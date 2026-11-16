@@ -49,6 +49,11 @@ type SyncConflict = {
   updatedAt: string | null;
 };
 
+type ConflictResolutionProgress = {
+  choice: 'cloud' | 'device';
+  phase: 'checking' | 'preserving' | 'saving' | 'verifying' | 'restoring';
+};
+
 type SyncStatus =
   | { kind: 'checking' }
   | { kind: 'device' }
@@ -94,6 +99,38 @@ type PreviewAccountSyncProps = {
 
 function messageFor(error: unknown): string {
   return error instanceof Error ? error.message : 'Account sync could not be completed.';
+}
+
+function conflictResolutionFailureMessage(
+  error: unknown,
+  accountSaveStarted: boolean,
+  accountSaveConfirmed: boolean
+): string {
+  const safeMessages = new Set([
+    'A different account recovery copy already exists. It was left unchanged; no account write was attempted.',
+    'The saved account recovery copy could not be validated. Download or preserve it before retrying; no account write was attempted.',
+    'The account recovery copy could not be verified. No account write was attempted.',
+    'A different device recovery copy already exists. Download or preserve it before using the account version again.',
+    'The previous device version could not be preserved. Nothing was replaced.'
+  ]);
+  if (error instanceof Error && safeMessages.has(error.message)) return error.message;
+  if (accountSaveConfirmed) {
+    return 'The account copy was confirmed, but local recovery or sync bookkeeping could not be completed. Check Save & sync before retrying; no second account write was attempted.';
+  }
+  return accountSaveStarted
+    ? 'The account save may have completed, but its result could not be confirmed. Check the account status before retrying; no automatic retry was made.'
+    : 'The account and recovery state could not be verified. No account write was attempted; review the conflict before retrying.';
+}
+
+function conflictProgressMessage(progress: ConflictResolutionProgress): string {
+  if (progress.phase === 'checking') return 'Checking the latest account copy…';
+  if (progress.choice === 'device') {
+    if (progress.phase === 'preserving') return 'Preserving the current account copy…';
+    if (progress.phase === 'saving') return 'Saving this device’s copy to your account…';
+    return 'Checking whether the account save completed…';
+  }
+  if (progress.phase === 'preserving') return 'Preserving this device’s copy…';
+  return 'Applying the account copy to this device…';
 }
 
 function resolvePendingImportGuard(storage: PreviewStorage): string | null {
@@ -217,6 +254,9 @@ export function PreviewAccountSync({
   const [conflict, setConflictState] = useState<SyncConflict | null>(null);
   const [syncMessage, setSyncMessage] = useState('');
   const [manualBusy, setManualBusy] = useState(false);
+  const [conflictResolutionProgress, setConflictResolutionProgress] =
+    useState<ConflictResolutionProgress | null>(null);
+  const conflictResolutionInFlight = useRef(false);
   const [cloudRecoveryRaw, setCloudRecoveryRaw] = useState<string | null>(null);
   const [cloudRecoveryError, setCloudRecoveryError] = useState('');
   const [deviceRecoveryRaw, setDeviceRecoveryRaw] = useState<string | null>(null);
@@ -242,6 +282,7 @@ export function PreviewAccountSync({
   });
   const controlRef = useRef<{ refresh: () => void; changed: () => void } | null>(null);
   const previousManualOperationLocked = useRef(manualOperationLocked);
+  const skipNextManualUnlockRefresh = useRef(false);
   const previousLocalInputs = useRef({ data, localRaw });
   const previousAuthRefreshSequence = useRef(authRefreshSequence);
   useEffect(() => {
@@ -682,7 +723,10 @@ export function PreviewAccountSync({
     setManualBusy(false);
     const wasLocked = previousManualOperationLocked.current;
     previousManualOperationLocked.current = false;
-    if (wasLocked && autoSyncEnabled) controlRef.current?.refresh();
+    if (wasLocked && autoSyncEnabled) {
+      if (skipNextManualUnlockRefresh.current) skipNextManualUnlockRefresh.current = false;
+      else controlRef.current?.refresh();
+    }
   }, [manualOperationLocked, enabled, autoSyncEnabled, api]);
 
   useEffect(() => {
@@ -697,9 +741,18 @@ export function PreviewAccountSync({
   async function resolveConflict(choice: 'cloud' | 'device') {
     const pending = conflict;
     const currentApi = latest.current.api;
-    if (!pending || !currentApi || !latest.current.autoSyncEnabled || !latest.current.isIdentityCurrent()) return;
+    if (conflictResolutionInFlight.current
+      || manualOperationLocked
+      || !pending
+      || !currentApi
+      || !latest.current.autoSyncEnabled
+      || !latest.current.isIdentityCurrent()) return;
+    conflictResolutionInFlight.current = true;
+    setConflictResolutionProgress({ choice, phase: 'checking' });
     setManualBusy(true);
     onManualOperationLockChange(true);
+    let accountSaveStarted = false;
+    let accountSaveConfirmed = false;
     try {
       const latestCloud = await currentApi.read();
       if (!latest.current.isIdentityCurrent()) return;
@@ -718,6 +771,10 @@ export function PreviewAccountSync({
             revision: latestCloud.revision,
             updatedAt: latestCloud.updatedAt
           });
+          setStatus({
+            kind: 'attention',
+            message: 'The account copy changed while this conflict was open. No overwrite was attempted; review the updated account copy.'
+          });
         } else {
           setStatus({ kind: 'attention', message: 'The account backup changed or disappeared. No data was replaced.' });
         }
@@ -730,13 +787,17 @@ export function PreviewAccountSync({
         latest.current.currentDate
       );
       if (local.raw !== pending.localRaw) {
-        setStatus({ kind: 'attention', message: 'This device changed while the conflict was open. Review the current versions again.' });
+        setStatus({
+          kind: 'attention',
+          message: 'This device changed while the conflict was open. No account write was attempted; review the current versions.'
+        });
         setConflictState(null);
         controlRef.current?.refresh();
         return;
       }
 
       if (choice === 'cloud') {
+        setConflictResolutionProgress({ choice, phase: 'preserving' });
         if (local.raw !== null) {
           const priorDeviceRecovery = storage.getItem(syncDeviceRecoveryKey);
           if (priorDeviceRecovery !== null && priorDeviceRecovery !== local.raw) {
@@ -749,6 +810,7 @@ export function PreviewAccountSync({
           }
           setDeviceRecoveryRaw(savedDeviceRecovery);
         }
+        setConflictResolutionProgress({ choice, phase: 'restoring' });
         const applyError = latest.current.onRestore(validated.data, local.raw);
         if (applyError) throw new Error(applyError);
         const guardError = resolvePendingImportGuard(storage);
@@ -763,6 +825,7 @@ export function PreviewAccountSync({
         setStatus({ kind: 'account', savedAt: latestCloud.updatedAt });
         setSyncMessage('Account data was saved on this device. Your previous local copy is recoverable.');
       } else {
+        setConflictResolutionProgress({ choice, phase: 'preserving' });
         const cloudRecovery = {
           accountId,
           revision: latestCloud.revision,
@@ -796,52 +859,46 @@ export function PreviewAccountSync({
                 );
               }
             }
-          } catch (error) {
-            throw new Error(
-              `The saved account recovery copy could not be validated (${messageFor(error)}). Download or preserve it before replacing the account version.`
-            );
+          } catch {
+            throw new Error('The saved account recovery copy could not be validated. Download or preserve it before retrying; no account write was attempted.');
           }
           if (!matches) {
-            throw new Error('A different account recovery copy already exists. Download or preserve it before replacing the account version.');
+            throw new Error('A different account recovery copy already exists. It was left unchanged; no account write was attempted.');
           }
         } else {
           storage.setItem(syncCloudRecoveryKey, recoveryRaw);
         }
         const savedRecovery = storage.getItem(syncCloudRecoveryKey);
-        if (savedRecovery !== recoveryRaw) {
-          throw new Error('The previous account version could not be preserved. Nothing was replaced.');
+        const recoveryPreserved = priorRecovery === null
+          ? savedRecovery === recoveryRaw
+          : savedRecovery === priorRecovery;
+        if (!recoveryPreserved) {
+          throw new Error('The account recovery copy could not be verified. No account write was attempted.');
         }
         setCloudRecoveryRaw(savedRecovery);
+        setConflictResolutionProgress({ choice, phase: 'saving' });
+        accountSaveStarted = true;
+        let savedRevision: number;
+        let savedAt: string | null;
         try {
-          const revision = await currentApi.save(local.envelope, latestCloud.revision);
-          if (!latest.current.isIdentityCurrent()) return;
-          const guardError = resolvePendingImportGuard(storage);
-          if (guardError) throw new Error(guardError);
-          const savedAt = new Date().toISOString();
-          saveMetadata(storage, {
-            accountId,
-            revision,
-            syncedEnvelope: local.envelope,
-            syncedAt: savedAt
-          });
-          setConflictState(null);
-          setStatus({ kind: 'account', savedAt });
-          setSyncMessage('This device’s data is now saved to your account. The previous account version is recoverable.');
-        } catch (error) {
-          const observed = await currentApi.read();
+          savedRevision = await currentApi.save(local.envelope, latestCloud.revision);
+          accountSaveConfirmed = true;
+          savedAt = new Date().toISOString();
+        } catch {
+          setConflictResolutionProgress({ choice, phase: 'verifying' });
+          let observed: PreviewAccountBackupRecord | null;
+          try {
+            observed = await currentApi.read();
+          } catch {
+            throw new Error('The account save may have completed, but its result could not be confirmed. Check the account status before retrying; no automatic retry was made.');
+          }
           if (!latest.current.isIdentityCurrent()) return;
           if (observed) {
             const observedValidated = validatePreviewAccountBackup(observed, latest.current.currentDate);
             if (previewEnvelopesEqual(observedValidated.envelope, local.envelope)) {
-              saveMetadata(storage, {
-                accountId,
-                revision: observed.revision,
-                syncedEnvelope: observedValidated.envelope,
-                syncedAt: observed.updatedAt
-              });
-              setConflictState(null);
-              setStatus({ kind: 'account', savedAt: observed.updatedAt });
-              setSyncMessage('This device’s data is now saved to your account. The previous account version is recoverable.');
+              accountSaveConfirmed = true;
+              savedRevision = observed.revision;
+              savedAt = observed.updatedAt;
             } else {
               setConflictState({
                 localRaw: local.raw,
@@ -850,20 +907,39 @@ export function PreviewAccountSync({
                 revision: observed.revision,
                 updatedAt: observed.updatedAt
               });
-              setStatus({ kind: 'conflict' });
+              setStatus({
+                kind: 'attention',
+                message: 'The account now has a different copy. No overwrite was forced; review the updated conflict.'
+              });
+              return;
             }
           } else {
-            throw error;
+            throw new Error('The account save may have completed, but no account copy was available to confirm it. Check the account status before retrying; no automatic retry was made.');
           }
         }
+        if (!latest.current.isIdentityCurrent()) return;
+        const guardError = resolvePendingImportGuard(storage);
+        if (guardError) throw new Error(guardError);
+        saveMetadata(storage, {
+          accountId,
+          revision: savedRevision,
+          syncedEnvelope: local.envelope,
+          syncedAt: savedAt
+        });
+        setConflictState(null);
+        setStatus({ kind: 'account', savedAt });
+        setSyncMessage('This device’s data is now saved to your account. The previous account version is recoverable.');
       }
     } catch (error) {
       setStatus({
-        kind: navigator.onLine ? 'attention' : 'offline',
-        ...(navigator.onLine ? { message: messageFor(error) } : {})
-      } as SyncStatus);
+        kind: 'attention',
+        message: conflictResolutionFailureMessage(error, accountSaveStarted, accountSaveConfirmed)
+      });
     } finally {
+      conflictResolutionInFlight.current = false;
+      setConflictResolutionProgress(null);
       setManualBusy(false);
+      skipNextManualUnlockRefresh.current = true;
       onManualOperationLockChange(false);
     }
   }
@@ -969,18 +1045,40 @@ export function PreviewAccountSync({
             <p className="preview-account-sync__message" role="status">{syncMessage}</p>
           )}
           {conflict && (
-            <div className="preview-account-sync__conflict" role="group" aria-labelledby="preview-account-sync-conflict-title">
+            <div
+              className="preview-account-sync__conflict"
+              role="group"
+              aria-busy={conflictResolutionProgress !== null}
+              aria-labelledby="preview-account-sync-conflict-title"
+            >
               <h4 id="preview-account-sync-conflict-title">This device and your account have different copies</h4>
               <p>
                 Automatic sync paused. Choose one version to keep; the other is preserved as a recovery copy. Tend will not merge these changes.
               </p>
               {formatTime(conflict.updatedAt) && <p>Account copy updated: {formatTime(conflict.updatedAt)}.</p>}
+              {conflictResolutionProgress && (
+                <p className="preview-account-sync__message" role="status">
+                  {conflictProgressMessage(conflictResolutionProgress)}
+                </p>
+              )}
               <div className="preview-account-sync__actions">
-                <button type="button" className="btn mini" disabled={manualBusy} onClick={() => void resolveConflict('device')}>
-                  Keep this device’s copy
+                <button
+                  type="button"
+                  className="btn mini"
+                  disabled={manualBusy || manualOperationLocked}
+                  onClick={() => void resolveConflict('device')}
+                >
+                  {conflictResolutionProgress?.choice === 'device'
+                    ? conflictResolutionProgress.phase === 'verifying' ? 'Confirming save…' : 'Working…'
+                    : 'Keep this device’s copy'}
                 </button>
-                <button type="button" className="btn mini ghost" disabled={manualBusy} onClick={() => void resolveConflict('cloud')}>
-                  Use the account copy
+                <button
+                  type="button"
+                  className="btn mini ghost"
+                  disabled={manualBusy || manualOperationLocked}
+                  onClick={() => void resolveConflict('cloud')}
+                >
+                  {conflictResolutionProgress?.choice === 'cloud' ? 'Applying…' : 'Use the account copy'}
                 </button>
               </div>
             </div>

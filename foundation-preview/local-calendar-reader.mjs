@@ -3,7 +3,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import * as https from 'node:https';
 import { pathToFileURL } from 'node:url';
-import { parseCalendarFeedForRange } from './src/domain/calendar-events.ts';
+import { getCalendarRangeWindow, parseCalendarFeedForRange } from './src/domain/calendar-events.ts';
 import {
   calendarFeedUrlError,
   CONTROLLED_CALENDAR_TEST_URL
@@ -215,7 +215,7 @@ async function readICloudFeed(rawUrl) {
   throw new CalendarReaderError('feed-retrieval-failed');
 }
 
-function controlledFeed(localDate, now) {
+function controlledFeed(localDate, now, timeZone) {
   const [year, month, day] = localDate.split('-').map(Number);
   const formatDate = value => value.toISOString().slice(0, 10).replaceAll('-', '');
   const formatDateTime = value => value.toISOString()
@@ -223,10 +223,12 @@ function controlledFeed(localDate, now) {
     .replace(/\.\d{3}Z$/, 'Z');
   const current = formatDate(new Date(Date.UTC(year, month - 1, day)));
   const next = formatDate(new Date(Date.UTC(year, month - 1, day + 1)));
-  const timedStart = new Date(now + 60 * 60_000);
-  const timedEnd = new Date(timedStart.getTime() + 30 * 60_000);
-  const recurringStart = new Date(now + 2 * 60 * 60_000);
-  const recurringEnd = new Date(recurringStart.getTime() + 30 * 60_000);
+  const today = getCalendarRangeWindow('today', now, timeZone);
+  const timedStartMs = Math.max(today.start + 60_000, Math.min(now, today.end - 25 * 60_000));
+  const timedStart = new Date(timedStartMs);
+  const timedEnd = new Date(timedStartMs + 10 * 60_000);
+  const recurringStart = new Date(timedStartMs + 15 * 60_000);
+  const recurringEnd = new Date(timedStartMs + 25 * 60_000);
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -337,12 +339,19 @@ export function createLocalCalendarReaderServer() {
       const requestedNowText = requestUrl.searchParams.get('now');
       const requestedNow = requestedNowText === null ? Number.NaN : Number(requestedNowText);
       const now = isValidInstant(requestedNow) ? requestedNow : Date.now();
+      const timeZone = requestUrl.searchParams.get('timeZone') ?? 'UTC';
+      try {
+        new Intl.DateTimeFormat('en', { timeZone }).format();
+      } catch {
+        sendJson(response, 400, { error: 'A valid time zone is required.' });
+        return;
+      }
       response.writeHead(200, {
         'content-type': 'text/calendar; charset=utf-8',
         'cache-control': 'no-store',
         'x-content-type-options': 'nosniff'
       });
-      response.end(controlledFeed(date, now));
+      response.end(controlledFeed(date, now, timeZone));
       return;
     }
     if (request.method !== 'POST' || requestUrl.pathname !== '/api/calendar/read') {
@@ -401,7 +410,7 @@ export function createLocalCalendarReaderServer() {
         const address = server.address();
         if (!address || typeof address === 'string') throw new CalendarReaderError('feed-retrieval-failed');
         const fixture = await fetch(
-          `http://127.0.0.1:${address.port}${controlledFeedPath}?date=${localDate}&now=${now}`
+          `http://127.0.0.1:${address.port}${controlledFeedPath}?date=${localDate}&now=${now}&timeZone=${encodeURIComponent(timeZone)}`
         );
         if (!fixture.ok || !fixture.headers.get('content-type')?.startsWith('text/calendar')) {
           throw new CalendarReaderError('feed-retrieval-failed');

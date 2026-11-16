@@ -17,8 +17,10 @@ async function startReader() {
   origin = `http://127.0.0.1:${address.port}`;
 }
 
-async function readControlledFeed() {
-  const now = Date.now();
+async function readControlledFeed(
+  now = Date.now(),
+  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+) {
   return fetch(`${origin}/api/calendar/read`, {
     method: 'POST',
     headers: {
@@ -35,7 +37,7 @@ async function readControlledFeed() {
       now,
       rangeStart: now - 60 * 60_000,
       rangeEnd: now + 31 * 24 * 60 * 60_000,
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+      timeZone
     })
   });
 }
@@ -81,10 +83,35 @@ describe('local calendar reader', () => {
       [...result.events.map(event => event.startsAt)].sort((left, right) => left - right)
     );
 
-    const date = new Intl.DateTimeFormat('en-CA').format(new Date());
-    const fixture = await fetch(`${origin}/__test/controlled-calendar.ics?date=${date}`);
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const now = Date.now();
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date(now));
+    const fixture = await fetch(
+      `${origin}/__test/controlled-calendar.ics?date=${date}&now=${now}&timeZone=${encodeURIComponent(timeZone)}`
+    );
     expect(fixture.headers.get('content-type')).toContain('text/calendar');
     expect(await fixture.text()).toContain('RRULE:FREQ=DAILY;COUNT=3');
+  });
+
+  it('keeps controlled timed and recurring events inside today near the local day boundary', async () => {
+    await startReader();
+    const now = Date.parse('2026-11-16T23:30:00.000Z');
+    const response = await readControlledFeed(now, 'UTC');
+    const result = await response.json() as {
+      events: Array<{ title: string; startsAt: number; endsAt: number }>;
+    };
+    const dayStart = Date.parse('2026-11-16T00:00:00.000Z');
+    const dayEnd = Date.parse('2026-11-17T00:00:00.000Z');
+    const todayEvents = result.events.filter(event => event.startsAt < dayEnd && event.endsAt > dayStart);
+
+    expect(response.status).toBe(200);
+    expect(todayEvents.map(event => event.title)).toEqual([
+      'Controlled all-day event',
+      'Controlled timed event',
+      'Controlled recurring event'
+    ]);
+    expect(todayEvents.every(event => event.startsAt >= dayStart && event.endsAt <= dayEnd)).toBe(true);
+    expect(result.events.filter(event => event.title === 'Controlled recurring event')).toHaveLength(3);
   });
 
   it('rejects unsupported hosts without echoing the supplied URL', async () => {

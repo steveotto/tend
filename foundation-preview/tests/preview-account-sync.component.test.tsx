@@ -272,6 +272,32 @@ function cloudRecord(data: PreviewData, revision = 1): PreviewAccountBackupRecor
   };
 }
 
+function markAsImported(storage: ReturnType<typeof makeStorage>, data: PreviewData): string {
+  const raw = storage.values.get(PREVIEW_STORAGE_KEY);
+  if (raw === undefined) throw new Error('Synthetic import fixture has no stored source.');
+  const result = writePreview(storage.storage, data, raw, {
+    currentDate,
+    importSourceRaw: JSON.stringify(createPreviewEnvelope(data)),
+    operation: 'import'
+  });
+  if (result.kind !== 'saved') throw new Error('Synthetic import fixture could not be saved.');
+  return result.raw;
+}
+
+function makeImportedConflictFixture() {
+  const cloudData = createSamplePreviewData();
+  cloudData.people = cloudData.people.map((person, index) =>
+    index === 0 ? { ...person, displayName: 'Existing account data' } : person
+  );
+  const importedData = createSamplePreviewData();
+  importedData.people = importedData.people.map((person, index) =>
+    index === 0 ? { ...person, displayName: 'Imported local data' } : person
+  );
+  const storage = makeStorage(importedData);
+  markAsImported(storage, importedData);
+  return { cloudData, importedData, storage };
+}
+
 function brokenLowerBodyWorkoutData(): PreviewData {
   const date = '2026-10-19';
   const rhythmId = 'user-rhythm-00000000-0000-4000-8000-000000000091';
@@ -697,6 +723,210 @@ describe('Preview account sync', () => {
       kind: 'loaded',
       guard: { kind: 'resolved', importedRaw: imported.kind === 'saved' ? imported.raw : null }
     });
+    view.unmount();
+  });
+
+  it('shows conflict progress immediately and ignores duplicate device-copy clicks', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    let holdReads = false;
+    let heldReadCalls = 0;
+    let releaseRead: ((record: PreviewAccountBackupRecord | null) => void) | null = null;
+    const api: PreviewAccountBackupApi = {
+      read: () => {
+        if (!holdReads) return service.api.read();
+        heldReadCalls += 1;
+        return new Promise(resolve => {
+          releaseRead = resolve;
+        });
+      },
+      save: service.api.save
+    };
+    const view = render(<Browser api={api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    holdReads = true;
+
+    const keepDevice = within(view.container).getByRole('button', { name: 'Keep this device’s copy' });
+    act(() => {
+      fireEvent.click(keepDevice);
+      fireEvent.click(keepDevice);
+    });
+
+    expect(await screen.findByText('Checking the latest account copy…')).toBeTruthy();
+    await waitFor(() => expect(heldReadCalls).toBe(1));
+    expect(keepDevice.getAttribute('disabled')).toBe('');
+    expect(within(view.container)
+      .getByRole('group', { name: 'This device and your account have different copies' })
+      .getAttribute('aria-busy')).toBe('true');
+    expect(service.saveCalls).toBe(0);
+
+    holdReads = false;
+    await act(async () => {
+      releaseRead?.(service.record);
+    });
+    await waitForRevision(service, 4);
+    expect(service.saveCalls).toBe(1);
+    expect(await screen.findByText('Saved to your account')).toBeTruthy();
+    view.unmount();
+  });
+
+  it('rechecks the conflict revision before preserving or saving a copy', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    const view = render(<Browser api={service.api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    const newerCloud = createSamplePreviewData();
+    newerCloud.people = newerCloud.people.map((person, index) =>
+      index === 0 ? { ...person, displayName: 'Newer account data' } : person
+    );
+    service.replace(cloudRecord(newerCloud, 4));
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The account copy changed while this conflict was open. No overwrite was attempted; review the updated account copy.'
+    );
+    expect(service.saveCalls).toBe(0);
+    expect(service.record?.revision).toBe(4);
+    expect(storage.values.has(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`)).toBe(false);
+    view.unmount();
+  });
+
+  it('preserves a matching existing account recovery archive byte-for-byte before saving', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const cloud = cloudRecord(cloudData, 3);
+    const service = backend(cloud);
+    const recoveryKey = `${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`;
+    const priorRecovery = JSON.stringify({
+      accountId,
+      revision: cloud.revision,
+      document: cloud.document,
+      updatedAt: cloud.updatedAt,
+      preservedAt: '2026-10-01T00:00:00.000Z'
+    });
+    storage.values.set(recoveryKey, priorRecovery);
+    const view = render(<Browser api={service.api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+    await waitForRevision(service, 4);
+
+    expect(service.expectedRevisions).toEqual([3]);
+    expect(storage.values.get(recoveryKey)).toBe(priorRecovery);
+    expect((service.record?.document as { data: PreviewData }).data.people[0]?.displayName)
+      .toBe('Imported local data');
+    expect(await screen.findByText('Saved to your account')).toBeTruthy();
+    view.unmount();
+  });
+
+  it('leaves a different existing account recovery archive untouched and skips the account save', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const cloud = cloudRecord(cloudData, 3);
+    const service = backend(cloud);
+    const recoveryKey = `${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`;
+    const priorRecovery = JSON.stringify({
+      accountId,
+      revision: cloud.revision,
+      document: createPreviewEnvelope(createEmptyPreviewData()),
+      updatedAt: cloud.updatedAt,
+      preservedAt: '2026-10-01T00:00:00.000Z'
+    });
+    storage.values.set(recoveryKey, priorRecovery);
+    const view = render(<Browser api={service.api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'A different account recovery copy already exists. It was left unchanged; no account write was attempted.'
+    );
+    expect(service.saveCalls).toBe(0);
+    expect(service.record?.revision).toBe(3);
+    expect(storage.values.get(recoveryKey)).toBe(priorRecovery);
+    view.unmount();
+  });
+
+  it('reports a recovery-preservation failure without exposing details or writing to the account', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    const recoveryKey = `${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`;
+    const failingStorage: PreviewStorage = {
+      getItem: key => storage.storage.getItem(key),
+      setItem: (key, value) => {
+        if (key === recoveryKey) throw new Error('synthetic private storage detail');
+        storage.storage.setItem(key, value);
+      }
+    };
+    const view = render(<Browser api={service.api} storage={failingStorage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The account and recovery state could not be verified. No account write was attempted; review the conflict before retrying.'
+    );
+    expect(view.container.textContent).not.toContain('synthetic private storage detail');
+    expect(service.saveCalls).toBe(0);
+    expect(service.record?.revision).toBe(3);
+    expect(storage.values.has(recoveryKey)).toBe(false);
+    view.unmount();
+  });
+
+  it('reports an unconfirmed account save when read-back fails without retrying it', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    let saveCalls = 0;
+    let failReadBack = false;
+    const api: PreviewAccountBackupApi = {
+      read: async () => {
+        if (failReadBack) throw new Error('synthetic private account response');
+        return service.api.read();
+      },
+      save: async () => {
+        saveCalls += 1;
+        failReadBack = true;
+        throw new Error('synthetic private save response');
+      }
+    };
+    const view = render(<Browser api={api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The account save may have completed, but its result could not be confirmed. Check the account status before retrying; no automatic retry was made.'
+    );
+    expect(view.container.textContent).not.toContain('synthetic private');
+    expect(saveCalls).toBe(1);
+    expect(service.record?.revision).toBe(3);
+    expect(storage.values.has(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`)).toBe(true);
+    view.unmount();
+  });
+
+  it('distinguishes a confirmed account save from failed local sync bookkeeping', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    const syncMetadataKey = `${PREVIEW_STORAGE_KEY}:account-sync-state`;
+    const failingStorage: PreviewStorage = {
+      getItem: key => storage.storage.getItem(key),
+      setItem: (key, value) => {
+        if (key === syncMetadataKey) throw new Error('synthetic private metadata detail');
+        storage.storage.setItem(key, value);
+      }
+    };
+    const view = render(<Browser api={service.api} storage={failingStorage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The account copy was confirmed, but local recovery or sync bookkeeping could not be completed.'
+    );
+    expect(view.container.textContent).not.toContain('synthetic private metadata detail');
+    expect(service.saveCalls).toBe(1);
+    expect(service.record?.revision).toBe(4);
+    expect((service.record?.document as { data: PreviewData }).data.people[0]?.displayName)
+      .toBe('Imported local data');
     view.unmount();
   });
 
