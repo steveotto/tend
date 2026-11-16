@@ -97,7 +97,7 @@ import {
 import type { CategoryPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 43;
+export const PREVIEW_SCHEMA_VERSION = 44;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -158,13 +158,14 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44; resolvedPersonCategories: number }
   | { valid: false; kind: 'invalid' | 'unsupported'; message: string };
 
-const goalKeys = [
+const goalKeysV43 = [
   'id', 'title', 'currency', 'direction', 'startingBalanceMinor', 'startDate',
   'targetBalanceMinor', 'targetDate', 'checkIns', 'correctionHistory'
 ];
+const goalKeysV44 = [...goalKeysV43, 'supportingRhythmIds'];
 const checkInKeys = ['id', 'effectiveDate', 'balanceMinor', 'note'];
 const correctionKeys = ['effectiveDate', 'previousBalanceMinor', 'previousNote', 'replacedAt'];
 const dataKeysV1 = ['goals', 'completedRhythmIds'];
@@ -210,6 +211,7 @@ const dataKeysV40 = dataKeysV39;
 const dataKeysV41 = [...dataKeysV40, 'textSize'];
 const dataKeysV42 = [...dataKeysV41, 'showCalendarOnToday'];
 const dataKeysV43 = [...dataKeysV42, 'categoryPreferences'];
+const dataKeysV44 = dataKeysV43;
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -373,8 +375,18 @@ function serializedTimeOfDay(rhythm: SavedRhythm) {
   return value;
 }
 
-function validateGoal(value: unknown, goalIds: Set<string>, checkInIds: Set<string>, currentDate: string): value is MoneyGoal {
-  if (!isRecord(value) || !hasOnlyKeys(value, goalKeys)) return false;
+function validateGoal(
+  value: unknown,
+  goalIds: Set<string>,
+  checkInIds: Set<string>,
+  currentDate: string,
+  supportsRhythmAssociations: boolean
+): value is MoneyGoal {
+  if (!isRecord(value) || !hasOnlyKeys(value, supportsRhythmAssociations ? goalKeysV44 : goalKeysV43)) return false;
+  if (supportsRhythmAssociations && value.supportingRhythmIds !== undefined
+    && (!Array.isArray(value.supportingRhythmIds)
+      || value.supportingRhythmIds.some(id => !isNonEmptyText(id))
+      || new Set(value.supportingRhythmIds).size !== value.supportingRhythmIds.length)) return false;
   if (!isNonEmptyText(value.id) || goalIds.has(value.id)) return false;
   if (!isNonEmptyText(value.title) || typeof value.currency !== 'string' || currencyFractionDigits(value.currency) === null) return false;
   if (value.direction !== 'increase' && value.direction !== 'decrease') return false;
@@ -451,7 +463,10 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
           targetBalanceMinor: goal.targetBalanceMinor,
           targetDate: goal.targetDate,
           checkIns,
-          correctionHistory
+          correctionHistory,
+          ...(goal.supportingRhythmIds === undefined
+            ? {}
+            : { supportingRhythmIds: [...goal.supportingRhythmIds] })
         };
       }),
       completedRhythmIds: [...data.completedRhythmIds],
@@ -630,7 +645,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
       && value.schemaVersion !== 38
       && value.schemaVersion !== 39
       && value.schemaVersion !== 40
-      && value.schemaVersion !== 41 && value.schemaVersion !== 42
+      && value.schemaVersion !== 41 && value.schemaVersion !== 42 && value.schemaVersion !== 43
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -665,7 +680,8 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV43 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV44 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV43 = value.schemaVersion === 43 || isV44;
   const isV42 = value.schemaVersion === 42 || isV43;
   const isV41 = value.schemaVersion === 41 || isV42;
   const isV40 = value.schemaVersion === 40 || isV41;
@@ -694,7 +710,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV44 ? dataKeysV44 : isV43 && value.schemaVersion === 43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   if (!isRecord(value.data) || (!isV19 && !isV20 && !hasOnlyKeysWithCompatibleDefaults(value.data, allowedDataKeys))
@@ -769,7 +785,7 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
   const checkInIds = new Set<string>();
   const goals: MoneyGoal[] = [];
   for (const goal of value.data.goals) {
-    if (!validateGoal(goal, goalIds, checkInIds, currentDate)) {
+    if (!validateGoal(goal, goalIds, checkInIds, currentDate, isV44)) {
       return { valid: false, kind: 'invalid', message: 'A goal, check-in, or correction record is invalid or duplicated.' };
     }
     goals.push(goal);

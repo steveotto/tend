@@ -1,10 +1,12 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   addOrUpdateConnection,
   connectionsForPerson,
   deleteConnection,
-  friendConnectionStatus
+  friendConnectionStatus,
+  formatConnectionRecency,
+  latestValidConnectionForPerson
 } from '../domain/friendships.ts';
 import type {
   FriendshipConnection,
@@ -26,13 +28,14 @@ import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 import { BackButton } from './BackButton.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
-import { ConnectionEditor, ConnectionHistoryList, ConnectionTypeActions, FriendshipCadenceControl } from './FriendshipConnectionControls.tsx';
+import { ConnectionEditor, ConnectionHistoryList } from './FriendshipConnectionControls.tsx';
 import { PersonAvatar, personFirstName } from './PersonBadge.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { selectPersonRhythmsDueToday } from '../domain/person-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
 import {
   connectionStyleLabel,
+  birthdayCardSummary,
   personDetailsForId,
   personWithSavedPhoto
 } from '../domain/person-details.ts';
@@ -46,11 +49,9 @@ import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
 import {
   PersonHealthComponentScores,
   PersonHealthSummary,
-  PersonHealthAreaMeasures,
   PersonHealthAreaDetails,
   PersonOverallHealthDetails
 } from './PersonHealthSummary.tsx';
-import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { createPersonHealthRollup } from './HealthRollupDiagram.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
@@ -109,7 +110,6 @@ export function PersonProfileView({
   showTended = false,
   onShowTendedChange = () => undefined,
   initializing = false,
-  onFriendshipsChange,
   personDetails = [],
   personNotes = [],
   prayerRequests = [],
@@ -153,7 +153,6 @@ export function PersonProfileView({
   showTended?: boolean;
   onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
-  onFriendshipsChange: (friendships: FriendshipData) => void;
   personDetails?: readonly PersonDetails[];
   personNotes?: readonly PersonNote[];
   prayerRequests?: readonly PersonPrayerRequest[];
@@ -195,13 +194,8 @@ export function PersonProfileView({
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const details = personDetailsForId(personDetails, personId);
   const person = personWithSavedPhoto(personById(people, personId), personDetails ?? []);
-  const componentId = useId();
   const [tab, setTab] = useState<ProfileTab>('rhythms');
   const [targetPrayerRequestId, setTargetPrayerRequestId] = useState<string | null>(null);
-  const [healthCardDisclosure, setHealthCardDisclosure] = useState<{
-    personId: PersonId;
-    area: ProfileTab | null;
-  }>({ personId, area: null });
   const [notesOpen, setNotesOpen] = useState(false);
 
   useEffect(() => {
@@ -212,7 +206,6 @@ export function PersonProfileView({
   }, [navigationRequest, personId]);
   const [connectionEditor, setConnectionEditor] = useState<{
     record?: FriendshipConnection;
-    type?: 'text' | 'call' | 'time-together';
   } | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [archivedPersonId, setArchivedPersonId] = useState<PersonId | null>(null);
@@ -222,30 +215,24 @@ export function PersonProfileView({
   const wasEditorOpen = useRef(false);
   const archiveOpener = useRef<HTMLElement | null>(null);
   const wasArchiveOpen = useRef(false);
-  const openHealthCard = healthCardDisclosure.personId === personId
-    ? healthCardDisclosure.area
-    : null;
-  const healthCardControlIds: Readonly<Record<ProfileTab, string>> = {
-    rhythms: `${componentId}-rhythm-health-card`,
-    connections: `${componentId}-connection-health-card`,
-    prayer: `${componentId}-prayer-health-card`
-  };
   const connectionHistory = connectionsForPerson(friendships, personId);
   const personConnectionStatus = friendConnectionStatus(friendships, personId, today);
   const availablePeopleGroups = useAvailablePersonGroups(peopleGroups);
   const classifications = availablePeopleGroups.filter(group => group.memberIds.includes(personId));
   const resolvedCategory = resolvePersonCategory(classifications.map(group => group.id));
   const categoryLabel = resolvedCategory === 'friends'
-    ? 'Friend'
+    ? 'Friends'
     : resolvedCategory === 'marriage'
       ? 'Marriage'
       : resolvedCategory === 'parenting'
         ? 'Parenting'
         : null;
   const profileNotes = personNotesForPerson(personNotes, personId);
-  const birthdayDateLabel = details?.birthday ? personDateLabel(details.birthday.monthDay) : null;
+  const birthdaySummaryForProfile = details?.birthday
+    ? birthdayCardSummary(details.birthday, today)
+    : null;
+  const birthdayDateLabel = birthdaySummaryForProfile?.dateLabel ?? null;
   const anniversaryDateLabel = details?.anniversary ? personDateLabel(details.anniversary.monthDay) : null;
-  const hasCategoryChip = Boolean(categoryLabel && details?.relationshipLabel);
   const personRhythms = rhythms.filter(rhythm => rhythm.personIds?.includes(personId));
   const archivedRhythmIds = new Set(archivedRhythms.map(rhythm => rhythm.id));
   const personRhythmHealth = selectPersonRhythmHealth(
@@ -325,11 +312,10 @@ export function PersonProfileView({
       supportsMeasures: false
     }
   };
-  const latestConnectionDate = connectionHistory
-    .map(connection => connection.date)
-    .filter((date): date is string => Boolean(date))
-    .sort()
-    .at(-1);
+  const latestConnection = latestValidConnectionForPerson(friendships, personId);
+  const latestConnectionLabel = latestConnection
+    ? formatConnectionRecency(latestConnection.date, today)
+    : null;
   const latestPrayerDate = personPrayerRecords
     .flatMap(request => request.prayerLogs.map(log => log.prayedAt))
     .sort()
@@ -344,7 +330,7 @@ export function PersonProfileView({
       ? [
           ['Logged connections', String(connectionHistory.length)],
           ['Configured cadence', connectionCadenceLabel],
-          ['Most recent connection', latestConnectionDate ?? '—']
+          ['Most recent connection', latestConnection?.date ?? '—']
         ] as const
       : area === 'prayer'
         ? [
@@ -427,13 +413,6 @@ export function PersonProfileView({
     setNotesOpen(false);
   }
 
-  function toggleHealthCard(area: ProfileTab) {
-    setHealthCardDisclosure(previous => ({
-      personId,
-      area: previous.personId === personId && previous.area === area ? null : area
-    }));
-  }
-
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let target: number | null = null;
     if (event.key === 'ArrowRight') target = (index + 1) % profileTabs.length;
@@ -446,12 +425,9 @@ export function PersonProfileView({
     tabRefs.current[target]?.focus();
   }
 
-  function openConnectionDraft(
-    type: 'text' | 'call' | 'time-together',
-    event: MouseEvent<HTMLButtonElement>
-  ) {
+  function openConnectionDraft(event: MouseEvent<HTMLButtonElement>) {
     connectionOpener.current = event.currentTarget;
-    setConnectionEditor({ type });
+    setConnectionEditor({});
   }
 
   function openEditConnection(record: FriendshipConnection, event: MouseEvent<HTMLButtonElement>) {
@@ -498,25 +474,6 @@ export function PersonProfileView({
     });
   }
 
-  function renderAreaHealthMeasures(area: ProfileTab) {
-    const config = personAreaHealth[area];
-    const metric = (score: number | null): HealthScoreMetric => ({
-      score,
-      state: score === null || !config.supportsMeasures ? 'unavailable' : 'scored'
-    });
-    const areaLabel = area === 'connections' ? 'Connections' : profileTabs.find(item => item.id === area)!.label;
-    return (
-      <PersonHealthAreaMeasures
-        label={areaLabel}
-        detailsLabel={config.label}
-        consistency={metric(config.health.consistency)}
-        onTrack={metric(config.health.onTrack)}
-        detailsDialogTitle={`${personFirstName(person.displayName)}’s ${config.label} Health details`}
-        detailsContent={healthDetailsFor(area)}
-      />
-    );
-  }
-
   return (
     <main className="person-profile-page" aria-labelledby="person-profile-title">
       <div className="person-profile-page__back">
@@ -529,9 +486,9 @@ export function PersonProfileView({
               <div className="person-profile__identity-title-row">
                 <h2 id="person-profile-title">{person.displayName}</h2>
               </div>
-              {(details?.relationshipLabel || categoryLabel) && (
+              {details?.relationshipLabel && (
                 <p className="person-profile__relationship">
-                  {details?.relationshipLabel ?? categoryLabel}
+                      {details.relationshipLabel}
                 </p>
               )}
             </div>
@@ -542,9 +499,10 @@ export function PersonProfileView({
               />
             )}
           </header>
-          {(hasCategoryChip || details?.connectionStyle || birthdayDateLabel || anniversaryDateLabel) && (
+          {(categoryLabel || details?.connectionStyle || birthdayDateLabel || anniversaryDateLabel
+            || latestConnectionLabel || personConnectionStatus.cadence) && (
             <div className="person-profile__details" aria-label={`${person.displayName} personal details`}>
-              {categoryLabel && details?.relationshipLabel && (
+              {categoryLabel && (
                 <span className="person-profile__category">
                   {resolvedCategory !== 'friends' && resolvedCategory && <AreaIcon id={resolvedCategory} />}
                   {categoryLabel}
@@ -558,10 +516,18 @@ export function PersonProfileView({
                   {connectionStyleLabel(details.connectionStyle)}
                 </span>
               )}
-              {birthdayDateLabel && (
-                <span className="person-profile__detail" aria-label={`Birthday: ${birthdayDateLabel}`}>
+              {birthdaySummaryForProfile?.age !== undefined && (
+                <span className="person-profile__detail" aria-label={`Age ${birthdaySummaryForProfile.age}`}>
+                  Age {birthdaySummaryForProfile.age}
+                </span>
+              )}
+              {birthdaySummaryForProfile && (
+                <span
+                  className="person-profile__detail"
+                  aria-label={`Birthday: ${birthdaySummaryForProfile.dateLabel}, ${birthdaySummaryForProfile.countdownLabel}`}
+                >
                   <BirthdayCakeIcon />
-                  {birthdayDateLabel}
+                  {birthdaySummaryForProfile.dateLabel} · {birthdaySummaryForProfile.countdownLabel}
                 </span>
               )}
               {anniversaryDateLabel && (
@@ -570,6 +536,16 @@ export function PersonProfileView({
                     <path d="M20.8 4.8a5.4 5.4 0 0 0-7.6 0L12 6l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6l1.2 1.2L12 21l7.6-7.4 1.2-1.2a5.4 5.4 0 0 0 0-7.6Z" />
                   </svg>
                   {anniversaryDateLabel}
+                </span>
+              )}
+              {latestConnectionLabel && (
+                <span className="person-profile__detail" aria-label={`Last connected: ${latestConnectionLabel}`}>
+                  Last connected · {latestConnectionLabel}
+                </span>
+              )}
+              {personConnectionStatus.cadence && (
+                <span className="person-profile__detail" aria-label={`Connection cadence: ${connectionCadenceLabel}`}>
+                  {connectionCadenceLabel}
                 </span>
               )}
             </div>
@@ -611,17 +587,7 @@ export function PersonProfileView({
                 />
               )}
               summaryContent={(
-                <PersonHealthComponentScores
-                  values={componentScores}
-                  expandedArea={openHealthCard}
-                  controlIds={healthCardControlIds}
-                  onSelectArea={toggleHealthCard}
-                  expandedContent={{
-                    rhythms: renderAreaHealthMeasures('rhythms'),
-                    connections: renderAreaHealthMeasures('connections'),
-                    prayer: renderAreaHealthMeasures('prayer')
-                  }}
-                />
+                <PersonHealthComponentScores values={componentScores} />
               )}
             />
           </div>
@@ -729,23 +695,15 @@ export function PersonProfileView({
           >
             <div className="person-profile__section-heading">
               <h3>Connections</h3>
-              <ConnectionTypeActions
-                personId={personId}
-                people={people}
-                onSelect={openConnectionDraft}
-              />
+              <button
+                type="button"
+                className="btn mini ghost"
+                ref={connectionOpener}
+                onClick={openConnectionDraft}
+              >
+                + Add
+              </button>
             </div>
-            <section className="person-profile__cadence" aria-label="Person connection cadence">
-                <span>Connection cadence</span>
-                <FriendshipCadenceControl
-                  personId={personId}
-                  people={people}
-                  cadence={personConnectionStatus.cadence}
-                  today={today}
-                  data={friendships}
-                  onChange={onFriendshipsChange}
-                />
-            </section>
             <ConnectionHistoryList
               connections={connectionHistory}
               people={people}
@@ -837,7 +795,6 @@ export function PersonProfileView({
           {...(connectionEditor.record ? { record: connectionEditor.record } : {})}
           people={people}
           initialParticipantIds={connectionEditor.record?.participantIds ?? [personId]}
-          {...(connectionEditor.type ? { initialType: connectionEditor.type } : {})}
           today={today}
           onSave={connection => {
             onConnectionChange(addOrUpdateConnection(friendships, connection));

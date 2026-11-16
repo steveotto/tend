@@ -138,6 +138,7 @@ type MarriageViewProps = {
     scoreInterpretationNote?: string;
     scoreExplanationIntro?: string;
     suggestionCatalogue?: CategoryRhythmSuggestionCatalogue;
+    headerTrailing?: ReactNode;
   };
   todayDate: string;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -498,7 +499,7 @@ export function MarriageView({
             title={categoryLabel}
             titleId={`${categoryToken}-title`}
             subtitle={categoryDescription}
-            trailing={categoryId === 'marriage' ? (
+            trailing={categoryConfig?.headerTrailing ?? (categoryId === 'marriage' ? (
               marriagePeople.length > 0
                 ? (
                   <div className="marriage-people-shortcuts" role="group" aria-label="People classified in Marriage">
@@ -524,7 +525,7 @@ export function MarriageView({
                     </button>
                   </div>
                 )
-            ) : undefined}
+            ) : undefined)}
           />
 
           <CategoryHealthSummary

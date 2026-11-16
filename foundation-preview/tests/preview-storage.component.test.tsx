@@ -3260,7 +3260,10 @@ describe('preview backup controls', () => {
 
   it('keeps app state on an invalid backup and restores goal corrections and Today completion on remount', async () => {
     const user = userEvent.setup();
-    const openFinances = () => user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
+    const openFinances = async () => {
+      await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
+      await user.click(await screen.findByRole('tab', { name: 'Goals' }));
+    };
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
     await user.click(screen.getByRole('tab', { name: 'All today' }));
@@ -3272,7 +3275,10 @@ describe('preview backup controls', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true));
     await openFinances();
     const goal = screen.getByRole('article', { name: 'Starter reserve' });
-    await user.click(within(goal).getAllByRole('button', { name: 'Correct' })[0]!);
+    await user.click(within(goal).getByRole('button', { name: 'View details for Starter reserve' }));
+    const details = screen.getByRole('dialog', { name: 'Starter reserve' });
+    const detailCard = within(details).getByRole('article', { name: 'Starter reserve' });
+    await user.click(within(detailCard).getAllByRole('button', { name: 'Correct' })[0]!);
     const correction = screen.getByRole('dialog', { name: 'Correct balance check-in' });
     const balance = within(correction).getByLabelText('Current balance');
     await user.clear(balance);
@@ -3292,8 +3298,11 @@ describe('preview backup controls', () => {
     await openFinances();
     const restored = screen.getByRole('article', { name: 'Starter reserve' });
     expect(within(restored).getByText('$1,350.00')).toBeTruthy();
-    expect(within(restored).getByText(/previous value \$1,250\.00/)).toBeTruthy();
-    expect(within(restored).getByRole('heading', { name: 'Correction history' })).toBeTruthy();
+    await user.click(within(restored).getByRole('button', { name: 'View details for Starter reserve' }));
+    const restoredDetails = screen.getByRole('dialog', { name: 'Starter reserve' });
+    const restoredCard = within(restoredDetails).getByRole('article', { name: 'Starter reserve' });
+    expect(within(restoredCard).getByText(/previous value \$1,250\.00/)).toBeTruthy();
+    expect(within(restoredCard).getByRole('heading', { name: 'Correction history' })).toBeTruthy();
   });
 
   it('preserves a backdated Tend state through backup export, import and reload', async () => {
@@ -3573,6 +3582,7 @@ describe('preview backup controls', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Replace preview data?' });
     await user.click(within(dialog).getByRole('button', { name: 'Replace with backup' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
+    await user.click(await screen.findByRole('tab', { name: 'Goals' }));
     const importedGoal = screen.getByRole('article', { name: '<script>synthetic</script>' });
     expect(importedGoal.textContent).toContain('<script>synthetic</script>');
     expect(importedGoal.querySelector('script')).toBeNull();
@@ -3602,6 +3612,7 @@ describe('preview backup controls', () => {
     expect(await screen.findByText(/changed in another tab/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Reload other tab’s preview' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
+    await user.click(await screen.findByRole('tab', { name: 'Goals' }));
     expect(await screen.findByRole('article', { name: 'Another tab reserve' })).toBeTruthy();
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(newValue);
 

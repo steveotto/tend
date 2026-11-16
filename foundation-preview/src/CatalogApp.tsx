@@ -139,7 +139,6 @@ export function CatalogApp() {
           rhythmScores={new Map<string, RhythmScoreResult>()}
           completedRhythms={new Set()}
           undoableRhythms={new Set()}
-          onFriendshipsChange={setFriendships}
           onAddRhythm={() => undefined}
           onEditRhythm={() => undefined}
           onRhythmHistory={() => undefined}
