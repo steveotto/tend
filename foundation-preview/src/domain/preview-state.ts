@@ -169,7 +169,100 @@ export type PreviewValidationResult =
 export type PreviewValidationDiagnostic = {
   code: string;
   path: string;
+  strengthCompletionLinks?: StrengthCompletionLinkSummary;
 };
+
+export type StrengthCompletionLinkSummary = {
+  workouts: number;
+  linked: number;
+  unlinked: number;
+  invalid: number;
+  incompleteLink: number;
+  missingRhythm: number;
+  nonHealthRhythm: number;
+  missingCompletion: number;
+  rhythmMismatch: number;
+  dateMismatch: number;
+  repeatedCompletion: number;
+  archivedRhythm: number;
+};
+
+function summarizeStrengthCompletionLinks(
+  strength: StrengthData,
+  savedRhythms: readonly SavedRhythm[],
+  datedRhythmCompletions: readonly DatedRhythmCompletion[],
+  archivedRhythmIds: ReadonlySet<string>
+): StrengthCompletionLinkSummary {
+  const summary: StrengthCompletionLinkSummary = {
+    workouts: 0,
+    linked: 0,
+    unlinked: 0,
+    invalid: 0,
+    incompleteLink: 0,
+    missingRhythm: 0,
+    nonHealthRhythm: 0,
+    missingCompletion: 0,
+    rhythmMismatch: 0,
+    dateMismatch: 0,
+    repeatedCompletion: 0,
+    archivedRhythm: 0
+  };
+  const seenCompletionIds = new Set<string>();
+
+  for (const log of strength.workouts) {
+    summary.workouts++;
+    if (!log.rhythmId && !log.completionId) {
+      summary.unlinked++;
+      continue;
+    }
+
+    let invalid = false;
+    if (!log.rhythmId || !log.completionId) {
+      summary.incompleteLink++;
+      invalid = true;
+    }
+    if (log.rhythmId && archivedRhythmIds.has(log.rhythmId)) summary.archivedRhythm++;
+
+    if (log.rhythmId) {
+      const rhythm = savedRhythms.find(item => item.id === log.rhythmId);
+      if (!rhythm) {
+        summary.missingRhythm++;
+        invalid = true;
+      } else if (!rhythm.categoryIds.includes('health')) {
+        summary.nonHealthRhythm++;
+        invalid = true;
+      }
+    }
+
+    if (log.completionId) {
+      if (seenCompletionIds.has(log.completionId)) {
+        summary.repeatedCompletion++;
+        invalid = true;
+      }
+      seenCompletionIds.add(log.completionId);
+      const completion = datedRhythmCompletions.find(item => item.id === log.completionId);
+      if (!completion) {
+        summary.missingCompletion++;
+        invalid = true;
+      } else {
+        if (completion.rhythmId !== log.rhythmId) {
+          summary.rhythmMismatch++;
+          invalid = true;
+        }
+        if (completion.effectiveDate !== log.rhythmOccurrence
+          || completion.effectiveDate !== log.date) {
+          summary.dateMismatch++;
+          invalid = true;
+        }
+      }
+    }
+
+    if (invalid) summary.invalid++;
+    else summary.linked++;
+  }
+
+  return summary;
+}
 
 const goalKeysV43 = [
   'id', 'title', 'currency', 'direction', 'startingBalanceMinor', 'startDate',
@@ -1104,25 +1197,23 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   if (!strength || !validateStrengthData(strength, true, true, true, undefined, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Strength settings, workouts, or workout history are invalid.' };
   }
-  const linkedWorkoutCompletionIds = new Set<string>();
-  for (const log of strength.workouts) {
-    if (!log.rhythmId || !log.completionId) continue;
-    const rhythm = savedRhythms.find(item => item.id === log.rhythmId);
-    const completion = datedRhythmCompletions.find(item => item.id === log.completionId);
-    if (!rhythm?.categoryIds.includes('health')
-      || !completion
-      || completion.rhythmId !== log.rhythmId
-      || completion.effectiveDate !== log.rhythmOccurrence
-      || completion.effectiveDate !== log.date
-      || linkedWorkoutCompletionIds.has(log.completionId)) {
-      return {
-        valid: false,
-        kind: 'invalid',
-        message: 'A linked Strength workout must reference its Health Rhythm and matching completion.'
-      };
-    }
-
-    linkedWorkoutCompletionIds.add(log.completionId);
+  const strengthCompletionLinks = summarizeStrengthCompletionLinks(
+    strength,
+    savedRhythms,
+    datedRhythmCompletions,
+    archivedRhythmIds
+  );
+  if (strengthCompletionLinks.invalid > 0) {
+    return {
+      valid: false,
+      kind: 'invalid',
+      message: 'A linked Strength workout must reference its Health Rhythm and matching completion.',
+      diagnostic: {
+        code: 'preview.strength.completion-link.invalid',
+        path: 'data.strength.workouts[*].completionId',
+        strengthCompletionLinks
+      }
+    };
   }
 
   const weight = isV17 || isV18 || hasCurrentFriendshipsData ? value.data.weight : createWeightData();

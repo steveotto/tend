@@ -5658,3 +5658,15 @@ The demonstrated defect is loss of diagnostics: the validator's reason was repla
 ## Release evidence
 
 PR [#95](https://github.com/steveotto/tend/pull/95) was merged to `main` as `ce80c05db7c0088479323b0a35afa5c4e97b3ce2`. The merged Pages build/deploy run **43897138012** and Cloudflare Pages check both succeeded; deployment `f8fd3411-9ca3-4a0e-ba47-81e2624d7c9e` completed successfully. Production serves the preview at `/app-preview` with `/assets/main-B-lUdmnM.js` and `/assets/main-Dze1cPm4.css`. The live JavaScript contains the new validation diagnostic markers, and the production CSS SHA-256 matches the locally verified production build. The preview and home endpoints return HTTP 200. This verifies publication, not real-account local saving or synchronization.
+
+## Strength workout-completion validation review (2026-11-16)
+
+The reported `preview.strength.completion-link.invalid` condition was not reproduced from any current synthetic writer. Quick and guided workout saves create the workout/completion pair through the shared Strength save path; removing a workout removes its linked completion in the same update; completion deletion and Tend Undo protect workout-linked records; Rhythm archiving retains the Rhythm and history; import and schema migration preserve stable IDs and relationships. Existing code rejects unlinked structural fragments and mismatched references rather than repairing them. This does not establish which condition exists in the user's document.
+
+Backup-validation errors for this relationship now include privacy-safe counts only: total, valid linked, unlinked, invalid, missing or non-Health Rhythms, missing completions, Rhythm/date mismatches, repeated completion references, and archived references. The diagnostic does not include workout text, notes, names, or identifiers and does not change validation or write behavior.
+
+Synthetic regression coverage verifies mixed linked/unlinked/malformed relationships and the aggregate diagnostic, valid archived history and unlinked logs through schema 43 migration, a save/reload/save and backup-serialization cycle, and legacy linked-workout import. Existing component coverage continues to verify quick and guided saves, exactly-once completion, protected Undo, and linked workout deletion.
+
+**Verification:** semantic typecheck passed; reader tests **7/7**; component/domain tests **1492/1492 across 100 files** (two workers); legacy tests **176/176**; production browser CSS check passed; Pages production build passed; Pages artifact tests **8/8**; `git diff --check` passed. Vite emitted its existing non-blocking chunk-size warning and runtime `/tend.css` resolution notice.
+
+No personal document, recovery bytes, account, private feed, or database was inspected or modified. Real-account local saving and synchronization remain unverified. No commit, push, merge, or deployment was made because no underlying cause in a supported synthetic path was demonstrated. The pre-existing `AGENTS.md` edit remains untouched.

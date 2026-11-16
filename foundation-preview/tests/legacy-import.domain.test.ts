@@ -273,6 +273,65 @@ describe('Classic Tend import dry run', () => {
     expect(result.candidate?.savedRhythms[0]?.personIds).toEqual(['person-one']);
   });
 
+  it('imports a linked Strength workout with its matching Rhythm completion intact', () => {
+    const result = analyzeLegacyTendImport(JSON.stringify({
+      people: [{ id: 'person-one', name: 'Synthetic Person' }],
+      rhythms: [{
+        id: 'strength-rhythm',
+        text: 'Strength session',
+        freq: 'daily',
+        tod: 'anytime',
+        areas: ['health'],
+        fitnessType: 'workout',
+        strengthMode: 'custom'
+      }],
+      events: [{
+        id: 'workout-event',
+        rhythmId: 'strength-rhythm',
+        fitnessLogId: 'workout-one',
+        rhythmOccurrence: '2026-10-10',
+        fitnessType: 'workout',
+        ts: Date.parse('2026-10-10T12:00:00Z')
+      }],
+      fitness: {
+        workouts: [{
+          id: 'workout-one',
+          date: '2026-10-10',
+          muscleIds: ['chest'],
+          rhythmId: 'strength-rhythm',
+          rhythmOccurrence: '2026-10-10',
+          fitnessType: 'workout'
+        }]
+      }
+    }), '2026-10-31');
+
+    expect(result.candidate).not.toBeNull();
+    expect(result.report.ambiguous).toEqual([]);
+    expect(result.report.invalid).toEqual([]);
+    const candidate = result.candidate!;
+    const rhythmId = candidate.savedRhythms[0]!.id;
+    expect(candidate.strength.workouts[0]).toMatchObject({
+      id: 'workout-one',
+      date: '2026-10-10',
+      rhythmId,
+      rhythmOccurrence: '2026-10-10',
+      completionId: 'legacy-completion-workout-event'
+    });
+    expect(candidate.datedRhythmCompletions).toContainEqual(expect.objectContaining({
+      id: 'legacy-completion-workout-event',
+      rhythmId,
+      effectiveDate: '2026-10-10'
+    }));
+
+    const imported = parsePreviewBackup(JSON.stringify(createPreviewEnvelope(candidate)), '2026-10-31');
+    expect(imported.valid).toBe(true);
+    if (imported.valid) {
+      expect(imported.envelope.data.strength.workouts).toHaveLength(1);
+      expect(imported.envelope.data.strength.workouts[0]).toMatchObject(candidate.strength.workouts[0]!);
+      expect(imported.envelope.data.datedRhythmCompletions).toEqual(candidate.datedRhythmCompletions);
+    }
+  });
+
   it('maps documented recurrence defaults and uses only explicit custom schedule anchors', () => {
     const result = analyzeLegacyTendImport(JSON.stringify({
       people: [{ id: 'person-one', name: 'Taylor' }],

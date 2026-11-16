@@ -225,5 +225,12 @@ function errorCode(value: unknown): string | null {
 }
 
 function formatDiagnostic(diagnostic: PreviewValidationDiagnostic): string {
-  return `${diagnostic.code} at ${diagnostic.path}`;
+  const counts = diagnostic.strengthCompletionLinks;
+  if (!counts) return `${diagnostic.code} at ${diagnostic.path}`;
+  return `${diagnostic.code} at ${diagnostic.path}; workout relationships: ${counts.workouts} total, `
+    + `${counts.linked} linked, ${counts.unlinked} unlinked, ${counts.invalid} invalid `
+    + `(incomplete ${counts.incompleteLink}, missing Rhythm ${counts.missingRhythm}, `
+    + `non-Health Rhythm ${counts.nonHealthRhythm}, missing completion ${counts.missingCompletion}, `
+    + `Rhythm mismatch ${counts.rhythmMismatch}, date mismatch ${counts.dateMismatch}, `
+    + `repeated completion ${counts.repeatedCompletion}, archived Rhythm ${counts.archivedRhythm})`;
 }
