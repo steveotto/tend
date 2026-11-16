@@ -332,6 +332,40 @@ describe('Classic Tend import dry run', () => {
     }
   });
 
+  it('blocks importing a linked Strength workout when its matching completion event is missing', () => {
+    const result = analyzeLegacyTendImport(JSON.stringify({
+      people: [{ id: 'person-one', name: 'Synthetic Person' }],
+      rhythms: [{
+        id: 'strength-rhythm',
+        text: 'Strength session',
+        freq: 'daily',
+        tod: 'anytime',
+        areas: ['health'],
+        fitnessType: 'workout',
+        strengthMode: 'custom'
+      }],
+      events: [],
+      fitness: {
+        workouts: [{
+          id: 'workout-one',
+          date: '2026-10-10',
+          muscleIds: ['chest'],
+          rhythmId: 'strength-rhythm',
+          rhythmOccurrence: '2026-10-10',
+          fitnessType: 'workout'
+        }]
+      }
+    }), '2026-10-31');
+
+    expect(result.candidate).toBeNull();
+    expect(result.report.ambiguous).toContainEqual({
+      path: '/fitness/workouts/0/fitnessLogId',
+      count: 1
+    });
+    expect(result.report.supported.strengthLogs).toBe(0);
+    expect(result.report.supported.rhythmCompletions).toBe(0);
+  });
+
   it('maps documented recurrence defaults and uses only explicit custom schedule anchors', () => {
     const result = analyzeLegacyTendImport(JSON.stringify({
       people: [{ id: 'person-one', name: 'Taylor' }],
