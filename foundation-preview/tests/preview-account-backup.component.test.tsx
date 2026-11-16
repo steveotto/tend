@@ -5,6 +5,7 @@ import { PreviewAccountBackupControls } from '../src/components/PreviewAccountBa
 import {
   createPreviewEnvelope,
   createSamplePreviewData,
+  parsePreviewBackup,
   PREVIEW_SCHEMA_VERSION,
   validatePreviewEnvelope
 } from '../src/domain/preview-state.ts';
@@ -217,6 +218,174 @@ describe('manual Preview account backup and restore', () => {
     expect(api.read).not.toHaveBeenCalled();
     expect(api.save).not.toHaveBeenCalled();
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+  });
+
+  it('reports relationship counts without exposing workout contents or identifiers', () => {
+    const data = fitnessData('Synthetic relationship diagnostic');
+    data.strength.workouts.push(
+      { id: 'synthetic-unlinked-workout', date: '2026-11-03', muscleIds: ['back'] },
+      {
+        id: 'synthetic-missing-completion-workout',
+        date: '2026-11-02',
+        muscleIds: ['hamstrings'],
+        rhythmId: data.savedRhythms[0]!.id,
+        rhythmOccurrence: '2026-11-02',
+        completionId: 'synthetic-missing-completion'
+      },
+      {
+        id: 'synthetic-missing-rhythm-workout',
+        date: '2026-11-01',
+        muscleIds: ['shoulders'],
+        rhythmId: 'synthetic-missing-rhythm',
+        rhythmOccurrence: '2026-11-01',
+        completionId: 'synthetic-known-completion'
+      }
+    );
+    data.datedRhythmCompletions.push({
+      id: 'synthetic-known-completion',
+      rhythmId: data.savedRhythms[0]!.id,
+      effectiveDate: '2026-11-01',
+      localTime: '15:00',
+      timeZone: 'UTC',
+      completedAt: '2026-11-01T15:00:00.000Z',
+      recordedAt: '2026-11-01T15:00:00.000Z'
+    });
+
+    let validationError: unknown;
+    try {
+      createValidatedPreviewAccountDocument(data, currentDate);
+    } catch (error) {
+      validationError = error;
+    }
+
+    expect(validationError).toMatchObject({
+      diagnostic: {
+        code: 'preview.strength.completion-link.invalid',
+        path: 'data.strength.workouts[*].completionId',
+        strengthCompletionLinks: {
+          workouts: 4,
+          linked: 1,
+          unlinked: 1,
+          invalid: 2,
+          missingRhythm: 1,
+          missingCompletion: 1,
+          rhythmMismatch: 1
+        }
+      }
+    });
+    expect(validationError).toBeInstanceOf(Error);
+    if (validationError instanceof Error) {
+      expect(validationError.message).toContain('1 linked, 1 unlinked, 2 invalid');
+      expect(validationError.message).not.toContain('Synthetic relationship diagnostic');
+      expect(validationError.message).not.toContain('synthetic-missing-rhythm');
+      expect(validationError.message).not.toContain('synthetic-missing-completion');
+      expect(validationError.message).not.toContain('synthetic-unlinked-workout');
+      expect(validationError.message).not.toContain('synthetic-missing-completion-workout');
+    }
+  });
+
+  it('shows relationship counts before any account request or local write', async () => {
+    const user = userEvent.setup();
+    const data = fitnessData('Synthetic visible relationship diagnostic');
+    data.strength.workouts.push({
+      id: 'synthetic-visible-invalid-workout',
+      date: '2026-11-03',
+      muscleIds: ['back'],
+      rhythmId: data.savedRhythms[0]!.id,
+      rhythmOccurrence: '2026-11-03',
+      completionId: 'synthetic-visible-missing-completion'
+    });
+    const local = accountStorage(data);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw, undefined, () => true, accountA, true, false);
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('1 linked, 0 unlinked, 1 invalid');
+    expect(alert.textContent).toContain('missing completion 1');
+    expect(alert.textContent).not.toContain('Synthetic visible relationship diagnostic');
+    expect(alert.textContent).not.toContain('synthetic-visible-invalid-workout');
+    expect(alert.textContent).not.toContain('synthetic-visible-missing-completion');
+    expect(api.read).not.toHaveBeenCalled();
+    expect(api.save).not.toHaveBeenCalled();
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+  });
+
+  it('preserves an archived Rhythm’s linked workout through a supported schema migration', () => {
+    const data = fitnessData('Synthetic archived relationship');
+    const rhythmId = data.savedRhythms[0]!.id;
+    data.archivedRhythmIds = [rhythmId];
+    data.strength.workouts[0]!.notes = 'Preserve this synthetic workout note.';
+    data.strength.workouts.push({
+      id: 'synthetic-unlinked-workout',
+      date: '2026-11-03',
+      muscleIds: ['back']
+    });
+    const workout = data.strength.workouts[0];
+    if (!workout) throw new Error('Synthetic relationship fixture is missing its workout.');
+    const preservedWorkout = structuredClone(workout);
+    const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+      schemaVersion: number;
+      data: {
+        goals: Array<{ supportingRhythmIds?: string[] }>;
+      };
+    };
+    envelope.schemaVersion = 43;
+    for (const goal of envelope.data.goals) delete goal.supportingRhythmIds;
+
+    const migrated = parsePreviewBackup(JSON.stringify(envelope), currentDate);
+
+    expect(migrated).toMatchObject({ valid: true, sourceSchemaVersion: 43 });
+    if (!migrated.valid) return;
+    expect(migrated.envelope.data.archivedRhythmIds).toEqual([rhythmId]);
+    expect(migrated.envelope.data.savedRhythms[0]?.id).toBe(rhythmId);
+    expect(migrated.envelope.data.strength.workouts[0]).toMatchObject(preservedWorkout);
+    expect(migrated.envelope.data.strength.workouts[0]?.supersetGroups).toEqual([]);
+    expect(migrated.envelope.data.strength.workouts[1]).toMatchObject({
+      id: 'synthetic-unlinked-workout',
+      date: '2026-11-03',
+      muscleIds: ['back']
+    });
+    expect(migrated.envelope.data.datedRhythmCompletions[0]?.id).toBe(workout.completionId);
+  });
+
+  it('saves, reloads, saves again, and serializes the same linked workout relationship', () => {
+    const data = fitnessData('Synthetic repeated save');
+    const local = accountStorage(data);
+    const workout = data.strength.workouts[0];
+    const completion = data.datedRhythmCompletions[0];
+    if (!workout || !completion) throw new Error('Synthetic linked workout fixture is incomplete.');
+
+    const firstSave = writePreview(local.storage, data, local.raw, { currentDate });
+    expect(firstSave.kind).toBe('saved');
+    if (firstSave.kind !== 'saved') return;
+    const reloaded = loadPreview(local.storage, currentDate);
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    const secondSave = writePreview(
+      local.storage,
+      { ...reloaded.data, showTended: !reloaded.data.showTended },
+      firstSave.raw,
+      { currentDate }
+    );
+    expect(secondSave.kind).toBe('saved');
+    if (secondSave.kind !== 'saved') return;
+
+    const serialized = parsePreviewBackup(secondSave.raw, currentDate);
+    expect(serialized.valid).toBe(true);
+    if (!serialized.valid) return;
+    expect(serialized.envelope.data.strength.workouts[0]).toMatchObject({
+      id: workout.id,
+      rhythmId: workout.rhythmId,
+      rhythmOccurrence: workout.rhythmOccurrence,
+      completionId: workout.completionId,
+      muscleIds: workout.muscleIds
+    });
+    expect(serialized.envelope.data.datedRhythmCompletions).toContainEqual(completion);
   });
 
   it('downloads the validated current account document through one read without changing either copy', async () => {
