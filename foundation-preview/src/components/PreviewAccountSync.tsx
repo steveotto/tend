@@ -1017,6 +1017,9 @@ export function PreviewAccountSync({
             deviceRecoveryError={deviceRecoveryError}
             autoSyncEnabled={autoSyncEnabled}
             enabled={enabled && !manualBusy && (!autoSyncEnabled || (status.kind !== 'saving' && status.kind !== 'checking'))}
+            localSaveConfirmed={localSaveConfirmed}
+            localSavePending={localSaveStatus === 'loading' || localSaveStatus === 'saving'}
+            recoveryOperationLocked={manualBusy || manualOperationLocked}
             syncBusy={autoSyncEnabled && (status.kind === 'saving' || status.kind === 'checking')}
             syncStatus={status.kind}
             verifiedAccountStatus={verifiedAccountStatus?.accountId === accountId

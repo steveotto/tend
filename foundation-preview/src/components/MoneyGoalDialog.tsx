@@ -23,6 +23,7 @@ type MoneyGoalDialogProps = {
   dismissOnBackdrop?: boolean;
   dialogClassName?: string;
   phoneFullScreen?: boolean;
+  scrollableBody?: boolean;
   inert?: boolean;
   surfaceClassName?: string;
   bodyClassName?: string;
@@ -48,6 +49,7 @@ export function MoneyGoalDialog({
   dismissOnBackdrop = false,
   dialogClassName,
   phoneFullScreen = false,
+  scrollableBody = false,
   inert = false,
   surfaceClassName,
   bodyClassName,
@@ -61,6 +63,10 @@ export function MoneyGoalDialog({
     const dialogElement = dialogRef.current;
     if (!dialogElement) return;
     const activeDialog: HTMLDialogElement = dialogElement;
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      && document.activeElement !== document.body
+      ? document.activeElement
+      : null;
     if (typeof activeDialog.showModal === 'function') activeDialog.showModal();
     else activeDialog.setAttribute('open', '');
     if (initialFocusId) {
@@ -68,10 +74,20 @@ export function MoneyGoalDialog({
     }
 
     const anchorReference = anchorRef;
+    function closeAndRestoreFocus() {
+      if (activeDialog.open && typeof activeDialog.close === 'function') activeDialog.close();
+      else activeDialog.removeAttribute('open');
+      const containingDialog = previouslyFocused?.closest('dialog');
+      if (previouslyFocused?.isConnected
+        && !previouslyFocused.hasAttribute('disabled')
+        && !previouslyFocused.closest('[inert]')
+        && !(containingDialog instanceof HTMLDialogElement && !containingDialog.open)) {
+        previouslyFocused.focus({ preventScroll: true });
+      }
+    }
+
     if (!anchorReference) {
-      return () => {
-        if (activeDialog.open && typeof activeDialog.close === 'function') activeDialog.close();
-      };
+      return closeAndRestoreFocus;
     }
     const activeAnchorReference: RefObject<HTMLElement | null> = anchorReference;
 
@@ -162,9 +178,40 @@ export function MoneyGoalDialog({
       window.removeEventListener('scroll', syncPosition, true);
       window.visualViewport?.removeEventListener('resize', syncPosition);
       window.visualViewport?.removeEventListener('scroll', syncPosition);
-      if (activeDialog.open && typeof activeDialog.close === 'function') activeDialog.close();
+      closeAndRestoreFocus();
     };
   }, [initialFocusId, anchorRef, phoneFullScreen]);
+
+  const closeControl = closeLabel && (
+    <button
+      id={closeButtonId}
+      type="button"
+      className="money-goal-dialog__close"
+      aria-label={closeLabel}
+      onClick={onClose}
+    >
+      ×
+    </button>
+  );
+  const titleContent = title && (titleLeadingAction ? (
+    <div className="money-goal-dialog__title-row">
+      {titleLeadingAction}
+      <h2
+        id={titleId ?? 'money-goal-dialog-title'}
+        tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+      >
+        {title}
+      </h2>
+    </div>
+  ) : (
+    <h2
+      id={titleId ?? 'money-goal-dialog-title'}
+      tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+    >
+      {title}
+    </h2>
+  ));
+  const dialogContent = bodyClassName ? <div className={bodyClassName}>{children}</div> : children;
 
   const dialog = (
     <dialog
@@ -174,7 +221,8 @@ export function MoneyGoalDialog({
       className={[
         'money-goal-dialog',
         dialogClassName,
-        phoneFullScreen ? 'dialog--phone-fullscreen' : ''
+        phoneFullScreen ? 'dialog--phone-fullscreen' : '',
+        scrollableBody ? 'money-goal-dialog--scrollable-body' : ''
       ].filter(Boolean).join(' ')}
       aria-labelledby={labelledBy ?? 'money-goal-dialog-title'}
       onCancel={event => {
@@ -196,38 +244,49 @@ export function MoneyGoalDialog({
       }}
     >
       <div className={['money-goal-dialog__surface', surfaceClassName].filter(Boolean).join(' ')}>
-        {closeLabel && (
-          <button
-            id={closeButtonId}
-            type="button"
-            className="money-goal-dialog__close"
-            aria-label={closeLabel}
-            onClick={onClose}
-          >
-            ×
-          </button>
-        )}
-        {eyebrow && <p className="money-goal-dialog__eyebrow">{eyebrow}</p>}
-        {title && titleLeadingAction ? (
-          <div className="money-goal-dialog__title-row">
-            {titleLeadingAction}
-            <h2
-              id={titleId ?? 'money-goal-dialog-title'}
-              tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+        {scrollableBody ? (
+          <>
+            <header className="money-goal-dialog__persistent-header">
+              <div className="money-goal-dialog__heading">
+                {eyebrow && <p className="money-goal-dialog__eyebrow">{eyebrow}</p>}
+                {titleContent}
+              </div>
+              {closeControl}
+            </header>
+            <div
+              className="money-goal-dialog__scroll-region"
+              role="region"
+              aria-label={title ? `${title} content` : 'Dialog content'}
+              tabIndex={0}
+              onKeyDown={event => {
+                if (event.target !== event.currentTarget) return;
+                const region = event.currentTarget;
+                const pageStep = Math.max(40, region.clientHeight - 32);
+                const maximum = Math.max(0, region.scrollHeight - region.clientHeight);
+                const key = event.key;
+                if (key === 'ArrowDown') region.scrollTop = Math.min(maximum, region.scrollTop + 40);
+                else if (key === 'ArrowUp') region.scrollTop = Math.max(0, region.scrollTop - 40);
+                else if (key === 'PageDown') region.scrollTop = Math.min(maximum, region.scrollTop + pageStep);
+                else if (key === 'PageUp') region.scrollTop = Math.max(0, region.scrollTop - pageStep);
+                else if (key === 'Home') region.scrollTop = 0;
+                else if (key === 'End') region.scrollTop = maximum;
+                else return;
+                event.preventDefault();
+              }}
             >
-              {title}
-            </h2>
-          </div>
-        ) : title && (
-          <h2
-            id={titleId ?? 'money-goal-dialog-title'}
-            tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
-          >
-            {title}
-          </h2>
+              {intro && <p className="money-goal-dialog__intro">{intro}</p>}
+              {dialogContent}
+            </div>
+          </>
+        ) : (
+          <>
+            {closeControl}
+            {eyebrow && <p className="money-goal-dialog__eyebrow">{eyebrow}</p>}
+            {titleContent}
+            {intro && <p className="money-goal-dialog__intro">{intro}</p>}
+            {dialogContent}
+          </>
         )}
-        {intro && <p className="money-goal-dialog__intro">{intro}</p>}
-        {bodyClassName ? <div className={bodyClassName}>{children}</div> : children}
       </div>
     </dialog>
   );

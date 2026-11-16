@@ -158,6 +158,11 @@ function Browser({
   const [repairRecoveryRaw, setRepairRecoveryRaw] = useState(
     () => storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)
   );
+  const [localSave, setLocalSave] = useState({
+    confirmed: localSaveConfirmed,
+    status: localSaveStatus,
+    error: null as string | null
+  });
 
   function editPerson(label: string) {
     const first = data.people[0];
@@ -183,8 +188,14 @@ function Browser({
     if (result.kind === 'saved') {
       setData(next);
       setRaw(result.raw);
+      setLocalSave({ confirmed: true, status: 'saved', error: null });
       return null;
     }
+    setLocalSave({
+      confirmed: false,
+      status: result.kind === 'conflict' ? 'conflict' : 'error',
+      error: result.kind === 'error' ? result.message : null
+    });
     return result.kind === 'error' ? result.message : 'Local data changed.';
   }
 
@@ -197,8 +208,14 @@ function Browser({
     if (result.kind === 'saved') {
       setData(next);
       setRaw(result.raw);
+      setLocalSave({ confirmed: true, status: 'saved', error: null });
       return null;
     }
+    setLocalSave({
+      confirmed: false,
+      status: result.kind === 'conflict' ? 'conflict' : 'error',
+      error: result.kind === 'error' ? result.message : null
+    });
     return result.kind === 'error' ? result.message : 'Local data changed.';
   }
 
@@ -225,10 +242,10 @@ function Browser({
         localRecoveryError={null}
         repairRecoveryRaw={repairRecoveryRaw}
         repairRecoveryError={null}
-        enabled={localSaveConfirmed}
-        localSaveConfirmed={localSaveConfirmed}
-        localSaveStatus={localSaveStatus}
-        localSaveError={null}
+        enabled={localSave.confirmed}
+        localSaveConfirmed={localSave.confirmed}
+        localSaveStatus={localSave.status}
+        localSaveError={localSave.error}
         onRetryLocalSave={() => {}}
         autoSyncEnabled={autoSyncEnabled}
         visible
@@ -1236,6 +1253,116 @@ describe('Preview account sync', () => {
     expect(localStorage.values.get(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(originalLocalRaw);
     expect(localStorage.values.get(PREVIEW_STORAGE_KEY)).not.toBe(originalLocalRaw);
     expect(screen.getByRole('button', { name: /Download workout-repair source copy/ })).toBeTruthy();
+    view.unmount();
+  });
+
+  it('keeps the repair alive when closing recovery during account sync and reports each stage', async () => {
+    const invalidLocal = brokenLowerBodyWorkoutData();
+    const localStorage = makeStorage(invalidLocal);
+    const existingAccountRecord = cloudRecord(createSamplePreviewData(), 4);
+    const service = backend(existingAccountRecord);
+    localStorage.values.set(`${PREVIEW_STORAGE_KEY}:account-sync-state`, JSON.stringify({
+      accountId,
+      revision: 4,
+      syncedEnvelope: existingAccountRecord.document,
+      syncedAt: existingAccountRecord.updatedAt
+    }));
+    let announceUpload!: () => void;
+    const uploadStarted = new Promise<void>(resolve => { announceUpload = resolve; });
+    let completeUpload: (() => Promise<void>) | null = null;
+    let uploadCalls = 0;
+    const api: PreviewAccountBackupApi = {
+      read: service.api.read,
+      save: (document, expectedRevision) => {
+        uploadCalls += 1;
+        announceUpload();
+        return new Promise<number>((resolve, reject) => {
+          completeUpload = async () => {
+            try {
+              resolve(await service.api.save(document, expectedRevision));
+            } catch (error) {
+              reject(error);
+            }
+          };
+        });
+      }
+    };
+    const view = render(<Browser api={api} storage={localStorage.storage} initialData={invalidLocal} />);
+
+    await screen.findByText(/Needs attention|Could not validate/i);
+    fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
+    await screen.findByText(/Workout: Lower Body/);
+    fireEvent.click(screen.getByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    await screen.findByText(/Local save: confirmed/);
+    await uploadStarted;
+    expect(await screen.findByText(/local save is confirmed\. Account sync is saving/i)).toBeTruthy();
+    const dialog = screen.getByRole('dialog', { name: 'Account recovery' });
+    const close = within(dialog).getByRole('button', { name: 'Close Account recovery' });
+    expect(close.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(close);
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Account recovery' })).toBeNull());
+    expect(document.body.style.position).not.toBe('fixed');
+    expect(screen.getByText('Saving…')).toBeTruthy();
+    expect(screen.getByText('Saving your changes to your account.')).toBeTruthy();
+    expect(uploadCalls).toBe(1);
+    expect(service.saveCalls).toBe(0);
+
+    await act(async () => {
+      if (!completeUpload) throw new Error('Synthetic account upload did not start.');
+      await completeUpload();
+    });
+    await screen.findByText('Saved to your account');
+    expect(uploadCalls).toBe(1);
+    expect(service.saveCalls).toBe(1);
+    expect(service.record?.revision).toBe(5);
+
+    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
+    await screen.findByText(/passed backup validation/);
+    expect(service.saveCalls).toBe(1);
+    view.unmount();
+  });
+
+  it('shows a real local-write failure instead of treating its recovery archive as a saved repair', async () => {
+    const invalidLocal = brokenLowerBodyWorkoutData();
+    const localStorage = makeStorage(invalidLocal);
+    const originalRaw = localStorage.values.get(PREVIEW_STORAGE_KEY);
+    if (!originalRaw) throw new Error('Synthetic invalid local source is missing.');
+    const failingStorage: PreviewStorage = {
+      getItem: key => localStorage.storage.getItem(key),
+      setItem: (key, value) => {
+        if (key === PREVIEW_STORAGE_KEY) throw new Error('synthetic active write failure');
+        localStorage.storage.setItem(key, value);
+      }
+    };
+    const service = backend(cloudRecord(createSamplePreviewData(), 4));
+    const view = render(<Browser api={service.api} storage={failingStorage} initialData={invalidLocal} />);
+
+    await screen.findByText(/Needs attention|Could not validate/i);
+    fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
+    await screen.findByText(/Workout: Lower Body/);
+    fireEvent.click(screen.getByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    expect(await screen.findByText(/repair save was not confirmed/i)).toBeTruthy();
+    expect(await screen.findByText(/local save is not confirmed/i)).toBeTruthy();
+    expect(screen.getByText(/latest changes are not confirmed saved on this device/i)).toBeTruthy();
+    expect(localStorage.values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(localStorage.values.get(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(originalRaw);
+    expect(service.saveCalls).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
+    expect(await screen.findByText(/Workout: Lower Body/)).toBeTruthy();
+    expect(service.saveCalls).toBe(0);
     view.unmount();
   });
 
