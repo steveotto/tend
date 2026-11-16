@@ -848,7 +848,11 @@ export function validatePreviewEnvelope(value: unknown, currentDate: string): Pr
     for (const rhythm of value.data.savedRhythms as SavedRhythm[]) {
       const timeOfDay = rhythmTimeValueFromLegacyLabel(rhythm.timeLabel);
       if (!timeOfDay) {
-        return { valid: false, kind: 'invalid', message: `No v4 time value is mapped for "${rhythm.timeLabel}".` };
+        return {
+          valid: false,
+          kind: 'invalid',
+          message: `The existing time value "${rhythm.timeLabel}" has no supported v4 mapping. Preserve the original recovery before resolving it; no changes were written.`
+        };
       }
       savedRhythms.push({ ...rhythm, timeOfDay });
     }
