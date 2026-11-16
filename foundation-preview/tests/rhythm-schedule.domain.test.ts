@@ -6,6 +6,7 @@ import {
   rhythmTimeLabel,
   rhythmTimeOptions,
   rhythmTimeValueFromLabel,
+  rhythmTimeValueFromLegacyLabel,
   validateRhythmSchedule
 } from '../src/domain/rhythm-schedule.ts';
 import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
@@ -231,8 +232,14 @@ describe('pure structured Rhythm schedule domain', () => {
       'Afternoon', 'Way home', 'Evening', 'Bedtime'
     ]);
     expect(rhythmTimeValueFromLabel('Morning')).toBe('morning');
+    expect(rhythmTimeValueFromLabel('All day')).toBe('all-day');
+    expect(rhythmTimeValueFromLabel('All-day')).toBe('all-day');
+    expect(rhythmTimeValueFromLegacyLabel('Anytime')).toBe('anytime');
+    expect(rhythmTimeValueFromLegacyLabel('All day')).toBe('all-day');
+    expect(rhythmTimeValueFromLegacyLabel('All-day')).toBe('all-day');
     expect(rhythmTimeLabel('way-home')).toBe('Way home');
     expect(rhythmTimeValueFromLabel('Night shift')).toBeUndefined();
+    expect(rhythmTimeValueFromLegacyLabel('Quiet time')).toBeUndefined();
     expect(rhythmSummary({ frequency: 'daily' }, 'all-day')).toBe('Every day · All day.');
   });
 });
