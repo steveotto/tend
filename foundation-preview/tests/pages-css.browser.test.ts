@@ -1037,6 +1037,160 @@ async function main() {
               row.left >= 0 && row.right <= viewportWidth && row.width > 0 && row.height > 0
             ));
           }
+          const backgroundScrollY = await page.evaluate(() => {
+            const sentinel = document.createElement('div');
+            sentinel.id = 'synthetic-background-scroll-sentinel';
+            sentinel.style.height = '2400px';
+            sentinel.style.pointerEvents = 'none';
+            sentinel.style.visibility = 'hidden';
+            sentinel.setAttribute('aria-hidden', 'true');
+            document.body.append(sentinel);
+            const maximum = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+            window.scrollTo(0, Math.min(180, maximum));
+            return window.scrollY;
+          });
+          assert.ok(backgroundScrollY > 0, 'The recovery fixture should have a scrollable background to restore.');
+          await page.getByRole('button', { name: /Account recovery/ }).click();
+          const recoveryDialog = page.getByRole('dialog', { name: 'Account recovery' });
+          await recoveryDialog.waitFor();
+          await page.evaluate(() => {
+            const region = document.querySelector<HTMLElement>('.preview-account-backup-dialog .money-goal-dialog__scroll-region');
+            if (!region) throw new Error('Account recovery is missing its scrollable content region.');
+            const diagnostic = document.createElement('p');
+            diagnostic.className = 'preview-account-backup__error';
+            diagnostic.setAttribute('role', 'alert');
+            diagnostic.textContent = `Synthetic long recovery diagnostic: ${'saved source remains unchanged. '.repeat(120)}`;
+            region.append(diagnostic);
+          });
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 812 });
+            const recoveryModal = await page.evaluate(() => {
+              const dialog = document.querySelector<HTMLElement>('.preview-account-backup-dialog');
+              const surface = dialog?.querySelector<HTMLElement>('.money-goal-dialog__surface');
+              const header = dialog?.querySelector<HTMLElement>('.money-goal-dialog__persistent-header');
+              const close = dialog?.querySelector<HTMLButtonElement>('.money-goal-dialog__close');
+              const region = dialog?.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+              if (!dialog || !surface || !header || !close || !region) {
+                throw new Error('Account recovery is missing its persistent close header or scroll region.');
+              }
+              const dialogRect = dialog.getBoundingClientRect();
+              const headerRect = header.getBoundingClientRect();
+              const closeRect = close.getBoundingClientRect();
+              const regionRect = region.getBoundingClientRect();
+              const surfaceStyle = getComputedStyle(surface);
+              const regionStyle = getComputedStyle(region);
+              const dialogStyle = getComputedStyle(dialog);
+              region.scrollTop = region.scrollHeight;
+              return {
+                hasScrollableLayout: dialog.classList.contains('money-goal-dialog--scrollable-body'),
+                dialogOverflow: dialogStyle.overflow,
+                surfaceDisplay: surfaceStyle.display,
+                surfaceOverflow: surfaceStyle.overflow,
+                viewportWidth: window.innerWidth,
+                documentWidth: document.documentElement.scrollWidth,
+                dialogWidth: dialogRect.width,
+                dialogHeight: dialogRect.height,
+                dialogBottom: dialogRect.bottom,
+                dialogBackground: dialogStyle.backgroundColor,
+                headerTop: headerRect.top,
+                closeTop: closeRect.top,
+                closeBottom: closeRect.bottom,
+                closeWidth: closeRect.width,
+                closeHeight: closeRect.height,
+                regionTop: regionRect.top,
+                regionBottom: regionRect.bottom,
+                regionOverflowY: regionStyle.overflowY,
+                regionOverscroll: regionStyle.overscrollBehaviorY,
+                touchAction: regionStyle.touchAction,
+                regionClientHeight: region.clientHeight,
+                regionScrollHeight: region.scrollHeight,
+                regionScrollTop: region.scrollTop,
+                surfacePadding: surfaceStyle.padding,
+                bodyPosition: document.body.style.position,
+                bodyOverflow: document.body.style.overflow,
+                closeInHeader: header.contains(close)
+              };
+            });
+            assert.equal(recoveryModal.viewportWidth, viewportWidth);
+            assert.equal(recoveryModal.documentWidth, viewportWidth,
+              `Account recovery must not cause horizontal overflow at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(recoveryModal.dialogWidth > 0 && recoveryModal.dialogHeight > 0);
+            assert.notEqual(recoveryModal.dialogBackground, 'rgba(0, 0, 0, 0)',
+              'The modal surface must be opaque over the underlying page.');
+            assert.equal(recoveryModal.hasScrollableLayout, true);
+            assert.equal(recoveryModal.dialogOverflow, 'hidden');
+            assert.equal(recoveryModal.surfaceDisplay, 'flex');
+            assert.equal(recoveryModal.surfaceOverflow, 'hidden');
+            assert.equal(recoveryModal.closeInHeader, true);
+            assert.ok(recoveryModal.closeTop >= 0 && recoveryModal.closeBottom <= 812);
+            assert.deepEqual([recoveryModal.closeWidth, recoveryModal.closeHeight], [44, 44]);
+            assert.ok(recoveryModal.regionTop > recoveryModal.headerTop);
+            assert.ok(recoveryModal.regionBottom <= recoveryModal.dialogBottom);
+            assert.equal(recoveryModal.regionOverflowY, 'auto');
+            assert.equal(recoveryModal.regionOverscroll, 'contain');
+            assert.equal(recoveryModal.touchAction, 'pan-y');
+            assert.ok(recoveryModal.regionClientHeight > 0);
+            assert.ok(recoveryModal.regionScrollHeight > recoveryModal.regionClientHeight);
+            assert.ok(recoveryModal.regionScrollTop > 0);
+            assert.equal(recoveryModal.bodyPosition, 'fixed');
+            assert.equal(recoveryModal.bodyOverflow, 'hidden');
+            assert.match(recoveryModal.surfacePadding, /18px/);
+            assert.match(recoveryModal.surfacePadding, /12px/);
+          }
+          await page.setViewportSize({ width: 667, height: 375 });
+          await page.evaluate(() => {
+            const region = document.querySelector<HTMLElement>('.preview-account-backup-dialog .money-goal-dialog__scroll-region');
+            const close = document.querySelector<HTMLButtonElement>('.preview-account-backup-dialog .money-goal-dialog__close');
+            if (!region || !close) throw new Error('Account recovery controls disappeared in landscape.');
+            region.scrollTop = 0;
+            close.focus();
+          });
+          await page.keyboard.press('Tab');
+          assert.equal(await page.evaluate(() =>
+            document.activeElement === document.querySelector('.preview-account-backup-dialog .money-goal-dialog__scroll-region')
+          ), true, 'Keyboard users should be able to focus the independently scrollable region.');
+          const keyboardScrollBefore = await page.locator('.preview-account-backup-dialog .money-goal-dialog__scroll-region')
+            .evaluate(element => ({ top: element.scrollTop, height: element.clientHeight, total: element.scrollHeight }));
+          await page.keyboard.press('PageDown');
+          const keyboardScrollAfter = await page.locator('.preview-account-backup-dialog .money-goal-dialog__scroll-region')
+            .evaluate(element => ({ top: element.scrollTop, height: element.clientHeight, total: element.scrollHeight }));
+          assert.ok(keyboardScrollAfter.top > keyboardScrollBefore.top,
+            `The scroll region should respond to keyboard scrolling in landscape: ${JSON.stringify({ keyboardScrollBefore, keyboardScrollAfter })}.`);
+          const landscapeModal = await page.evaluate(() => {
+            const dialog = document.querySelector<HTMLElement>('.preview-account-backup-dialog');
+            const close = dialog?.querySelector<HTMLButtonElement>('.money-goal-dialog__close');
+            const region = dialog?.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+            if (!dialog || !close || !region) throw new Error('Account recovery is incomplete in landscape.');
+            const closeRect = close.getBoundingClientRect();
+            return {
+              viewportWidth: window.innerWidth,
+              viewportHeight: window.innerHeight,
+              documentWidth: document.documentElement.scrollWidth,
+              dialogWidth: dialog.getBoundingClientRect().width,
+              dialogHeight: dialog.getBoundingClientRect().height,
+              closeBottom: closeRect.bottom,
+              regionBottom: region.getBoundingClientRect().bottom
+            };
+          });
+          assert.equal(landscapeModal.viewportWidth, 667);
+          assert.equal(landscapeModal.viewportHeight, 375);
+          assert.equal(landscapeModal.documentWidth, 667);
+          assert.equal(landscapeModal.dialogWidth, 667);
+          assert.equal(landscapeModal.dialogHeight, 375);
+          assert.ok(landscapeModal.closeBottom <= 375);
+          assert.ok(landscapeModal.regionBottom <= 375);
+          await page.getByRole('button', { name: 'Close Account recovery' }).click();
+          assert.equal(await page.evaluate(() =>
+            document.activeElement?.classList.contains('preview-account-backup__entry') ?? false
+          ), true, 'Closing Account recovery should restore focus to its opener.');
+          assert.notEqual(await page.evaluate(() => document.body.style.position), 'fixed');
+          assert.notEqual(await page.evaluate(() => document.body.style.overflow), 'hidden');
+          assert.equal(await page.evaluate(() => window.scrollY), backgroundScrollY,
+            'Closing Account recovery should restore the background scroll position.');
+          await page.evaluate(() => {
+            document.getElementById('synthetic-background-scroll-sentinel')?.remove();
+            window.scrollTo(0, 0);
+          });
           await page.getByRole('button', { name: '‹ Settings' }).click();
           await page.getByRole('button', { name: '‹ More' }).click();
           for (const viewportWidth of [375, 390, 430]) {
@@ -2123,7 +2277,7 @@ async function main() {
                     originalExpanded === 'true' ? 'false' : 'true',
                     'Keyboard activation should toggle exactly once.'
                   );
-                  await page.keyboard.press('Space');
+                  await page.keyboard.press('Enter');
                   assert.equal(await finalDisclosure.getAttribute('aria-expanded'), originalExpanded);
                   await assertActualRailEndpoints();
                 }

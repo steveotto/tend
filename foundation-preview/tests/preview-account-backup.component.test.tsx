@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewAccountBackupControls } from '../src/components/PreviewAccountBackupControls.tsx';
@@ -139,7 +139,12 @@ function renderControls(
   openRecovery = true,
   autoSyncEnabled = true,
   syncStatus: PreviewAccountSyncState = 'account',
-  onRepair?: (data: PreviewData, expectedRaw: string) => string | null
+  onRepair?: (data: PreviewData, expectedRaw: string) => string | null,
+  localSaveConfirmed = true,
+  localSavePending = false,
+  recoveryOperationLocked = false,
+  enabled = true,
+  syncBusy = false
 ) {
   const view = render(
     <PreviewAccountBackupControls
@@ -150,7 +155,11 @@ function renderControls(
       currentDate={currentDate}
       localRaw={localRaw}
       localRecoveryRaw={storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)}
-      enabled
+      enabled={enabled}
+      localSaveConfirmed={localSaveConfirmed}
+      localSavePending={localSavePending}
+      recoveryOperationLocked={recoveryOperationLocked}
+      syncBusy={syncBusy}
       autoSyncEnabled={autoSyncEnabled}
       syncStatus={syncStatus}
       isIdentityCurrent={isIdentityCurrent}
@@ -220,6 +229,70 @@ describe('manual Preview account backup and restore', () => {
     fireEvent.click(screen.getByText('Technical details'));
     expect(await screen.findByText(/Last updated .*revision 3\./)).toBeTruthy();
     expect(screen.queryByText(/Signed-in account ending in/)).toBeNull();
+  });
+
+  it('keeps Account recovery closeable with a keyboard-accessible scroll region and restores focus', async () => {
+    const user = userEvent.setup();
+    const data = fitnessData('Scrollable recovery');
+    const local = accountStorage(data);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw, undefined, () => true, accountA, false);
+    const opener = screen.getByRole('button', { name: /Account recovery/ });
+    await user.click(opener);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Account recovery' });
+    const close = within(dialog).getByRole('button', { name: 'Close Account recovery' });
+    const scrollRegion = within(dialog).getByRole('region', { name: 'Account recovery content' });
+    expect(dialog.classList.contains('money-goal-dialog--scrollable-body')).toBe(true);
+    expect(close.closest('.money-goal-dialog__persistent-header')).toBeTruthy();
+    expect(scrollRegion.tabIndex).toBe(0);
+    expect(document.activeElement).toBe(close);
+    expect(document.body.style.position).toBe('fixed');
+
+    await user.click(close);
+    expect(await screen.queryByRole('dialog', { name: 'Account recovery' })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(document.body.style.position).not.toBe('fixed');
+  });
+
+  it('lets a confirmed account save continue after closing its confirmation dialog', async () => {
+    const user = userEvent.setup();
+    const deviceData = fitnessData('Synthetic device version');
+    const accountData = fitnessData('Synthetic account version');
+    const local = accountStorage(deviceData);
+    const record = accountBackupRecord(createPreviewEnvelope(accountData), 3);
+    let completeSave: ((revision: number) => void) | null = null;
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => record),
+      save: vi.fn(() => new Promise<number>(resolve => { completeSave = resolve; }))
+    };
+
+    renderControls(api, local.storage, deviceData, local.raw);
+    await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace account copy?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace account copy' }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+
+    const close = within(confirmation).getByRole('button', { name: 'Close Account recovery' });
+    expect(close.hasAttribute('disabled')).toBe(false);
+    await user.click(close);
+    expect(screen.queryByRole('dialog', { name: 'Account recovery' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Replace account copy?' })).toBeNull();
+    expect(document.body.style.position).not.toBe('fixed');
+    expect(api.save).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      if (!completeSave) throw new Error('Synthetic account save did not start.');
+      completeSave(4);
+    });
+    const opener = screen.getByRole('button', { name: /Account recovery/ });
+    await user.click(opener);
+    expect(await screen.findByText('The account copy was updated.')).toBeTruthy();
+    expect(api.save).toHaveBeenCalledTimes(1);
   });
 
   it('clearly disables account operations when the authenticated backup API is unavailable', () => {
@@ -521,6 +594,35 @@ describe('manual Preview account backup and restore', () => {
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecovery);
     expect(local.storage.getItem(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(local.raw);
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it('keeps the close control available above a long repair diagnostic', async () => {
+    const user = userEvent.setup();
+    const data = missingCompletionData();
+    const local = accountStorage(data);
+    const longDiagnostic = `Synthetic repair diagnostic: ${'field path remains available. '.repeat(120)}`;
+    const onRepair = vi.fn(() => longDiagnostic);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw, undefined, () => true, accountA, true, true, 'account', onRepair);
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    await user.click(await screen.findByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Repair this workout’s Rhythm link?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Repair this workout' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Account recovery' });
+    const error = await within(dialog).findByRole('alert');
+    const close = within(dialog).getByRole('button', { name: 'Close Account recovery' });
+    const scrollRegion = within(dialog).getByRole('region', { name: 'Account recovery content' });
+    expect(error.textContent).toContain(longDiagnostic);
+    expect(scrollRegion.contains(error)).toBe(true);
+    expect(close.closest('.money-goal-dialog__persistent-header')).toBeTruthy();
+    expect(close.hasAttribute('disabled')).toBe(false);
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(api.save).not.toHaveBeenCalled();
   });
 

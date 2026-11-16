@@ -56,6 +56,9 @@ type PreviewAccountBackupControlsProps = {
   deviceRecoveryError?: string | null;
   autoSyncEnabled?: boolean;
   enabled: boolean;
+  localSaveConfirmed: boolean;
+  localSavePending?: boolean;
+  recoveryOperationLocked?: boolean;
   syncBusy?: boolean;
   verifiedAccountStatus?: VerifiedAccountStatus | null;
   syncStatus: PreviewAccountSyncState;
@@ -269,6 +272,9 @@ export function PreviewAccountBackupControls({
   deviceRecoveryError = null,
   autoSyncEnabled = true,
   enabled,
+  localSaveConfirmed,
+  localSavePending = false,
+  recoveryOperationLocked = false,
   syncBusy = false,
   verifiedAccountStatus = null,
   syncStatus,
@@ -780,10 +786,15 @@ export function PreviewAccountBackupControls({
   }
 
   function cancelPending() {
-    if (busy) return;
+    if (operationInProgress.current) return;
     setPending(null);
     setExclusiveLocked(false);
     onOperationFinished?.();
+  }
+
+  function closeRecovery() {
+    if (pending && !operationInProgress.current) cancelPending();
+    setAdvancedOpen(false);
   }
 
   const pendingBackup = pending?.kind === 'backup';
@@ -795,6 +806,15 @@ export function PreviewAccountBackupControls({
   const accountActionDisabled = !enabled || syncBusy || !api || busy;
   const repairActionDisabled = accountActionDisabled || !autoSyncEnabled || syncStatus === 'conflict'
     || !accountId.trim();
+  const recoveryDisabledMessage = !localSaveConfirmed
+    ? localSavePending
+      ? 'This device’s local save is still in progress. Close Account recovery to view Save & sync; closing will not cancel an operation already started.'
+      : 'This device’s local save is not confirmed. Close Account recovery to review Save & sync before retrying; account sync will not start until the local save succeeds.'
+    : syncBusy
+      ? `This device’s local save is confirmed. Account sync is ${syncStatus === 'checking' ? 'checking' : 'saving'}; close Account recovery to view Save & sync. Closing will not cancel a confirmed operation.`
+      : recoveryOperationLocked
+        ? 'A recovery operation is in progress. Close Account recovery to view Save & sync; closing will not cancel a confirmed operation.'
+        : 'Account recovery is temporarily unavailable.';
 
   return (
     <>
@@ -817,10 +837,11 @@ export function PreviewAccountBackupControls({
           intro="Account-copy tools for this signed-in account. Replacing a copy is not a merge."
           phoneFullScreen
           dialogClassName="preview-account-backup-dialog"
-          onClose={() => {
-            if (pending && !busy) cancelPending();
-            setAdvancedOpen(false);
-          }}
+          closeLabel="Close Account recovery"
+          closeButtonId="preview-account-backup-close"
+          initialFocusId="preview-account-backup-close"
+          scrollableBody
+          onClose={closeRecovery}
         >
           <div className="preview-account-backup__dialog-content">
             {!autoSyncEnabled && (
@@ -874,7 +895,7 @@ export function PreviewAccountBackupControls({
             </div>
             {!enabled && (
               <p className="preview-account-backup__note">
-                Wait until this device’s changes are saved before using account recovery.
+                {recoveryDisabledMessage}
               </p>
             )}
             {(localRecoveryRaw !== null || repairRecoveryRaw !== null || cloudRecoveryRaw !== null || deviceRecoveryRaw !== null) && (
@@ -966,7 +987,11 @@ export function PreviewAccountBackupControls({
               titleId="preview-account-backup-confirm-title"
               labelledBy="preview-account-backup-confirm-title"
               intro="These copies differ. This replaces the account copy with this device’s saved data; this device will not change."
-              onClose={cancelPending}
+              closeLabel="Close Account recovery"
+              closeButtonId="preview-account-backup-confirm-close"
+              initialFocusId="preview-account-backup-confirm-close"
+              scrollableBody
+              onClose={closeRecovery}
             >
               <div className="money-goal-dialog__actions">
                 <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
@@ -984,7 +1009,11 @@ export function PreviewAccountBackupControls({
               titleId="preview-account-backup-confirm-title"
               labelledBy="preview-account-backup-confirm-title"
               intro="This replaces local data with the account copy; it does not merge them. The current device data is preserved as a recovery copy before replacement."
-              onClose={cancelPending}
+              closeLabel="Close Account recovery"
+              closeButtonId="preview-account-backup-confirm-close"
+              initialFocusId="preview-account-backup-confirm-close"
+              scrollableBody
+              onClose={closeRecovery}
             >
               <div className="money-goal-dialog__actions">
                 <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
@@ -1002,7 +1031,11 @@ export function PreviewAccountBackupControls({
               titleId="preview-account-backup-confirm-title"
               labelledBy="preview-account-backup-confirm-title"
               intro={`The ${repairWorkoutName} workout from ${repairWorkoutDate} will stay intact in History. Only its broken Rhythm association (rhythmId, rhythmOccurrence, completionId) will be removed. The original saved data will be preserved byte-for-byte before writing, and normal sync may upload the repaired document to the signed-in account.`}
-              onClose={cancelPending}
+              closeLabel="Close Account recovery"
+              closeButtonId="preview-account-backup-confirm-close"
+              initialFocusId="preview-account-backup-confirm-close"
+              scrollableBody
+              onClose={closeRecovery}
             >
               <div className="money-goal-dialog__actions">
                 <button type="button" className="btn mini" disabled={busy || syncBusy} onClick={() => void confirmPending()}>
