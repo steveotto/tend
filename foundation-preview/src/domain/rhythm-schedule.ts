@@ -144,6 +144,9 @@ const legacyTimeValues = new Map<string, RhythmTimeValue>([
   ['Afternoon', 'afternoon'],
   ['Evening', 'evening']
 ]);
+const historicalTimeValueAliases = new Map<string, RhythmTimeValue>([
+  ['All-day', 'all-day']
+]);
 const weekdays = new Set([0, 1, 2, 3, 4, 5, 6]);
 const months = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 const commonKeys = ['frequency', 'endDate'];
@@ -424,11 +427,15 @@ export function rhythmTimeValueFromLabel(
   label: string,
   options: readonly RhythmTimeOption[] = rhythmTimeOptions
 ): RhythmTimeValue | undefined {
-  return options.find(option => option.label === label)?.value ?? timeValueByLabel.get(label);
+  return options.find(option => option.label === label)?.value
+    ?? timeValueByLabel.get(label)
+    ?? historicalTimeValueAliases.get(label);
 }
 
 export function rhythmTimeValueFromLegacyLabel(label: string): RhythmTimeValue | undefined {
-  return legacyTimeValues.get(label) ?? timeValueByLabel.get(label);
+  return legacyTimeValues.get(label)
+    ?? timeValueByLabel.get(label)
+    ?? historicalTimeValueAliases.get(label);
 }
 
 export function rhythmWeekdayName(weekday: RhythmWeekday): string {

@@ -32,6 +32,18 @@ import type { StrengthData, StrengthSavedWorkout } from '../src/domain/strength.
 
 const currentDate = '2026-10-22';
 const savedRhythmId = 'user-rhythm-11111111-1111-4111-8111-111111111111';
+const historicalTimeValues = [
+  ['Anytime', 'anytime'],
+  ['All day', 'all-day'],
+  ['All-day', 'all-day'],
+  ['Early morning', 'early-morning'],
+  ['Morning', 'morning'],
+  ['Lunch', 'lunch'],
+  ['Afternoon', 'afternoon'],
+  ['Way home', 'way-home'],
+  ['Evening', 'evening'],
+  ['Bedtime', 'bedtime']
+] as const;
 
 function dataWithHistory(): PreviewData {
   const data = createSamplePreviewData();
@@ -396,70 +408,73 @@ describe('v4 migration and recovery domain', () => {
     expect(result.envelope.data.savedRhythms[0]!.personal).toBeUndefined();
   });
 
-  it('migrates the historical Early morning label, preserves raw recovery, and supports repeated saves and backup import', () => {
-    const data = dataWithHistory();
-    data.savedRhythms[0]!.timeLabel = 'Early morning';
-    const raw = rawAtVersion(data, 3);
-    const { storage, values } = storageFixture(raw);
+  it.each(historicalTimeValues)(
+    'migrates historical time label %s to stable value %s and preserves recovery through repeated saves and backup import',
+    (timeLabel, timeOfDay) => {
+      const data = dataWithHistory();
+      data.savedRhythms[0]!.timeLabel = timeLabel;
+      const raw = rawAtVersion(data, 3);
+      const { storage, values } = storageFixture(raw);
 
-    const loaded = loadPreview(storage, currentDate);
-    expect(loaded.kind).toBe('loaded');
-    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
-    expect(values.has(PREVIEW_V3_RECOVERY_KEY)).toBe(false);
-    if (loaded.kind !== 'loaded') return;
-    expect(loaded.data.savedRhythms[0]).toMatchObject({
-      id: savedRhythmId,
-      timeLabel: 'Early morning',
-      timeOfDay: 'early-morning'
-    });
-
-    const firstSave = writePreview(storage, loaded.data, raw, { currentDate });
-    expect(firstSave.kind).toBe('saved');
-    if (firstSave.kind !== 'saved') return;
-    expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(raw);
-    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(firstSave.raw);
-
-    const reloaded = loadPreview(storage, currentDate);
-    expect(reloaded.kind).toBe('loaded');
-    if (reloaded.kind !== 'loaded') return;
-    expect(reloaded.data.savedRhythms[0]).toMatchObject({
-      timeLabel: 'Early morning',
-      timeOfDay: 'early-morning'
-    });
-    expect(reloaded.data.goals).toEqual(data.goals);
-    expect(reloaded.data.completedRhythmIds).toEqual(data.completedRhythmIds);
-    expect(reloaded.data.archivedRhythmIds).toEqual(data.archivedRhythmIds);
-
-    const secondSave = writePreview(storage, reloaded.data, firstSave.raw, { currentDate });
-    expect(secondSave.kind).toBe('saved');
-    if (secondSave.kind !== 'saved') return;
-    expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(raw);
-    expect(parsePreviewBackup(secondSave.raw, currentDate).valid).toBe(true);
-
-    const backup = parsePreviewBackup(raw, currentDate);
-    expect(backup.valid).toBe(true);
-    if (!backup.valid) return;
-    const importTargetRaw = JSON.stringify(createPreviewEnvelope(createSamplePreviewData()));
-    const importTarget = storageFixture(importTargetRaw);
-    const imported = writePreview(importTarget.storage, backup.envelope.data, importTargetRaw, {
-      currentDate,
-      operation: 'import',
-      importSourceRaw: raw
-    });
-    expect(imported.kind).toBe('saved');
-    if (imported.kind !== 'saved') return;
-    const importedAgain = loadPreview(importTarget.storage, currentDate);
-    expect(importedAgain.kind).toBe('loaded');
-    if (importedAgain.kind === 'loaded') {
-      expect(importedAgain.data.savedRhythms[0]).toMatchObject({
-        timeLabel: 'Early morning',
-        timeOfDay: 'early-morning'
+      const loaded = loadPreview(storage, currentDate);
+      expect(loaded.kind).toBe('loaded');
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+      expect(values.has(PREVIEW_V3_RECOVERY_KEY)).toBe(false);
+      if (loaded.kind !== 'loaded') return;
+      expect(loaded.data.savedRhythms[0]).toMatchObject({
+        id: savedRhythmId,
+        timeLabel,
+        timeOfDay
       });
+
+      const firstSave = writePreview(storage, loaded.data, raw, { currentDate });
+      expect(firstSave.kind).toBe('saved');
+      if (firstSave.kind !== 'saved') return;
+      expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(raw);
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBe(firstSave.raw);
+
+      const reloaded = loadPreview(storage, currentDate);
+      expect(reloaded.kind).toBe('loaded');
+      if (reloaded.kind !== 'loaded') return;
+      expect(reloaded.data.savedRhythms[0]).toMatchObject({
+        timeLabel,
+        timeOfDay
+      });
+      expect(reloaded.data.goals).toEqual(data.goals);
+      expect(reloaded.data.completedRhythmIds).toEqual(data.completedRhythmIds);
+      expect(reloaded.data.archivedRhythmIds).toEqual(data.archivedRhythmIds);
+
+      const secondSave = writePreview(storage, reloaded.data, firstSave.raw, { currentDate });
+      expect(secondSave.kind).toBe('saved');
+      if (secondSave.kind !== 'saved') return;
+      expect(values.get(PREVIEW_V3_RECOVERY_KEY)).toBe(raw);
+      expect(parsePreviewBackup(secondSave.raw, currentDate).valid).toBe(true);
+
+      const backup = parsePreviewBackup(raw, currentDate);
+      expect(backup.valid).toBe(true);
+      if (!backup.valid) return;
+      const importTargetRaw = JSON.stringify(createPreviewEnvelope(createSamplePreviewData()));
+      const importTarget = storageFixture(importTargetRaw);
+      const imported = writePreview(importTarget.storage, backup.envelope.data, importTargetRaw, {
+        currentDate,
+        operation: 'import',
+        importSourceRaw: raw
+      });
+      expect(imported.kind).toBe('saved');
+      if (imported.kind !== 'saved') return;
+      const importedAgain = loadPreview(importTarget.storage, currentDate);
+      expect(importedAgain.kind).toBe('loaded');
+      if (importedAgain.kind === 'loaded') {
+        expect(importedAgain.data.savedRhythms[0]).toMatchObject({
+          timeLabel,
+          timeOfDay
+        });
+      }
     }
-  });
+  );
 
   it('keeps unknown legacy time labels blocked without changing the saved bytes', () => {
-    for (const label of ['Early am', 'early-morning']) {
+    for (const label of ['Early am', 'early-morning', 'Quiet time']) {
       const rawValue = JSON.parse(rawAtVersion(dataWithHistory(), 3)) as {
         data: { savedRhythms: Array<{ timeLabel: string }> };
       };
@@ -523,6 +538,43 @@ describe('v4 migration and recovery domain', () => {
     if (!migrated.valid) return;
     expect(migrated.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(migrated.envelope.data).toEqual(data);
+    expect(migrated.envelope.data.timeBlocks.blocks).toEqual([
+      { id: 'early-morning', name: 'Early morning', start: '05:30' },
+      { id: customTimeBlockId, name: 'Quiet time', start: '07:00' },
+      { id: 'morning', name: 'Morning', start: '09:00' },
+      { id: 'lunch', name: 'Lunch', start: '11:30' },
+      { id: 'afternoon', name: 'Afternoon', start: '13:30' },
+      { id: 'way-home', name: 'Way home', start: '16:30' },
+      { id: 'evening', name: 'Evening', start: '18:00' },
+      { id: 'bedtime', name: 'Bedtime', start: '21:30' }
+    ]);
+    expect(migrated.envelope.data.savedRhythms[0]).toMatchObject({
+      timeOfDay: customTimeBlockId,
+      scoring: { scheduleHistory: [{ timeOfDay: customTimeBlockId }] }
+    });
+
+    const { storage, values } = storageFixture(raw);
+    const loaded = loadPreview(storage, currentDate);
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data).toEqual(data);
+    const firstSave = writePreview(storage, loaded.data, raw, { currentDate });
+    expect(firstSave.kind).toBe('saved');
+    if (firstSave.kind !== 'saved') return;
+    const reloaded = loadPreview(storage, currentDate);
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    expect(reloaded.data).toEqual(data);
+    expect(reloaded.data.timeBlocks.blocks).toEqual(data.timeBlocks.blocks);
+    expect(reloaded.data.savedRhythms[0]).toMatchObject({
+      timeOfDay: customTimeBlockId,
+      scoring: { scheduleHistory: [{ timeOfDay: customTimeBlockId }] }
+    });
+    const secondSave = writePreview(storage, reloaded.data, firstSave.raw, { currentDate });
+    expect(secondSave.kind).toBe('saved');
+    if (secondSave.kind !== 'saved') return;
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(secondSave.raw);
+    expect(parsePreviewBackup(secondSave.raw, currentDate).valid).toBe(true);
   });
 
   it('migrates v1 and v2 while preserving their supported data without inventing archive state', () => {
