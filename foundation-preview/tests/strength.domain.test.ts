@@ -55,6 +55,11 @@ import {
   validateStrengthGuidedSessionDraft,
   validateStrengthSettings
 } from '../src/domain/strength.ts';
+import {
+  createPreviewEnvelope,
+  createSamplePreviewData,
+  parsePreviewBackup
+} from '../src/domain/preview-state.ts';
 import type {
   StrengthData,
   StrengthLoad,
@@ -991,7 +996,8 @@ describe('Strength selector and command behavior', () => {
     for (const suggestion of strengthWorkoutSuggestions) {
       const drafts = createStrengthWorkoutSuggestionExercises(suggestion, makeId, data.settings);
       expect(drafts.map(exercise => exercise.restDurationSeconds)).toEqual(
-        suggestion.exercises.map(exercise => resolveStrengthBetweenSetRestSeconds(exercise.muscleIds, data.settings))
+        suggestion.exercises.map(exercise => suggestion.restDurationSeconds
+          ?? resolveStrengthBetweenSetRestSeconds(exercise.muscleIds, data.settings))
       );
       expect(drafts.flatMap(exercise => exercise.sets).every(set => set.targetLoad === undefined)).toBe(true);
     }
@@ -1007,6 +1013,9 @@ describe('Strength selector and command behavior', () => {
     expect(plankDraft.restDurationSeconds).toBe(210);
     expect(plankDraft.sets[0]?.measurement).toEqual({ kind: 'duration', targetDurationSeconds: 180 });
     expect(plankDraft.sets[0]?.targetLoad).toBeUndefined();
+    const p90x = strengthWorkoutSuggestions.find(item => item.sourceId === 'strength.p90x-ab-ripper')!;
+    const p90xDrafts = createStrengthWorkoutSuggestionExercises(p90x, makeId, data.settings);
+    expect(p90xDrafts.map(exercise => exercise.restDurationSeconds)).toEqual(Array(11).fill(0));
     expect(data.savedWorkouts).toEqual([existingWorkout]);
     expect(data.savedWorkouts[0]?.exercises?.[0]?.restDurationSeconds).toBe(75);
   });
@@ -1019,7 +1028,7 @@ describe('Strength selector and command behavior', () => {
     expect(selectStrengthScore(scores)).toBeNull();
   });
 
-  it('defines all ten approved source-linked templates with authoritative muscle IDs', () => {
+  it('defines all eleven approved source-linked templates with authoritative muscle IDs', () => {
     expect(strengthWorkoutSuggestions.map(({ sourceId, name, muscleIds }) => ({
       sourceId,
       name,
@@ -1034,9 +1043,10 @@ describe('Strength selector and command behavior', () => {
       { sourceId: 'strength.arms-shoulders', name: 'Arms & Shoulders', muscleIds: ['biceps', 'triceps', 'shoulders', 'back'] },
       { sourceId: 'strength.ab-roller', name: 'Ab Roller', muscleIds: ['abs'] },
       { sourceId: 'strength.power-abs', name: 'Power Abs', muscleIds: ['abs'] },
+      { sourceId: 'strength.p90x-ab-ripper', name: 'P90X Ab Ripper', muscleIds: ['abs'] },
       { sourceId: 'strength.plank', name: 'Plank', muscleIds: ['abs'] }
     ]);
-    expect(new Set(strengthWorkoutSuggestions.map(item => item.sourceId)).size).toBe(10);
+    expect(new Set(strengthWorkoutSuggestions.map(item => item.sourceId)).size).toBe(11);
     expect(strengthWorkoutSuggestions.every(item =>
       item.muscleIds.every(id => strengthMuscles.some(muscle => muscle.id === id))
         && new Set(item.muscleIds).size === item.muscleIds.length
@@ -1101,8 +1111,8 @@ describe('Strength selector and command behavior', () => {
     ]);
     expect(strengthWorkoutSuggestions.flatMap(suggestion => suggestion.exercises).every(exercise =>
       exercise.sets.every(set => 'targetReps' in set
-        ? Object.keys(set).every(key => key === 'targetReps')
-        : Object.keys(set).every(key => key === 'targetDurationSeconds'))
+        ? Object.keys(set).every(key => key === 'targetReps' || key === 'label')
+        : Object.keys(set).every(key => key === 'targetDurationSeconds' || key === 'label'))
         && exercise.muscleIds.every(id => strengthMuscles.some(muscle => muscle.id === id))
     )).toBe(true);
     expect(plan('strength.ab-roller')).toEqual([
@@ -1112,10 +1122,112 @@ describe('Strength selector and command behavior', () => {
       { name: 'Weighted Decline Sit-Up', muscleIds: ['abs'], equipment: 'Weight plate', notes: undefined, sets: [{ targetReps: 10 }, { targetReps: 10 }, { targetReps: 10 }] },
       { name: 'Roman Chair Leg Raise', muscleIds: ['abs'], equipment: 'Roman chair', notes: undefined, sets: [{ targetReps: 10 }, { targetReps: 10 }, { targetReps: 10 }] }
     ]);
+    expect(plan('strength.p90x-ab-ripper')).toEqual([
+      { name: 'In-and-Outs', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25 }] },
+      { name: 'Bicycles', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25, label: 'Forward' }, { targetReps: 25, label: 'Reverse' }] },
+      { name: 'Crunchy Frog', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25 }] },
+      { name: 'Cross-Leg / Wide-Leg Sit-Up', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25 }] },
+      { name: 'Fifer Scissors', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25 }] },
+      { name: 'Hip Rock and Raise', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25 }] },
+      { name: 'Pulse-Up', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25 }] },
+      { name: 'V-Up Roll-Up', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25 }] },
+      { name: 'Oblique V-Up', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25, label: 'Left' }, { targetReps: 25, label: 'Right' }] },
+      { name: 'Leg Climb', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 25 }] },
+      { name: 'Mason Twists', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetReps: 50 }] }
+    ]);
+    const p90x = strengthWorkoutSuggestions.find(item => item.sourceId === 'strength.p90x-ab-ripper')!;
+    expect(p90x.exercises).toHaveLength(11);
+    expect(p90x.exercises.reduce((total, exercise) => total + exercise.sets.length, 0)).toBe(13);
     expect(strengthWorkoutSuggestions.find(item => item.sourceId === 'strength.power-abs')?.supersetExerciseIndexes).toEqual([0, 1]);
     expect(plan('strength.plank')).toEqual([
       { name: 'Plank', muscleIds: ['abs'], equipment: 'Bodyweight', notes: undefined, sets: [{ targetDurationSeconds: 180 }] }
     ]);
+  });
+
+  it('preserves labeled sets through template edits, guided logs, and backup import', () => {
+    const suggestion = strengthWorkoutSuggestions.find(item => item.sourceId === 'strength.p90x-ab-ripper')!;
+    let id = 0;
+    const template: StrengthSavedWorkout = {
+      id: 'p90x-ab-ripper-template',
+      name: suggestion.name,
+      muscleIds: [...suggestion.muscleIds],
+      sharedWith: [],
+      suggestionSourceId: suggestion.sourceId,
+      exercises: createStrengthWorkoutSuggestionExercises(suggestion, () => `p90x-${++id}`)
+    };
+    const created = createStrengthWorkout([], template);
+    expect(created.valid).toBe(true);
+    if (!created.valid) return;
+    const savedTemplate = created.workouts[0]!;
+    const bicycles = savedTemplate.exercises!.find(exercise => exercise.name === 'Bicycles')!;
+    const started = createStrengthGuidedSession(savedTemplate, {
+      id: 'p90x-guided-session',
+      date: '2026-10-22',
+      startedAt: '2026-10-22T09:00:00.000Z',
+      timeZone: 'UTC'
+    });
+    expect(started.valid).toBe(true);
+    if (!started.valid) return;
+    expect(started.session.autoStartRest).toBe(false);
+    expect(started.session.restTimer).toEqual({ status: 'idle', durationSeconds: 0 });
+    expect(started.session.exercises.find(exercise => exercise.name === 'Bicycles')?.sets
+      .map(set => [set.label, set.targetReps])).toEqual([['Forward', 25], ['Reverse', 25]]);
+
+    const performed = confirmStrengthSessionSet(
+      started.session,
+      bicycles.id,
+      bicycles.sets[0]!.id,
+      25,
+      '2026-10-22T09:05:00.000Z'
+    );
+    expect(performed.valid).toBe(true);
+    if (!performed.valid) return;
+    expect(performed.session.restTimer).toEqual({ status: 'idle', durationSeconds: 0 });
+    const finished = finishStrengthGuidedSession(
+      performed.session,
+      'p90x-guided-log',
+      '2026-10-22T09:15:00.000Z'
+    );
+    expect(finished.valid).toBe(true);
+    if (!finished.valid) return;
+    expect(finished.log.exercises?.find(exercise => exercise.name === 'Bicycles')?.sets
+      .map(set => set.label)).toEqual(['Forward', 'Reverse']);
+
+    const edited = editStrengthWorkout(created.workouts, {
+      ...savedTemplate,
+      exercises: savedTemplate.exercises!.map(exercise => exercise.name !== 'Bicycles'
+        ? exercise
+        : {
+            ...exercise,
+            sets: exercise.sets.map((set, index) => index === 0 ? { ...set, label: 'Changed' } : set)
+          })
+    });
+    expect(edited.valid).toBe(true);
+    if (!edited.valid) return;
+    expect(finished.log.exercises?.find(exercise => exercise.name === 'Bicycles')?.sets[0]?.label).toBe('Forward');
+
+    const savedLogs = saveStrengthWorkoutLog([], finished.log);
+    expect(savedLogs.valid).toBe(true);
+    if (!savedLogs.valid) return;
+    const previewData = createSamplePreviewData();
+    previewData.strength = {
+      ...createStrengthData(),
+      savedWorkouts: edited.workouts,
+      workouts: savedLogs.workouts,
+      guidedSessionDraft: performed.session
+    };
+    const imported = parsePreviewBackup(
+      JSON.stringify(createPreviewEnvelope(previewData)),
+      '2026-10-22'
+    );
+    expect(imported.valid).toBe(true);
+    if (!imported.valid) return;
+    expect(imported.envelope.data.strength.savedWorkouts[0]?.exercises?.find(exercise => exercise.name === 'Bicycles')
+      ?.sets.map(set => set.label)).toEqual(['Changed', 'Reverse']);
+    expect(imported.envelope.data.strength.workouts[0]?.exercises?.find(exercise => exercise.name === 'Bicycles')
+      ?.sets.map(set => set.label)).toEqual(['Forward', 'Reverse']);
+    expect(imported.envelope.data.strength.guidedSessionDraft?.exercises.find(exercise => exercise.name === 'Bicycles')
+      ?.sets.map(set => set.label)).toEqual(['Forward', 'Reverse']);
   });
 
   it('creates valid suggestion templates with explicit load meanings and only declared supersets', () => {
@@ -1146,6 +1258,17 @@ describe('Strength selector and command behavior', () => {
       'Ab Wheel Rollout': 'bodyweight',
       'Weighted Decline Sit-Up': 'total',
       'Roman Chair Leg Raise': 'bodyweight',
+      'In-and-Outs': 'bodyweight',
+      'Bicycles': 'bodyweight',
+      'Crunchy Frog': 'bodyweight',
+      'Cross-Leg / Wide-Leg Sit-Up': 'bodyweight',
+      'Fifer Scissors': 'bodyweight',
+      'Hip Rock and Raise': 'bodyweight',
+      'Pulse-Up': 'bodyweight',
+      'V-Up Roll-Up': 'bodyweight',
+      'Oblique V-Up': 'bodyweight',
+      'Leg Climb': 'bodyweight',
+      'Mason Twists': 'bodyweight',
       'Plank': 'bodyweight'
     };
     let id = 0;

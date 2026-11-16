@@ -3,10 +3,16 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FlexibilityView } from '../src/components/FlexibilityView.tsx';
+import type { FlexibilityViewProps } from '../src/components/FlexibilityView.tsx';
 import type { CategoryScoreSelection } from '../src/domain/category-scoring.ts';
-import { createFlexibilityData, flexibilityRoutineSuggestions } from '../src/domain/flexibility.ts';
+import {
+  createFlexibilityData,
+  createFlexibilityGuidedSession,
+  flexibilityRoutineSuggestions
+} from '../src/domain/flexibility.ts';
 import type { FlexibilityData, SavedFlexibilityRoutine } from '../src/domain/flexibility.ts';
 import type { HealthAggregateEvidence } from '../src/components/HealthScoringDetailsCard.tsx';
+import { todayRhythms } from '../src/domain/preview-data.ts';
 
 afterEach(() => {
   cleanup();
@@ -41,12 +47,20 @@ function StatefulFlexibility({
   initialData = createFlexibilityData(),
   healthScore = unscoredHealthScore,
   scoringEvidence = unscoredEvidence,
-  unlinkedStretchRhythmTitles = []
+  unlinkedStretchRhythmTitles = [],
+  rhythms,
+  onAddLinkedRhythm,
+  onSaveFoundationAssociations,
+  onDataChange
 }: {
   initialData?: FlexibilityData;
   healthScore?: CategoryScoreSelection;
   scoringEvidence?: HealthAggregateEvidence;
   unlinkedStretchRhythmTitles?: readonly string[];
+  rhythms?: FlexibilityViewProps['rhythms'];
+  onAddLinkedRhythm?: FlexibilityViewProps['onAddLinkedRhythm'];
+  onSaveFoundationAssociations?: FlexibilityViewProps['onSaveFoundationAssociations'];
+  onDataChange?: (data: FlexibilityData) => void;
 }) {
   const [data, setData] = useState<FlexibilityData>(initialData);
   return (
@@ -56,8 +70,12 @@ function StatefulFlexibility({
       healthScore={healthScore}
       scoringEvidence={scoringEvidence}
       unlinkedStretchRhythmTitles={unlinkedStretchRhythmTitles}
+      {...(rhythms ? { rhythms } : {})}
+      {...(onAddLinkedRhythm ? { onAddLinkedRhythm } : {})}
+      {...(onSaveFoundationAssociations ? { onSaveFoundationAssociations } : {})}
       onChange={next => {
         setData(next);
+        onDataChange?.(next);
         return null;
       }}
     />
@@ -65,6 +83,38 @@ function StatefulFlexibility({
 }
 
 describe('Flexibility foundation presentation', () => {
+  it('defaults to Body and uses automatic arrow, Home, and End tab activation', async () => {
+    const user = userEvent.setup();
+    render(<StatefulFlexibility />);
+    const tablist = screen.getByRole('tablist', { name: 'Flexibility sections' });
+    const bodyTab = within(tablist).getByRole('tab', { name: 'Body' });
+    const routinesTab = within(tablist).getByRole('tab', { name: 'Routines' });
+    const rhythmsTab = within(tablist).getByRole('tab', { name: 'Rhythms' });
+    expect(bodyTab.getAttribute('aria-selected')).toBe('true');
+    expect(bodyTab.getAttribute('tabindex')).toBe('0');
+    expect(routinesTab.getAttribute('tabindex')).toBe('-1');
+    expect(document.getElementById(bodyTab.getAttribute('aria-controls')!)?.getAttribute('aria-labelledby'))
+      .toBe(bodyTab.id);
+
+    bodyTab.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(routinesTab);
+    expect(routinesTab.getAttribute('aria-selected')).toBe('true');
+    expect(routinesTab.getAttribute('tabindex')).toBe('0');
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(rhythmsTab);
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(bodyTab);
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(rhythmsTab);
+    await user.keyboard('{Home}');
+    expect(document.activeElement).toBe(bodyTab);
+    expect(bodyTab.getAttribute('aria-selected')).toBe('true');
+    await user.keyboard('{End}');
+    expect(document.activeElement).toBe(rhythmsTab);
+    expect(rhythmsTab.getAttribute('aria-selected')).toBe('true');
+  });
+
   it('exposes all ten regions on the shared front/back map with keyboard selection', async () => {
     const user = userEvent.setup();
     const { container } = render(<StatefulFlexibility />);
@@ -191,6 +241,8 @@ describe('Flexibility foundation presentation', () => {
     )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     await user.click(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' }));
     const healthDialog = screen.getByRole('dialog', { name: 'Flexibility Health details' });
+    expect(healthDialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(healthDialog.querySelector('.health-score-details-dialog__body')).toBeTruthy();
     const scoringDisclosure = within(healthDialog).getByRole('button', { name: 'How this Flexibility Foundation was scored' });
     expect(scoringDisclosure.getAttribute('aria-expanded')).toBe('false');
     await user.click(scoringDisclosure);
@@ -203,23 +255,23 @@ describe('Flexibility foundation presentation', () => {
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' }));
     });
-    expect(screen.getByRole('heading', { name: 'Stretch routines' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Recommended stretches' })).toBeTruthy();
-    expect(screen.getByText('Save a routine to get recommendations, or log a custom stretch.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Body overview' })).toBeTruthy();
+    expect(screen.getByRole('tablist', { name: 'Flexibility sections' })).toBeTruthy();
     expect(screen.queryByText('Suggested next stretch')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Daily Stretch' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Custom stretch' }));
+    await user.click(screen.getByRole('button', { name: 'Log Shoulders' }));
     expect(screen.getByRole('dialog', { name: 'Log a stretch' })).toBeTruthy();
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('tab', { name: 'History' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
     expect(screen.getByText('No stretches logged yet.')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Stretch history' })).toBeTruthy();
-    expect(container.querySelector('#flexibility-panel-history .card')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'History' })).toBeTruthy();
 
-    await user.click(screen.getByRole('tab', { name: 'Recommended' }));
+    await user.click(screen.getByRole('tab', { name: 'Body' }));
     await user.click(screen.getByRole('button', { name: 'Stretch interval settings' }));
-    expect(screen.getByRole('dialog', { name: 'Stretch intervals' })).toBeTruthy();
+    const intervalDialog = screen.getByRole('dialog', { name: 'Stretch intervals' });
+    expect(intervalDialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(intervalDialog.querySelector('.flexibility-settings-dialog__body')).toBeTruthy();
   });
 
   it('shows a not-yet-scored state and the first-due explanation for linked stretch Rhythms', async () => {
@@ -287,62 +339,102 @@ describe('Flexibility foundation presentation', () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = render(<StatefulFlexibility />);
-    await user.click(screen.getByRole('button', { name: 'Custom stretch' }));
+    await user.click(screen.getByRole('button', { name: 'Log Shoulders' }));
     const dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
     await user.click(within(dialog).getByRole('checkbox', { name: 'Hamstrings' }));
     await user.type(within(dialog).getByRole('textbox', { name: 'Notes (optional)' }), 'Easy session');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    await user.click(screen.getByRole('tab', { name: 'Saved' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
     await user.click(screen.getByRole('button', { name: 'Resume manual stretch log' }));
     const resumedDialog = screen.getByRole('dialog', { name: 'Log a stretch' });
     expect((within(resumedDialog).getByRole('textbox', { name: 'Notes (optional)' }) as HTMLTextAreaElement).value)
       .toBe('Easy session');
     await user.click(within(resumedDialog).getByRole('button', { name: 'Save stretch' }));
+    await user.click(screen.getByRole('tab', { name: 'Body' }));
     await user.click(screen.getByRole('button', { name: 'Back' }));
     const hamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
       .find(row => row.textContent?.includes('Hamstrings'))!;
     expect(hamstrings.getAttribute('aria-label')).toContain('Due in 2 days.');
     expect(within(hamstrings).getByRole('img', { name: 'Stretch status: Due in 2 days.' })).toBeTruthy();
 
-    await user.click(screen.getByRole('tab', { name: 'History' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
     await user.click(screen.getByRole('button', { name: /^Edit$/ }));
     const editDialog = screen.getByRole('dialog', { name: 'Edit stretch session' });
     fireEvent.change(within(editDialog).getByLabelText('Date'), { target: { value: '2026-10-19' } });
     await user.click(within(editDialog).getByRole('button', { name: 'Save stretch' }));
+    await user.click(screen.getByRole('tab', { name: 'Body' }));
     const updatedHamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
       .find(row => row.textContent?.includes('Hamstrings'))!;
     expect(updatedHamstrings.getAttribute('aria-label')).toContain('2 days overdue.');
     expect(within(updatedHamstrings).getByRole('img', { name: 'Stretch status: 2 days overdue.' })).toBeTruthy();
 
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
     await user.click(screen.getByRole('button', { name: /^Delete$/ }));
     expect(confirm).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole('tab', { name: 'Body' }));
     const deletedHamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
       .find(row => row.textContent?.includes('Hamstrings'))!;
     expect(deletedHamstrings.getAttribute('aria-label')).toContain('Not logged yet.');
     expect(within(deletedHamstrings).getByText('No log yet')).toBeTruthy();
   });
 
-  it('saves editable per-region stretch intervals', async () => {
+  it('saves preset intervals with keyboard and retains uncovered saved values as custom', async () => {
     const user = userEvent.setup();
-    render(<StatefulFlexibility />);
+    const data = createFlexibilityData();
+    data.settings.intervals.hamstrings = 6;
+    const changes: FlexibilityData[] = [];
+    render(<StatefulFlexibility initialData={data} onDataChange={next => changes.push(next)} />);
     await user.click(screen.getByRole('button', { name: 'Stretch interval settings' }));
     const dialog = screen.getByRole('dialog', { name: 'Stretch intervals' });
-    fireEvent.change(within(dialog).getByLabelText('Hamstrings interval in days'), {
-      target: { value: '5' }
-    });
-    fireEvent.change(within(dialog).getByLabelText('Abs interval in days'), {
-      target: { value: '4' }
-    });
+    const hamstrings = within(dialog).getByRole('combobox', { name: 'Hamstrings stretch interval' });
+    expect(hamstrings.textContent).toContain('Custom · Every 6 days');
+    expect((within(dialog).getByRole('textbox', { name: 'Hamstrings custom interval in days' }) as HTMLInputElement)
+      .value).toBe('6');
+
+    const abs = within(dialog).getByRole('combobox', { name: 'Abs stretch interval' });
+    await user.click(abs);
+    await user.keyboard('{Home}{Enter}');
+    expect(abs.textContent).toBe('Every 1 day');
+    expect(within(dialog).queryByRole('textbox', { name: 'Abs custom interval in days' })).toBeNull();
+
     await user.click(within(dialog).getByRole('button', { name: 'Save intervals' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(changes.at(-1)?.settings.intervals.abs).toBe(1);
+    expect(changes.at(-1)?.settings.intervals.hamstrings).toBe(6);
+  });
+
+  it('validates custom values and discards unsaved interval edits on Cancel', async () => {
+    const user = userEvent.setup();
+    const data = createFlexibilityData();
+    data.settings.intervals.hamstrings = 6;
+    const onDataChange = vi.fn();
+    render(<StatefulFlexibility initialData={data} onDataChange={onDataChange} />);
+    await user.click(screen.getByRole('button', { name: 'Stretch interval settings' }));
+    let dialog = screen.getByRole('dialog', { name: 'Stretch intervals' });
+    const interval = within(dialog).getByRole('textbox', { name: 'Hamstrings custom interval in days' });
+    await user.clear(interval);
+    await user.type(interval, '366');
+    await user.click(within(dialog).getByRole('button', { name: 'Save intervals' }));
+    expect(within(dialog).getByRole('alert').textContent).toContain('from 1 to 365');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(onDataChange).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Stretch interval settings' }));
+    dialog = screen.getByRole('dialog', { name: 'Stretch intervals' });
+    expect((within(dialog).getByRole('textbox', { name: 'Hamstrings custom interval in days' }) as HTMLInputElement)
+      .value).toBe('6');
+    expect(within(dialog).getByRole('combobox', { name: 'Hamstrings stretch interval' }).textContent)
+      .toContain('Custom · Every 6 days');
+    await user.click(within(dialog).getByRole('button', { name: 'Close stretch intervals' }));
+    expect(onDataChange).not.toHaveBeenCalled();
   });
 
   it('logs, edits, and deletes Abs through the shared stretch-session flow', async () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = render(<StatefulFlexibility />);
-    await user.click(screen.getByRole('button', { name: 'Custom stretch' }));
+    await user.click(screen.getByRole('button', { name: 'Log Shoulders' }));
     let dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
     await user.click(within(dialog).getByRole('checkbox', { name: 'Abs' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
@@ -351,7 +443,7 @@ describe('Flexibility foundation presentation', () => {
     const absRow = container.querySelector<HTMLButtonElement>('.flexibility-region[aria-label^="Abs"]');
     expect(absRow?.getAttribute('aria-label')).toContain('Due in 3 days.');
 
-    await user.click(screen.getByRole('tab', { name: 'History' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
     await user.click(screen.getByRole('button', { name: /^Edit$/ }));
     dialog = screen.getByRole('dialog', { name: 'Edit stretch session' });
     fireEvent.change(within(dialog).getByLabelText('Date'), { target: { value: '2026-10-19' } });
@@ -369,11 +461,15 @@ describe('Flexibility foundation presentation', () => {
   it('previews and edits a suggested routine before saving without creating activity', async () => {
     const user = userEvent.setup();
     const { container } = render(<StatefulFlexibility />);
-    await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Suggestions' }));
-    const picker = screen.getByRole('dialog', { name: 'Suggested stretch routines' });
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Add routine' }));
+    const picker = screen.getByRole('dialog', { name: 'Add routine' });
+    expect(within(picker).getByRole('heading', { name: 'Create your own' })).toBeTruthy();
     expect(within(picker).getByRole('heading', { name: 'Daily Stretch' })).toBeTruthy();
-    await user.click(within(picker).getByRole('button', { name: 'Preview and edit Daily Stretch' }));
+    expect(within(picker).getByText(/6 stretches · About 10 min/)).toBeTruthy();
+    await user.click(within(picker).getAllByText('Preview routine')[0]!);
+    expect(within(picker).getAllByText('Downward Dog').length).toBeGreaterThan(0);
+    await user.click(within(picker).getAllByRole('button', { name: 'Customize' })[0]!);
     const editor = screen.getByRole('dialog', { name: 'Preview routine' });
     expect(within(editor).getByLabelText('Estimated duration 10 min 50 sec including holds and preparation')).toBeTruthy();
     expect(editor.querySelectorAll('.flexibility-routine-editor__stretch')).toHaveLength(6);
@@ -388,12 +484,12 @@ describe('Flexibility foundation presentation', () => {
     await user.type(within(editor).getByLabelText('Routine name'), 'Evening Stretch');
     await user.click(within(editor).getByRole('button', { name: 'Add to Saved' }));
 
-    expect(screen.getByRole('tab', { name: 'Saved' }).getAttribute('aria-selected')).toBe('true');
-    await user.click(screen.getByRole('tab', { name: 'Saved' }));
+    expect(screen.getByRole('tab', { name: 'Routines' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('heading', { name: 'Evening Stretch' })).toBeTruthy();
     expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
     expect(container.querySelector('.flexibility-history__list')).toBeNull();
-    await user.click(screen.getByRole('button', { name: /^Edit$/ }));
+    await user.click(container.querySelector('.strength-template__menu summary')!);
+    await user.click(screen.getByRole('button', { name: 'Edit routine' }));
     const savedEditor = screen.getByRole('dialog', { name: 'Edit routine' });
     await user.clear(within(savedEditor).getByLabelText('Routine name'));
     await user.type(within(savedEditor).getByLabelText('Routine name'), 'Evening Stretch Updated');
@@ -404,8 +500,9 @@ describe('Flexibility foundation presentation', () => {
   it('creates a blank saved routine through the shared editor without logging a stretch', async () => {
     const user = userEvent.setup();
     const { container } = render(<StatefulFlexibility />);
-    await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Create routine' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Add routine' }));
+    await user.click(screen.getByRole('button', { name: 'Create' }));
     const editor = screen.getByRole('dialog', { name: 'Create routine' });
     await user.click(within(editor).getByRole('button', { name: 'Save routine' }));
     expect(within(editor).getByRole('alert').textContent).toContain('Add at least one stretch');
@@ -435,17 +532,149 @@ describe('Flexibility foundation presentation', () => {
     expect(container.querySelector('.flexibility-history__list')).toBeNull();
   });
 
-  it('cancels routine edits without adding a saved template', async () => {
+  it('returns to the routine library with an unsaved draft available to continue', async () => {
     const user = userEvent.setup();
     render(<StatefulFlexibility />);
-    await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: 'Create routine' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Add routine' }));
+    await user.click(screen.getByRole('button', { name: 'Create' }));
     const editor = screen.getByRole('dialog', { name: 'Create routine' });
     await user.type(within(editor).getByLabelText('Routine name'), 'Discarded draft');
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('dialog', { name: 'Create routine' })).toBeNull();
+    const library = screen.getByRole('dialog', { name: 'Add routine' });
+    await user.click(within(library).getByRole('button', { name: 'Continue editing' }));
+    const resumedEditor = screen.getByRole('dialog', { name: 'Create routine' });
+    expect((within(resumedEditor).getByLabelText('Routine name') as HTMLInputElement).value)
+      .toBe('Discarded draft');
+    await user.click(within(resumedEditor).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('heading', { name: 'Discarded draft' })).toBeNull();
-    expect(screen.getByText('No saved routines yet. Create one or choose a suggestion.')).toBeTruthy();
+  });
+
+  it('offers the accurate guided and quick-log choices and records selected regions only on quick log', async () => {
+    const user = userEvent.setup();
+    const routine = flexibilityRoutineSuggestions[0]!;
+    const savedRoutine: SavedFlexibilityRoutine = {
+      ...routine,
+      id: 'saved-quick-log',
+      name: 'Quick log routine'
+    };
+    const { container } = render(<StatefulFlexibility initialData={{
+      ...createFlexibilityData(),
+      savedRoutines: [savedRoutine]
+    }} />);
+
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Stretch' }));
+    expect(screen.getByText('Time each stretch and track each side.')).toBeTruthy();
+    expect(screen.getByText('Record the regions you stretched.')).toBeTruthy();
+    const choiceDialog = screen.getByRole('dialog', { name: 'Quick log routine' });
+    await user.click(within(choiceDialog).getByRole('button', { name: /Quick log/ }));
+    const logDialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    expect(logDialog.querySelectorAll('input[type="checkbox"]:checked').length)
+      .toBeGreaterThan(0);
+    await user.click(within(logDialog).getByRole('button', { name: 'Save stretch' }));
+
+    expect(screen.getByRole('heading', { name: 'History' })).toBeTruthy();
+    const historyEntry = container.querySelector('.flexibility-history__list li');
+    expect(historyEntry?.textContent).toContain('Manual stretch');
+    expect(historyEntry?.textContent).toMatch(/Hamstrings|Shoulders|Back|Glutes|Calves|Neck/);
+  });
+
+  it('resumes an in-progress guided stretch session without creating history', async () => {
+    const user = userEvent.setup();
+    const routine = flexibilityRoutineSuggestions[0]!;
+    const savedRoutine: SavedFlexibilityRoutine = {
+      ...routine,
+      id: 'saved-resume',
+      name: 'Resume stretch routine'
+    };
+    const draftResult = createFlexibilityGuidedSession(savedRoutine, {
+      id: 'guided-draft',
+      date: '2026-10-23',
+      startedAt: '2026-10-23T09:00:00.000Z',
+      timeZone: 'UTC'
+    });
+    expect(draftResult.valid).toBe(true);
+    if (!draftResult.valid) return;
+    render(<StatefulFlexibility initialData={{
+      ...createFlexibilityData(),
+      savedRoutines: [savedRoutine],
+      guidedSessionDraft: draftResult.session
+    }} />);
+
+    expect(screen.getByRole('tab', { name: 'Routines' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Resume session' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Resume session' }));
+    const session = screen.getByRole('dialog', { name: 'Resume stretch routine' });
+    expect(within(session).getByRole('heading', { name: 'Downward Dog' })).toBeTruthy();
+    expect(screen.getByText('No stretches logged yet.')).toBeTruthy();
+  });
+
+  it('shows empty and populated linked-Rhythm panels and preserves the association entry point', async () => {
+    const user = userEvent.setup();
+    const onAddLinkedRhythm = vi.fn();
+    const onSaveFoundationAssociations = vi.fn(() => null);
+    const linkedRhythm = {
+      ...todayRhythms[0]!,
+      id: 'flexibility-stretch-rhythm',
+      title: 'Morning stretches',
+      categoryIds: ['health'] as const,
+      primaryFoundationId: 'health-flexibility'
+    };
+    const { rerender } = render(<StatefulFlexibility
+      onAddLinkedRhythm={onAddLinkedRhythm}
+      onSaveFoundationAssociations={onSaveFoundationAssociations}
+    />);
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    expect(screen.getByText('No Rhythms are linked to Flexibility yet.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Linked Rhythms · 0' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Manage links' }));
+    const emptyAssociationDialog = screen.getByRole('dialog', { name: 'Linked Rhythms' });
+    expect(within(emptyAssociationDialog).getByRole('heading', { name: 'No rhythms to link yet' }))
+      .toBeTruthy();
+    await user.click(within(emptyAssociationDialog).getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
+    expect(onAddLinkedRhythm.mock.calls[0]?.[0]).toBe('health-flexibility');
+
+    rerender(<StatefulFlexibility
+      rhythms={[linkedRhythm]}
+      onAddLinkedRhythm={onAddLinkedRhythm}
+      onSaveFoundationAssociations={onSaveFoundationAssociations}
+    />);
+    expect(screen.getByRole('heading', { name: 'Linked Rhythms · 1' })).toBeTruthy();
+    expect(screen.getByText('Morning stretches')).toBeTruthy();
+    expect(screen.queryByText('No Rhythms are linked to Flexibility yet.')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Manage links' }));
+    const associationDialog = screen.getByRole('dialog', { name: 'Linked Rhythms' });
+    expect((within(associationDialog).getByRole('checkbox', {
+      name: /Morning stretches/
+    }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('shows the three newest manual sessions first and reveals older history on request', async () => {
+    const user = userEvent.setup();
+    const data: FlexibilityData = {
+      ...createFlexibilityData(),
+      sessions: [
+        { id: 'stretch-old', date: '2026-10-18', regionIds: ['neck'] },
+        { id: 'stretch-newest', date: '2026-10-22', regionIds: ['hamstrings'] },
+        { id: 'stretch-middle', date: '2026-10-20', regionIds: ['shoulders'] },
+        { id: 'stretch-recent', date: '2026-10-21', regionIds: ['back'] }
+      ]
+    };
+    const { container } = render(<StatefulFlexibility initialData={data} />);
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    const historyList = container.querySelector('.flexibility-history__list')!;
+    const firstThree = [...historyList.querySelectorAll('li strong')].map(item => item.textContent);
+    expect(firstThree).toEqual([
+      '2026-10-22 · Manual stretch',
+      '2026-10-21 · Manual stretch',
+      '2026-10-20 · Manual stretch'
+    ]);
+    await user.click(screen.getByRole('button', { name: 'View all' }));
+    expect(historyList.querySelectorAll('li')).toHaveLength(4);
+    expect(historyList.querySelector('li:last-child strong')?.textContent)
+      .toBe('2026-10-18 · Manual stretch');
   });
 
   it('keeps the existing region recommendation actionable when no saved routine matches', async () => {
@@ -499,8 +728,9 @@ describe('Flexibility foundation presentation', () => {
       }
     };
     render(<StatefulFlexibility initialData={initialData} />);
-    await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: /^Start$/ }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Stretch' }));
+    await user.click(screen.getByRole('button', { name: /Guided session/ }));
     const dialog = screen.getByRole('dialog', { name: 'Shoulder Routine' });
     expect(within(dialog).getByRole('heading', { name: 'Shoulder Stretch' })).toBeTruthy();
     expect(within(dialog).getByText('Left side')).toBeTruthy();
@@ -574,8 +804,9 @@ describe('Flexibility foundation presentation', () => {
       savedRoutines: [routine]
     };
     render(<StatefulFlexibility initialData={initialData} />);
-    await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: /^Start$/ }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Stretch' }));
+    await user.click(screen.getByRole('button', { name: /Guided session/ }));
     const dialog = screen.getByRole('dialog', { name: 'Bilateral routine' });
     expect(within(dialog).getByRole('heading', { name: 'Downward Dog' })).toBeTruthy();
     expect(within(dialog).getByText('Both sides')).toBeTruthy();
@@ -600,8 +831,9 @@ describe('Flexibility foundation presentation', () => {
       savedRoutines: [routine]
     };
     render(<StatefulFlexibility initialData={initialData} />);
-    await user.click(screen.getByRole('tab', { name: 'Saved' }));
-    await user.click(screen.getByRole('button', { name: /^Start$/ }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Stretch' }));
+    await user.click(screen.getByRole('button', { name: /Guided session/ }));
     const dialog = screen.getByRole('dialog', { name: 'Two stretch routine' });
     expect(within(dialog).getByRole('button', { name: '1 of 2' })).toBeTruthy();
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
@@ -15,11 +15,17 @@ type RoutineEditorErrors = {
 export function FlexibilityRoutineEditorDialog({
   routine,
   onSave,
-  onClose
+  onClose,
+  onBack,
+  onDraftChange,
+  errorMessage
 }: {
   routine: SavedFlexibilityRoutine;
   onSave: (routine: SavedFlexibilityRoutine) => void;
   onClose: () => void;
+  onBack?: () => void;
+  onDraftChange?: (routine: SavedFlexibilityRoutine) => void;
+  errorMessage?: string;
 }) {
   const [draft, setDraft] = useState<SavedFlexibilityRoutine>(() => clone(routine));
   const [expandedStretchIds, setExpandedStretchIds] = useState<Set<string>>(
@@ -27,6 +33,15 @@ export function FlexibilityRoutineEditorDialog({
   );
   const [errors, setErrors] = useState<RoutineEditorErrors>({ stretches: {} });
   const estimatedSeconds = estimateFlexibilityRoutineSeconds(draft);
+  const onDraftChangeRef = useRef(onDraftChange);
+
+  useEffect(() => {
+    onDraftChangeRef.current = onDraftChange;
+  }, [onDraftChange]);
+
+  useEffect(() => {
+    onDraftChangeRef.current?.(draft);
+  }, [draft]);
 
   function updateStretch(index: number, patch: Partial<SavedFlexibilityRoutine['stretches'][number]>) {
     setDraft(current => ({
@@ -137,6 +152,13 @@ export function FlexibilityRoutineEditorDialog({
       dismissOnBackdrop
       portalToBody
       phoneFullScreen
+      {...(onBack ? {
+        titleLeadingAction: (
+          <button type="button" className="btn mini ghost" onClick={onBack}>
+            Back to routines
+          </button>
+        )
+      } : {})}
       initialFocusId="flexibility-routine-name"
       dialogClassName="flexibility-routine-editor"
       onClose={onClose}
@@ -259,6 +281,7 @@ export function FlexibilityRoutineEditorDialog({
           {errors.noStretches && <p className="flexibility-routine-editor__field-error" role="alert">{errors.noStretches}</p>}
           <button type="button" className="strength-editor-link" onClick={addStretch}>+ Add stretch</button>
         </div>
+        {errorMessage && <p className="flexibility-error" role="alert">{errorMessage}</p>}
         <div className="money-goal-dialog__actions flexibility-routine-editor__actions">
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn mini">

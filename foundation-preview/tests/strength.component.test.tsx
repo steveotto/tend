@@ -127,6 +127,50 @@ function renderStatefulStrength(initialData = createStrengthData()) {
   return { ...render(<StatefulStrength />), changes };
 }
 
+function renderFoundationStrength(
+  initialData = createStrengthData(),
+  quickStartRequest?: { requestId: number; opener: HTMLButtonElement }
+) {
+  const changes: StrengthData[] = [];
+  const rhythm = {
+    ...todayRhythms[0]!,
+    id: 'health-strength-rhythm',
+    title: 'Strength training',
+    categoryIds: ['health'] as CategoryId[],
+    primaryFoundationId: 'health-strength',
+    healthLogCapability: 'workout' as const,
+    schedule: { frequency: 'daily' as const }
+  };
+  function ReopenableFoundation() {
+    const [data, setData] = useState(initialData);
+    const [active, setActive] = useState(true);
+    const [refreshCount, setRefreshCount] = useState(0);
+    return (
+      <>
+        <button type="button" onClick={() => setActive(false)}>Leave Strength</button>
+        <button type="button" onClick={() => setActive(true)}>Reopen Strength</button>
+        <button type="button" onClick={() => setRefreshCount(count => count + 1)}>
+          Refresh active view {refreshCount}
+        </button>
+        <StrengthView
+          data={data}
+          rhythms={[{ rhythm, mode: 'recommended' }]}
+          evaluationDate="2026-10-22"
+          onChange={next => {
+            changes.push(next);
+            setData(next);
+            return null;
+          }}
+          foundationNavigation
+          foundationActive={active}
+          {...(quickStartRequest ? { quickStartRequest } : {})}
+        />
+      </>
+    );
+  }
+  return { ...render(<ReopenableFoundation />), changes };
+}
+
 function startGuidedWorkoutFromChoice(button = screen.getByRole('button', { name: 'Workout' })) {
   fireEvent.click(button);
   const choice = screen.getByRole('dialog');
@@ -220,6 +264,68 @@ function getSettingsMuscleSummary(dialog: HTMLElement, muscleName: string): HTML
 }
 
 describe('Strength preview presentation', () => {
+  it('opens the Strength foundation on Body and resets only when the foundation is reopened', async () => {
+    const user = userEvent.setup();
+    renderFoundationStrength();
+    const tabs = screen.getByRole('tablist', { name: 'Strength sections' });
+    const body = within(tabs).getByRole('tab', { name: 'Body' });
+    const workouts = within(tabs).getByRole('tab', { name: 'Workouts' });
+    const rhythms = within(tabs).getByRole('tab', { name: 'Rhythms' });
+    expect(body.getAttribute('aria-selected')).toBe('true');
+
+    await user.click(workouts);
+    await user.click(screen.getByRole('button', { name: /Refresh active view/ }));
+    expect(workouts.getAttribute('aria-selected')).toBe('true');
+    await user.click(rhythms);
+    await user.click(screen.getByRole('button', { name: /Refresh active view/ }));
+    expect(rhythms.getAttribute('aria-selected')).toBe('true');
+
+    await user.click(screen.getByRole('button', { name: 'Leave Strength' }));
+    await user.click(screen.getByRole('button', { name: 'Reopen Strength' }));
+    expect(body.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('preserves an explicitly opened guided workout when Strength is reopened', async () => {
+    const user = userEvent.setup();
+    const data = createStrengthData();
+    const workout: StrengthSavedWorkout = {
+      id: 'foundation-active-session-template',
+      name: 'Active foundation workout',
+      muscleIds: ['chest'],
+      sharedWith: [],
+      exercises: [{
+        id: 'foundation-active-session-exercise',
+        name: 'Bench Press',
+        muscleIds: ['chest'],
+        equipment: 'Barbell',
+        loadMeaning: 'total',
+        restDurationSeconds: 60,
+        sets: [{ id: 'foundation-active-session-set', targetReps: 8 }]
+      }]
+    };
+    const started = createStrengthGuidedSession(workout, {
+      id: 'foundation-active-guided-session',
+      date: '2026-10-22',
+      startedAt: '2026-10-22T09:00:00.000Z',
+      timeZone: 'UTC'
+    });
+    expect(started.valid).toBe(true);
+    if (!started.valid) return;
+    data.guidedSessionDraft = started.session;
+    const opener = document.createElement('button');
+    opener.dataset.testRhythmOpener = 'true';
+    document.body.append(opener);
+    renderFoundationStrength(data, { requestId: 1, opener });
+
+    const tabs = screen.getByRole('tablist', { name: 'Strength sections' });
+    expect(within(tabs).getByRole('tab', { name: 'Workouts' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('dialog', { name: 'Active foundation workout' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Leave Strength' }));
+    await user.click(screen.getByRole('button', { name: 'Reopen Strength' }));
+    expect(within(tabs).getByRole('tab', { name: 'Workouts' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('dialog', { name: 'Active foundation workout' })).toBeTruthy();
+  });
+
   it('renders the consolidated Workouts page and keeps the Add draft across Back navigation', async () => {
     const user = userEvent.setup();
     const empty = renderStrength();
@@ -734,7 +840,7 @@ describe('Strength preview presentation', () => {
     expect(details.getAttribute('aria-expanded')).toBe('false');
     await user.click(details);
     const dialog = screen.getByRole('dialog', { name: 'Strength Health details' });
-    expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(false);
+    expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     const explanation = within(dialog).getByRole('region', { name: 'Strength Health scoring details' });
     expect(within(explanation).getByRole('img', { name: 'Strength Health: Not enough data' })).toBeTruthy();
     const breakdown = within(explanation).getByRole('region', { name: 'Strength Health scoring details score summary' });
@@ -1465,7 +1571,10 @@ describe('Strength preview presentation', () => {
     expect(bodySection.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('heading', { name: 'Body overview' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Your body, at a glance' })).toBeTruthy();
-    expect(screen.getByRole('meter', { name: 'Strength training status score' })).toBeTruthy();
+    const trainingStatus = screen.getByRole('meter', { name: 'Strength training status score' });
+    expect(trainingStatus.closest('.strength-section-heading__subtitle')).toBeTruthy();
+    expect(trainingStatus.textContent).toContain('Training status');
+    expect(trainingStatus.querySelector('strong')?.textContent).toBe('—');
     await user.keyboard('{End}');
     expect(document.activeElement).toBe(rhythmsSection);
     expect(rhythmsSection.getAttribute('aria-selected')).toBe('true');
@@ -1541,6 +1650,13 @@ describe('Strength preview presentation', () => {
     expect(rhythmsTab.getAttribute('aria-selected')).toBe('true');
 
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 1' })).toBeTruthy();
+    const linkedRhythmsHeading = screen.getByRole('heading', { name: 'Linked Rhythms · 1' });
+    const linkedRhythmsHeader = linkedRhythmsHeading.closest('.strength-section-heading');
+    expect(linkedRhythmsHeader?.querySelector('.strength-section-heading__subtitle')?.textContent)
+      .toBe('Your routines for building strength.');
+    expect(linkedRhythmsHeader?.querySelector('.strength-linked-rhythms-count')?.textContent).toBe('1');
+    expect([...linkedRhythmsHeader!.querySelectorAll('.strength-section-heading__actions button')]
+      .map(button => button.textContent?.trim())).toEqual(['Manage links', 'Add Rhythm']);
     expect(screen.getByText('Strength connection')).toBeTruthy();
     const logButton = screen.getByRole('button', { name: 'Log workout Strength connection' });
     await user.click(logButton);
@@ -1558,6 +1674,23 @@ describe('Strength preview presentation', () => {
       { rhythmId: 'user-rhythm-00000000-0000-4000-8000-000000000001', linked: true },
       { rhythmId: 'user-rhythm-00000000-0000-4000-8000-000000000002', linked: true }
     ]);
+  });
+
+  it('shows a card for an empty Strength Rhythm list', async () => {
+    const user = userEvent.setup();
+    render(
+      <StrengthView
+        data={createStrengthData()}
+        rhythms={[]}
+        evaluationDate="2026-10-22"
+        onChange={() => null}
+      />
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    const emptyState = screen.getByText('No Rhythms are linked to Strength yet.').parentElement;
+    expect(emptyState?.classList.contains('strength-rhythms-empty')).toBe(true);
+    expect(emptyState?.closest<HTMLElement>('.strength-section-panel')?.hidden).toBe(false);
   });
 
   it('shows the latest three workouts and opens the complete history on View all', async () => {
@@ -1981,6 +2114,70 @@ describe('Strength preview presentation', () => {
     expect(changes).toHaveLength(0);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Shoulders & Squats' })).toBeTruthy();
+  });
+
+  it('previews, customizes, and guides the labeled P90X Ab Ripper sets', async () => {
+    const user = userEvent.setup();
+    const { changes } = renderStatefulStrength();
+    await user.click(screen.getByRole('button', { name: 'Add workout' }));
+    const picker = screen.getByRole('dialog', { name: 'Add workout' });
+    const p90x = within(picker).getByRole('heading', { name: 'P90X Ab Ripper' }).closest('article')!;
+    await user.click(within(p90x).getByText('Preview routine'));
+    expect(within(p90x).getByText(/Forward · 25 reps/)).toBeTruthy();
+    expect(within(p90x).getByText(/Reverse · 25 reps/)).toBeTruthy();
+    expect(within(p90x).getByText(/Left · 25 reps/)).toBeTruthy();
+    expect(within(p90x).getByText(/Right · 25 reps/)).toBeTruthy();
+    await user.click(within(p90x).getByRole('button', { name: 'Customize' }));
+
+    let editor = screen.getByRole('dialog', { name: 'Create workout' });
+    await user.click(within(editor).getByRole('button', { name: 'Edit Bicycles' }));
+    const exerciseEditor = screen.getByRole('dialog', { name: 'Edit exercise' });
+    expect(within(exerciseEditor).getByRole('textbox', { name: 'Set 1 label' })).toHaveProperty('value', 'Forward');
+    expect(within(exerciseEditor).getByRole('textbox', { name: 'Set 2 label' })).toHaveProperty('value', 'Reverse');
+    await user.click(within(exerciseEditor).getByRole('button', { name: 'Done' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save workout' }));
+
+    const saved = changes.at(-1)?.savedWorkouts[0]!;
+    expect(saved.exercises?.map(exercise => exercise.restDurationSeconds)).toEqual(Array(11).fill(0));
+    expect(saved.exercises?.find(exercise => exercise.name === 'Bicycles')?.sets
+      .map(set => [set.label, set.targetReps])).toEqual([['Forward', 25], ['Reverse', 25]]);
+    const savedCard = within(screen.getByRole('region', { name: 'My workouts' }))
+      .getByRole('heading', { name: 'P90X Ab Ripper' }).closest('article')!;
+    startGuidedWorkoutFromChoice(within(savedCard).getByRole('button', { name: 'Workout' }));
+    const session = screen.getByRole('dialog', { name: 'P90X Ab Ripper' });
+    const timer = within(session).getByRole('region', { name: 'Rest timer' });
+    expect(changes.at(-1)?.guidedSessionDraft).toMatchObject({
+      autoStartRest: false,
+      restTimer: { status: 'idle', durationSeconds: 0 },
+      exercises: saved.exercises?.map(exercise => ({
+        restDurationSeconds: exercise.restDurationSeconds
+      }))
+    });
+    expect(within(timer).getByRole('button', { name: 'Rest timer settings' })).toBeTruthy();
+    await user.click(within(session).getByRole('button', { name: '1 of 11' }));
+    await user.click(within(session).getByRole('menuitem', { name: 'Bicycles' }));
+    expect(within(session).getByText('Forward', { selector: '.strength-guided__side-indicator' })).toBeTruthy();
+    await user.click(within(session).getByRole('button', { name: 'Set 2, Reverse, pending' }));
+    expect(within(session).getByText('Reverse', { selector: '.strength-guided__side-indicator' })).toBeTruthy();
+    await user.click(within(session).getByRole('button', { name: 'Set 1, Forward, pending' }));
+    await user.click(within(session).getByRole('button', { name: 'Log set 1' }));
+    expect(changes.at(-1)?.guidedSessionDraft).toMatchObject({
+      autoStartRest: false,
+      restTimer: { status: 'idle', durationSeconds: 0 }
+    });
+    expect(within(session).queryByText(/Resting · Tap to pause/)).toBeNull();
+    await user.click(within(timer).getByRole('button', { name: 'Rest timer settings' }));
+    const restSettings = screen.getByRole('dialog', { name: 'Rest settings' });
+    expect(within(restSettings).getByRole('checkbox', { name: 'Auto-start rest' })).toHaveProperty('checked', false);
+    await user.click(within(restSettings).getByRole('button', { name: '1:00' }));
+    await user.click(within(restSettings).getByRole('button', { name: 'Apply' }));
+    expect(changes.at(-1)?.guidedSessionDraft?.restTimer).toMatchObject({ status: 'idle', durationSeconds: 60 });
+    await user.click(within(timer).getByRole('button', { name: 'Start rest timer' }));
+    expect(changes.at(-1)?.guidedSessionDraft?.restTimer).toMatchObject({ status: 'running', durationSeconds: 60 });
+    await user.click(within(session).getByRole('button', { name: '2 of 11' }));
+    await user.click(within(session).getByRole('menuitem', { name: 'Finish & review' }));
+    expect(within(session).getByText('Set 1 · Forward')).toBeTruthy();
+    expect(within(session).getByText('Set 2 · Reverse')).toBeTruthy();
   });
 
   it('saves and starts the Power Abs draft with alternating pair order and pair rest', async () => {

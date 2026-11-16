@@ -198,7 +198,7 @@ export function FitnessScoreSummary({
       {expanded && (
         <HealthScoreDetailsDialog
           title={`${category} Health details`}
-          phoneFullScreen={false}
+          phoneFullScreen
           onClose={() => {
             setExpanded(false);
             requestAnimationFrame(() => infoButtonRef.current?.focus());

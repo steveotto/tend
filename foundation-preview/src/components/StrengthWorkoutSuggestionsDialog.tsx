@@ -136,10 +136,11 @@ export function StrengthWorkoutSuggestionsDialog({
 }
 
 function formatSuggestionSet(set: StrengthWorkoutSuggestion['exercises'][number]['sets'][number]): string {
+  const label = set.label ? `${set.label} · ` : '';
   if ('targetDurationSeconds' in set) {
     const minutes = Math.floor(set.targetDurationSeconds / 60);
     const seconds = set.targetDurationSeconds % 60;
-    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    return `${label}${minutes}:${String(seconds).padStart(2, '0')}`;
   }
-  return `${set.targetReps} reps`;
+  return `${label}${set.targetReps} reps`;
 }

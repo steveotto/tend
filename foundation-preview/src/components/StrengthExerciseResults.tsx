@@ -63,7 +63,9 @@ export function StrengthExerciseResults({
             : null;
           return (
             <li key={set.id} className={`strength-exercise-results__set strength-exercise-results__set--${set.status}`}>
-              <span className="strength-exercise-results__set-number">Set {index + 1}</span>
+              <span className="strength-exercise-results__set-number">
+                Set {index + 1}{set.label ? ` · ${set.label}` : ''}
+              </span>
               <span className="strength-exercise-results__set-value">
                 {value ?? (set.status === 'skipped' ? 'Skipped' : 'Unfinished')}
                 {presentation === 'history' && set.status === 'performed'

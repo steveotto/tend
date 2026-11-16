@@ -93,7 +93,7 @@ async function main() {
       });
       await context.addInitScript((initialIdentity: string) => {
         const session = initialIdentity === 'dashboard'
-          ? { user: { id: 'c0000000-0000-4000-8000-000000000003' } }
+          ? { user: { id: 'c0000000-0000-4000-8000-000000000003', email: 'browser-test@example.test' } }
           : null;
         Object.assign(window, {
           supabase: {
@@ -157,6 +157,41 @@ async function main() {
         assert.equal(styles.classicLinkUnderlineOffset, '3px');
       } else {
         await page.locator('.home-dashboard').waitFor();
+        await page.route('https://geocoding-api.open-meteo.com/**', route => route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            results: [{
+              id: 1,
+              name: 'Springfield',
+              admin1: 'Oregon',
+              country: 'United States',
+              country_code: 'US',
+              latitude: 44.05,
+              longitude: -123.02
+            }]
+          })
+        }));
+        await page.route('https://api.open-meteo.com/**', route => {
+          const currentTime = new Date();
+          currentTime.setUTCMinutes(0, 0, 0);
+          const timestamp = currentTime.toISOString().slice(0, 16);
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              timezone: 'GMT',
+              utc_offset_seconds: 0,
+              current: { time: timestamp, temperature_2m: 42, weather_code: 3, is_day: 1 },
+              hourly: {
+                time: [timestamp],
+                temperature_2m: [42],
+                weather_code: [3],
+                is_day: [1]
+              }
+            })
+          });
+        });
         await page.setViewportSize({ width: 375, height: 812 });
         const styles = await page.evaluate(() => {
           const wrap = document.querySelector<HTMLElement>('.wrap');
@@ -187,6 +222,20 @@ async function main() {
         assert.equal(styles.moduleDisplay, 'grid');
         assert.equal(styles.moduleColumns.trim().split(/\s+/).length, 1);
         assert.ok(styles.moduleWidth > 0);
+
+        await page.getByRole('button', { name: 'More, settings' }).click();
+        await page.getByRole('button', { name: /Settings/ }).click();
+        await page.getByRole('button', { name: /Weather/ }).click();
+        await page.getByRole('button', { name: 'Choose city' }).click();
+        await page.getByRole('searchbox', { name: 'City or postal code' }).fill('Springfield');
+        await page.getByRole('button', { name: 'Search', exact: true }).click();
+        const forecastResponse = page.waitForResponse(response =>
+          response.url().startsWith('https://api.open-meteo.com/')
+        );
+        await page.getByRole('button', { name: /Springfield/ }).click();
+        await forecastResponse;
+        await page.getByRole('button', { name: 'Today', exact: true }).click();
+        await page.locator('.today-plan__title-weather').waitFor();
 
         const mobileSizeToggle = page.locator('.mobile-display-toggle');
         const expectedSizes = [
@@ -237,6 +286,15 @@ async function main() {
               const calendarHeadingRow = document.querySelector<HTMLElement>('.calendar-heading-row');
               const calendarHeading = document.querySelector<HTMLElement>('.calendar-heading-row h2');
               const prayerHeading = document.querySelector<HTMLElement>('.today-prayer-section > .sectiontitle h2');
+              const todayTitleRow = document.querySelector<HTMLElement>('.today-plan__title-row');
+              const todayTitleMain = todayTitleRow?.querySelector<HTMLElement>('.today-plan__title-main');
+              const todayHeading = todayTitleMain?.querySelector<HTMLElement>('.today-plan__heading');
+              const todayWeather = todayTitleMain?.querySelector<HTMLElement>('.today-plan__title-weather');
+              const todayWeatherImage = todayWeather?.querySelector<HTMLElement>('[role="img"]');
+              const todayWeatherCompact = todayWeather?.querySelector<HTMLElement>('.today-weather--compact');
+              const todayWeatherIcon = todayWeatherCompact?.querySelector<SVGSVGElement>('svg');
+              const todayProgress = todayTitleRow?.querySelector<HTMLElement>('.today-plan__title-progress');
+              const timeframeWeather = document.querySelector<HTMLElement>('.today-timeframe-header .today-plan__weather');
               let calendarRange = document.querySelector<HTMLElement>('.calendar-range-control');
               let calendarRangeLabel = document.querySelector<HTMLElement>('.calendar-range-label');
               const currentTool = document.querySelector<HTMLButtonElement>('.utility-primary-button[aria-current="page"]');
@@ -270,7 +328,9 @@ async function main() {
               if (!headerActions || !mobileSearch || !sizeToggle || !brandTagline || !stickyNav
                 || !areaNavigation || !utilitySearch || !menuGrid || !firstMenuArea || !currentTool
                 || !calendarSection || !calendarHeadingRow || !calendarHeading || !prayerHeading
-                || !calendarRange || !calendarRangeLabel) {
+                || !calendarRange || !calendarRangeLabel || !todayTitleRow || !todayTitleMain
+                || !todayHeading || !todayWeather || !todayWeatherImage || !todayWeatherCompact
+                || !todayWeatherIcon || !todayProgress) {
                 throw new Error('Dashboard is missing an expected mobile shell or Health category element.');
               }
               const searchStyle = getComputedStyle(mobileSearch);
@@ -279,6 +339,19 @@ async function main() {
               const gridStyle = getComputedStyle(menuGrid);
               const gridRect = menuGrid.getBoundingClientRect();
               const areaRect = firstMenuArea.getBoundingClientRect();
+              const titleMainRect = todayTitleMain.getBoundingClientRect();
+              const weatherRect = todayWeather.getBoundingClientRect();
+              const compactWeatherRect = todayWeatherCompact.getBoundingClientRect();
+              const weatherIconRect = todayWeatherIcon.getBoundingClientRect();
+              const temperature = todayWeatherCompact.querySelector<HTMLElement>('.today-weather__reading strong');
+              if (!temperature) throw new Error('Compact weather is missing its temperature.');
+              const temperatureRect = temperature.getBoundingClientRect();
+              const progressRect = todayProgress.getBoundingClientRect();
+              const titleMainStyle = getComputedStyle(todayTitleMain);
+              const weatherStyle = getComputedStyle(todayWeather);
+              const compactWeatherStyle = getComputedStyle(todayWeatherCompact);
+              const weatherIconStyle = getComputedStyle(todayWeatherIcon);
+              const condition = todayWeather.querySelector<HTMLElement>('.today-weather__reading > span');
               const navRect = stickyNav.getBoundingClientRect();
               const calendarHeadingRect = calendarHeading.getBoundingClientRect();
               const calendarHeadingStyle = getComputedStyle(calendarHeading);
@@ -408,6 +481,35 @@ async function main() {
                   itemWidth: areaRect.width,
                   itemCount: menuGrid.querySelectorAll('.menu-area').length
                 },
+                todayWeather: {
+                  heading: todayHeading.textContent?.trim(),
+                  accessibleName: todayWeatherImage.getAttribute('aria-label'),
+                  conditionClass: condition?.className,
+                  weatherCount: document.querySelectorAll('.today-plan__title-weather').length,
+                  timeframeWeather: Boolean(timeframeWeather),
+                  titleMainDisplay: titleMainStyle.display,
+                  titleMainAlignItems: titleMainStyle.alignItems,
+                  weatherDisplay: weatherStyle.display,
+                  weatherAlignItems: weatherStyle.alignItems,
+                  weatherMinHeight: weatherStyle.minHeight,
+                  compactWeatherDisplay: compactWeatherStyle.display,
+                  compactWeatherAlignItems: compactWeatherStyle.alignItems,
+                  weatherIconAlignSelf: weatherIconStyle.alignSelf,
+                  compactWeatherHeight: compactWeatherRect.height,
+                  iconTemperatureCenterDelta: Math.abs(
+                    weatherIconRect.top + weatherIconRect.height / 2
+                    - temperatureRect.top - temperatureRect.height / 2
+                  ),
+                  titleRight: titleMainRect.right,
+                  weatherRight: weatherRect.right,
+                  progressLeft: progressRect.left,
+                  progressRight: progressRect.right,
+                  rowRight: todayTitleRow.getBoundingClientRect().right,
+                  overlapsProgress: titleMainRect.left < progressRect.right
+                    && titleMainRect.right > progressRect.left
+                    && titleMainRect.top < progressRect.bottom
+                    && titleMainRect.bottom > progressRect.top
+                },
                 calendarRange: {
                   headingText: calendarHeading.textContent?.trim(),
                   headingFontFamily: calendarHeadingStyle.fontFamily,
@@ -491,6 +593,26 @@ async function main() {
             assert.ok(phoneStyles.categoryGrid.itemCount > 0);
             assert.ok(Math.abs(phoneStyles.categoryGrid.itemWidth - phoneStyles.categoryGrid.width) < 1,
               `Health category items must fill the grid at ${viewportWidth}px / ${expected.size}.`);
+            assert.equal(phoneStyles.todayWeather.heading, 'Today');
+            assert.equal(phoneStyles.todayWeather.accessibleName, 'Current conditions: Cloudy, 42 degrees');
+            assert.equal(phoneStyles.todayWeather.conditionClass, 'visually-hidden');
+            assert.equal(phoneStyles.todayWeather.weatherCount, 1);
+            assert.equal(phoneStyles.todayWeather.timeframeWeather, false);
+            assert.equal(phoneStyles.todayWeather.titleMainDisplay, 'flex');
+            assert.equal(phoneStyles.todayWeather.titleMainAlignItems, 'baseline');
+            assert.equal(phoneStyles.todayWeather.weatherDisplay, 'flex');
+            assert.equal(phoneStyles.todayWeather.weatherAlignItems, 'baseline');
+            assert.equal(phoneStyles.todayWeather.weatherMinHeight, '28px');
+            assert.equal(phoneStyles.todayWeather.compactWeatherDisplay, 'grid');
+            assert.equal(phoneStyles.todayWeather.compactWeatherAlignItems, 'baseline');
+            assert.equal(phoneStyles.todayWeather.weatherIconAlignSelf, 'center');
+            assert.ok(phoneStyles.todayWeather.iconTemperatureCenterDelta <= 1,
+              `The weather icon should center against the temperature line at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(phoneStyles.todayWeather.weatherRight <= phoneStyles.todayWeather.progressLeft
+              || !phoneStyles.todayWeather.overlapsProgress,
+              `Today weather and tended controls must wrap without overlapping at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(phoneStyles.todayWeather.progressRight <= phoneStyles.todayWeather.rowRight + 1,
+              `The tended control must remain in the title row at ${viewportWidth}px / ${expected.size}.`);
             assert.deepEqual(phoneStyles.calendarRange.buttonNames, ['Today', 'Week', 'Month']);
             assert.deepEqual(phoneStyles.calendarRange.buttonTitles, ['Today', 'Week', 'Month']);
             assert.equal(phoneStyles.calendarRange.headingText, 'Calendar');
@@ -768,7 +890,66 @@ async function main() {
 
           await page.setViewportSize({ width: 375, height: 812 });
           await page.getByRole('button', { name: 'More, settings' }).click();
+          assert.equal(await page.getByText('Make Tend your own.', { exact: true }).count(), 1);
+          const moreStatus = page.locator('.preview-account-sync');
+          await moreStatus.waitFor({ state: 'visible' });
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 812 });
+            const moreLayout = await page.evaluate(() => {
+              const page = document.querySelector<HTMLElement>('.settings-page');
+              const status = document.querySelector<HTMLElement>('.preview-account-sync');
+              const settings = document.querySelector<HTMLElement>('.settings-page__more-options .settings-link');
+              if (!page || !status || !settings) throw new Error('More is missing its account save status or Settings navigation.');
+              return {
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+                status: status.getBoundingClientRect().toJSON(),
+                settings: settings.getBoundingClientRect().toJSON(),
+                accountRows: document.querySelectorAll('.preview-account-sync__account').length
+              };
+            });
+            assert.equal(moreLayout.documentWidth, viewportWidth,
+              `More must not overflow at ${viewportWidth}px / ${expected.size}.`);
+            assert.equal(moreLayout.viewportWidth, viewportWidth);
+            assert.ok(moreLayout.status.width > 0 && moreLayout.settings.width > 0);
+            assert.equal(moreLayout.accountRows, 1,
+              'The signed-in account should appear once in the Save & sync status.');
+          }
           await page.getByRole('button', { name: 'Settings', exact: true }).click();
+          await page.setViewportSize({ width: 375, height: 812 });
+          const directoryLayout = await page.evaluate(() => {
+            const directory = document.querySelector<HTMLElement>('.settings-page__directory');
+            if (!directory) throw new Error('Settings directory is missing.');
+            const sections = [...directory.querySelectorAll<HTMLElement>('.settings-section')];
+            const rows = [...directory.querySelectorAll<HTMLElement>('.settings-link')];
+            return {
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth,
+              headings: sections.map(section => section.querySelector('h3')?.textContent?.trim()),
+              sectionStyles: sections.map(section => {
+                const style = getComputedStyle(section);
+                return { border: style.borderTopWidth, background: style.backgroundColor, shadow: style.boxShadow };
+              }),
+              rows: rows.map(row => {
+                const rect = row.getBoundingClientRect();
+                return {
+                  left: rect.left,
+                  right: rect.right,
+                  height: rect.height,
+                  icon: row.querySelector<HTMLElement>('.settings-link__icon')?.getBoundingClientRect().width ?? 0
+                };
+              })
+            };
+          });
+          assert.deepEqual(directoryLayout.headings, ['Personalize', 'Connections', 'Your data']);
+          assert.equal(directoryLayout.documentWidth, 375);
+          assert.equal(directoryLayout.viewportWidth, 375);
+          assert.ok(directoryLayout.sectionStyles.every(style =>
+            style.border === '0px' && style.background === 'rgba(0, 0, 0, 0)' && style.shadow === 'none'
+          ), 'Settings section headings should sit directly on the page background.');
+          assert.ok(directoryLayout.rows.every(row =>
+            row.left >= 0 && row.right <= 375 && row.height >= 68 && row.icon >= 34
+          ), 'Settings rows and icon tiles must fit the phone viewport.');
           await page.getByRole('button', { name: 'Time blocks' }).click();
           const sleepLayout = await page.evaluate(() => {
             const sleep = document.querySelector<HTMLElement>('.time-block-settings__sleep');
@@ -820,17 +1001,14 @@ async function main() {
             ));
           }
           await page.getByRole('button', { name: '‹ Settings' }).click();
-          await page.getByRole('button', { name: 'Save & sync' }).click();
+          await page.getByRole('button', { name: '‹ More' }).click();
           for (const viewportWidth of [375, 390, 430]) {
             await page.setViewportSize({ width: viewportWidth, height: 812 });
             const syncLayout = await page.evaluate(() => {
-              const section = [...document.querySelectorAll<HTMLElement>('.preview-data-controls, .preview-account-sync')]
-                .find(element => element.getClientRects().length > 0);
-              const notice = section?.querySelector<HTMLElement>(
-                '.preview-data-controls__notice, .preview-account-sync__status'
-              );
+              const section = document.querySelector<HTMLElement>('.preview-account-sync');
+              const notice = section?.querySelector<HTMLElement>('.preview-account-sync__status');
               const rect = section?.getBoundingClientRect();
-              if (!section || !notice || !rect) throw new Error('Save & sync is missing its visible save status.');
+              if (!section || !notice || !rect) throw new Error('More is missing its visible Save & sync status.');
               return {
                 documentWidth: document.documentElement.scrollWidth,
                 viewportWidth: document.documentElement.clientWidth,
@@ -848,8 +1026,8 @@ async function main() {
             assert.ok(syncLayout.noticeWidth > 0 && syncLayout.noticeHeight > 0);
             assert.equal(syncLayout.nestedCards, 0);
           }
-          await page.getByRole('button', { name: '‹ Settings' }).click();
-          await page.getByRole('button', { name: '‹ More' }).click();
+          assert.equal(await page.getByRole('button', { name: 'Preview data tools' }).count(), 0,
+            'Synthetic-only tools must not appear in the signed-in production interface.');
           await page.getByRole('button', { name: 'Today', exact: true }).click();
           await page.setViewportSize({ width: 1280, height: 900 });
 
@@ -2162,8 +2340,8 @@ async function main() {
         const rhythmsTab = strengthTabs.getByRole('tab', { name: 'Rhythms' });
         const sectionTabOrder = await strengthTabs.getByRole('tab').allTextContents();
         assert.deepEqual(sectionTabOrder.map(label => label.trim()), ['Body', 'Workouts', 'Rhythms']);
-        assert.equal(await workoutsTab.getAttribute('aria-selected'), 'true',
-          'Strength should default to Workouts.');
+        assert.equal(await bodyTab.getAttribute('aria-selected'), 'true',
+          'Strength should default to Body.');
         for (const textSize of ['small', 'medium', 'large'] as const) {
           await page.setViewportSize({ width: 375, height: 844 });
           for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -2171,6 +2349,58 @@ async function main() {
             await strengthSizeToggle.click();
           }
           assert.equal(await strengthSizeToggle.getAttribute('data-text-size'), textSize);
+          await page.setViewportSize({ width: 390, height: 390 });
+          await bodyTab.click();
+          await page.getByRole('button', { name: 'Show Strength Health scoring details' }).click();
+          const strengthHealthDialog = page.getByRole('dialog', { name: 'Strength Health details' });
+          assert.equal((await strengthHealthDialog.getAttribute('class'))?.includes('dialog--phone-fullscreen'), true);
+          await strengthHealthDialog.getByRole('button', { name: 'How this Strength Foundation was scored' }).click();
+          const strengthHealthLayout = await strengthHealthDialog.evaluate(dialog => {
+            const scrollBody = dialog.querySelector<HTMLElement>('.health-score-details-dialog__body');
+            const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+            if (!scrollBody || !close) throw new Error('Strength Health details are missing their scroll body or Close control.');
+            return {
+              overflowY: getComputedStyle(scrollBody).overflowY,
+              scrollHeight: scrollBody.scrollHeight,
+              clientHeight: scrollBody.clientHeight,
+              closeVisible: close.getBoundingClientRect().height > 0
+                && close.getBoundingClientRect().top >= dialog.getBoundingClientRect().top
+            };
+          });
+          assert.equal(strengthHealthLayout.overflowY, 'auto');
+          assert.ok(strengthHealthLayout.scrollHeight > strengthHealthLayout.clientHeight,
+            `Strength Health details must scroll at Large/Small/Medium text with a short viewport.`);
+          assert.equal(strengthHealthLayout.closeVisible, true);
+          await strengthHealthDialog.locator('.health-score-details-dialog__body').evaluate(element => {
+            element.scrollTop = element.scrollHeight;
+          });
+          await strengthHealthDialog.getByRole('button', { name: 'Close Health details' }).click();
+          await page.waitForFunction(() =>
+            document.activeElement?.getAttribute('aria-label') === 'Show Strength Health scoring details'
+          );
+          if (textSize === 'small') {
+            await page.setViewportSize({ width: 812, height: 375 });
+            await bodyTab.click();
+            await page.getByRole('button', { name: 'Show Strength Health scoring details' }).click();
+            const landscapeHealth = page.getByRole('dialog', { name: 'Strength Health details' });
+            const landscapeHealthBounds = await landscapeHealth.evaluate(dialog => {
+              const rect = dialog.getBoundingClientRect();
+              return {
+                left: rect.left,
+                top: rect.top,
+                width: rect.width,
+                height: rect.height,
+                viewportWidth: document.documentElement.clientWidth,
+                viewportHeight: document.documentElement.clientHeight
+              };
+            });
+            assert.equal(landscapeHealthBounds.left, 0);
+            assert.equal(landscapeHealthBounds.top, 0);
+            assert.equal(landscapeHealthBounds.width, landscapeHealthBounds.viewportWidth);
+            assert.equal(landscapeHealthBounds.height, landscapeHealthBounds.viewportHeight);
+            await landscapeHealth.getByRole('button', { name: 'Close Health details' }).click();
+          }
+          await page.setViewportSize({ width: 375, height: 844 });
           await workoutsTab.click();
           assert.equal(await page.getByRole('tablist', { name: 'Strength workouts' }).count(), 0);
           assert.equal(await page.getByRole('heading', { name: 'For you' }).count(), 0);
@@ -2203,6 +2433,7 @@ async function main() {
                 const title = element.querySelector<HTMLElement>('.strength-section-heading__title-row');
                 const actions = element.querySelector<HTMLElement>('.strength-section-heading__actions');
                 const titleRect = title?.getBoundingClientRect();
+                const subtitle = element.querySelector<HTMLElement>('.strength-section-heading__subtitle');
                 const action = actions?.querySelector<HTMLElement>('.btn');
                 const actionRect = action?.getBoundingClientRect();
                 const actionSharesTitleRow = Boolean(titleRect && actionRect
@@ -2213,6 +2444,7 @@ async function main() {
                   offset: rect.top - tabsRect.bottom,
                   height: rect.height,
                   titleTop: titleRect ? titleRect.top - rect.top : null,
+                  subtitleTop: subtitle ? subtitle.getBoundingClientRect().top - rect.top : null,
                   actionTop: titleRect && actionRect ? actionRect.top - titleRect.top : null,
                   actionSharesTitleRow,
                   overlap: Boolean(titleRect && actionRect
@@ -2232,8 +2464,14 @@ async function main() {
                 assert.equal(position.actionTop, 0,
                   `${headingName} action should align with its title when sharing the row.`);
               }
+              if (headingName === 'Body overview') {
+                assert.ok(position.subtitleTop !== null && position.subtitleTop > 0,
+                  `Training status should be a subtitle below Body overview at ${viewportWidth}px / ${textSize} text.`);
+              }
               firstHeadingPositions.push(position);
             }
+            assert.ok(firstHeadingPositions[0]!.offset >= 16,
+              `Strength panels need breathing room below the tabs at ${viewportWidth}px / ${textSize} text.`);
             const bodyHeadingPosition = firstHeadingPositions[0]!;
             for (const position of firstHeadingPositions.slice(1)) {
               assert.ok(Math.abs(position.left - bodyHeadingPosition.left) < 0.5,
@@ -2241,6 +2479,34 @@ async function main() {
               assert.ok(Math.abs(position.offset - bodyHeadingPosition.offset) < 0.5,
                 `Strength section headings should share a tab-panel offset at ${viewportWidth}px / ${textSize} text.`);
             }
+            const rhythmHeaderLayout = await rhythmsTab.evaluate(tab => {
+              const panel = document.querySelector<HTMLElement>('#strength-panel-rhythms');
+              const header = panel?.querySelector<HTMLElement>('.strength-section-heading');
+              const actions = header?.querySelector<HTMLElement>('.strength-section-heading__actions');
+              const manage = actions?.querySelector<HTMLElement>('button[aria-haspopup="dialog"]');
+              const add = actions?.querySelector<HTMLElement>('.btn:not(.ghost)');
+              const badge = header?.querySelector<HTMLElement>('.strength-linked-rhythms-count');
+              const subtitle = header?.querySelector<HTMLElement>('.strength-section-heading__subtitle');
+              const panelRect = panel?.getBoundingClientRect();
+              const manageRect = manage?.getBoundingClientRect();
+              const addRect = add?.getBoundingClientRect();
+              const badgeRect = badge?.getBoundingClientRect();
+              return {
+                selected: tab.getAttribute('aria-selected'),
+                subtitle: subtitle?.textContent?.trim(),
+                manageLeft: manageRect?.left ?? null,
+                addRight: addRect?.right ?? null,
+                panelLeft: panelRect?.left ?? null,
+                panelRight: panelRect?.right ?? null,
+                badgeWidth: badgeRect?.width ?? 0,
+                badgeHeight: badgeRect?.height ?? 0
+              };
+            });
+            assert.equal(rhythmHeaderLayout.selected, 'true');
+            assert.equal(rhythmHeaderLayout.subtitle, 'Your routines for building strength.');
+            assert.ok(rhythmHeaderLayout.manageLeft !== null && rhythmHeaderLayout.manageLeft <= rhythmHeaderLayout.panelLeft! + 1);
+            assert.ok(rhythmHeaderLayout.addRight !== null && rhythmHeaderLayout.addRight <= rhythmHeaderLayout.panelRight! + 1);
+            assert.ok(rhythmHeaderLayout.badgeWidth > 0 && rhythmHeaderLayout.badgeHeight > 0);
             await workoutsTab.click();
             const historyHeading = page.locator('#strength-panel-workouts .strength-history-page > .strength-section-heading');
             const historyAction = await historyHeading.evaluate(element => {
@@ -2267,6 +2533,13 @@ async function main() {
           }
           await page.setViewportSize({ width: 375, height: 844 });
           await workoutsTab.click();
+          const originalBodyStyles = await page.evaluate(() => ({
+            position: document.body.style.position,
+            top: document.body.style.top,
+            width: document.body.style.width,
+            overflow: document.body.style.overflow,
+            paddingRight: document.body.style.paddingRight
+          }));
           await page.getByRole('button', { name: 'Add workout' }).click();
           const routines = page.getByRole('dialog', { name: 'Add workout' });
           assert.equal((await routines.getAttribute('class'))?.includes('dialog--phone-fullscreen'), true);
@@ -2327,7 +2600,8 @@ async function main() {
           assert.equal(createCardLayout.createBackground, createCardLayout.cardBackground);
           assert.equal(createCardLayout.createBorder, createCardLayout.starterBorder);
           assert.equal(createCardLayout.createColor, createCardLayout.starterBorder);
-          await routines.locator('.strength-workout-suggestion__preview summary').first().click();
+          const p90xCard = routines.locator('.strength-workout-suggestion').filter({ hasText: 'P90X Ab Ripper' });
+          await p90xCard.locator('.strength-workout-suggestion__preview summary').click();
           const routineLayout = await routines.evaluate(dialog => {
           const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
             const rect = dialog.getBoundingClientRect();
@@ -2348,14 +2622,130 @@ async function main() {
           assert.equal(routineLayout.surfaceScrollWidth, routineLayout.surfaceWidth,
             `Strength routine content must fit at ${textSize} text.`);
           assert.equal(routineLayout.previewVisible, true);
-          const customization = routines.getByRole('button', { name: 'Customize' }).first();
+          const customization = p90xCard.getByRole('button', { name: 'Customize' });
           await customization.click();
           const editor = page.getByRole('dialog', { name: 'Create workout' });
           assert.equal(await page.getByRole('dialog').count(), 1);
           assert.equal((await editor.getAttribute('class'))?.includes('dialog--phone-fullscreen'), true);
+          const workoutEditorForm = editor.locator('form.strength-workout-editor');
+          const exerciseStructure = await editor.evaluate(dialog => {
+            const form = dialog.querySelector<HTMLFormElement>('form.strength-workout-editor');
+            const items = [...(form?.querySelectorAll<HTMLElement>('.strength-exercises__item') ?? [])];
+            const twoSetItems = items.filter(item =>
+              item.querySelector('.strength-exercises__meta')?.textContent?.includes('2 ×')
+            );
+            if (!form) throw new Error('P90X customization is missing its shared workout editor form.');
+            return {
+              exerciseCount: items.length,
+              twoSetExerciseCount: twoSetItems.length,
+              scrollHeight: form.scrollHeight,
+              clientHeight: form.clientHeight,
+              overflowY: getComputedStyle(form).overflowY,
+              overscrollBehavior: getComputedStyle(form).overscrollBehaviorY,
+              bodyPosition: document.body.style.position,
+              bodyOverflow: document.body.style.overflow
+            };
+          });
+          assert.equal(exerciseStructure.exerciseCount, 11);
+          assert.equal(exerciseStructure.twoSetExerciseCount, 2);
+          assert.ok(exerciseStructure.scrollHeight > exerciseStructure.clientHeight,
+            `P90X editor must have a bounded scroll area at ${textSize} text.`);
+          assert.equal(exerciseStructure.overflowY, 'auto');
+          assert.equal(exerciseStructure.overscrollBehavior, 'contain');
+          assert.equal(exerciseStructure.bodyPosition, 'fixed');
+          assert.equal(exerciseStructure.bodyOverflow, 'hidden');
+
+          const touchSession = await context.newCDPSession(page);
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            await workoutEditorForm.evaluate(form => { form.scrollTop = 0; });
+            const bounds = await workoutEditorForm.boundingBox();
+            if (!bounds) throw new Error('P90X workout editor scroll region is not visible.');
+            await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+            await page.mouse.wheel(0, 700);
+            await page.waitForFunction(() =>
+              (document.querySelector<HTMLFormElement>('.money-goal-dialog--strength-workout-editor form.strength-workout-editor')
+                ?.scrollTop ?? 0) > 0
+            );
+            const wheelScrollTop = await workoutEditorForm.evaluate(form => form.scrollTop);
+            assert.ok(wheelScrollTop > 0,
+              `P90X editor should respond to mouse-wheel scrolling at ${viewportWidth}px / ${textSize} text.`);
+
+            await workoutEditorForm.evaluate(form => { form.scrollTop = 0; });
+            const touchTarget = await editor.locator('.strength-exercises__heading h3').boundingBox();
+            if (!touchTarget) throw new Error('P90X exercise heading is not visible for touch-scroll testing.');
+            const touchX = Math.round(touchTarget.x + Math.min(touchTarget.width / 2, 80));
+            const touchY = Math.round(touchTarget.y + touchTarget.height / 2);
+            await touchSession.send('Input.dispatchTouchEvent', {
+              type: 'touchStart',
+              touchPoints: [{ x: touchX, y: touchY, id: 1 }]
+            });
+            await touchSession.send('Input.dispatchTouchEvent', {
+              type: 'touchMove',
+              touchPoints: [{ x: touchX, y: touchY - 240, id: 1 }]
+            });
+            await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            await page.waitForFunction(() =>
+              (document.querySelector<HTMLFormElement>('.money-goal-dialog--strength-workout-editor form.strength-workout-editor')
+                ?.scrollTop ?? 0) > 0
+            );
+            const touchScrollTop = await workoutEditorForm.evaluate(form => form.scrollTop);
+            assert.ok(touchScrollTop > 0,
+              `P90X editor should respond to touch scrolling at ${viewportWidth}px / ${textSize} text.`);
+          }
+
+          await page.setViewportSize({ width: 375, height: 844 });
+          await workoutEditorForm.evaluate(form => { form.scrollTop = 0; });
+          await editor.getByRole('textbox', { name: 'Workout name' }).focus();
+          const saveButton = editor.getByRole('button', { name: 'Save workout' });
+          let saveReachedByKeyboard = false;
+          for (let tab = 0; tab < 100; tab += 1) {
+            await page.keyboard.press('Tab');
+            if (await saveButton.evaluate(button => document.activeElement === button)) {
+              saveReachedByKeyboard = true;
+              break;
+            }
+          }
+          assert.equal(saveReachedByKeyboard, true, 'Keyboard tab navigation should reach Save workout.');
+          assert.ok(await workoutEditorForm.evaluate(form => form.scrollTop > 0),
+            `Keyboard navigation should scroll the P90X editor at ${textSize} text.`);
+          await page.keyboard.press('Tab');
+          assert.equal(
+            await editor.getByRole('button', { name: 'Cancel' }).evaluate(button => document.activeElement === button),
+            true,
+            'Keyboard tab navigation should reach Cancel.'
+          );
+          await page.setViewportSize({ width: 844, height: 390 });
+          const landscapeScroll = await editor.evaluate(dialog => ({
+            scrollHeight: dialog.scrollHeight,
+            clientHeight: dialog.clientHeight,
+            overflowY: getComputedStyle(dialog).overflowY
+          }));
+          assert.ok(landscapeScroll.scrollHeight > landscapeScroll.clientHeight,
+            `P90X editor should fit a scrollable landscape viewport at ${textSize} text.`);
+          assert.equal(landscapeScroll.overflowY, 'auto');
+          await page.setViewportSize({ width: 375, height: 390 });
+          const shortViewport = await workoutEditorForm.evaluate(form => ({
+            scrollHeight: form.scrollHeight,
+            clientHeight: form.clientHeight,
+            overflowY: getComputedStyle(form).overflowY
+          }));
+          assert.ok(shortViewport.clientHeight > 0 && shortViewport.scrollHeight > shortViewport.clientHeight,
+            `P90X editor should retain a scroll region in a short keyboard-like viewport at ${textSize} text.`);
+          assert.equal(shortViewport.overflowY, 'auto');
+          await touchSession.detach();
           await editor.getByRole('button', { name: 'Back to Add workout' }).click();
           assert.equal(await page.getByRole('dialog').count(), 1);
           await page.getByRole('dialog', { name: 'Add workout' }).getByRole('button', { name: 'Close Add workout' }).click();
+          const restoredBodyStyles = await page.evaluate(() => ({
+            position: document.body.style.position,
+            top: document.body.style.top,
+            width: document.body.style.width,
+            overflow: document.body.style.overflow,
+            paddingRight: document.body.style.paddingRight
+          }));
+          assert.deepEqual(restoredBodyStyles, originalBodyStyles,
+            'Closing the workout editor should restore background scroll styles.');
           await workoutsTab.focus();
           await page.keyboard.press('Home');
           await page.waitForFunction(() => {
@@ -2421,6 +2811,271 @@ async function main() {
               `Strength body map must fit at ${viewportWidth}px / ${textSize} text.`);
           }
         }
+
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.getByRole('button', { name: /All Foundations/ }).click();
+        await page.getByRole('button', { name: /Open Flexibility foundation details/ }).click();
+        const flexibilityTabs = page.getByRole('tablist', { name: 'Flexibility sections' });
+        const flexibilityBodyTab = flexibilityTabs.getByRole('tab', { name: 'Body' });
+        const flexibilityRoutinesTab = flexibilityTabs.getByRole('tab', { name: 'Routines' });
+        const flexibilityRhythmsTab = flexibilityTabs.getByRole('tab', { name: 'Rhythms' });
+        assert.equal(await flexibilityBodyTab.getAttribute('aria-selected'), 'true',
+          'Flexibility should default to Body when opened.');
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          await page.setViewportSize({ width: 375, height: 844 });
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await categorySizeToggle.getAttribute('data-text-size') === textSize) break;
+            await categorySizeToggle.click();
+          }
+          assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            await flexibilityBodyTab.click();
+            await page.getByRole('heading', { name: 'Body overview' }).waitFor();
+            const bodyLayout = await page.locator('#flexibility-panel-body').evaluate(panel => {
+              const heading = panel.querySelector<HTMLElement>('.strength-section-heading');
+              const map = panel.querySelector<HTMLElement>('.flexibility-map-card');
+              const mapLayout = map?.querySelector<HTMLElement>('.strength-map-layout');
+              const tabs = document.querySelector<HTMLElement>('.flexibility-view > [role="tablist"]');
+              if (!heading || !map || !mapLayout || !tabs) {
+                throw new Error('Flexibility Body is missing its shared map layout or section tabs.');
+              }
+              const headingRect = heading.getBoundingClientRect();
+              const tabsRect = tabs.getBoundingClientRect();
+              const mapRect = map.getBoundingClientRect();
+              const mapLayoutRect = mapLayout.getBoundingClientRect();
+              return {
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+                headingFits: heading.scrollWidth <= heading.clientWidth,
+                headingOffset: headingRect.top - tabsRect.bottom,
+                mapFits: mapLayoutRect.left >= mapRect.left && mapLayoutRect.right <= mapRect.right
+              };
+            });
+            assert.equal(bodyLayout.documentWidth, viewportWidth,
+              `Flexibility Body must not overflow at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(bodyLayout.viewportWidth, viewportWidth);
+            assert.equal(bodyLayout.headingFits, true);
+            assert.ok(bodyLayout.headingOffset >= 16,
+              `Flexibility Body needs breathing room below the tabs at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(bodyLayout.mapFits, true);
+
+            await flexibilityRoutinesTab.click();
+            const routinesPanel = page.locator('#flexibility-panel-routines');
+            await routinesPanel.getByRole('heading', { name: 'My routines' }).waitFor();
+            assert.equal(await routinesPanel.getByText('Your stretches, ready when you are.', { exact: true }).isVisible(), true);
+            assert.equal(await routinesPanel.getByRole('button', { name: 'Add routine' }).isVisible(), true);
+            assert.equal(await routinesPanel.getByRole('heading', { name: 'History' }).isVisible(), true);
+            assert.equal(await routinesPanel.getByText('Your completed stretches.', { exact: true }).isVisible(), true);
+            assert.equal(await routinesPanel.getByRole('button', { name: 'Log stretch' }).isVisible(), true);
+            assert.equal(await routinesPanel.getByText('No stretches logged yet.', { exact: true }).isVisible(), true);
+            assert.equal(await routinesPanel.getByText('No routines saved yet. Add a suggested routine or create your own.', { exact: true }).isVisible(), true);
+            const routineHeadings = await routinesPanel.locator('.strength-section-heading').evaluateAll(headings => {
+              const tabsRect = document.querySelector<HTMLElement>(
+                '.flexibility-view > [role="tablist"]'
+              )!.getBoundingClientRect();
+              return headings.map(element => {
+                const heading = element as HTMLElement;
+                const title = heading.querySelector<HTMLElement>('.strength-section-heading__title-row');
+                const action = heading.querySelector<HTMLElement>('.strength-section-heading__actions .btn');
+                const titleRect = title?.getBoundingClientRect();
+                const actionRect = action?.getBoundingClientRect();
+                return {
+                  offset: heading.getBoundingClientRect().top - tabsRect.bottom,
+                  overlap: Boolean(titleRect && actionRect
+                    && titleRect.top < actionRect.bottom
+                    && actionRect.top < titleRect.bottom
+                    && titleRect.left < actionRect.right
+                    && actionRect.left < titleRect.right)
+                };
+              });
+            });
+            assert.equal(routineHeadings.length, 2);
+            assert.equal(routineHeadings[0]!.overlap, false,
+              `Flexibility routine actions must not overlap headings at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(routineHeadings[1]!.overlap, false,
+              `Flexibility history actions must not overlap headings at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(routineHeadings[0]!.offset >= 16,
+              `Flexibility Routines needs breathing room below the tabs at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(Math.abs(routineHeadings[0]!.offset - bodyLayout.headingOffset) < 0.5,
+              `Flexibility Body and Routines should share a tab-panel offset at ${viewportWidth}px / ${textSize} text.`);
+            const routineSpacing = await routinesPanel.locator('.flexibility-routine-collection').evaluate(collection => {
+              const sections = collection.querySelectorAll<HTMLElement>(':scope > .strength-workout-section');
+              if (sections.length !== 2) throw new Error('Flexibility Routines and History must remain separate sections.');
+              return {
+                rowGap: getComputedStyle(collection).rowGap,
+                sectionGap: sections[1]!.getBoundingClientRect().top - sections[0]!.getBoundingClientRect().bottom
+              };
+            });
+            assert.equal(routineSpacing.rowGap, '18px',
+              'Flexibility must reuse Strength’s section gap for both empty and populated routine content.');
+            assert.ok(routineSpacing.sectionGap >= 17,
+              `Flexibility History must be separated from My routines at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), viewportWidth,
+              `Flexibility Routines must not overflow at ${viewportWidth}px / ${textSize} text.`);
+
+            await flexibilityRhythmsTab.click();
+            const rhythmPanel = page.locator('#flexibility-panel-rhythms');
+            await rhythmPanel.getByRole('heading', { name: /^Linked Rhythms/ }).waitFor();
+            assert.equal(await rhythmPanel.getByText('Your routines for building flexibility.', { exact: true }).isVisible(), true);
+            assert.equal(await rhythmPanel.getByRole('button', { name: 'Manage links' }).isVisible(), true);
+            assert.equal(await rhythmPanel.getByRole('button', { name: 'Add Rhythm' }).isVisible(), true);
+            assert.equal(await rhythmPanel.getByText('No Rhythms are linked to Flexibility yet.', { exact: true }).isVisible(), true);
+            const rhythmHeading = await rhythmPanel.locator('.strength-section-heading').evaluate(element => {
+              const heading = element as HTMLElement;
+              const tabsRect = document.querySelector<HTMLElement>(
+                '.flexibility-view > [role="tablist"]'
+              )!.getBoundingClientRect();
+              const title = heading.querySelector<HTMLElement>('.strength-section-heading__title-row');
+              const actions = heading.querySelector<HTMLElement>('.strength-section-heading__actions');
+              const titleRect = title?.getBoundingClientRect();
+              const actionsRect = actions?.getBoundingClientRect();
+              return {
+                overlap: Boolean(titleRect && actionsRect
+                  && titleRect.top < actionsRect.bottom
+                  && actionsRect.top < titleRect.bottom
+                  && titleRect.left < actionsRect.right
+                  && actionsRect.left < titleRect.right),
+                offset: heading.getBoundingClientRect().top - tabsRect.bottom,
+                badgeSize: heading.querySelector<HTMLElement>('.strength-linked-rhythms-count')?.getBoundingClientRect().width ?? 0
+              };
+            });
+            assert.equal(rhythmHeading.overlap, false,
+              `Flexibility Rhythm actions must not overlap headings at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(rhythmHeading.badgeSize > 0);
+            assert.ok(Math.abs(rhythmHeading.offset - bodyLayout.headingOffset) < 0.5,
+              `Flexibility Body and Rhythms should share a tab-panel offset at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), viewportWidth,
+              `Flexibility Rhythms must not overflow at ${viewportWidth}px / ${textSize} text.`);
+
+            await flexibilityBodyTab.click();
+            await page.getByRole('button', { name: 'Stretch interval settings' }).click();
+            const intervalDialog = page.getByRole('dialog', { name: 'Stretch intervals' });
+            assert.equal((await intervalDialog.getAttribute('class'))?.includes('dialog--phone-fullscreen'), true);
+            const intervalLayout = await intervalDialog.evaluate(dialog => {
+              const body = dialog.querySelector<HTMLElement>('.flexibility-settings-dialog__body');
+              const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+              const row = dialog.querySelector<HTMLElement>('.flexibility-settings__row');
+              const region = row?.querySelector<HTMLElement>(':scope > span');
+              const field = row?.querySelector<HTMLElement>('.flexibility-settings__field');
+              const trigger = dialog.querySelector<HTMLElement>('.flexibility-settings__select-trigger');
+              if (!body || !surface || !region || !field || !trigger) {
+                throw new Error('Stretch intervals are missing their scroll body or standard field layout.');
+              }
+              const regionRect = region.getBoundingClientRect();
+              const fieldRect = field.getBoundingClientRect();
+              const triggerRect = trigger.getBoundingClientRect();
+              return {
+                overflowY: getComputedStyle(body).overflowY,
+                bodyHeight: body.clientHeight,
+                dialogWidth: dialog.getBoundingClientRect().width,
+                surfaceWidth: surface.getBoundingClientRect().width,
+                documentWidth: document.documentElement.scrollWidth,
+                regionRight: regionRect.right,
+                fieldLeft: fieldRect.left,
+                triggerHeight: triggerRect.height
+              };
+            });
+            assert.equal(intervalLayout.overflowY, 'auto');
+            assert.ok(intervalLayout.bodyHeight > 0);
+            assert.ok(intervalLayout.dialogWidth <= viewportWidth);
+            assert.ok(intervalLayout.surfaceWidth <= viewportWidth);
+            assert.equal(intervalLayout.documentWidth, viewportWidth,
+              `Stretch intervals must not overflow at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(intervalLayout.fieldLeft >= intervalLayout.regionRight - 1);
+            assert.ok(intervalLayout.triggerHeight >= 44);
+            if (textSize === 'small' && viewportWidth === 375) {
+              const shoulders = intervalDialog.getByRole('combobox', { name: 'Shoulders stretch interval' });
+              const savedShoulderInterval = (await shoulders.textContent())?.trim();
+              await shoulders.click();
+              await intervalDialog.getByRole('listbox', { name: 'Shoulders stretch interval' }).waitFor();
+              const anchored = await intervalDialog.evaluate(dialog => {
+                const menuElement = dialog.querySelector<HTMLElement>('[role="listbox"]');
+                const trigger = dialog.querySelector<HTMLElement>(
+                  '.flexibility-settings__select-trigger[aria-label="Shoulders stretch interval"]'
+                );
+                if (!menuElement || !trigger) throw new Error('Interval choices are missing their anchored trigger or menu.');
+                const menu = menuElement.getBoundingClientRect();
+                const field = trigger.getBoundingClientRect();
+                return {
+                  left: menu.left,
+                  right: menu.right,
+                  top: menu.top,
+                  bottom: menu.bottom,
+                  fieldLeft: field.left,
+                  fieldRight: field.right,
+                  viewportWidth: document.documentElement.clientWidth,
+                  viewportHeight: document.documentElement.clientHeight
+                };
+              });
+              assert.equal(anchored.left, anchored.fieldLeft);
+              assert.equal(anchored.right, anchored.fieldRight);
+              assert.ok(anchored.top >= 0 && anchored.bottom <= anchored.viewportHeight);
+              await page.keyboard.press('Home');
+              await page.keyboard.press('Enter');
+              assert.equal((await shoulders.textContent())?.trim(), 'Every 1 day');
+              await intervalDialog.getByRole('button', { name: 'Cancel' }).click();
+              await page.getByRole('button', { name: 'Stretch interval settings' }).click();
+              const reopenedShoulders = page.getByRole('dialog', { name: 'Stretch intervals' })
+                .getByRole('combobox', { name: 'Shoulders stretch interval' });
+              assert.equal((await reopenedShoulders.textContent())?.trim(), savedShoulderInterval);
+              await page.getByRole('dialog', { name: 'Stretch intervals' })
+                .getByRole('button', { name: 'Cancel' }).click();
+            } else {
+              await intervalDialog.getByRole('button', { name: 'Cancel' }).click();
+            }
+          }
+        }
+
+        await page.setViewportSize({ width: 375, height: 844 });
+        await flexibilityRoutinesTab.click();
+        await page.getByRole('button', { name: 'Add routine' }).click();
+        const flexibilityLibrary = page.getByRole('dialog', { name: 'Add routine' });
+        await flexibilityLibrary.getByRole('button', { name: 'Customize' }).first().click();
+        const flexibilityRoutineEditor = page.getByRole('dialog', { name: 'Preview routine' });
+        await flexibilityRoutineEditor.getByRole('button', { name: 'Add to Saved' }).click();
+        await page.getByRole('heading', { name: 'Daily Stretch' }).waitFor();
+        const populatedRoutineSpacing = await page.locator('#flexibility-panel-routines .flexibility-routine-collection')
+          .evaluate(collection => {
+            const sections = collection.querySelectorAll<HTMLElement>(':scope > .strength-workout-section');
+            if (collection.querySelector('.strength-template-list')?.children.length === 0 || sections.length !== 2) {
+              throw new Error('A saved Flexibility routine and its History section must render together.');
+            }
+            return {
+              rowGap: getComputedStyle(collection).rowGap,
+              sectionGap: sections[1]!.getBoundingClientRect().top - sections[0]!.getBoundingClientRect().bottom
+            };
+          });
+        assert.equal(populatedRoutineSpacing.rowGap, '18px');
+        assert.ok(populatedRoutineSpacing.sectionGap >= 17);
+
+        await page.setViewportSize({ width: 812, height: 375 });
+        await flexibilityBodyTab.click();
+        await page.getByRole('button', { name: 'Stretch interval settings' }).click();
+        const landscapeIntervals = page.getByRole('dialog', { name: 'Stretch intervals' });
+        const landscapeBounds = await landscapeIntervals.evaluate(dialog => {
+          const rect = dialog.getBoundingClientRect();
+          const body = dialog.querySelector<HTMLElement>('.flexibility-settings-dialog__body');
+          const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+          if (!body || !close) throw new Error('Landscape interval editor is missing its scroll body or Close control.');
+          return {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+            viewportWidth: document.documentElement.clientWidth,
+            viewportHeight: document.documentElement.clientHeight,
+            bodyOverflowY: getComputedStyle(body).overflowY,
+            closeHeight: close.getBoundingClientRect().height
+          };
+        });
+        assert.equal(landscapeBounds.left, 0);
+        assert.equal(landscapeBounds.top, 0);
+        assert.equal(landscapeBounds.width, landscapeBounds.viewportWidth);
+        assert.equal(landscapeBounds.height, landscapeBounds.viewportHeight);
+        assert.equal(landscapeBounds.bodyOverflowY, 'auto');
+        assert.ok(landscapeBounds.closeHeight > 0);
+        await landscapeIntervals.getByRole('button', { name: 'Cancel' }).click();
 
         await page.setViewportSize({ width: 1280, height: 900 });
         await areaNavigation.getByRole('button', { name: 'Faith' }).click();

@@ -14,6 +14,7 @@ import type { TodayFocusId, TodayViewId } from '../src/domain/today-plan.ts';
 import { todayFocusContext } from '../src/domain/today-plan.ts';
 import { areas } from '../src/domain/preview-data.ts';
 import type { CalendarSource } from '../src/domain/calendar-sources.ts';
+import type { WeatherCity } from '../src/weather/open-meteo.ts';
 
 afterEach(cleanup);
 
@@ -25,6 +26,34 @@ const unavailableWeather: TodayWeatherController = {
   selectCity: vi.fn(),
   clearCity: vi.fn(),
   retry: vi.fn()
+};
+const testWeatherCity: WeatherCity = {
+  id: 1,
+  name: 'Springfield',
+  admin1: 'Oregon',
+  country: 'United States',
+  countryCode: 'US',
+  latitude: 44.05,
+  longitude: -123.02
+};
+const availableWeather: TodayWeatherController = {
+  ...unavailableWeather,
+  city: testWeatherCity,
+  weather: {
+    status: 'ready',
+    report: {
+      current: {
+        date: '2026-10-31',
+        time: '10:00',
+        temperature: 42,
+        code: 3,
+        isDay: true
+      },
+      hourly: []
+    },
+    fetchedAt: 1,
+    message: null
+  }
 };
 
 const defaultTimeBlocks = createDefaultTimeBlockSettings();
@@ -43,7 +72,8 @@ function TodayHarness({
   evaluationInstant = defaultInstant,
   localDate = '2026-10-31',
   initialView = 'now',
-  calendarSources = []
+  calendarSources = [],
+  weatherController = unavailableWeather
 }: {
   satisfiedRhythmIds?: ReadonlySet<string>;
   showTended?: boolean;
@@ -54,6 +84,7 @@ function TodayHarness({
   localDate?: string;
   initialView?: TodayViewId;
   calendarSources?: CalendarSource[];
+  weatherController?: TodayWeatherController;
 }) {
   const [view, setView] = useState<TodayViewId>(initialView);
   const [tendedVisible, setTendedVisible] = useState(showTended);
@@ -66,7 +97,7 @@ function TodayHarness({
         localDate={localDate}
         view={view}
         onViewChange={setView}
-        weatherController={unavailableWeather}
+        weatherController={weatherController}
         completedRhythms={completedRhythms}
         undoableRhythms={new Set()}
         satisfiedRhythmIds={satisfiedRhythmIds}
@@ -101,6 +132,7 @@ function renderToday(options: {
   localDate?: string;
   initialView?: TodayViewId;
   calendarSources?: CalendarSource[];
+  weatherController?: TodayWeatherController;
 } = {}) {
   return render(<TodayHarness {...options} />);
 }
@@ -142,6 +174,45 @@ function planTabs(plan: HTMLElement) {
 }
 
 describe('Today time-frame interaction', () => {
+  it('keeps compact weather beside Today in every view with accessible conditions', async () => {
+    const user = userEvent.setup();
+    renderToday({ weatherController: availableWeather });
+    const plan = todayPlan();
+    const titleMain = plan.querySelector<HTMLElement>('.today-plan__title-main')!;
+    expect(within(titleMain).getByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(within(titleMain).getByRole('img', {
+      name: 'Current conditions: Cloudy, 42 degrees'
+    }).getAttribute('title')).toBe('Cloudy');
+    expect(within(titleMain).getByText('42').parentElement?.querySelector('sup')?.textContent).toBe('°');
+    expect(within(titleMain).getByText('Cloudy', { selector: '.visually-hidden' })).toBeTruthy();
+    expect(plan.querySelectorAll('.today-plan__title-weather')).toHaveLength(1);
+    expect(plan.querySelector<HTMLElement>('.today-timeframe-header .today-plan__weather')).toBeNull();
+    expect(plan.querySelector('.today-plan__title-row .today-plan__title-progress')).toBeTruthy();
+
+    for (const viewName of ['Flexible', 'All today']) {
+      await user.click(within(planTabs(plan)).getByRole('tab', { name: viewName }));
+      expect(plan.querySelectorAll('.today-plan__title-weather')).toHaveLength(1);
+      expect(within(titleMain).getByRole('img', {
+        name: 'Current conditions: Cloudy, 42 degrees'
+      })).toBeTruthy();
+      expect(plan.querySelector('.today-timeframe-header .today-plan__weather')).toBeNull();
+    }
+  });
+
+  it('omits weather for loading, failed, or unconfigured conditions', () => {
+    for (const status of ['loading', 'error'] as const) {
+      const controller: TodayWeatherController = {
+        ...availableWeather,
+        weather: { status, report: null, fetchedAt: null, message: null }
+      };
+      const { unmount } = render(<TodayHarness weatherController={controller} />);
+      expect(document.querySelector('.today-plan__title-weather')).toBeNull();
+      unmount();
+    }
+    renderToday();
+    expect(document.querySelector('.today-plan__title-weather')).toBeNull();
+  });
+
   it('keeps Overall Health category labels intact and in order beside their icon and score', () => {
     renderToday();
     const overall = screen.getByRole('region', { name: 'Overall health summary' });

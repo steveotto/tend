@@ -3076,8 +3076,7 @@ describe('synthetic preview storage adapter and envelope', () => {
 
 async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.click(screen.getByRole('button', { name: 'More, settings' }));
-  await user.click(await screen.findByRole('button', { name: /^Settings$/ }));
-  await user.click(await screen.findByRole('button', { name: /^Save & sync$/ }));
+  await user.click(await screen.findByRole('button', { name: 'Preview data tools' }));
 }
 
 describe('preview backup controls', () => {

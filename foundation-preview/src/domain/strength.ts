@@ -19,13 +19,16 @@ export type StrengthMuscleId = (typeof strengthMuscles)[number]['id'];
 export type StrengthHistoryState = 'trained' | 'never-trained' | 'invalid';
 export type StrengthMode = 'recommended' | 'specific' | 'custom';
 export type StrengthLoadMeaning = 'total' | 'per-dumbbell' | 'per-side' | 'bodyweight';
+export type StrengthWorkoutSuggestionSet =
+  | { targetReps: number; label?: string }
+  | { targetDurationSeconds: number; label?: string };
 export type StrengthWorkoutSuggestionExercise = {
   name: string;
   muscleIds: readonly StrengthMuscleId[];
   equipment: string;
   loadMeaning?: StrengthLoadMeaning;
   notes?: string;
-  sets: readonly ({ targetReps: number } | { targetDurationSeconds: number })[];
+  sets: readonly StrengthWorkoutSuggestionSet[];
 };
 export type StrengthSupersetGroup = {
   id: string;
@@ -38,6 +41,7 @@ export type StrengthWorkoutSuggestion = {
   name: string;
   muscleIds: readonly StrengthMuscleId[];
   exercises: readonly StrengthWorkoutSuggestionExercise[];
+  restDurationSeconds?: number;
   supersetExerciseIndexes?: readonly [number, number];
 };
 
@@ -81,6 +85,7 @@ export type StrengthLoad =
 export type StrengthPlannedSet = {
   id: string;
   measurement?: StrengthSetMeasurement;
+  label?: string;
   targetReps?: number;
   targetLoad?: StrengthLoad;
 };
@@ -289,6 +294,43 @@ export const strengthWorkoutSuggestions: readonly StrengthWorkoutSuggestion[] = 
     ]
   },
   {
+    sourceId: 'strength.p90x-ab-ripper',
+    name: 'P90X Ab Ripper',
+    muscleIds: ['abs'],
+    restDurationSeconds: 0,
+    exercises: [
+      suggestedExercise('In-and-Outs', ['abs'], 'Bodyweight', [25], undefined, 'bodyweight'),
+      {
+        name: 'Bicycles',
+        muscleIds: ['abs'],
+        equipment: 'Bodyweight',
+        loadMeaning: 'bodyweight',
+        sets: [
+          { targetReps: 25, label: 'Forward' },
+          { targetReps: 25, label: 'Reverse' }
+        ]
+      },
+      suggestedExercise('Crunchy Frog', ['abs'], 'Bodyweight', [25], undefined, 'bodyweight'),
+      suggestedExercise('Cross-Leg / Wide-Leg Sit-Up', ['abs'], 'Bodyweight', [25], undefined, 'bodyweight'),
+      suggestedExercise('Fifer Scissors', ['abs'], 'Bodyweight', [25], undefined, 'bodyweight'),
+      suggestedExercise('Hip Rock and Raise', ['abs'], 'Bodyweight', [25], undefined, 'bodyweight'),
+      suggestedExercise('Pulse-Up', ['abs'], 'Bodyweight', [25], undefined, 'bodyweight'),
+      suggestedExercise('V-Up Roll-Up', ['abs'], 'Bodyweight', [25], undefined, 'bodyweight'),
+      {
+        name: 'Oblique V-Up',
+        muscleIds: ['abs'],
+        equipment: 'Bodyweight',
+        loadMeaning: 'bodyweight',
+        sets: [
+          { targetReps: 25, label: 'Left' },
+          { targetReps: 25, label: 'Right' }
+        ]
+      },
+      suggestedExercise('Leg Climb', ['abs'], 'Bodyweight', [25], undefined, 'bodyweight'),
+      suggestedExercise('Mason Twists', ['abs'], 'Bodyweight', [50], undefined, 'bodyweight')
+    ]
+  },
+  {
     sourceId: 'strength.plank',
     name: 'Plank',
     muscleIds: ['abs'],
@@ -314,10 +356,12 @@ export function createStrengthWorkoutSuggestionExercises(
     equipment: exercise.equipment,
     ...(exercise.loadMeaning === undefined ? {} : { loadMeaning: exercise.loadMeaning }),
     ...(exercise.notes ? { notes: exercise.notes } : {}),
-    restDurationSeconds: resolveStrengthBetweenSetRestSeconds(exercise.muscleIds, settings),
+    restDurationSeconds: suggestion.restDurationSeconds
+      ?? resolveStrengthBetweenSetRestSeconds(exercise.muscleIds, settings),
     restDurationOverridden: false,
     sets: exercise.sets.map(set => ({
       id: `strength-set-${createId()}`,
+      ...(set.label === undefined ? {} : { label: set.label }),
       ...( 'targetDurationSeconds' in set
         ? { measurement: { kind: 'duration' as const, targetDurationSeconds: set.targetDurationSeconds } }
         : { measurement: { kind: 'reps' as const }, targetReps: set.targetReps })
@@ -1210,7 +1254,7 @@ export function createStrengthGuidedSession(
     sharedWith: [...template.sharedWith],
     currentExerciseIndex: 0,
     currentSetId: template.exercises[0]!.sets[0]!.id,
-    autoStartRest: true,
+    autoStartRest: template.exercises.some(exercise => exercise.restDurationSeconds > 0),
     restTimer: { status: 'idle', durationSeconds: template.exercises[0]!.restDurationSeconds },
     ...(session.rhythmId === undefined ? {} : {
       rhythmId: session.rhythmId,
@@ -2330,6 +2374,7 @@ function validateExercises(value: unknown, snapshots: boolean, requireV25 = fals
     const setIds = new Set<string>();
     for (const set of exercise.sets) {
       if (!isRecord(set) || !isNonEmptyText(set.id, 160) || setIds.has(set.id)) return false;
+      if (set.label !== undefined && !isNonEmptyText(set.label, 60)) return false;
       const measurementKind = set.measurement === undefined
         ? 'reps'
         : isRecord(set.measurement) ? set.measurement.kind : undefined;
@@ -2354,7 +2399,7 @@ function validateExercises(value: unknown, snapshots: boolean, requireV25 = fals
       setIds.add(set.id);
       if (snapshots) {
         if (!validateSetPerformance(set, measurementKind)) return false;
-      } else if (!hasOnlyKeys(set, ['id', 'measurement', 'targetReps', 'targetLoad'])
+      } else if (!hasOnlyKeys(set, ['id', 'measurement', 'label', 'targetReps', 'targetLoad'])
         || (measurementKind === 'duration'
           ? !(isRecord(set.measurement)
             && isPositiveInteger(set.measurement.targetDurationSeconds, 86_400))
@@ -2436,11 +2481,11 @@ function exerciseTimerReferencesTimedSet(timer: unknown, exercises: unknown): bo
 
 function validateSetPerformance(set: Record<string, unknown>, measurementKind: unknown): boolean {
   if (set.status === 'pending' || set.status === 'skipped') {
-    return hasOnlyKeys(set, ['id', 'measurement', 'targetReps', 'targetLoad', 'status']);
+    return hasOnlyKeys(set, ['id', 'measurement', 'label', 'targetReps', 'targetLoad', 'status']);
   }
   if (set.status !== 'performed' || !isCanonicalInstant(set.confirmedAt)
     || set.actualLoad !== undefined && !validateStrengthLoad(set.actualLoad)) return false;
-  const allowed = ['id', 'measurement', 'targetReps', 'targetLoad', 'status', 'actualLoad', 'confirmedAt'];
+  const allowed = ['id', 'measurement', 'label', 'targetReps', 'targetLoad', 'status', 'actualLoad', 'confirmedAt'];
   return measurementKind === 'duration'
     ? hasOnlyKeys(set, [...allowed, 'actualDurationSeconds'])
       && isPositiveInteger(set.actualDurationSeconds, 86_400)

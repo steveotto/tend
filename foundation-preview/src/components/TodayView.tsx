@@ -315,15 +315,15 @@ export function TodayView({
           {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, controls, itemProps }) => {
               const allMatchingHidden = planRhythms.length > 0
                 && planRhythms.every(rhythm => !visibleRhythmIds.has(rhythm.id));
-              const weather = view === 'now'
-                && weatherController.city
+              const weather = weatherController.city
                 && weatherController.weather.status === 'ready'
                 && (
                   <TodayWeather
                     report={weatherController.weather.report}
                     localDate={localDate}
                     time={null}
-                    containerClassName="today-plan__weather"
+                    containerClassName="today-plan__title-weather"
+                    compact
                   />
                 );
               const renderRhythms = (sectionRhythms: readonly RhythmPreview[]) =>
@@ -375,7 +375,10 @@ export function TodayView({
               return (
                 <>
                   <div className="today-plan__title-row">
-                    <h3 className="today-plan__heading">Today</h3>
+                    <div className="today-plan__title-main">
+                      <h3 className="today-plan__heading">Today</h3>
+                      {weather}
+                    </div>
                     <div className="today-plan__title-progress">{controls}</div>
                   </div>
                   <div className="today-plan__controls">
@@ -411,7 +414,6 @@ export function TodayView({
                               timeRange={currentBlockRange}
                               agendaState="expanded"
                               progress={timeframeProgress(planSections[0]?.rhythms ?? [])}
-                              trailingContent={weather}
                             />
                             {renderHiddenStatus}
                             {planSections.length > 0

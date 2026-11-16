@@ -1045,7 +1045,7 @@ export function StrengthGuidedSessionDialog({
                   <button
                     type="button"
                     className={`strength-guided__set strength-guided__set--${item.status}`}
-                    aria-label={`Set ${index + 1}, ${item.status}${item.status === 'performed' ? `, ${formatSet(item, preferredWeightUnit)}` : ''}`}
+                    aria-label={`Set ${index + 1}${item.label ? `, ${item.label}` : ''}, ${item.status}${item.status === 'performed' ? `, ${formatSet(item, preferredWeightUnit)}` : ''}`}
                     aria-current={item.id === session.currentSetId ? 'step' : undefined}
                     onClick={() => selectSet(session.currentExerciseIndex, item.id)}
                   >
@@ -1065,6 +1065,9 @@ export function StrengthGuidedSessionDialog({
                 <span aria-hidden="true">+</span>
               </button>
             </div>
+            {set.label && (
+              <p className="strength-guided__side-indicator" aria-live="polite">{set.label}</p>
+            )}
           </section>
           <section className="strength-rest-timer" aria-label="Rest timer">
             <div className={`strength-rest-timer__clock-wrap${restTimer.status === 'complete' && alertPlaying ? ' strength-rest-timer__clock-wrap--silence' : ''}`}>
@@ -1208,7 +1211,8 @@ export function StrengthGuidedSessionDialog({
               </div>
             </MoneyGoalDialog>
           )}
-          <section className="strength-guided__entry" aria-label={`Set ${setIndex + 1} entry`}>
+          <section className="strength-guided__entry"
+            aria-label={`Set ${setIndex + 1}${set.label ? `, ${set.label}` : ''} entry`}>
             <div className="strength-guided__performance-references">
               <div className="strength-guided__performance">
                 <span>{lastSet?.exercise.id !== exercise.id && lastSet
@@ -1543,12 +1547,15 @@ function formatSet(
   set: StrengthGuidedSessionDraft['exercises'][number]['sets'][number],
   preferredWeightUnit: 'lb' | 'kg' = 'lb'
 ): string {
+  const label = set.label ? `${set.label} · ` : '';
   if (set.measurement?.kind === 'duration') {
-    if (set.status !== 'performed') return `${formatDuration(set.measurement.targetDurationSeconds)} planned`;
-    return `${formatDuration(set.actualDurationSeconds ?? 0)} time`;
+    if (set.status !== 'performed') return `${label}${formatDuration(set.measurement.targetDurationSeconds)} planned`;
+    return `${label}${formatDuration(set.actualDurationSeconds ?? 0)} time`;
   }
-  if (set.status !== 'performed') return set.targetReps === undefined ? 'Not performed' : `${set.targetReps} reps planned`;
-  return `${set.actualLoad ? `${formatLoad(set.actualLoad, preferredWeightUnit)} × ` : ''}${set.actualReps ?? 'Reps unavailable'} reps`;
+  if (set.status !== 'performed') {
+    return set.targetReps === undefined ? `${label}Not performed` : `${label}${set.targetReps} reps planned`;
+  }
+  return `${label}${set.actualLoad ? `${formatLoad(set.actualLoad, preferredWeightUnit)} × ` : ''}${set.actualReps ?? 'Reps unavailable'} reps`;
 }
 
 function performedSetCount(session: StrengthGuidedSessionDraft): number {

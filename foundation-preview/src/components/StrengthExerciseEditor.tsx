@@ -16,6 +16,7 @@ import type {
 
 type ExerciseEditorSet = {
   id: string;
+  label: string;
   reps: string;
   durationMinutes: string;
   durationSeconds: string;
@@ -80,6 +81,7 @@ function initialDraft(exercise: StrengthWorkoutExercise, preferredWeightUnit: 'l
     unit: externalLoad?.unit ?? preferredWeightUnit,
     sets: exercise.sets.map(set => ({
       id: set.id,
+      label: set.label ?? '',
       reps: set.targetReps === undefined ? '' : String(set.targetReps),
       durationMinutes: set.measurement?.kind === 'duration'
         ? String(Math.floor(set.measurement.targetDurationSeconds / 60)) : '',
@@ -93,6 +95,7 @@ function initialDraft(exercise: StrengthWorkoutExercise, preferredWeightUnit: 'l
 function makeSet(): ExerciseEditorSet {
   return {
     id: `strength-set-${globalThis.crypto.randomUUID()}`,
+    label: '',
     reps: '',
     durationMinutes: '',
     durationSeconds: '',
@@ -246,6 +249,7 @@ export function StrengthExerciseEditor({
         return {
           id: set.id,
           measurement,
+          ...(set.label.trim() ? { label: set.label.trim() } : {}),
           ...(targetReps === undefined ? {} : { targetReps }),
           targetLoad: { kind: 'bodyweight' as const }
         };
@@ -257,6 +261,7 @@ export function StrengthExerciseEditor({
       return {
         id: set.id,
         measurement,
+        ...(set.label.trim() ? { label: set.label.trim() } : {}),
         ...(targetReps === undefined ? {} : { targetReps }),
         ...(draft.meaning === ''
           || load === undefined || !Number.isFinite(load) || load < 0 || load > 10000
@@ -385,6 +390,7 @@ export function StrengthExerciseEditor({
             <thead>
               <tr>
                 <th scope="col">Set</th>
+                <th scope="col">Set label</th>
                 <th scope="col">{draft.meaning !== 'bodyweight' ? `Weight (${weightUnit})` : 'Weight'}</th>
                 <th scope="col">{draft.measurement === 'duration' ? 'Time target' : 'Reps'}</th>
                 <th scope="col"><span className="visually-hidden">Remove</span></th>
@@ -394,6 +400,13 @@ export function StrengthExerciseEditor({
               {draft.sets.map((set, index) => (
                 <tr key={set.id}>
                   <th scope="row">{index + 1}</th>
+                  <td>
+                    <label>
+                      <span className="visually-hidden">Set {index + 1} label</span>
+                      <input type="text" maxLength={60} value={set.label} placeholder="Optional"
+                        onChange={event => updateSet(index, { label: event.currentTarget.value })} />
+                    </label>
+                  </td>
                   <td>{draft.meaning === 'bodyweight'
                     ? <span className="strength-exercise-editor__bodyweight">Bodyweight</span>
                     : (

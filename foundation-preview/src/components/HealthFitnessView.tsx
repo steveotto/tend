@@ -768,6 +768,7 @@ export function HealthFitnessView({
               overallHealthScore={overallHealthScore}
               categoryHealthScore={healthScore.health}
               foundationNavigation
+              foundationActive={!hidden && selected === 'progress' && progressSelected === 'strength'}
               {...(onAddLinkedRhythm ? { onAddLinkedRhythm } : {})}
               {...(onSaveFoundationAssociations ? { onSaveFoundationAssociations } : {})}
               onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'rhythms')}
@@ -789,6 +790,22 @@ export function HealthFitnessView({
               overallHealthScore={overallHealthScore}
               categoryHealthScore={healthScore.health}
               foundationNavigation
+              foundationActive={!hidden && selected === 'progress' && progressSelected === 'cardio'}
+              people={people}
+              archivedRhythms={archivedRhythms}
+              foundations={foundations}
+              rhythmScores={rhythmScores}
+              completedRhythms={completedRhythms}
+              undoableRhythms={undoableRhythms}
+              {...(onAddLinkedRhythm ? { onAddLinkedRhythm } : {})}
+              {...(onSaveFoundationAssociations ? { onSaveFoundationAssociations } : {})}
+              onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'rhythms')}
+              onEditRhythm={(rhythm, event) => onEditRhythm(rhythm, event)}
+              onTend={openRhythmLog}
+              onUndo={onUndoRhythm}
+              onPersonSelect={onPersonSelect}
+              onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
+              onOpenCategory={onOpenCategory}
               onLogRequestClosed={restoreLogContext}
             />
           </section>
@@ -802,6 +819,22 @@ export function HealthFitnessView({
               overallHealthScore={overallHealthScore}
               categoryHealthScore={healthScore.health}
               foundationNavigation
+              foundationActive={!hidden && selected === 'progress' && progressSelected === 'weight'}
+              people={people}
+              archivedRhythms={archivedRhythms}
+              foundations={foundations}
+              rhythmScores={rhythmScores}
+              completedRhythms={completedRhythms}
+              undoableRhythms={undoableRhythms}
+              {...(onAddLinkedRhythm ? { onAddLinkedRhythm } : {})}
+              {...(onSaveFoundationAssociations ? { onSaveFoundationAssociations } : {})}
+              onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'rhythms')}
+              onEditRhythm={(rhythm, event) => onEditRhythm(rhythm, event)}
+              onTend={openRhythmLog}
+              onUndo={onUndoRhythm}
+              onPersonSelect={onPersonSelect}
+              onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
+              onOpenCategory={onOpenCategory}
               onLogRequestClosed={restoreLogContext}
             />
           </section>
@@ -816,6 +849,23 @@ export function HealthFitnessView({
               overallHealthScore={overallHealthScore}
               categoryHealthScore={healthScore.health}
               foundationNavigation
+              foundationActive={!hidden && selected === 'progress' && progressSelected === 'flexibility'}
+              people={people}
+              rhythms={rhythms}
+              archivedRhythms={archivedRhythms}
+              foundations={foundations}
+              rhythmScores={rhythmScores}
+              completedRhythms={completedRhythms}
+              undoableRhythms={undoableRhythms}
+              {...(onAddLinkedRhythm ? { onAddLinkedRhythm } : {})}
+              {...(onSaveFoundationAssociations ? { onSaveFoundationAssociations } : {})}
+              onRhythmHistory={(id, event) => onRhythmHistory(id, event, 'rhythms')}
+              onEditRhythm={(rhythm, event) => onEditRhythm(rhythm, event)}
+              onTend={openRhythmLog}
+              onUndo={onUndoRhythm}
+              onPersonSelect={onPersonSelect}
+              onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
+              onOpenCategory={onOpenCategory}
               pendingQuickLog={pendingFlexibilityLog ?? flexibility.pendingQuickLog ?? null}
               onQuickLogOpened={requestId => {
                 setPendingFlexibilityLog(current =>
