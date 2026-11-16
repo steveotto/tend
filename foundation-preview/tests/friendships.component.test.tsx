@@ -300,6 +300,28 @@ describe('Friendships view', () => {
     expect(screen.getAllByRole('button', { name: /^Open profile for/ })).toHaveLength(3);
   });
 
+  it('opens the shared People list with the Friends classification selected', () => {
+    const groups = setPersonGroupMembership(
+      createPersonPickerGroups(),
+      'friends',
+      'sample-person-morgan',
+      true
+    );
+    render(
+      <PeopleView
+        groups={groups}
+        friendships={createFriendshipData()}
+        today="2026-10-21"
+        initialFilter="friends"
+        onOpenPerson={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Friends' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('button', { name: /^Open profile for/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Open profile for Morgan Reed' })).toBeTruthy();
+  });
+
   it('renders the assigned group only when all relationship filter options are available', () => {
     const person = { id: 'synthetic-person-amy', displayName: 'Amy Sample' };
     const groups = createPersonPickerGroups().map(group => ({
@@ -484,7 +506,8 @@ describe('Friendships view', () => {
 
     await user.click(screen.getByRole('button', { name: 'Call Morgan Reed' }));
     const editor = screen.getByRole('dialog', { name: 'Log connection' });
-    expect((within(editor).getByLabelText('Connection type') as HTMLSelectElement).value).toBe('call');
+    expect(editor.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(within(editor).getByRole('combobox', { name: 'Connection type: Call' })).toBeTruthy();
     await user.type(within(editor).getByLabelText('Time (optional)'), '10:15');
     await user.type(within(editor).getByLabelText('Notes (optional)'), 'Talked about the weekend.');
     const participantCheckboxes = within(editor).getAllByRole('checkbox');
@@ -558,11 +581,11 @@ describe('Friendships view', () => {
     render(<FriendshipsHarness />);
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
 
-    for (const [label, type] of [['Text', 'text'], ['Call', 'call'], ['Time Together', 'time-together']] as const) {
+    for (const label of ['Text', 'Call', 'Time Together']) {
       const opener = screen.getByRole('button', { name: `${label} Morgan Reed` });
       await user.click(opener);
       const dialog = screen.getByRole('dialog', { name: 'Log connection' });
-      expect((within(dialog).getByLabelText('Connection type') as HTMLSelectElement).value).toBe(type);
+      expect(within(dialog).getByRole('combobox', { name: `Connection type: ${label}` })).toBeTruthy();
       const participants = within(dialog).getAllByRole('checkbox') as HTMLInputElement[];
       expect(participants.map(input => input.checked)).toEqual([false, true, false]);
       await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));

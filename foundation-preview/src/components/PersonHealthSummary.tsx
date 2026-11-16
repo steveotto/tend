@@ -7,8 +7,7 @@ import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { formatScore } from '../domain/score-display.ts';
 import { scoreTone } from '../domain/score-tone.ts';
 import { CategoryHealthBadge } from './Cards.tsx';
-import { HealthScoreBreakdown, HealthScoreInfoButton, HealthScoreMeasures } from './HealthScoreBreakdown.tsx';
-import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
+import { HealthScoreBreakdown } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 import { HealthInfoIdentityCard } from './HealthInfoIdentityCard.tsx';
 import { HealthScoringDetailsCard } from './HealthScoringDetailsCard.tsx';
@@ -127,17 +126,9 @@ export function PersonHealthSummary({
 
 export function PersonHealthComponentScores({
   values,
-  expandedArea,
-  controlIds,
-  onSelectArea,
-  expandedContent,
   areaDetails
 }: {
   values: readonly PersonHealthComponentScore[];
-  expandedArea?: 'rhythms' | 'connections' | 'prayer' | null;
-  controlIds?: Readonly<Record<'rhythms' | 'connections' | 'prayer', string>>;
-  onSelectArea?: (area: 'rhythms' | 'connections' | 'prayer') => void;
-  expandedContent?: Readonly<Record<'rhythms' | 'connections' | 'prayer', ReactNode>>;
   areaDetails?: Readonly<Record<'rhythms' | 'connections' | 'prayer', {
     title: string;
     content: ReactNode;
@@ -166,38 +157,26 @@ export function PersonHealthComponentScores({
             </span>
           </>
         );
-        if (id && (onSelectArea || areaDetails)) {
+        if (id && areaDetails) {
           const selectableArea = id;
-          const expanded = onSelectArea
-            ? expandedArea === selectableArea
-            : dialogArea === selectableArea;
-          const controlledRegion = onSelectArea
-            ? controlIds?.[selectableArea]
-            : expanded ? `${detailsId}-${selectableArea}` : undefined;
+          const expanded = dialogArea === selectableArea;
           return (
             <button
               type="button"
               ref={element => { scoreButtonRefs.current[selectableArea] = element; }}
               className={`person-health-component-score ${scoreTone(value)}`}
               aria-label={`${label} Health ${value === null ? 'unavailable' : formatScore(value)}`}
-              {...(controlledRegion ? { 'aria-controls': controlledRegion } : {})}
               aria-expanded={expanded}
-              {...(!onSelectArea && areaDetails ? { 'aria-haspopup': 'dialog' as const } : {})}
+              aria-haspopup="dialog"
               key={id}
               onClick={() => {
-                if (onSelectArea) {
-                  onSelectArea(selectableArea);
-                } else if (areaDetails?.[selectableArea]) {
-                  setDialogArea(selectableArea);
-                  setParentDialogInert(true);
-                }
+                setDialogArea(selectableArea);
+                setParentDialogInert(true);
               }}
             >
               {content}
               <span className="visually-hidden">
-                {expanded
-                  ? areaDetails && !onSelectArea ? 'Health details open' : 'Health measures expanded'
-                  : areaDetails && !onSelectArea ? 'Health details closed' : 'Health measures collapsed'}
+                {expanded ? 'Health details open' : 'Health details closed'}
               </span>
             </button>
           );
@@ -214,20 +193,6 @@ export function PersonHealthComponentScores({
             >
               {content}
             </span>
-          </div>
-        );
-      })}
-      {onSelectArea && controlIds && expandedContent && values.map(({ id }) => {
-        if (!id) return null;
-        return (
-          <div
-            key={`${id}-measures`}
-            id={controlIds[id]}
-            className="person-health-component-scores__expanded"
-            role="region"
-            hidden={expandedArea !== id}
-          >
-            {expandedArea === id ? expandedContent[id] : null}
           </div>
         );
       })}
@@ -251,69 +216,6 @@ export function PersonHealthComponentScores({
         </HealthScoreDetailsDialog>
       )}
     </div>
-  );
-}
-
-export function PersonHealthAreaMeasures({
-  label,
-  detailsLabel = label,
-  consistency,
-  onTrack,
-  detailsDialogTitle,
-  detailsContent
-}: {
-  label: string;
-  detailsLabel?: string;
-  consistency: HealthScoreMetric;
-  onTrack: HealthScoreMetric;
-  detailsDialogTitle: string;
-  detailsContent: ReactNode;
-}) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const infoButtonRef = useRef<HTMLButtonElement>(null);
-  const setParentDialogInert = useHealthDetailsNestedDialog();
-  const titleId = useId();
-  const detailsId = useId();
-
-  return (
-    <section className="person-health-area-measures" aria-labelledby={titleId}>
-      <header className="person-health-area-measures__header">
-        <h4 id={titleId}>{label}</h4>
-        <HealthScoreInfoButton
-          ref={infoButtonRef}
-          label={`Show ${detailsLabel} Health details`}
-          expanded={detailsOpen}
-          controls={detailsId}
-          onClick={() => {
-            setDetailsOpen(true);
-            setParentDialogInert(true);
-          }}
-        />
-      </header>
-      <HealthScoreMeasures
-        healthScore={null}
-        consistency={consistency}
-        onTrack={onTrack}
-        consistencyCaption="Follow-through over time"
-        onTrackCaption="How caught up you are"
-        showHealthMeter={false}
-        showCaptions
-      />
-      {detailsOpen && (
-        <HealthScoreDetailsDialog
-          title={detailsDialogTitle}
-          onClose={() => {
-            setDetailsOpen(false);
-            setParentDialogInert(false);
-            requestAnimationFrame(() => infoButtonRef.current?.focus({ preventScroll: true }));
-          }}
-        >
-          <div id={detailsId} className="category-health-summary__details" role="region" aria-label={detailsDialogTitle}>
-            {detailsContent}
-          </div>
-        </HealthScoreDetailsDialog>
-      )}
-    </section>
   );
 }
 

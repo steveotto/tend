@@ -17,7 +17,7 @@ import { resolvePersonCategoryGroups } from './person-categories.ts';
 
 export type FoundationPreview = {
   id: string;
-  category: 'Faith' | 'Marriage' | 'Parenting' | 'Health & Fitness' | 'Finances';
+  category: 'Faith' | 'Marriage' | 'Parenting' | 'Health & Fitness' | 'Finances' | 'Friendships';
   categoryId: CategoryId;
   name: string;
   description: string;
@@ -880,6 +880,39 @@ export const parentingFoundations: readonly FoundationPreview[] = [
   }
 ];
 
+export const friendshipFoundations: readonly FoundationPreview[] = [
+  {
+    id: 'friendships-connection',
+    category: 'Friendships',
+    categoryId: 'friendships',
+    name: 'Connection',
+    description: 'Make time to be together, listen, and deepen your friendship.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'friendships-connection'
+  },
+  {
+    id: 'friendships-encouragement',
+    category: 'Friendships',
+    categoryId: 'friendships',
+    name: 'Encouragement',
+    description: 'Reach out and brighten someone’s day.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'friendships-encouragement'
+  },
+  {
+    id: 'friendships-fun-memories',
+    category: 'Friendships',
+    categoryId: 'friendships',
+    name: 'Fun & Memories',
+    description: 'Share experiences worth remembering.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'friendships-fun-memories'
+  }
+];
+
 export const faithPractices: readonly FoundationPreview[] = [
   {
     id: 'faith-sabbath',
@@ -1444,6 +1477,7 @@ export const financeFoundation: FoundationPreview = {
 export const foundationCatalogue: readonly FoundationPreview[] = [
   ...marriageFoundations,
   ...parentingFoundations,
+  ...friendshipFoundations,
   ...faithPractices,
   ...healthFoundations,
   financeFoundation

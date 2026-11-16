@@ -26,7 +26,7 @@ function CalendarReaderHarness({ readerOrigin }: { readerOrigin: string }) {
       />
       <CalendarAgendaSection
         sources={sources}
-        timeZone={Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}
+        timeZone="UTC"
         readerEnabled
       />
       <output hidden>{readerOrigin}</output>

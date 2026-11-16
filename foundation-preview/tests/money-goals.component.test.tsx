@@ -4,6 +4,7 @@ import { GoalCard } from '../src/components/Cards.tsx';
 import { TimelineChart } from '../src/components/TimelineChart.tsx';
 import {
   formatMoney,
+  goalProgressPercentage,
   goalDraftFrom,
   goalFromDraft,
   goalTimeline,
@@ -12,6 +13,7 @@ import {
   parseMoneyInput,
   remainingAmount,
   saveCheckIn,
+  updateGoalSupportingRhythms,
   validateCheckInDraft,
   type GoalDraft,
   type MoneyGoal
@@ -74,6 +76,59 @@ describe('money goal domain', () => {
     const currencyEdit = goalFromDraft({ ...goalDraftFrom(savings), currency: 'EUR' }, savings.id, savings);
     expect(currencyEdit.errors.currency).toContain('cannot change');
     expect(goalFromDraft(goalDraftFrom(savings), savings.id, savings).goal?.checkIns).toEqual(savings.checkIns);
+    expect(goalFromDraft(
+      goalDraftFrom(savings),
+      savings.id,
+      { ...savings, supportingRhythmIds: ['rhythm-stable-id'] }
+    ).goal?.supportingRhythmIds).toEqual(['rhythm-stable-id']);
+  });
+
+  it('updates goal associations by stable ID without changing or deleting Rhythm records', () => {
+    const goal: MoneyGoal = {
+      ...savings,
+      supportingRhythmIds: ['archived-rhythm-id', 'unavailable-rhythm-id']
+    };
+    const result = updateGoalSupportingRhythms(goal, [
+      { rhythmId: 'archived-rhythm-id', linked: true },
+      { rhythmId: 'new-rhythm-id', linked: true }
+    ], new Set(['new-rhythm-id']));
+
+    expect(result.error).toBeUndefined();
+    expect(result.goal?.supportingRhythmIds).toEqual([
+      'archived-rhythm-id',
+      'unavailable-rhythm-id',
+      'new-rhythm-id'
+    ]);
+    expect(goal.supportingRhythmIds).toEqual(['archived-rhythm-id', 'unavailable-rhythm-id']);
+
+    const removed = updateGoalSupportingRhythms(result.goal!, [
+      { rhythmId: 'unavailable-rhythm-id', linked: false }
+    ], new Set());
+    expect(removed.goal?.supportingRhythmIds).toEqual(['archived-rhythm-id', 'new-rhythm-id']);
+  });
+
+  it('calculates increasing and decreasing goal progress without exceeding the goal bounds', () => {
+    const debt = goals[1]!;
+    expect(goalProgressPercentage(savings, 200_000)).toBe(25);
+    expect(goalProgressPercentage(savings, 1_000_000)).toBe(100);
+    expect(goalProgressPercentage(savings, 50_000)).toBe(0);
+    expect(goalProgressPercentage(debt, 662_500)).toBe(25);
+    expect(goalProgressPercentage(debt, 100_000)).toBe(100);
+    expect(goalProgressPercentage(debt, 1_000_000)).toBe(0);
+  });
+
+  it('rejects new links to ineligible Rhythms and duplicate association commands', () => {
+    expect(updateGoalSupportingRhythms(savings, [
+      { rhythmId: 'not-finance-eligible', linked: true }
+    ], new Set())).toMatchObject({
+      error: 'Only an eligible Finance Rhythm can be newly linked to this goal.'
+    });
+    expect(updateGoalSupportingRhythms(savings, [
+      { rhythmId: 'eligible-rhythm', linked: true },
+      { rhythmId: 'eligible-rhythm', linked: false }
+    ], new Set(['eligible-rhythm']))).toMatchObject({
+      error: 'Rhythm associations must use unique, non-empty IDs.'
+    });
   });
 
   it('sorts snapshots by effective date and replaces same-date check-ins while retaining the prior value', () => {
@@ -196,6 +251,8 @@ describe('goal preview components', () => {
     expect(within(card).getByText(/Target balance · Jun 30, 2027/)).toBeTruthy();
     expect(within(card).getByText('No sample check-ins yet. Record an observed balance to begin.')).toBeTruthy();
     expect(within(card).getByText('Record a balance to calculate the amount remaining.')).toBeTruthy();
+    expect(within(card).getByText('Unavailable until a check-in')).toBeTruthy();
+    expect(within(card).queryByRole('progressbar')).toBeNull();
     const chart = within(card).getByRole('img', { name: /0 dated observed balance check-ins/ });
     expect(chart.querySelectorAll('circle')).toHaveLength(0);
     expect(chart.querySelectorAll('line')).toHaveLength(1);
@@ -228,5 +285,7 @@ describe('goal preview components', () => {
     expect(screen.getByText('$3,750.00 remaining')).toBeTruthy();
     expect(screen.getByText('$2,800.00 remaining')).toBeTruthy();
     expect(screen.getAllByText('Recorded Oct 18, 2026')).toHaveLength(2);
+    expect(screen.getAllByRole('progressbar')).toHaveLength(2);
+    expect(screen.getByRole('progressbar', { name: 'Progress toward Starter reserve' }).getAttribute('aria-valuenow')).toBe('6');
   });
 });

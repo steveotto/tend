@@ -25,6 +25,12 @@ export type MoneyGoal = {
   targetDate: string;
   checkIns: GoalCheckIn[];
   correctionHistory: GoalCorrection[];
+  supportingRhythmIds?: string[];
+};
+
+export type GoalRhythmAssociationChange = {
+  rhythmId: string;
+  linked: boolean;
 };
 
 export type GoalDraft = {
@@ -190,7 +196,37 @@ export function goalFromDraft(
       targetBalanceMinor,
       targetDate: draft.targetDate,
       checkIns: existing?.checkIns ?? [],
-      correctionHistory: existing?.correctionHistory ?? []
+      correctionHistory: existing?.correctionHistory ?? [],
+      supportingRhythmIds: [...(existing?.supportingRhythmIds ?? [])]
+    }
+  };
+}
+
+export function updateGoalSupportingRhythms(
+  goal: MoneyGoal,
+  changes: readonly GoalRhythmAssociationChange[],
+  eligibleRhythmIds: ReadonlySet<string>
+): { goal?: MoneyGoal; error?: string } {
+  const supportingRhythmIds = new Set(goal.supportingRhythmIds ?? []);
+  const seenRhythmIds = new Set<string>();
+
+  for (const change of changes) {
+    if (!change.rhythmId.trim() || seenRhythmIds.has(change.rhythmId)) {
+      return { error: 'Rhythm associations must use unique, non-empty IDs.' };
+    }
+    seenRhythmIds.add(change.rhythmId);
+    if (change.linked && !supportingRhythmIds.has(change.rhythmId)
+      && !eligibleRhythmIds.has(change.rhythmId)) {
+      return { error: 'Only an eligible Finance Rhythm can be newly linked to this goal.' };
+    }
+    if (change.linked) supportingRhythmIds.add(change.rhythmId);
+    else supportingRhythmIds.delete(change.rhythmId);
+  }
+
+  return {
+    goal: {
+      ...goal,
+      supportingRhythmIds: [...supportingRhythmIds]
     }
   };
 }
@@ -271,6 +307,12 @@ export function remainingAmount(goal: MoneyGoal, balanceMinor: number): number {
   return goal.direction === 'increase'
     ? goal.targetBalanceMinor - balanceMinor
     : balanceMinor - goal.targetBalanceMinor;
+}
+
+export function goalProgressPercentage(goal: MoneyGoal, balanceMinor: number): number {
+  const progress = (balanceMinor - goal.startingBalanceMinor)
+    / (goal.targetBalanceMinor - goal.startingBalanceMinor);
+  return Math.round(Math.max(0, Math.min(1, progress)) * 100);
 }
 
 export function goalTimeline(goal: MoneyGoal): GoalTimeline {

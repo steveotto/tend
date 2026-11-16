@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -46,9 +47,31 @@ async function waitForPreview(url: string, server: ReturnType<typeof spawn>): Pr
 
 async function main() {
   const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'tend-pages-css-'));
+  const catalogOutputDirectory = await mkdtemp(path.join(os.tmpdir(), 'tend-catalog-css-'));
   const port = await availablePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   let previewServer: ReturnType<typeof spawn> | undefined;
+  const catalogPort = await availablePort();
+  const catalogUrl = `http://127.0.0.1:${catalogPort}`;
+  const catalogServer = createServer(async (request, response) => {
+    const requestPath = decodeURIComponent(new URL(request.url ?? '/', catalogUrl).pathname);
+    const filePath = path.resolve(catalogOutputDirectory, `.${requestPath}`);
+    if (!filePath.startsWith(`${catalogOutputDirectory}${path.sep}`)) {
+      response.writeHead(404).end();
+      return;
+    }
+    try {
+      const contents = await readFile(filePath);
+      const contentType = filePath.endsWith('.html')
+        ? 'text/html'
+        : filePath.endsWith('.js') ? 'text/javascript'
+          : filePath.endsWith('.css') ? 'text/css'
+            : 'application/octet-stream';
+      response.writeHead(200, { 'content-type': contentType }).end(contents);
+    } catch {
+      response.writeHead(404).end();
+    }
+  });
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 
   try {
@@ -85,6 +108,18 @@ async function main() {
     ], { cwd: previewDirectory, stdio: 'inherit' });
     await waitForPreview(`${baseUrl}/app-preview.html`, previewServer);
     browser = await chromium.launch({ headless: true });
+
+    await run(process.execPath, [
+      viteCli,
+      'build',
+      '--outDir',
+      catalogOutputDirectory,
+      '--emptyOutDir'
+    ], { cwd: previewDirectory, env: process.env });
+    await new Promise<void>((resolve, reject) => {
+      catalogServer.once('error', reject);
+      catalogServer.listen(catalogPort, '127.0.0.1', resolve);
+    });
 
     for (const identity of ['signed-out', 'dashboard'] as const) {
       const context = await browser.newContext({
@@ -3222,7 +3257,528 @@ async function main() {
           await rhythmEditor.getByRole('button', { name: 'Cancel', exact: true }).click();
           await rhythmEditor.waitFor({ state: 'detached' });
         }
+
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await areaNavigation.getByRole('button', { name: 'Health & Fitness' }).click();
+        const cardioWeightFoundations = [
+          {
+            name: 'Cardio',
+            tablist: 'Cardio Foundation sections',
+            tabs: ['Progress', 'Activities', 'Rhythms'],
+            panels: ['cardio-panel-progress', 'cardio-panel-activities', 'cardio-panel-rhythms'],
+            gear: 'Cardio tracking settings',
+            dialog: 'Cardio goals',
+            emptyActivity: 'No valid runs logged yet.',
+            emptyRhythms: 'No Rhythms are linked to Cardio yet.',
+            card: '.cardio-progress-card'
+          },
+          {
+            name: 'Weight',
+            tablist: 'Weight Foundation sections',
+            tabs: ['Progress', 'Measurements', 'Rhythms'],
+            panels: ['weight-panel-progress', 'weight-panel-measurements', 'weight-panel-rhythms'],
+            gear: 'Weight tracking settings',
+            dialog: 'Weight goals',
+            emptyActivity: 'No valid weigh-ins to show.',
+            emptyRhythms: 'No Rhythms are linked to Weight yet.',
+            card: '.weight-progress-card'
+          }
+        ] as const;
+
+        for (const [foundationIndex, foundation] of cardioWeightFoundations.entries()) {
+          if (foundationIndex > 0) {
+            await page.getByRole('button', { name: /All Foundations/ }).click();
+          }
+          await page.getByRole('button', {
+            name: `Open ${foundation.name} foundation details`
+          }).click();
+          const tabs = page.getByRole('tablist', { name: foundation.tablist });
+
+          for (const textSize of ['small', 'medium', 'large'] as const) {
+            await page.setViewportSize({ width: 375, height: 844 });
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+              if (await categorySizeToggle.getAttribute('data-text-size') === textSize) break;
+              await categorySizeToggle.click();
+            }
+            assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
+
+            for (const viewportWidth of [375, 390, 430]) {
+              await page.setViewportSize({ width: viewportWidth, height: 844 });
+              for (let tabIndex = 0; tabIndex < foundation.tabs.length; tabIndex += 1) {
+                const tabName = foundation.tabs[tabIndex]!;
+                const tab = tabs.getByRole('tab', { name: tabName, exact: true });
+                await tab.click();
+                const panel = page.locator(`#${foundation.panels[tabIndex]}`);
+                const panelLayout = await panel.evaluate((element, tablistName) => {
+                  const panelElement = element as HTMLElement;
+                  const tablist = document.querySelector<HTMLElement>(
+                    `[role="tablist"][aria-label="${tablistName}"]`
+                  );
+                  const heading = panelElement.querySelector<HTMLElement>('.strength-section-heading');
+                  const title = heading?.querySelector<HTMLElement>('.strength-section-heading__title-row');
+                  const actions = heading?.querySelector<HTMLElement>('.strength-section-heading__actions');
+                  const card = panelElement.querySelector<HTMLElement>(
+                    '.cardio-progress-card, .weight-progress-card, .cardio-history-card, .weight-history-card'
+                  );
+                  if (!tablist || !heading || !title || !actions) {
+                    throw new Error('Cardio or Weight Foundation panel is missing its shared section heading.');
+                  }
+                  const panelRect = panelElement.getBoundingClientRect();
+                  const tablistRect = tablist.getBoundingClientRect();
+                  const headingRect = heading.getBoundingClientRect();
+                  const titleRect = title.getBoundingClientRect();
+                  const actionsRect = actions.getBoundingClientRect();
+                  return {
+                    viewportWidth: document.documentElement.clientWidth,
+                    documentWidth: document.documentElement.scrollWidth,
+                    tabSelected: tablist.querySelector('[aria-selected="true"]')?.textContent?.trim(),
+                    panelVisible: !panelElement.hidden,
+                    panelRole: panelElement.getAttribute('role'),
+                    headingOffset: headingRect.top - tablistRect.bottom,
+                    headingRight: headingRect.right,
+                    panelRight: panelRect.right,
+                    titleActionsOverlap: titleRect.left < actionsRect.right
+                      && titleRect.right > actionsRect.left
+                      && titleRect.top < actionsRect.bottom
+                      && titleRect.bottom > actionsRect.top,
+                    cardPadding: card ? getComputedStyle(card).padding : null,
+                    actionHeights: [...actions.querySelectorAll<HTMLElement>('button')]
+                      .map(button => button.getBoundingClientRect().height)
+                  };
+                }, foundation.tablist);
+                assert.equal(panelLayout.viewportWidth, viewportWidth);
+                assert.equal(panelLayout.documentWidth, viewportWidth,
+                  `${foundation.name} ${tabName} must not overflow at ${viewportWidth}px / ${textSize} text.`);
+                assert.equal(panelLayout.tabSelected, tabName);
+                assert.equal(panelLayout.panelVisible, true);
+                assert.equal(panelLayout.panelRole, 'tabpanel');
+                assert.ok(panelLayout.headingOffset >= 16,
+                  `${foundation.name} ${tabName} needs consistent space below the tabs.`);
+                assert.ok(panelLayout.headingRight <= panelLayout.panelRight + 1);
+                assert.equal(panelLayout.titleActionsOverlap, false,
+                  `${foundation.name} ${tabName} title and actions must not overlap at ${viewportWidth}px / ${textSize} text.`);
+                assert.ok(panelLayout.actionHeights.length > 0);
+                assert.ok(panelLayout.actionHeights.every(height => height >= 44),
+                  `${foundation.name} ${tabName} actions must retain touch targets.`);
+                if ((foundation.name === 'Cardio' && (tabName === 'Progress' || tabName === 'Activities'))
+                  || (foundation.name === 'Weight' && tabName === 'Measurements')) {
+                  const sectionSpacing = await panel.evaluate(element => {
+                    const heading = element.querySelector<HTMLElement>('.strength-section-heading');
+                    const historyCard = element.querySelector<HTMLElement>(
+                      '.cardio-progress-card, .cardio-history-card, .weight-history-card'
+                    );
+                    if (!heading || !historyCard) {
+                      throw new Error('A Foundation panel is missing its shared heading or card.');
+                    }
+                    return {
+                      sharedSpacing: element.classList.contains('strength-workout-section'),
+                      rowGap: getComputedStyle(element).rowGap,
+                      headingToCard: historyCard.getBoundingClientRect().top - heading.getBoundingClientRect().bottom
+                    };
+                  });
+                  assert.equal(sectionSpacing.sharedSpacing, true);
+                  assert.equal(sectionSpacing.rowGap, '12px');
+                  assert.ok(Math.abs(sectionSpacing.headingToCard - 12) < 0.5,
+                    `${foundation.name} ${tabName} content should have the same section gap as Strength Add at ${viewportWidth}px / ${textSize} text.`);
+                }
+                if (tabName === 'Progress') {
+                  assert.ok(Number.parseFloat(panelLayout.cardPadding ?? '0') >= 16,
+                    `${foundation.name} chart card must keep comfortable padding.`);
+                  assert.equal(await page.getByRole('button', { name: foundation.gear }).isVisible(), true);
+                  if (viewportWidth === 375) {
+                    await page.getByRole('button', { name: foundation.gear }).click();
+                    const settings = page.getByRole('dialog', { name: foundation.dialog });
+                    const settingsLayout = await settings.evaluate(dialog => {
+                      const rect = dialog.getBoundingClientRect();
+                      const scroll = dialog.querySelector<HTMLElement>('.fitness-goals-scroll');
+                      if (!scroll) throw new Error('Foundation tracking settings need a scrollable form body.');
+                      return {
+                        left: rect.left,
+                        top: rect.top,
+                        width: rect.width,
+                        height: rect.height,
+                        viewportWidth: document.documentElement.clientWidth,
+                        viewportHeight: document.documentElement.clientHeight,
+                        overflowY: getComputedStyle(scroll).overflowY,
+                        documentWidth: document.documentElement.scrollWidth
+                      };
+                    });
+                    assert.deepEqual(settingsLayout, {
+                      left: 0,
+                      top: 0,
+                      width: 375,
+                      height: 844,
+                      viewportWidth: 375,
+                      viewportHeight: 844,
+                      overflowY: 'auto',
+                      documentWidth: 375
+                    });
+                    assert.equal(await settings.getByRole('button', { name: 'Save goals' }).isVisible(), true);
+                    await settings.getByRole('button', { name: 'Cancel' }).click();
+                    await page.waitForFunction(label =>
+                      document.activeElement?.getAttribute('aria-label') === label, foundation.gear);
+                  }
+                } else if (tabName === 'Activities' || tabName === 'Measurements') {
+                  assert.equal(await panel.getByText(foundation.emptyActivity, { exact: true }).isVisible(), true);
+                } else {
+                  assert.equal(await panel.getByText(foundation.emptyRhythms, { exact: true }).isVisible(), true);
+                }
+              }
+            }
+          }
+        }
       }
+
+      if (identity === 'dashboard') {
+        await page.setViewportSize({ width: 375, height: 844 });
+        await page.getByRole('button', { name: 'More, settings' }).click();
+        await page.getByRole('button', { name: /^Settings/ }).click();
+        await page.getByRole('button', { name: 'Categories', exact: true }).click();
+        const financeSwitch = page.locator('.category-settings__item')
+          .filter({ hasText: 'Finances' })
+          .locator('input[role="switch"]');
+        if (!(await financeSwitch.isChecked())) await financeSwitch.click();
+        const financePage = page.locator('main.finance-page');
+        const financeTabs = financePage.getByRole('tablist', { name: 'Finances' });
+        let browserGoalCreated = false;
+
+        for (const [sizeIndex, textSize] of ['small', 'medium', 'large'].entries()) {
+          if (sizeIndex > 0) {
+            await page.setViewportSize({ width: 375, height: 844 });
+            await page.getByRole('button', { name: 'More, settings' }).click();
+            await page.getByRole('button', { name: /^Settings/ }).click();
+            await page.getByRole('button', { name: 'Categories', exact: true }).click();
+          }
+          const financeSizeToggle = page.locator('.mobile-display-toggle');
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await financeSizeToggle.getAttribute('data-text-size') === textSize) break;
+            await financeSizeToggle.click();
+          }
+          assert.equal(await financeSizeToggle.getAttribute('data-text-size'), textSize);
+          await page.setViewportSize({ width: 1280, height: 900 });
+          await page.getByRole('navigation', { name: 'Areas' })
+            .getByRole('button', { name: 'Finances', exact: true })
+            .click();
+          await page.getByRole('heading', { name: 'Finances' }).waitFor();
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const layout = await financePage.evaluate(element => {
+              const tablist = element.querySelector<HTMLElement>('[role="tablist"]');
+              const panel = element.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])');
+              const content = panel?.firstElementChild as HTMLElement | null;
+              if (!tablist || !panel || !content) {
+                throw new Error('Finance must expose a tablist and one visible panel.');
+              }
+              const tabsRect = tablist.getBoundingClientRect();
+              const panelRect = panel.getBoundingClientRect();
+              const contentRect = content.getBoundingClientRect();
+              return {
+                viewportWidth: document.documentElement.clientWidth,
+                documentWidth: document.documentElement.scrollWidth,
+                summaryAndTabs: Math.round(tabsRect.top - element.querySelector('.category-health-summary')!.getBoundingClientRect().bottom),
+                tabsToContent: Math.round(contentRect.top - tabsRect.bottom),
+                panelVisible: panelRect.width > 0 && panelRect.height > 0
+              };
+            });
+            assert.equal(layout.viewportWidth, viewportWidth);
+            assert.equal(layout.documentWidth, viewportWidth,
+              `Finance must not overflow at ${viewportWidth}px / ${textSize}.`);
+            assert.ok(Math.abs(layout.summaryAndTabs - 12) <= 1,
+              `Finance Health and tabs should use the shared 12px gap at ${viewportWidth}px / ${textSize}.`);
+            assert.ok(Math.abs(layout.tabsToContent - 12) <= 1,
+              `Finance tabs and content should use the shared 12px gap at ${viewportWidth}px / ${textSize}.`);
+            assert.equal(layout.panelVisible, true);
+
+            for (const tabName of ['Overview', 'Goals', 'Rhythms'] as const) {
+              await financeTabs.getByRole('tab', { name: tabName, exact: true }).click();
+              const panel = financePage.getByRole('tabpanel', { name: tabName });
+              assert.equal(await panel.isVisible(), true);
+              if (tabName === 'Overview') {
+                assert.equal(await panel.getByRole('heading', { name: 'Savings' }).isVisible(), true);
+                assert.equal(await panel.getByRole('heading', { name: 'Debt' }).isVisible(), true);
+              } else if (tabName === 'Goals') {
+                assert.equal(await panel.getByRole('heading', { name: 'My goals' }).isVisible(), true);
+                assert.equal(await panel.getByRole('button', { name: '+ Add' }).first().isVisible(), true);
+                if (!browserGoalCreated
+                  && await panel.getByRole('button', { name: /^View details for / }).count() === 0) {
+                  await panel.getByRole('button', { name: '+ Add' }).first().click();
+                  const library = page.getByRole('dialog', { name: 'Add a goal' });
+                  await library.getByRole('button', { name: 'Create', exact: true }).click();
+                  const editor = page.getByRole('dialog', { name: 'Create goal' });
+                  await editor.getByLabel('Title').fill('Browser review goal');
+                  await editor.getByLabel('Starting balance').fill('1000');
+                  await editor.getByLabel('Starting date').fill('2026-10-01');
+                  await editor.getByLabel('Target balance').fill('5000');
+                  await editor.getByLabel('Target date').fill('2027-06-30');
+                  await editor.getByRole('button', { name: 'Add goal' }).click();
+                  await panel.getByRole('button', { name: 'View details for Browser review goal' }).waitFor();
+                  browserGoalCreated = true;
+                }
+                const detailsTrigger = panel.getByRole('button', { name: /^View details for / }).first();
+                const detailsLabel = await detailsTrigger.getAttribute('aria-label');
+                assert.ok(detailsLabel);
+                const detailTitle = detailsLabel.replace('View details for ', '');
+                const pageBodyStyles = await page.evaluate(() => ({
+                  overflow: document.body.style.overflow,
+                  position: document.body.style.position,
+                  top: document.body.style.top
+                }));
+                await detailsTrigger.click();
+                const details = page.getByRole('dialog', { name: detailTitle });
+                const detailsGeometry = await details.evaluate(dialog => {
+                  const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+                  if (!surface) throw new Error('Goal details need a scrollable surface.');
+                  surface.scrollTop = surface.scrollHeight;
+                  const rect = dialog.getBoundingClientRect();
+                  return {
+                    left: rect.left,
+                    top: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                    viewportWidth: document.documentElement.clientWidth,
+                    viewportHeight: document.documentElement.clientHeight,
+                    overflowY: getComputedStyle(surface).overflowY,
+                    scrollable: surface.scrollHeight > surface.clientHeight,
+                    horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+                  };
+                });
+                assert.deepEqual(detailsGeometry, {
+                  left: 0,
+                  top: 0,
+                  width: viewportWidth,
+                  height: 844,
+                  viewportWidth,
+                  viewportHeight: 844,
+                  overflowY: 'auto',
+                  scrollable: true,
+                  horizontalOverflow: false
+                });
+                assert.equal(await page.evaluate(() => document.body.style.overflow), 'hidden');
+                assert.equal(await details.getByRole('heading', { name: 'Recorded check-ins' }).isVisible(), true);
+                assert.equal(await details.getByRole('button', { name: 'Close goal details' }).isVisible(), true);
+                await details.getByRole('button', { name: 'Close goal details' }).click();
+                await page.waitForFunction(label =>
+                  document.activeElement?.getAttribute('aria-label') === label, detailsLabel);
+                assert.deepEqual(await page.evaluate(() => ({
+                  overflow: document.body.style.overflow,
+                  position: document.body.style.position,
+                  top: document.body.style.top
+                })), pageBodyStyles);
+              } else {
+                assert.equal(await panel.getByRole('heading', { name: /Linked Rhythms/ }).isVisible(), true);
+                assert.equal(await panel.getByRole('button', { name: 'Manage links' }).isVisible(), true);
+                assert.equal(await panel.getByRole('button', { name: 'Add Rhythm' }).isVisible(), true);
+              }
+            }
+          }
+        }
+
+        await page.setViewportSize({ width: 375, height: 844 });
+        const overviewTab = financeTabs.getByRole('tab', { name: 'Overview', exact: true });
+        const goalsTab = financeTabs.getByRole('tab', { name: 'Goals', exact: true });
+        const rhythmsTab = financeTabs.getByRole('tab', { name: 'Rhythms', exact: true });
+        await overviewTab.focus();
+        await page.keyboard.press('ArrowRight');
+        assert.equal(await goalsTab.getAttribute('aria-selected'), 'true');
+        assert.equal(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.id), await goalsTab.getAttribute('id'));
+        await page.keyboard.press('End');
+        assert.equal(await rhythmsTab.getAttribute('aria-selected'), 'true');
+        await page.keyboard.press('ArrowRight');
+        assert.equal(await overviewTab.getAttribute('aria-selected'), 'true');
+        await page.keyboard.press('Home');
+        assert.equal(await overviewTab.getAttribute('aria-selected'), 'true');
+
+        await goalsTab.click();
+        const addGoal = page.getByRole('button', { name: '+ Add', exact: true }).first();
+        const originalBodyStyles = await page.evaluate(() => ({
+          overflow: document.body.style.overflow,
+          position: document.body.style.position,
+          top: document.body.style.top
+        }));
+        await addGoal.click();
+        const library = page.getByRole('dialog', { name: 'Add a goal' });
+        const libraryGeometry = await library.evaluate(dialog => {
+          const rect = dialog.getBoundingClientRect();
+          const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+          if (!surface) throw new Error('The Finance library needs a scrollable surface.');
+          return {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+            overflowY: getComputedStyle(surface).overflowY,
+            className: dialog.className,
+            position: getComputedStyle(dialog).position,
+            classicCss: [...document.styleSheets].some(sheet => sheet.href?.endsWith('/tend.css'))
+          };
+        });
+        assert.deepEqual(libraryGeometry, {
+          left: 0,
+          top: 0,
+          width: 375,
+          height: 844,
+          overflowY: 'auto',
+          className: 'money-goal-dialog finance-goal-fullscreen-dialog dialog--phone-fullscreen',
+          position: 'fixed',
+          classicCss: false
+        });
+        assert.equal(await page.evaluate(() => document.body.style.overflow), 'hidden');
+        await library.getByRole('button', { name: 'Create', exact: true }).click();
+        const editor = page.getByRole('dialog', { name: 'Create goal' });
+        const editorGeometry = await editor.evaluate(async dialog => {
+          const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+          const actions = dialog.querySelector<HTMLElement>('.money-goal-dialog__actions');
+          if (!surface || !actions) throw new Error('The Finance goal editor needs a scrollable body and actions.');
+          surface.scrollTop = surface.scrollHeight;
+          await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)));
+          const surfaceRect = surface.getBoundingClientRect();
+          const actionsRect = actions.getBoundingClientRect();
+          return {
+            width: dialog.getBoundingClientRect().width,
+            height: dialog.getBoundingClientRect().height,
+            overflowY: getComputedStyle(surface).overflowY,
+            actionTop: actionsRect.top,
+            actionBottom: actionsRect.bottom,
+            surfaceTop: surfaceRect.top,
+            surfaceBottom: surfaceRect.bottom,
+            horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+          };
+        });
+        assert.equal(editorGeometry.width, 375);
+        assert.equal(editorGeometry.height, 844);
+        assert.equal(editorGeometry.overflowY, 'auto');
+        assert.ok(editorGeometry.actionTop >= editorGeometry.surfaceTop - 1);
+        assert.ok(editorGeometry.actionBottom <= editorGeometry.surfaceBottom + 1);
+        assert.equal(editorGeometry.horizontalOverflow, false);
+        assert.equal(await editor.getByRole('button', { name: 'Add goal' }).isVisible(), true);
+        assert.equal(await editor.getByRole('button', { name: 'Cancel' }).isVisible(), true);
+        await editor.getByRole('button', { name: 'Cancel' }).click();
+        await page.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+        assert.deepEqual(await page.evaluate(() => ({
+          overflow: document.body.style.overflow,
+          position: document.body.style.position,
+          top: document.body.style.top
+        })), originalBodyStyles);
+      }
+
+      const profileContext = await browser.newContext({
+        viewport: { width: 1280, height: 900 },
+        hasTouch: true
+      });
+      const profilePage = await profileContext.newPage();
+      const profileClassicCssRequests: string[] = [];
+      await profilePage.route('**/*', route => {
+        const origin = new URL(route.request().url()).origin;
+        if (origin === baseUrl || origin === catalogUrl) return route.continue();
+        return route.abort();
+      });
+      await profilePage.route('**/tend.css', async route => {
+        profileClassicCssRequests.push(route.request().url());
+        await route.abort();
+      });
+      await profilePage.goto(`${catalogUrl}/preview.html`);
+      await profilePage.getByRole('heading', { name: 'One shared language. Room for what’s different.' }).waitFor();
+      await profilePage.setViewportSize({ width: 1280, height: 900 });
+      await profilePage.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }).click();
+      const personProfile = profilePage.getByRole('main', { name: 'Avery Brooks' });
+      await personProfile.getByRole('tab', { name: 'Connections' }).click();
+      await profilePage.setViewportSize({ width: 375, height: 844 });
+      let checkedKeyboardSelect = false;
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await profilePage.evaluate(size => {
+          document.documentElement.dataset.mobileTextSize = size === 'small'
+            ? 'normal'
+            : size === 'medium' ? 'large' : 'larger';
+          document.documentElement.dataset.mobileTextSizeLevel = size === 'large' ? 'larger' : size;
+        }, textSize);
+        for (const viewport of [
+          { width: 375, height: 844 },
+          { width: 390, height: 844 },
+          { width: 430, height: 844 }
+        ]) {
+          await profilePage.setViewportSize(viewport);
+          const addConnection = personProfile.getByRole('button', { name: '+ Add' });
+          const originalBodyStyles = await profilePage.evaluate(() => ({
+            overflow: document.body.style.overflow,
+            position: document.body.style.position,
+            top: document.body.style.top
+          }));
+          await addConnection.click();
+          const connectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
+          const connectionGeometry = await connectionDialog.evaluate(dialog => {
+            const form = dialog.querySelector<HTMLElement>('.friendships-connection-form');
+            const actions = dialog.querySelector<HTMLElement>('.friendships-connection-form button[type="submit"]');
+            if (!form || !actions) throw new Error('The connection editor needs a scrollable form and save action.');
+            form.scrollTop = form.scrollHeight;
+            const formBounds = form.getBoundingClientRect();
+            const actionsBounds = actions.getBoundingClientRect();
+            const dialogBounds = dialog.getBoundingClientRect();
+            return {
+              width: dialogBounds.width,
+              height: dialogBounds.height,
+              top: dialogBounds.top,
+              formOverflowY: getComputedStyle(form).overflowY,
+              formClientHeight: form.clientHeight,
+              formScrollHeight: form.scrollHeight,
+              actionTop: actionsBounds.top,
+              actionBottom: actionsBounds.bottom,
+              formBottom: formBounds.bottom,
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth,
+              bodyOverflow: document.body.style.overflow
+            };
+          });
+          assert.equal(connectionGeometry.width, viewport.width);
+          assert.equal(connectionGeometry.height, viewport.height);
+          assert.equal(connectionGeometry.top, 0);
+          assert.equal(connectionGeometry.formOverflowY, 'auto');
+          assert.ok(connectionGeometry.formClientHeight > 0);
+          assert.ok(connectionGeometry.actionTop >= 0);
+          assert.ok(connectionGeometry.actionBottom <= connectionGeometry.formBottom + 1);
+          assert.equal(connectionGeometry.documentWidth, viewport.width);
+          assert.equal(connectionGeometry.viewportWidth, viewport.width);
+          assert.equal(connectionGeometry.bodyOverflow, 'hidden');
+          assert.equal(await connectionDialog.getByRole('button', { name: 'Close connection editor' }).isVisible(), true);
+          assert.equal(await connectionDialog.getByRole('button', { name: 'Cancel' }).isVisible(), true);
+
+          if (!checkedKeyboardSelect) {
+            const typeSelect = connectionDialog.getByRole('combobox', { name: 'Connection type: Text' });
+            await typeSelect.press('Enter');
+            await profilePage.keyboard.press('ArrowDown');
+            await profilePage.keyboard.press('Enter');
+            assert.equal(await connectionDialog.getByRole('combobox', { name: 'Connection type: Call' }).isVisible(), true);
+            checkedKeyboardSelect = true;
+          }
+
+          await connectionDialog.getByRole('button', { name: 'Close connection editor' }).click();
+          await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+          assert.deepEqual(await profilePage.evaluate(() => ({
+            overflow: document.body.style.overflow,
+            position: document.body.style.position,
+            top: document.body.style.top
+          })), originalBodyStyles);
+        }
+      }
+
+      await profilePage.setViewportSize({ width: 430, height: 390 });
+      await personProfile.getByRole('button', { name: '+ Add' }).click();
+      const landscapeConnectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
+      const landscapeForm = landscapeConnectionDialog.locator('.friendships-connection-form');
+      const landscapeScroll = await landscapeForm.evaluate(form => ({
+        clientHeight: form.clientHeight,
+        scrollHeight: form.scrollHeight,
+        overflowY: getComputedStyle(form).overflowY
+      }));
+      assert.equal(landscapeScroll.overflowY, 'auto');
+      assert.ok(landscapeScroll.scrollHeight > landscapeScroll.clientHeight,
+        'The connection editor must scroll in a short landscape viewport.');
+      await landscapeForm.evaluate(form => { form.scrollTop = form.scrollHeight; });
+      assert.equal(await landscapeConnectionDialog.getByRole('button', { name: 'Save connection' }).isVisible(), true);
+      assert.equal(await landscapeConnectionDialog.getByRole('button', { name: 'Cancel' }).isVisible(), true);
+      await landscapeConnectionDialog.getByRole('button', { name: 'Cancel' }).click();
+      await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+      assert.deepEqual(profileClassicCssRequests, [], 'Person profile React pages must not request tend.css.');
+      await profileContext.close();
 
       assert.deepEqual(classicCssRequests, [], 'React pages must not request tend.css.');
       await context.close();
@@ -3231,12 +3787,12 @@ async function main() {
     console.log('Browser CSS contract passed: sign-in and dashboard layouts render without tend.css.');
   } finally {
     await browser?.close();
+    await new Promise<void>(resolve => catalogServer.close(() => resolve()));
     if (previewServer?.pid && previewServer.exitCode === null && previewServer.signalCode === null) {
-      const stopped = new Promise<void>(resolve => previewServer?.once('exit', () => resolve()));
-      previewServer.kill('SIGTERM');
-      await stopped;
+      previewServer.kill('SIGKILL');
     }
     await rm(outputDirectory, { recursive: true, force: true });
+    await rm(catalogOutputDirectory, { recursive: true, force: true });
   }
 }
 

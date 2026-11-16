@@ -32,6 +32,7 @@ export function PeopleView({
   today,
   personDetails = [],
   healthScores,
+  initialFilter = 'all',
   onOpenPerson,
   onCreatePerson
 }: {
@@ -41,10 +42,11 @@ export function PeopleView({
   today: string;
   personDetails?: readonly PersonDetails[];
   healthScores?: ReadonlyMap<PersonId, number | null>;
+  initialFilter?: PersonPickerGroupId | 'all';
   onOpenPerson: (personId: PersonId) => void;
   onCreatePerson?: (person: PersonPreview, groupIds: readonly PersonPickerGroupId[]) => string | null;
 }) {
-  const [selectedFilter, setSelectedFilter] = useState<PersonPickerGroupId | 'all'>('all');
+  const [selectedFilter, setSelectedFilter] = useState<PersonPickerGroupId | 'all'>(initialFilter);
   const categoryPreferences = useCategoryAvailability();
   const availableGroups = useAvailablePersonGroups(groups);
   const availableFilters = classificationFilters.filter(filter =>
@@ -59,6 +61,10 @@ export function PeopleView({
     : people.filter(person =>
         availableGroups.some(group => group.id === selectedFilter && group.memberIds.includes(person.id))
       );
+
+  useEffect(() => {
+    setSelectedFilter(initialFilter);
+  }, [initialFilter]);
 
   useEffect(() => {
     if (!availableFilters.some(filter => filter.id === selectedFilter)) setSelectedFilter('all');

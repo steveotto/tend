@@ -15,12 +15,17 @@ import type {
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonBadge, PersonBadgeVisual } from './PersonBadge.tsx';
 import { PersonConnectionCadenceSelect } from './PersonConnectionCadenceSelect.tsx';
+import { StyledSelect } from './StyledSelect.tsx';
+import type { StyledSelectOption } from './StyledSelect.tsx';
 
 export const connectionTypeLabels: Record<ConnectionType, string> = {
   text: 'Text',
   call: 'Call',
   'time-together': 'Time Together'
 };
+const connectionTypes = ['text', 'call', 'time-together'] as const;
+const connectionTypeOptions: readonly StyledSelectOption<ConnectionType>[] =
+  connectionTypes.map(value => ({ value, label: connectionTypeLabels[value] }));
 
 export function ConnectionTypeActions({
   personId,
@@ -317,20 +322,23 @@ export function ConnectionEditor({
       titleId="friendship-connection-title"
       labelledBy="friendship-connection-title"
       initialFocusId="friendship-connection-type"
+      closeLabel="Close connection editor"
+      phoneFullScreen
       onClose={onClose}
     >
       <form className="friendships-connection-form" onSubmit={submit} noValidate>
         <label>
           <span>Connection type</span>
-          <select
+          <StyledSelect
             id="friendship-connection-type"
+            label="Connection type"
+            options={connectionTypeOptions}
             value={type}
-            onChange={event => setType(event.currentTarget.value as ConnectionType)}
-          >
-            {Object.entries(connectionTypeLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+            matchTriggerWidth
+            containerClassName="friendships-connection-type"
+            triggerClassName="friendships-connection-type__trigger"
+            onChange={setType}
+          />
         </label>
         <div className="friendships-date-fields">
           <label>

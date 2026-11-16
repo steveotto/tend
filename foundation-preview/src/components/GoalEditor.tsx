@@ -12,6 +12,8 @@ import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 type GoalEditorProps = {
   goal?: MoneyGoal;
   newGoalId: string;
+  initialDraft?: Partial<GoalDraft>;
+  intro?: string;
   onSave: (goal: MoneyGoal) => void;
   onClose: () => void;
 };
@@ -26,8 +28,17 @@ const emptyDraft: GoalDraft = {
   targetDate: ''
 };
 
-export function GoalEditor({ goal, newGoalId, onSave, onClose }: GoalEditorProps) {
-  const [draft, setDraft] = useState<GoalDraft>(() => goal ? goalDraftFrom(goal) : emptyDraft);
+export function GoalEditor({
+  goal,
+  newGoalId,
+  initialDraft,
+  intro,
+  onSave,
+  onClose
+}: GoalEditorProps) {
+  const [draft, setDraft] = useState<GoalDraft>(() => goal
+    ? goalDraftFrom(goal)
+    : { ...emptyDraft, ...initialDraft });
   const [errors, setErrors] = useState<GoalDraftErrors>({});
 
   function update(field: keyof GoalDraft, value: string) {
@@ -48,8 +59,13 @@ export function GoalEditor({ goal, newGoalId, onSave, onClose }: GoalEditorProps
 
   return (
     <MoneyGoalDialog
-      title={goal ? 'Edit example goal' : 'Add example goal'}
-      intro="Example only. Edits stay in this synthetic preview, separate from your Tend account."
+      title={goal ? 'Edit goal' : 'Create goal'}
+      intro={intro ?? 'Set a manually tracked savings or debt balance goal. Changes stay in this synthetic preview; no bank connection or money movement is active.'}
+      closeLabel="Close goal editor"
+      closeButtonId="finance-goal-editor-close"
+      initialFocusId="goal-title"
+      dialogClassName="finance-goal-fullscreen-dialog"
+      phoneFullScreen
       onClose={onClose}
     >
       <form onSubmit={submit} noValidate>
@@ -79,7 +95,7 @@ export function GoalEditor({ goal, newGoalId, onSave, onClose }: GoalEditorProps
             {fieldError('currency')}
           </div>
           <div className="goal-field">
-            <label htmlFor="goal-direction">Goal direction</label>
+            <label htmlFor="goal-direction">Goal type</label>
             <select
               id="goal-direction"
               value={draft.direction}
@@ -88,8 +104,8 @@ export function GoalEditor({ goal, newGoalId, onSave, onClose }: GoalEditorProps
                 if (direction === 'increase' || direction === 'decrease') update('direction', direction);
               }}
             >
-              <option value="increase">Savings — balance increases</option>
-              <option value="decrease">Debt — balance decreases</option>
+              <option value="increase">Savings increase</option>
+              <option value="decrease">Debt reduction</option>
             </select>
           </div>
           <div className="goal-field">

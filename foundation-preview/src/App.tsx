@@ -12,7 +12,11 @@ import {
 } from './components/MarriageView.tsx';
 import { MarriageIcon } from './components/MarriageIcon.tsx';
 import { selectActiveUserRhythms, selectArchivedUserRhythms } from './domain/active-user-rhythms.ts';
-import { foundationCategoryId, saveFoundationRhythmAssociations } from './domain/foundation-rhythm-associations.ts';
+import {
+  foundationCategoryId,
+  foundationRhythmIds,
+  saveFoundationRhythmAssociations
+} from './domain/foundation-rhythm-associations.ts';
 import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
 import { selectFoundationRhythmScores } from './domain/foundation-scoring.ts';
 import {
@@ -48,7 +52,7 @@ import { TimeBlocksSettings } from './components/TimeBlocksSettings.tsx';
 import { useTodayWeather } from './components/useTodayWeather.ts';
 import type { TodayViewId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
-import { FriendshipsView } from './components/FriendshipsView.tsx';
+import { AreaIcon } from './components/AreaIcon.tsx';
 import { connectionCadences, setPersonConnectionCadence } from './domain/friendships.ts';
 import { selectGlobalSearchResults } from './domain/global-search.ts';
 import type { GlobalSearchResult } from './domain/global-search.ts';
@@ -56,6 +60,7 @@ import { APP_DISPLAY_VERSION } from './domain/app-version.ts';
 import { resolvePersonCategory, resolvePersonCategoryGroups, setPersonCategory } from './domain/person-categories.ts';
 import {
   marriageRhythms,
+  financeFoundation,
   foundationCatalogue,
   faithRhythmSuggestionGroups,
   faithRhythmSuggestions,
@@ -83,7 +88,8 @@ import {
   type CheckInDraftErrors,
   type GoalCheckIn,
   localDateString,
-  type MoneyGoal
+  type MoneyGoal,
+  updateGoalSupportingRhythms
 } from './domain/money-goals.ts';
 import {
   createEmptyPreviewData,
@@ -508,6 +514,7 @@ function PreviewWorkspace({
     ? createSamplePreviewData()
     : createEmptyPreviewData();
   const [destination, setDestination] = useState<Destination>('today');
+  const [peopleInitialFilter, setPeopleInitialFilter] = useState<PersonPickerGroupId | 'all'>('all');
   const [moreSettingsOpen, setMoreSettingsOpen] = useState(false);
   const [settingsDetail, setSettingsDetail] = useState<SettingsDetail | null>(null);
   const [settingsReturnTo, setSettingsReturnTo] = useState<SettingsDetail | null>(null);
@@ -816,6 +823,8 @@ function PreviewWorkspace({
   const archivedFaithRhythms = rhythmsForCategory(archivedUserRhythms, 'faith');
   const archivedHealthRhythms = rhythmsForCategory(archivedUserRhythms, 'health');
   const archivedFriendshipRhythms = rhythmsForCategory(archivedUserRhythms, 'friendships');
+  const financeCategoryRhythms = rhythmsForCategory(userRhythms, 'finances');
+  const archivedFinanceCategoryRhythms = rhythmsForCategory(archivedUserRhythms, 'finances');
   const pendingStrengthLogRhythm = strengthLogRequest
     ? healthCategoryRhythms.find(rhythm => rhythm.id === strengthLogRequest.rhythmId)
     : undefined;
@@ -840,7 +849,8 @@ function PreviewWorkspace({
   const categoryRhythms = {
     faith: faithCategoryRhythms,
     marriage: marriageCategoryRhythms,
-    parenting: parentingCategoryRhythms
+    parenting: parentingCategoryRhythms,
+    friendships: friendshipCategoryRhythms
   } as const;
   const cardioCategoryScore = selectCardioCategoryScore(
     selectCardioProgress(previewData.cardio, localDateString(scoringInstant))
@@ -871,7 +881,7 @@ function PreviewWorkspace({
   const availableCategoryIds = selectAvailableCategoryIds(previewData.categoryPreferences);
   const categoryHealthScores = new Map<CategoryId, number | null>(
     [
-      ...(['faith', 'marriage', 'parenting'] as const).map(categoryId => [
+      ...(['faith', 'marriage', 'parenting', 'friendships'] as const).map(categoryId => [
         categoryId,
         selectCategoryHealthScore(
           foundationCatalogue.filter(foundation => foundation.categoryId === categoryId),
@@ -1603,7 +1613,8 @@ function PreviewWorkspace({
     }
     if (categoryTabDefault
       && (safeDestination === 'faith' || safeDestination === 'marriage'
-        || safeDestination === 'parenting' || safeDestination === 'health')) {
+        || safeDestination === 'parenting' || safeDestination === 'friendships'
+        || safeDestination === 'health')) {
       categoryTabNavigationSequence.current += 1;
       setCategoryTabNavigationRequest({
         categoryId: safeDestination,
@@ -1612,6 +1623,7 @@ function PreviewWorkspace({
     } else if (!categoryTabDefault) {
       setCategoryTabNavigationRequest(null);
     }
+    if (safeDestination !== 'people') setPeopleInitialFilter('all');
     setDestination(safeDestination);
     if (safeDestination === 'health') setHealthFitnessVisited(true);
     setMoreSettingsOpen(false);
@@ -3060,6 +3072,31 @@ function PreviewWorkspace({
     }));
   }
 
+  function saveGoalSupportingRhythms(
+    goalId: string,
+    changes: readonly { rhythmId: string; linked: boolean }[]
+  ): string | null {
+    const goal = previewData.goals.find(item => item.id === goalId);
+    if (!goal) return 'This goal is no longer available.';
+    const eligibleRhythmIds = new Set(
+      userRhythms
+        .filter(rhythm =>
+          rhythm.categoryIds?.includes('finances')
+          && foundationRhythmIds(rhythm).includes(financeFoundation.id)
+          && isCategoryEnabled(previewData.categoryPreferences, 'finances')
+        )
+        .map(rhythm => rhythm.id)
+    );
+    const result = updateGoalSupportingRhythms(goal, changes, eligibleRhythmIds);
+    const updatedGoal = result.goal;
+    if (result.error || !updatedGoal) return result.error ?? 'The goal association could not be saved.';
+    setPreviewData(previous => ({
+      ...previous,
+      goals: previous.goals.map(item => item.id === goalId ? updatedGoal : item)
+    }));
+    return null;
+  }
+
   function saveGoalCheckIn(
     goalId: string,
     draft: CheckInDraft,
@@ -3908,33 +3945,71 @@ function PreviewWorkspace({
             ? null
           : destination === 'friendships'
             ? (
-              <FriendshipsView
-                data={previewData.friendships}
+              <MarriageView
                 people={peopleWithPhotos}
                 peopleGroups={resolvedPeopleGroups}
-                personDetails={previewData.personDetails}
-                healthScores={personOverallHealthScores}
-                today={localDateInTimeZone(new Date(), localTimeZone)}
-                rhythms={friendshipCategoryRhythms}
-                archivedRhythms={archivedFriendshipRhythms}
-                foundations={foundationCatalogue}
-                rhythmScores={rhythmScoreResults}
-                completedRhythms={completedRhythms}
-                undoableRhythms={undoableRhythms}
-                onChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+                overallHealthScore={overallHealthScore}
+                categoryConfig={{
+                  categoryId: 'friendships',
+                  label: 'Friendships',
+                  description: 'Keep close through time, encouragement, and shared memories.',
+                  foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'friendships'),
+                  scoreExplanationIntro: 'Friendships Health reflects eligible Rhythms linked through these Foundations. Connection logs and cadence do not affect scoring.',
+                  headerTrailing: (
+                    <>
+                      <span className="menu-area-icon"><AreaIcon id="friendships" variant="today-summary" /></span>
+                      <button
+                        type="button"
+                        className="btn mini ghost friendships-friends-navigation"
+                        aria-label={`Open People filtered to Friends · ${resolvedPeopleGroups.find(group => group.id === 'friends')?.memberIds.length ?? 0}`}
+                        onClick={() => {
+                          setPeopleInitialFilter('friends');
+                          navigate('people');
+                        }}
+                      >
+                        Friends · {resolvedPeopleGroups.find(group => group.id === 'friends')?.memberIds.length ?? 0}
+                        <span aria-hidden="true">›</span>
+                      </button>
+                    </>
+                  )
+                }}
+                todayDate={currentDate}
                 onAddRhythm={event => openRhythmEditor(event, undefined, {
                   initialDraft: createRhythmDraft(['friendships'])
                 })}
-                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
-                onTend={openCompletion}
-                onUndo={id => undoTend(id)}
+                onAddLinkedRhythm={(foundationId, event) => openRhythmEditor(event, undefined, {
+                  initialDraft: {
+                    ...createRhythmDraft(['friendships']),
+                    primaryFoundationId: foundationId,
+                    secondaryFoundationIds: []
+                  }
+                })}
                 onPersonSelect={openPersonProfile}
-                onGoToPeople={() => navigate('people')}
-                onRhythmHistory={openRhythmHistory}
-                onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+                onOpenPeople={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
+                userRhythms={friendshipCategoryRhythms}
+                archivedRhythms={archivedFriendshipRhythms}
+                foundationRhythms={friendshipCategoryRhythms}
+                suggestionRhythms={friendshipCategoryRhythms}
+                suggestionInstances={allTodayRhythms}
+                foundationRhythmScores={rhythmScoreResults}
+                archivedRhythmIds={previewData.archivedRhythmIds}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                satisfiedRhythmIds={satisfiedRhythmIds}
+                tendedRhythmIds={tendedRhythmIds}
+                showTended={previewData.showTended}
+                onShowTendedChange={setShowTendedPreference}
+                initializing={!hydrated}
+                onRhythmHistory={openRhythmHistory}
+                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
                 onRestoreRhythm={restoreRhythm}
-                profileOpen={profilePersonId !== null}
+                onTend={openCompletion}
+                onUndo={undoTend}
+                onSaveFoundationAssociations={saveFoundationAssociations}
+                foundationNavigationRequest={foundationNavigationRequest}
+                categoryTabNavigationRequest={categoryTabNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
               />
             )
           : destination === 'finances'
@@ -3942,8 +4017,39 @@ function PreviewWorkspace({
               <FinanceGoalsView
                 goals={moneyGoals}
                 currentDate={currentDate}
+                financeFoundation={financeFoundation}
+                financeCategoryEnabled={isCategoryEnabled(previewData.categoryPreferences, 'finances')}
+                rhythms={userRhythms}
+                archivedRhythms={archivedUserRhythms}
+                categoryRhythms={financeCategoryRhythms}
+                archivedCategoryRhythms={archivedFinanceCategoryRhythms}
+                people={peopleWithPhotos}
+                foundations={foundationCatalogue}
+                rhythmScores={rhythmScoreResults}
+                archivedRhythmIds={previewData.archivedRhythmIds}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
                 onSaveGoal={saveGoal}
                 onSaveCheckIn={saveGoalCheckIn}
+                onSaveGoalRhythms={saveGoalSupportingRhythms}
+                onSaveFoundationAssociations={saveFoundationAssociations}
+                onAddLinkedRhythm={(foundationId, event) => openRhythmEditor(event, undefined, {
+                  initialDraft: {
+                    ...createRhythmDraft(['finances']),
+                    primaryFoundationId: foundationId
+                  }
+                })}
+                onCreateRhythmFromGoal={(event, onFinished) => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['finances']),
+                  returnToSuggestions: onFinished
+                })}
+                onTendRhythm={openCompletion}
+                onUndoRhythm={undoTend}
+                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                onRhythmHistory={openRhythmHistory}
+                onPersonSelect={openPersonProfile}
+                onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+                onOpenCategory={categoryId => navigate(categoryId)}
                 onToday={() => navigate('today')}
               />
             )
@@ -3956,6 +4062,7 @@ function PreviewWorkspace({
                 today={currentDate}
                 personDetails={previewData.personDetails}
                 healthScores={personOverallHealthScores}
+                initialFilter={peopleInitialFilter}
                 onOpenPerson={openPersonProfile}
                 onCreatePerson={createPerson}
               />
@@ -4046,7 +4153,6 @@ function PreviewWorkspace({
           showTended={previewData.showTended}
           onShowTendedChange={setShowTendedPreference}
           initializing={!hydrated}
-          onFriendshipsChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
           onEditPerson={openPersonDetailsEditor}
           onAddRhythm={(event, personId) => openRhythmEditor(event, undefined, {
             initialDraft: { ...createRhythmDraft([]), personIds: [personId] }

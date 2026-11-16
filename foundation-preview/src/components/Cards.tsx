@@ -6,6 +6,7 @@ import { useRef } from 'react';
 import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import {
   formatMoney,
+  goalProgressPercentage,
   goalTimeline,
   latestCheckIn,
   remainingAmount,
@@ -329,88 +330,188 @@ export function CategoryHealthBadge({
 
 type GoalCardProps = {
   goal: MoneyGoal;
+  presentation?: 'summary' | 'details';
   onEdit?: () => void;
   onCheckIn?: () => void;
   onCorrectCheckIn?: (checkIn: GoalCheckIn) => void;
+  onDetails?: () => void;
+  supportingRhythmCount?: number;
+  onManageSupportingRhythms?: () => void;
 };
 
-export function GoalCard({ goal, onEdit, onCheckIn, onCorrectCheckIn }: GoalCardProps) {
+export function GoalCard({
+  goal,
+  presentation = 'details',
+  onEdit,
+  onCheckIn,
+  onCorrectCheckIn,
+  onDetails,
+  supportingRhythmCount,
+  onManageSupportingRhythms
+}: GoalCardProps) {
   const latest = latestCheckIn(goal);
   const remaining = latest ? remainingAmount(goal, latest.balanceMinor) : null;
+  const progress = latest ? goalProgressPercentage(goal, latest.balanceMinor) : null;
   return (
-    <article className="goal-card" aria-labelledby={`goal-${goal.id}`}>
+    <article
+      className={`goal-card${presentation === 'summary' ? ' goal-card--summary' : ''}`}
+      aria-labelledby={`goal-${goal.id}`}
+    >
       <div className="card-heading">
         <div>
           <p className="eyebrow">{goal.direction === 'increase' ? 'Savings goal' : 'Debt goal'} · {goal.currency}</p>
           <h3 id={`goal-${goal.id}`}>{goal.title}</h3>
         </div>
-        <span className="goal-kind">Money</span>
+        {presentation === 'summary'
+          ? <span className="goal-card__type">{goal.direction === 'increase' ? 'Savings increase' : 'Debt reduction'}</span>
+          : <span className="goal-kind">Money</span>}
       </div>
-      <dl className="goal-values">
-        <div>
-          <dt>Latest recorded balance</dt>
-          <dd>{latest ? formatMoney(latest.balanceMinor, goal.currency) : 'No check-ins yet'}</dd>
-          {latest && <dd className="goal-date-detail">Recorded {formatDate(latest.effectiveDate)}</dd>}
-        </div>
-        <div>
-          <dt>Target balance · {formatDate(goal.targetDate)}</dt>
-          <dd>{formatMoney(goal.targetBalanceMinor, goal.currency)}</dd>
-          <dd className="goal-date-detail">
-            {remaining === null
-              ? 'Record a balance to calculate the amount remaining.'
-              : remaining < 0
-                ? `${formatMoney(Math.abs(remaining), goal.currency)} beyond target`
-                : `${formatMoney(remaining, goal.currency)} remaining`}
-          </dd>
-        </div>
-      </dl>
-      <TimelineChart
-        timeline={goalTimeline(goal)}
-        valueLabel="balance"
-        formatValue={value => formatMoney(value, goal.currency)}
-      />
-      <section className="goal-check-ins" aria-label={`Balance check-ins for ${goal.title}`}>
-        <h4>Recorded check-ins</h4>
-        {goal.checkIns.length
-          ? (
-            <ul>
-              {[...goal.checkIns].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate)).map(checkIn => (
-                <li key={checkIn.id}>
-                  <span>
-                    <strong>{formatDate(checkIn.effectiveDate)} · {formatMoney(checkIn.balanceMinor, goal.currency)}</strong>
-                    {checkIn.note && <small>{checkIn.note}</small>}
-                  </span>
-                  {onCorrectCheckIn && (
-                    <button type="button" className="goal-text-button" onClick={() => onCorrectCheckIn(checkIn)}>
-                      Correct
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )
-          : <p className="goal-empty-state">No sample check-ins yet. Record an observed balance to begin.</p>}
-      </section>
-      {goal.correctionHistory.length > 0 && (
-        <section className="goal-correction-history" aria-label={`Correction history for ${goal.title}`}>
-          <h4>Correction history</h4>
-          <ul>
-            {goal.correctionHistory.map((correction, index) => (
-              <li key={`${correction.effectiveDate}-${index}`}>
-                {formatDate(correction.effectiveDate)}: previous value {formatMoney(correction.previousBalanceMinor, goal.currency)}
-                {correction.previousNote && <small>{correction.previousNote}</small>}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {(onEdit || onCheckIn) && (
-        <footer className="goal-footer">
-          {onEdit && <button type="button" className="btn mini ghost" onClick={onEdit}>Edit goal</button>}
-          {onCheckIn && <button type="button" className="btn mini" onClick={onCheckIn}>Record check-in</button>}
-        </footer>
+      {presentation === 'summary' ? (
+        <>
+          <GoalBalanceValues goal={goal} latest={latest} remaining={remaining} compact />
+          <GoalProgress goal={goal} progress={progress} />
+          {onManageSupportingRhythms && (
+            <div className="goal-card__support">
+              <button
+                type="button"
+                className="goal-text-button"
+                onClick={onManageSupportingRhythms}
+              >
+                {supportingRhythmCount
+                  ? `Supporting Rhythms · ${supportingRhythmCount}`
+                  : 'Add a supporting Rhythm'}
+              </button>
+            </div>
+          )}
+          {(onDetails || onCheckIn) && (
+            <footer className="goal-footer">
+              {onCheckIn && <button type="button" className="btn mini" onClick={onCheckIn}>Check in</button>}
+              {onDetails && (
+                <button
+                  type="button"
+                  className="btn mini ghost"
+                  aria-label={`View details for ${goal.title}`}
+                  onClick={onDetails}
+                >
+                  Details
+                </button>
+              )}
+            </footer>
+          )}
+        </>
+      ) : (
+        <>
+          <GoalBalanceValues goal={goal} latest={latest} remaining={remaining} />
+          <GoalProgress goal={goal} progress={progress} />
+          <TimelineChart
+            timeline={goalTimeline(goal)}
+            valueLabel="balance"
+            formatValue={value => formatMoney(value, goal.currency)}
+          />
+          <section className="goal-check-ins" aria-label={`Balance check-ins for ${goal.title}`}>
+            <h4>Recorded check-ins</h4>
+            {goal.checkIns.length
+              ? (
+                <ul>
+                  {[...goal.checkIns].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate)).map(checkIn => (
+                    <li key={checkIn.id}>
+                      <span>
+                        <strong>{formatDate(checkIn.effectiveDate)} · {formatMoney(checkIn.balanceMinor, goal.currency)}</strong>
+                        {checkIn.note && <small>{checkIn.note}</small>}
+                      </span>
+                      {onCorrectCheckIn && (
+                        <button type="button" className="goal-text-button" onClick={() => onCorrectCheckIn(checkIn)}>
+                          Correct
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )
+              : <p className="goal-empty-state">No sample check-ins yet. Record an observed balance to begin.</p>}
+          </section>
+          {goal.correctionHistory.length > 0 && (
+            <section className="goal-correction-history" aria-label={`Correction history for ${goal.title}`}>
+              <h4>Correction history</h4>
+              <ul>
+                {goal.correctionHistory.map((correction, index) => (
+                  <li key={`${correction.effectiveDate}-${index}`}>
+                    {formatDate(correction.effectiveDate)}: previous value {formatMoney(correction.previousBalanceMinor, goal.currency)}
+                    {correction.previousNote && <small>{correction.previousNote}</small>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {(onEdit || onCheckIn) && (
+            <footer className="goal-footer">
+              {onEdit && <button type="button" className="btn mini ghost" onClick={onEdit}>Edit goal</button>}
+              {onCheckIn && <button type="button" className="btn mini" onClick={onCheckIn}>Record check-in</button>}
+            </footer>
+          )}
+        </>
       )}
     </article>
+  );
+}
+
+function GoalBalanceValues({
+  goal,
+  latest,
+  remaining,
+  compact = false
+}: {
+  goal: MoneyGoal;
+  latest: ReturnType<typeof latestCheckIn>;
+  remaining: number | null;
+  compact?: boolean;
+}) {
+  return (
+    <dl className={`goal-values${compact ? ' goal-values--summary' : ''}`}>
+      <div>
+        <dt>{compact ? 'Current balance' : 'Latest recorded balance'}</dt>
+        <dd>{latest ? formatMoney(latest.balanceMinor, goal.currency) : compact ? 'Unavailable' : 'No check-ins yet'}</dd>
+        {latest && <dd className="goal-date-detail">Recorded {formatDate(latest.effectiveDate)}</dd>}
+      </div>
+      <div>
+        <dt>{compact ? 'Target balance' : `Target balance · ${formatDate(goal.targetDate)}`}</dt>
+        <dd>{formatMoney(goal.targetBalanceMinor, goal.currency)}</dd>
+        <dd className="goal-date-detail">
+          {remaining === null
+            ? compact
+              ? 'Remaining amount unavailable until a check-in.'
+              : 'Record a balance to calculate the amount remaining.'
+            : remaining < 0
+              ? `${formatMoney(Math.abs(remaining), goal.currency)} beyond target`
+              : `${formatMoney(remaining, goal.currency)} remaining`}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function GoalProgress({ goal, progress }: { goal: MoneyGoal; progress: number | null }) {
+  return (
+    <div className="goal-progress">
+      <div className="goal-progress__label">
+        <span>Progress</span>
+        <span>{progress === null ? 'Unavailable until a check-in' : `${progress}%`}</span>
+      </div>
+      <div
+        className="goal-progress__track"
+        {...(progress === null
+          ? { 'aria-hidden': true }
+          : {
+              role: 'progressbar',
+              'aria-label': `Progress toward ${goal.title}`,
+              'aria-valuemin': 0,
+              'aria-valuemax': 100,
+              'aria-valuenow': progress
+            })}
+      >
+        {progress !== null && <span style={{ width: `${progress}%` }} />}
+      </div>
+    </div>
   );
 }
 

@@ -166,7 +166,6 @@ function ProfileHarness({
         rhythmScores={rhythmScores}
         completedRhythms={completed ? new Set([linkedRhythm.id]) : new Set()}
         undoableRhythms={completed ? new Set([linkedRhythm.id]) : new Set()}
-        onFriendshipsChange={setFriendships}
         onEditPerson={onEditPerson}
         personDetails={initialDetails}
         personNotes={personNotes}
@@ -250,7 +249,7 @@ describe('shared person profile', () => {
     expect(screen.getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Today with Avery' })).toBeTruthy();
     expect(screen.getByText('0 in queue')).toBeTruthy();
-    expect(screen.getByText('Friend')).toBeTruthy();
+    expect(screen.getByText('Friends')).toBeTruthy();
     expect(screen.getByRole('article', { name: 'Avery and Morgan walk' })).toBeTruthy();
     expect(screen.queryByRole('article', { name: 'Jordan walk' })).toBeNull();
     expect(screen.getByText('Take a walk and talk.')).toBeTruthy();
@@ -275,7 +274,7 @@ describe('shared person profile', () => {
     const settingsButton = within(profile).getByRole('button', { name: 'Person settings' });
     const identity = profile.querySelector<HTMLElement>('.person-profile__identity')!;
     expect(settingsButton.parentElement).toBe(identity);
-    expect(within(identity).getByText('Friend')).toBeTruthy();
+    expect(screen.getByText('Friends')).toBeTruthy();
     expect(settingsButton.getAttribute('aria-label')).toBe('Person settings');
     expect(settingsButton.getAttribute('aria-haspopup')).toBe('dialog');
     const settingsIcon = settingsButton.querySelector('svg');
@@ -316,15 +315,28 @@ describe('shared person profile', () => {
     expect(screen.getByLabelText('Avery Brooks personal details').textContent).toContain('Marriage');
   });
 
-  it('shows the resolved category and only supplied date and love-language badges', () => {
+  it('shows relationship, category, connection, age, birthday countdown, and anniversary details', () => {
+    const connection = {
+      id: 'recent-connection',
+      type: 'call' as const,
+      date: '2026-10-28',
+      participantIds: ['sample-person-avery' as PersonId]
+    };
+    const friendships = setFriendCadence(
+      addOrUpdateConnection(createFriendshipData(), connection),
+      'sample-person-avery',
+      'weekly',
+      '2026-10-21'
+    );
     render(
       <ProfileHarness
         category="marriage"
+        initialFriendships={friendships}
         initialDetails={[{
           personId: 'sample-person-avery',
           relationshipLabel: 'Spouse',
           connectionStyle: 'qt',
-          birthday: { monthDay: '12-02' },
+          birthday: { monthDay: '12-02', year: 1990 },
           anniversary: { monthDay: '06-12', year: 2018 }
         }]}
         rhythms={[]}
@@ -333,8 +345,11 @@ describe('shared person profile', () => {
     expect(screen.getByText('Marriage')).toBeTruthy();
     expect(screen.getByText('Spouse')).toBeTruthy();
     expect(screen.getByLabelText('Love language: Quality Time')).toBeTruthy();
-    expect(screen.getByLabelText('Birthday: Dec 2')).toBeTruthy();
+    expect(screen.getByLabelText('Age 35')).toBeTruthy();
+    expect(screen.getByLabelText('Birthday: Dec 2, in 34d')).toBeTruthy();
     expect(screen.getByLabelText('Anniversary: Jun 12')).toBeTruthy();
+    expect(screen.getByLabelText('Last connected: Yesterday')).toBeTruthy();
+    expect(screen.getByLabelText('Connection cadence: Weekly')).toBeTruthy();
     const overallHealth = screen.getByRole('region', { name: 'Overall Health summary' });
     const overallHeader = overallHealth.querySelector('.health-score-breakdown__header');
     expect(Array.from(overallHeader!.children).map(child => child.tagName)).toEqual(['H3', 'SPAN', 'BUTTON']);
@@ -347,7 +362,7 @@ describe('shared person profile', () => {
     expect(screen.getByRole('button', { name: 'Notes (0)' })).toBeTruthy();
   });
 
-  it('expands one area measure panel inside Overall Health without changing the content tab', async () => {
+  it('keeps area scores static and opens area explanations from Overall Health Info', async () => {
     const user = userEvent.setup();
     const rhythmScores = new Map<string, RhythmScoreResult>([
       [linkedRhythm.id, scoredProfileRhythmScore(80.4, 100)]
@@ -361,67 +376,28 @@ describe('shared person profile', () => {
     expect(within(overall).queryByRole('group', { name: 'Consistency and On Track' })).toBeNull();
     expect(within(overall).getByRole('meter', { name: 'Overall Health progress score' })).toBeTruthy();
     const areaScores = within(overall).getByRole('group', { name: 'Health by area' });
-    const rhythmScoreButton = within(areaScores).getByRole('button', { name: 'Rhythms Health 85' });
-    expect(rhythmScoreButton.getAttribute('aria-expanded')).toBe('false');
-    expect(rhythmScoreButton.querySelector('.person-health-component-score__chevron')).toBeNull();
-    expect(document.getElementById(rhythmScoreButton.getAttribute('aria-controls')!)).toBeTruthy();
-    expect(within(areaScores).getByRole('button', { name: 'Connections Health unavailable' })).toBeTruthy();
-    expect(within(areaScores).getByRole('button', { name: 'Prayer Health unavailable' })).toBeTruthy();
-    expect(within(overall).queryByRole('region', { name: 'Rhythms' })).toBeNull();
-    const rhythmPanelId = rhythmScoreButton.getAttribute('aria-controls')!;
-    expect(document.getElementById(rhythmPanelId)?.hasAttribute('hidden')).toBe(true);
+    expect(areaScores.querySelectorAll('button')).toHaveLength(0);
+    for (const element of areaScores.querySelectorAll('.person-health-component-score')) {
+      expect(element.tagName).toBe('DIV');
+      expect(element.hasAttribute('aria-expanded')).toBe(false);
+      expect(element.hasAttribute('aria-controls')).toBe(false);
+    }
+    expect(within(areaScores).getByRole('meter', { name: 'Rhythms Health score' })).toBeTruthy();
+    expect(within(areaScores).getByRole('img', { name: 'Connections Health score: unavailable' })).toBeTruthy();
 
-    const tablist = within(profile).getByRole('tablist', { name: 'Avery Brooks profile' });
-    await user.click(within(tablist).getByRole('tab', { name: 'Prayer' }));
-    expect(within(tablist).getByRole('tab', { name: 'Prayer' }).getAttribute('aria-selected')).toBe('true');
-
-    const connectionsScore = within(areaScores).getByRole('button', { name: 'Connections Health unavailable' });
-    const connectionsPanelId = connectionsScore.getAttribute('aria-controls')!;
-    connectionsScore.focus();
-    await user.keyboard(' ');
-    const connectionsMeasures = within(overall).getByRole('region', { name: 'Connections' });
-    expect(connectionsScore.getAttribute('aria-expanded')).toBe('true');
-    expect(within(connectionsMeasures).getByRole('group', { name: 'Consistency and On Track' })).toBeTruthy();
-    expect(within(connectionsMeasures).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
-    expect(within(connectionsMeasures).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
-    expect(within(tablist).getByRole('tab', { name: 'Prayer' }).getAttribute('aria-selected')).toBe('true');
-
+    const overallInfo = within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' });
+    await user.click(overallInfo);
+    const overallDialog = screen.getByRole('dialog', { name: 'Avery’s Overall Health details' });
+    const dialogAreaScores = within(overallDialog).getByRole('group', { name: 'Health by area' });
+    const rhythmScoreButton = within(dialogAreaScores).getByRole('button', { name: 'Rhythms Health 85' });
+    expect(rhythmScoreButton.getAttribute('aria-haspopup')).toBe('dialog');
     await user.click(rhythmScoreButton);
-    const rhythmMeasures = within(overall).getByRole('region', { name: 'Rhythms' });
-    expect(rhythmScoreButton.getAttribute('aria-expanded')).toBe('true');
-    expect(connectionsScore.getAttribute('aria-expanded')).toBe('false');
-    expect(document.getElementById(connectionsPanelId)?.hasAttribute('hidden')).toBe(true);
-    const rhythmGaugeGroup = within(rhythmMeasures).getByRole('group', { name: 'Consistency and On Track' });
-    expect(within(rhythmGaugeGroup).getAllByRole('meter')).toHaveLength(2);
-    expect(within(rhythmMeasures).getByText('Follow-through over time')).toBeTruthy();
-    expect(within(rhythmMeasures).getByText('How caught up you are')).toBeTruthy();
-    expect(within(tablist).getByRole('tab', { name: 'Prayer' }).getAttribute('aria-selected')).toBe('true');
-
-    await user.click(rhythmScoreButton);
-    expect(rhythmScoreButton.getAttribute('aria-expanded')).toBe('false');
-    expect(document.getElementById(rhythmPanelId)?.hasAttribute('hidden')).toBe(true);
-
-    await user.click(within(areaScores).getByRole('button', { name: 'Prayer Health unavailable' }));
-    const prayerMeasures = within(overall).getByRole('region', { name: 'Prayer' });
-    expect(within(areaScores).getByRole('button', { name: 'Prayer Health unavailable' })
-      .getAttribute('aria-expanded')).toBe('true');
-    expect(connectionsScore.getAttribute('aria-expanded')).toBe('false');
-    expect(rhythmScoreButton.getAttribute('aria-expanded')).toBe('false');
-    expect(within(prayerMeasures).getByRole('group', { name: 'Consistency and On Track' })).toBeTruthy();
-    expect(within(tablist).getByRole('tab', { name: 'Prayer' }).getAttribute('aria-selected')).toBe('true');
-
-    const prayerInfo = within(prayerMeasures).getByRole('button', { name: 'Show Prayer Health details' });
-    prayerInfo.focus();
-    await user.keyboard('{Enter}');
-    const prayerDialog = screen.getByRole('dialog', { name: 'Avery’s Prayer Health details' });
-    expect(within(prayerDialog).getByRole('button', { name: 'How Prayer Health was scored' })).toBeTruthy();
-    await user.click(within(prayerDialog).getByRole('button', { name: 'Close Health details' }));
-    await waitFor(() => expect(document.activeElement).toBe(prayerInfo));
-
-    await user.click(within(tablist).getByRole('tab', { name: 'Rhythms' }));
-    expect(within(areaScores).getByRole('button', { name: 'Prayer Health unavailable' })
-      .getAttribute('aria-expanded')).toBe('true');
-    expect(within(profile).getByRole('heading', { name: 'Today with Avery' })).toBeTruthy();
+    const rhythmDialog = screen.getByRole('dialog', { name: 'Avery’s Rhythm Health details' });
+    expect(within(rhythmDialog).getByRole('button', { name: 'How Rhythm Health was scored' })).toBeTruthy();
+    await user.click(within(rhythmDialog).getByRole('button', { name: 'Close Health details' }));
+    await waitFor(() => expect(document.activeElement).toBe(rhythmScoreButton));
+    await user.click(within(overallDialog).getByRole('button', { name: 'Close Health details' }));
+    await waitFor(() => expect(document.activeElement).toBe(overallInfo));
   });
 
   it('shows the equal-area overall explanation and shared area details without mixing their scoring levels', async () => {
@@ -595,7 +571,7 @@ describe('shared person profile', () => {
     expect(within(overall).getByRole('meter', { name: 'Overall Health progress score' })
       .getAttribute('aria-valuenow')).toBe('0');
     expect(within(within(overall).getByRole('group', { name: 'Health by area' }))
-      .getByRole('button', { name: 'Rhythms Health 0' }).textContent).toContain('0');
+      .getByRole('meter', { name: 'Rhythms Health score' }).getAttribute('aria-valuenow')).toBe('0');
     expect(within(overall).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
 
     await user.click(within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' }));
@@ -637,14 +613,17 @@ describe('shared person profile', () => {
     ]);
     render(<ProfileHarness rhythms={[linkedRhythm]} rhythmScores={rhythmScores} />);
     const profile = screen.getByRole('main', { name: 'Avery Brooks' });
-    await user.click(within(profile).getByRole('button', { name: 'Rhythms Health 11' }));
-    await user.click(within(profile).getByRole('button', { name: 'Show Rhythm Health details' }));
+    await user.click(within(profile).getByRole('button', { name: 'Show Overall Health scoring explanation' }));
+    const overallDialog = screen.getByRole('dialog', { name: 'Avery’s Overall Health details' });
+    await user.click(within(overallDialog).getByRole('button', { name: 'Rhythms Health 11' }));
     const dialog = screen.getByRole('dialog', { name: 'Avery’s Rhythm Health details' });
     await user.click(within(dialog).getByRole('button', { name: 'How Rhythm Health was scored' }));
     expect(within(dialog).getByLabelText('75% times 14 approximately equals 11 points')).toBeTruthy();
     expect(dialog.querySelector('.rhythm-health-scoring-card__formula--total')?.textContent)
       .toContain('11 + 0 ≈ 11');
     expect(dialog.textContent).not.toMatch(/\d+\.\d{2,}/);
+    await user.click(within(dialog).getByRole('button', { name: 'Close Health details' }));
+    await user.click(within(overallDialog).getByRole('button', { name: 'Close Health details' }));
   });
 
   it('shows compact scored Rhythm rows, zero scores, and the empty scoring state', async () => {
@@ -664,8 +643,9 @@ describe('shared person profile', () => {
     ]);
     render(<ProfileHarness rhythms={[first, second]} rhythmScores={rhythmScores} />);
     const profile = screen.getByRole('main', { name: 'Avery Brooks' });
-    await user.click(within(profile).getByRole('button', { name: 'Rhythms Health 31' }));
-    await user.click(within(profile).getByRole('button', { name: 'Show Rhythm Health details' }));
+    await user.click(within(profile).getByRole('button', { name: 'Show Overall Health scoring explanation' }));
+    const overallDialog = screen.getByRole('dialog', { name: 'Avery’s Overall Health details' });
+    await user.click(within(overallDialog).getByRole('button', { name: 'Rhythms Health 31' }));
     const dialog = screen.getByRole('dialog', { name: 'Avery’s Rhythm Health details' });
     await user.click(within(dialog).getByRole('button', { name: 'How Rhythm Health was scored' }));
     const evidence = within(dialog).getByRole('region', { name: 'Scored Rhythms' });
@@ -686,12 +666,14 @@ describe('shared person profile', () => {
       .toContain('On Track average50');
 
     await user.click(within(dialog).getByRole('button', { name: 'Close Health details' }));
+    await user.click(within(overallDialog).getByRole('button', { name: 'Close Health details' }));
     cleanup();
     const emptyScores = new Map<string, RhythmScoreResult>([[linkedRhythm.id, score]]);
     render(<ProfileHarness rhythms={[linkedRhythm]} rhythmScores={emptyScores} />);
     const emptyProfile = screen.getByRole('main', { name: 'Avery Brooks' });
-    await user.click(within(emptyProfile).getByRole('button', { name: 'Rhythms Health unavailable' }));
-    await user.click(within(emptyProfile).getByRole('button', { name: 'Show Rhythm Health details' }));
+    await user.click(within(emptyProfile).getByRole('button', { name: 'Show Overall Health scoring explanation' }));
+    const emptyOverallDialog = screen.getByRole('dialog', { name: 'Avery’s Overall Health details' });
+    await user.click(within(emptyOverallDialog).getByRole('button', { name: 'Rhythms Health unavailable' }));
     const emptyDialog = screen.getByRole('dialog', { name: 'Avery’s Rhythm Health details' });
     await user.click(within(emptyDialog).getByRole('button', { name: 'How Rhythm Health was scored' }));
     const emptyEvidence = within(emptyDialog).getByRole('region', { name: 'Scored Rhythms' });
@@ -732,16 +714,17 @@ describe('shared person profile', () => {
     const queueHeading = screen.getByRole('heading', { name: 'Today with Avery' });
     const rhythmCard = screen.getByRole('article', { name: 'Avery and Morgan walk' });
     expect(Boolean(queueHeading.compareDocumentPosition(rhythmCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(screen.getByRole('button', { name: 'Rhythms Health unavailable' })
-      .getAttribute('aria-expanded')).toBe('false');
+    const areaScores = screen.getByRole('group', { name: 'Health by area' });
+    expect(areaScores.querySelectorAll('button')).toHaveLength(0);
   });
 
-  it('exposes the shared person-owned cadence control on an uncategorized profile', async () => {
+  it('keeps connection cadence out of the Connections panel', async () => {
     const user = userEvent.setup();
     render(<ProfileHarness personId="sample-person-morgan" />);
     const profile = screen.getByRole('main', { name: 'Morgan Reed' });
     await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
-    expect(within(profile).getByRole('combobox', { name: 'Connection cadence: No cadence' })).toBeTruthy();
+    expect(within(profile).queryByRole('combobox', { name: /Connection cadence/ })).toBeNull();
+    expect(within(profile).getByRole('button', { name: 'Person settings' })).toBeTruthy();
   });
 
   it('retains shared Undo behavior for a completed person-linked Rhythm', async () => {
@@ -762,19 +745,21 @@ describe('shared person profile', () => {
     expect(screen.getByText('No Rhythms yet.')).toBeTruthy();
   });
 
-  it('opens connection drafts with the person and selected type, and Cancel stores no event', async () => {
+  it('opens a full-screen connection draft from Add and Cancel stores no event', async () => {
     const user = userEvent.setup();
     render(<ProfileHarness rhythms={[]} />);
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
 
-    const callOpener = screen.getByRole('button', { name: 'Call Avery Brooks' });
-    await user.click(callOpener);
+    const addOpener = screen.getByRole('button', { name: '+ Add' });
+    await user.click(addOpener);
     const editor = screen.getByRole('dialog', { name: 'Log connection' });
-    expect((within(editor).getByLabelText('Connection type') as HTMLSelectElement).value).toBe('call');
+    expect(editor.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(within(editor).getByRole('button', { name: 'Close connection editor' })).toBeTruthy();
+    expect(within(editor).getByRole('combobox', { name: 'Connection type: Text' })).toBeTruthy();
     expect((within(editor).getAllByRole('checkbox') as HTMLInputElement[]).map(input => input.checked))
       .toEqual([true, false, false]);
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
-    expect(document.activeElement).toBe(callOpener);
+    expect(document.activeElement).toBe(addOpener);
     expect(screen.getByText('No connections yet.')).toBeTruthy();
     expect(JSON.parse(screen.getByTestId('saved-connections').textContent ?? '{}').connections).toEqual([]);
   });
@@ -798,7 +783,6 @@ describe('shared person profile', () => {
             rhythmScores={new Map()}
             completedRhythms={new Set()}
             undoableRhythms={new Set()}
-            onFriendshipsChange={setFriendships}
             onAddRhythm={vi.fn()}
             onEditRhythm={vi.fn()}
             onRhythmHistory={vi.fn()}
@@ -818,19 +802,18 @@ describe('shared person profile', () => {
 
     render(<StatefulProfileHarness />);
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
-    await user.click(screen.getByRole('button', { name: 'Text Avery Brooks' }));
+    await user.click(screen.getByRole('button', { name: '+ Add' }));
     const editor = screen.getByRole('dialog', { name: 'Log connection' });
+    expect(editor.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(within(editor).getByRole('combobox', { name: 'Connection type: Text' })).toBeTruthy();
     await user.click(within(editor).getAllByRole('checkbox')[1]!);
     await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
 
     const stored = JSON.parse(screen.getByTestId('connection-state').textContent ?? '{}') as FriendshipData;
     expect(stored.connections).toHaveLength(1);
     expect(stored.connections[0]?.participantIds).toEqual(['sample-person-avery', 'sample-person-morgan']);
-    expect(screen.getByRole('button', { name: 'Text Avery Brooks' })).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'Connection cadence: No cadence' })).toBeTruthy();
-
-    await user.click(screen.getByRole('combobox', { name: 'Connection cadence: No cadence' }));
-    await user.click(within(screen.getByRole('listbox', { name: 'Connection cadence' })).getByRole('option', { name: 'Weekly' }));
+    expect(screen.getByRole('button', { name: '+ Add' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: /Connection cadence/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     const edit = screen.getByRole('dialog', { name: 'Edit connection' });
     await user.click(within(edit).getAllByRole('checkbox')[0]!);
@@ -839,8 +822,7 @@ describe('shared person profile', () => {
     const edited = JSON.parse(screen.getByTestId('connection-state').textContent ?? '{}') as FriendshipData;
     expect(edited.connections).toHaveLength(1);
     expect(edited.connections[0]?.participantIds).toEqual(['sample-person-morgan']);
-    expect(edited.cadenceSettings).toHaveLength(1);
-    expect(edited.cadenceSettings[0]?.cadence).toBe('weekly');
+    expect(edited.cadenceSettings).toHaveLength(0);
   });
 
   it('keeps archive and restore in the shared scoped Rhythm manager', async () => {
