@@ -279,6 +279,7 @@ describe('account-isolated Preview storage', () => {
     expect(savedA.kind).toBe('saved');
     expect(savedB.kind).toBe('saved');
     if (savedA.kind !== 'saved' || savedB.kind !== 'saved') return;
+    const savedAccountARaw = savedA.raw;
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, 'unbound-data');
     const savedBRaw = scopeB.storage.getItem(PREVIEW_STORAGE_KEY);
 
@@ -297,9 +298,12 @@ describe('account-isolated Preview storage', () => {
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
     await user.click(screen.getByRole('button', { name: /^Settings$/ }));
     await user.click(screen.getByRole('button', { name: 'Backup & recovery' }));
-    await user.click(screen.getByRole('button', { name: /Export backup/ }));
+    await user.click(screen.getByRole('button', { name: /Download exact saved source/ }));
     expect(downloadBlobs).toHaveLength(1);
-    const exported = parsePreviewBackup(await downloadBlobs[0]!.text(), '2026-11-01');
+    expect(await downloadBlobs[0]!.text()).toBe(savedAccountARaw);
+    await user.click(screen.getByRole('button', { name: /Download current in-memory state/ }));
+    expect(downloadBlobs).toHaveLength(2);
+    const exported = parsePreviewBackup(await downloadBlobs[1]!.text(), '2026-11-01');
     expect(exported.valid).toBe(true);
     if (exported.valid) expect(exported.envelope.data.people[0]?.displayName).toBe('Account A');
 
@@ -310,6 +314,8 @@ describe('account-isolated Preview storage', () => {
     );
     const importDialog = await screen.findByRole('dialog', { name: 'Replace data on this device?' });
     await user.click(within(importDialog).getByRole('button', { name: 'Replace with backup' }));
+    await waitFor(() => expect(downloadBlobs).toHaveLength(3));
+    expect(await downloadBlobs[2]!.text()).toBe(savedAccountARaw);
     await waitForScopedValue(scopeA.storage, 'Imported A');
     expect(scopeB.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedBRaw);
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe('unbound-data');

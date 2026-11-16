@@ -2996,6 +2996,88 @@ describe('synthetic preview storage adapter and envelope', () => {
       });
   });
 
+  it('imports a validated duplicate over an invalid source only after preserving the exact source and checking its revision', () => {
+    const invalidData = createSamplePreviewData();
+    const rhythmId = 'user-rhythm-84000000-0000-4000-8000-000000000022';
+    const completionId = 'workout-completion-missing-synthetic';
+    const workoutDate = '2026-10-19';
+    invalidData.savedRhythms = [{
+      id: rhythmId,
+      title: 'Synthetic Lower Body',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: ['health'],
+      schedule: { frequency: 'daily' },
+      primaryFoundationId: null,
+      secondaryFoundationIds: [],
+      healthLogCapability: 'workout'
+    }];
+    invalidData.rhythmHistoryIds = [rhythmId];
+    invalidData.completedRhythmIds = [];
+    invalidData.activeRhythmCompletions = [];
+    invalidData.datedRhythmCompletions = [];
+    invalidData.strength.workouts = [{
+      id: 'strength-log-synthetic-missing-completion',
+      date: workoutDate,
+      muscleIds: ['chest'],
+      rhythmId,
+      rhythmOccurrence: workoutDate,
+      completionId
+    }];
+    const originalRaw = JSON.stringify(createPreviewEnvelope(invalidData), null, 2);
+    const originalValidation = parsePreviewBackup(originalRaw, '2026-10-21');
+    expect(originalValidation.valid).toBe(false);
+    if (originalValidation.valid) return;
+    expect(originalValidation.diagnostic?.code).toBe('preview.strength.completion-link.invalid');
+
+    const importedData = structuredClone(invalidData);
+    const originalWorkout = importedData.strength.workouts[0];
+    if (!originalWorkout) throw new Error('Synthetic workout fixture is missing.');
+    const {
+      rhythmId: _rhythmId,
+      rhythmOccurrence: _rhythmOccurrence,
+      completionId: _completionId,
+      ...preservedWorkout
+    } = originalWorkout;
+    void _rhythmId;
+    void _rhythmOccurrence;
+    void _completionId;
+    importedData.strength.workouts = [preservedWorkout];
+    const repairedRaw = JSON.stringify(createPreviewEnvelope(importedData), null, 2);
+    const repairedValidation = parsePreviewBackup(repairedRaw, '2026-10-21');
+    expect(repairedValidation.valid).toBe(true);
+    if (!repairedValidation.valid) return;
+    const validatedImport = repairedValidation.envelope.data;
+
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: originalRaw });
+    const saved = writePreview(storage, validatedImport, originalRaw, {
+      allowUnrecoverableReplacement: true,
+      currentDate: '2026-10-21',
+      operation: 'import',
+      importSourceRaw: repairedRaw
+    });
+
+    expect(saved).toMatchObject({ kind: 'saved' });
+    expect(loadPreview(storage, '2026-10-21')).toMatchObject({ kind: 'loaded' });
+    expect(loadPreviewImportRecovery(storage)).toMatchObject({
+      kind: 'loaded',
+      latestRaw: originalRaw,
+      latestSourceRaw: repairedRaw
+    });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(saved.kind === 'saved' ? saved.raw : originalRaw);
+
+    const staleWrite = writePreview(storage, validatedImport, originalRaw, {
+      allowUnrecoverableReplacement: true,
+      currentDate: '2026-10-21',
+      operation: 'import',
+      importSourceRaw: repairedRaw
+    });
+    expect(staleWrite).toEqual({ kind: 'conflict', actualRaw: saved.kind === 'saved' ? saved.raw : null });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(saved.kind === 'saved' ? saved.raw : originalRaw);
+  });
+
   it('archives exact local and source JSON before import and rolls back recovery metadata on save failure', () => {
     const previous = createSamplePreviewData();
     const imported = createSamplePreviewData();
