@@ -245,7 +245,16 @@ describe('manual Preview account backup and restore', () => {
   it('shows the privacy-safe relationship diagnostic without reading or writing storage or account', async () => {
     const user = userEvent.setup();
     const data = fitnessData('Synthetic invalid check');
+    data.strength.workouts[0]!.workoutName = 'Synthetic flagged workout';
+    data.strength.workouts[0]!.notes = 'Do not display this workout note.';
     data.strength.workouts[0]!.completionId = 'synthetic-missing-completion';
+    data.strength.workouts.push({
+      id: 'synthetic-unrelated-workout',
+      date: '2026-11-03',
+      muscleIds: ['back'],
+      workoutName: 'Synthetic unrelated workout',
+      notes: 'Do not display unrelated details.'
+    });
     const originalData = JSON.stringify(data);
     const local = accountStorage(data);
     const api: PreviewAccountBackupApi = {
@@ -261,11 +270,43 @@ describe('manual Preview account backup and restore', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('preview.strength.completion-link.invalid');
     expect(alert.textContent).toContain('data.strength.workouts[*].completionId');
-    expect(alert.textContent).toContain('1 total, 0 linked, 0 unlinked, 1 invalid');
+    expect(alert.textContent).toContain('2 total, 0 linked, 1 unlinked, 1 invalid');
     expect(alert.textContent).toContain('missing completion 1');
     expect(alert.textContent).not.toContain('Synthetic invalid check');
     expect(alert.textContent).not.toContain('synthetic-missing-completion');
+    const inspection = await screen.findByText(/Workout: Synthetic flagged workout/);
+    expect(inspection.textContent).toContain(`Date: ${currentDate}`);
+    expect(inspection.textContent).toContain('Matching completion for the same Rhythm/date: yes');
+    expect(inspection.textContent).not.toContain('Do not display');
+    expect(inspection.textContent).not.toContain('Synthetic unrelated workout');
     expect(JSON.stringify(data)).toBe(originalData);
+    expect(api.read).not.toHaveBeenCalled();
+    expect(api.save).not.toHaveBeenCalled();
+    expect(getItem).not.toHaveBeenCalled();
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it('reports when no completion exists for the missing workout Rhythm/date', async () => {
+    const user = userEvent.setup();
+    const data = fitnessData('Synthetic no matching completion');
+    data.strength.workouts[0]!.workoutName = 'Synthetic unmatched workout';
+    data.strength.workouts[0]!.completionId = 'synthetic-missing-completion';
+    data.datedRhythmCompletions = [];
+    data.activeRhythmCompletions = [];
+    const local = accountStorage(data);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save: vi.fn(async () => 1)
+    };
+
+    renderControls(api, local.storage, data, local.raw, undefined, () => true, accountA, true, false);
+    const getItem = vi.spyOn(local.storage, 'getItem');
+    const setItem = vi.spyOn(local.storage, 'setItem');
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+
+    const inspection = await screen.findByText(/Workout: Synthetic unmatched workout/);
+    expect(inspection.textContent).toContain(`Date: ${currentDate}`);
+    expect(inspection.textContent).toContain('Matching completion for the same Rhythm/date: no');
     expect(api.read).not.toHaveBeenCalled();
     expect(api.save).not.toHaveBeenCalled();
     expect(getItem).not.toHaveBeenCalled();

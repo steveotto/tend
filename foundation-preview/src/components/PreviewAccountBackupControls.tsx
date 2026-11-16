@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PreviewData, PreviewEnvelope } from '../domain/preview-state.ts';
+import type {
+  PreviewData,
+  PreviewEnvelope,
+  PreviewValidationDiagnostic
+} from '../domain/preview-state.ts';
 import {
   createValidatedPreviewAccountDocument,
   PreviewAccountBackupError,
@@ -61,6 +65,38 @@ type AccountBackupStatus =
   | { kind: 'checking' }
   | VerifiedAccountStatus
   | { kind: 'unavailable'; message: string };
+
+type MissingCompletionInspection = {
+  workoutName: string;
+  date: string;
+  matchingCompletionExists: boolean;
+};
+
+function inspectSingleMissingCompletion(
+  data: PreviewData,
+  diagnostic: PreviewValidationDiagnostic | undefined
+): MissingCompletionInspection | null {
+  const counts = diagnostic?.strengthCompletionLinks;
+  if (!counts || counts.invalid !== 1 || counts.missingCompletion !== 1
+    || counts.incompleteLink !== 0 || counts.missingRhythm !== 0 || counts.nonHealthRhythm !== 0
+    || counts.rhythmMismatch !== 0 || counts.dateMismatch !== 0
+    || counts.repeatedCompletion !== 0 || counts.archivedRhythm !== 0) return null;
+
+  const targets = data.strength.workouts.filter(workout =>
+    Boolean(workout.rhythmId && workout.completionId)
+    && !data.datedRhythmCompletions.some(completion => completion.id === workout.completionId)
+  );
+  if (targets.length !== 1) return null;
+  const target = targets[0]!;
+  const savedWorkout = data.strength.savedWorkouts.find(item => item.id === target.savedWorkoutId);
+  return {
+    workoutName: target.workoutName?.trim() || savedWorkout?.name || 'Unnamed workout',
+    date: target.date,
+    matchingCompletionExists: data.datedRhythmCompletions.some(completion =>
+      completion.rhythmId === target.rhythmId && completion.effectiveDate === target.date
+    )
+  };
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'The account backup request failed. No data was changed.';
@@ -158,6 +194,8 @@ export function PreviewAccountBackupControls({
   const [activeOperation, setActiveOperation] = useState<'backup' | 'restore' | 'download' | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [missingCompletionInspection, setMissingCompletionInspection] =
+    useState<MissingCompletionInspection | null>(null);
   const [backupStatus, setBackupStatus] = useState<AccountBackupStatus>(
     api === null
       ? { kind: 'unavailable', message: 'Account backup is unavailable in this Preview session.' }
@@ -182,10 +220,15 @@ export function PreviewAccountBackupControls({
   function checkDeviceData() {
     setMessage('');
     setError('');
+    setMissingCompletionInspection(null);
     try {
       createValidatedPreviewAccountDocument(data, currentDate);
       setMessage('This device’s data passed backup validation. No storage or account data was changed.');
     } catch (validationError) {
+      if (validationError instanceof PreviewAccountBackupError
+        && validationError.diagnostic?.code === 'preview.strength.completion-link.invalid') {
+        setMissingCompletionInspection(inspectSingleMissingCompletion(data, validationError.diagnostic));
+      }
       setError(validationError instanceof PreviewAccountBackupError
         ? validationError.message
         : 'This device’s data could not be validated. No storage or account data was changed.');
@@ -617,6 +660,13 @@ export function PreviewAccountBackupControls({
             )}
             {message && <p className="preview-account-backup__message" role="status">{message}</p>}
             {error && <p className="preview-account-backup__error" role="alert">{error}</p>}
+            {missingCompletionInspection && (
+              <p className="preview-account-backup__status" role="status">
+                Workout: {missingCompletionInspection.workoutName}. Date: {missingCompletionInspection.date}.
+                {' '}Matching completion for the same Rhythm/date:{' '}
+                {missingCompletionInspection.matchingCompletionExists ? 'yes' : 'no'}.
+              </p>
+            )}
             <details className="preview-account-backup__technical">
               <summary>Technical details</summary>
               <p
