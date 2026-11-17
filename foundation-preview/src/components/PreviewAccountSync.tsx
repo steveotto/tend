@@ -11,6 +11,7 @@ import {
 import type {
   PreviewAccountBackupApi,
   PreviewAccountBackupRecord,
+  PreviewAccountRecoveryArchive,
   ValidatedPreviewAccountBackup
 } from '../storage/preview-account-backup.ts';
 import {
@@ -57,7 +58,7 @@ type ConflictResolutionProgress = {
 
 type ConflictReadOnlyCheckReport = {
   phase: 'account-read' | 'identity-change' | 'revision-conflict' | 'recovery-archive' | 'unexpected';
-  errorCode: 'none' | 'request' | 'invalid' | 'stale' | 'unknown' | 'storage-unavailable' | 'archive-invalid' | 'archive-mismatch' | 'unexpected';
+  errorCode: 'none' | 'request' | 'invalid' | 'stale' | 'recovery-conflict' | 'unknown' | 'storage-unavailable' | 'archive-invalid' | 'archive-mismatch' | 'unexpected';
   revisionMatch: 'match' | 'mismatch' | 'not-checked';
   archiveMatch: 'match' | 'mismatch' | 'missing' | 'invalid' | 'unavailable' | 'not-checked';
 };
@@ -80,7 +81,11 @@ type RecoveryArchiveFailureCode =
   | 'archive-readback-missing'
   | 'archive-readback-mismatch'
   | 'archive-serialization-failed'
-  | 'archive-invalid';
+  | 'archive-invalid'
+  | 'account-archive-write-failed'
+  | 'account-archive-readback-failed'
+  | 'account-archive-readback-missing'
+  | 'account-archive-readback-mismatch';
 
 class RecoveryArchivePersistenceError extends Error {
   constructor(readonly code: RecoveryArchiveFailureCode) {
@@ -168,6 +173,14 @@ function conflictResolutionFailureMessage(
         return 'The recovery archive could not be serialized (archive-serialization-failed). No archive or account write was attempted.';
       case 'archive-invalid':
         return 'The existing recovery archive is invalid (archive-invalid). It was left unchanged; no account write was attempted.';
+      case 'account-archive-write-failed':
+        return 'The previous account copy could not be preserved remotely (account-archive-write-failed). No account replacement was attempted; the archive may have been created.';
+      case 'account-archive-readback-failed':
+        return 'The remote recovery archive could not be read back (account-archive-readback-failed). No account replacement was attempted; do not clear any archive.';
+      case 'account-archive-readback-missing':
+        return 'The remote recovery archive was missing after preservation (account-archive-readback-missing). No account replacement was attempted.';
+      case 'account-archive-readback-mismatch':
+        return 'The remote recovery archive did not match the reviewed account copy (account-archive-readback-mismatch). No account replacement was attempted; the archive was left unchanged.';
     }
   }
   if (error instanceof Error && safeMessages.has(error.message)) return error.message;
@@ -261,6 +274,38 @@ function compareAccountRecoveryArchive(
     };
     const existingValidated = validatePreviewAccountBackup(existingRecord, currentDate);
     return previewEnvelopesEqual(existingValidated.envelope, validated.envelope) ? 'match' : 'mismatch';
+  } catch {
+    return 'invalid';
+  }
+}
+
+function timestampsMatch(left: string | null, right: string): boolean {
+  if (left === null) return false;
+  if (left === right) return true;
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  return Number.isFinite(leftTime) && leftTime === rightTime;
+}
+
+function compareRemoteAccountRecoveryArchive(
+  archive: PreviewAccountRecoveryArchive | null,
+  latestCloud: PreviewAccountBackupRecord,
+  validated: ValidatedPreviewAccountBackup,
+  currentDate: string
+): ConflictReadOnlyCheckReport['archiveMatch'] {
+  if (archive === null) return 'missing';
+  if (archive.revision !== latestCloud.revision
+    || archive.schemaVersion !== latestCloud.schemaVersion
+    || !timestampsMatch(latestCloud.updatedAt, archive.updatedAt)) return 'mismatch';
+  if (!Number.isFinite(Date.parse(archive.preservedAt))) return 'invalid';
+  try {
+    const archived = validatePreviewAccountBackup({
+      document: archive.document,
+      schemaVersion: archive.schemaVersion,
+      revision: archive.revision,
+      updatedAt: archive.updatedAt
+    }, currentDate);
+    return previewEnvelopesEqual(archived.envelope, validated.envelope) ? 'match' : 'mismatch';
   } catch {
     return 'invalid';
   }
@@ -1064,13 +1109,34 @@ export function PreviewAccountSync({
         });
         return;
       }
-      archiveMatch = compareAccountRecoveryArchive(
-        priorRecovery,
-        current.accountId,
-        latestCloud,
-        validated,
-        current.currentDate
-      );
+      if (priorRecovery === null && currentApi.readRecovery) {
+        let remoteRecovery: PreviewAccountRecoveryArchive | null;
+        try {
+          remoteRecovery = await currentApi.readRecovery(latestCloud.revision);
+        } catch (error) {
+          setConflictReadOnlyCheckReport({
+            phase: 'recovery-archive',
+            errorCode: accountReadErrorCode(error),
+            revisionMatch,
+            archiveMatch: 'unavailable'
+          });
+          return;
+        }
+        archiveMatch = compareRemoteAccountRecoveryArchive(
+          remoteRecovery,
+          latestCloud,
+          validated,
+          current.currentDate
+        );
+      } else {
+        archiveMatch = compareAccountRecoveryArchive(
+          priorRecovery,
+          current.accountId,
+          latestCloud,
+          validated,
+          current.currentDate
+        );
+      }
       setConflictReadOnlyCheckReport({
         phase: 'recovery-archive',
         errorCode: archiveMatch === 'invalid'
@@ -1219,14 +1285,6 @@ export function PreviewAccountSync({
       } else {
         phase = 'recovery-archive';
         setConflictResolutionProgress({ choice, phase: 'preserving' });
-        const cloudRecovery = {
-          accountId,
-          revision: latestCloud.revision,
-          document: latestCloud.document,
-          updatedAt: latestCloud.updatedAt,
-          preservedAt: new Date().toISOString()
-        };
-        const recoveryRaw = serializeRecoveryArchive(cloudRecovery);
         const priorRecovery = readRecoveryArchive(storage, syncCloudRecoveryKey);
         if (priorRecovery !== null) {
           const archiveMatch = compareAccountRecoveryArchive(
@@ -1243,12 +1301,89 @@ export function PreviewAccountSync({
             throw new Error('A different account recovery copy already exists. It was left unchanged; no account write was attempted.');
           }
         }
-        const savedRecovery = priorRecovery === null
-          ? writeAndVerifyMissingRecoveryArchive(storage, syncCloudRecoveryKey, recoveryRaw)
-          : readRecoveryArchive(storage, syncCloudRecoveryKey, true);
-        if (savedRecovery === null) throw new RecoveryArchivePersistenceError('archive-readback-missing');
-        if (priorRecovery !== null && savedRecovery !== priorRecovery) {
-          throw new RecoveryArchivePersistenceError('archive-readback-mismatch');
+        let savedRecovery: string;
+        if (priorRecovery !== null) {
+          const verifiedRecovery = readRecoveryArchive(storage, syncCloudRecoveryKey, true);
+          if (verifiedRecovery === null) {
+            throw new RecoveryArchivePersistenceError('archive-readback-missing');
+          }
+          if (verifiedRecovery !== priorRecovery) {
+            throw new RecoveryArchivePersistenceError('archive-readback-mismatch');
+          }
+          savedRecovery = verifiedRecovery;
+        } else if (currentApi.preserveRecovery && currentApi.readRecovery) {
+          let archiveWriteFailed = false;
+          try {
+            await currentApi.preserveRecovery(latestCloud.revision);
+          } catch (error) {
+            if (error instanceof PreviewAccountBackupError && error.kind === 'stale') throw error;
+            archiveWriteFailed = true;
+          }
+          let remoteRecovery: PreviewAccountRecoveryArchive | null;
+          try {
+            remoteRecovery = await currentApi.readRecovery(latestCloud.revision);
+          } catch {
+            throw new RecoveryArchivePersistenceError('account-archive-readback-failed');
+          }
+          if (remoteRecovery === null) {
+            throw new RecoveryArchivePersistenceError(
+              archiveWriteFailed
+                ? 'account-archive-write-failed'
+                : 'account-archive-readback-missing'
+            );
+          }
+          const archiveMatch = compareRemoteAccountRecoveryArchive(
+            remoteRecovery,
+            latestCloud,
+            validated,
+            latest.current.currentDate
+          );
+          if (archiveMatch !== 'match') {
+            throw new RecoveryArchivePersistenceError('account-archive-readback-mismatch');
+          }
+          savedRecovery = serializeRecoveryArchive({
+            accountId,
+            revision: remoteRecovery.revision,
+            document: remoteRecovery.document,
+            updatedAt: remoteRecovery.updatedAt,
+            preservedAt: remoteRecovery.preservedAt
+          });
+        } else {
+          const cloudRecovery = {
+            accountId,
+            revision: latestCloud.revision,
+            document: latestCloud.document,
+            updatedAt: latestCloud.updatedAt,
+            preservedAt: new Date().toISOString()
+          };
+          const recoveryRaw = serializeRecoveryArchive(cloudRecovery);
+          try {
+            savedRecovery = writeAndVerifyMissingRecoveryArchive(storage, syncCloudRecoveryKey, recoveryRaw);
+          } catch (error) {
+            if (error instanceof RecoveryArchivePersistenceError) throw error;
+            throw new RecoveryArchivePersistenceError('account-archive-write-failed');
+          }
+        }
+        if (!latest.current.isIdentityCurrent()) {
+          setStatus({
+            kind: 'attention',
+            message: 'The signed-in account changed during recovery preservation. The archive was kept, but no account replacement was attempted.'
+          });
+          return;
+        }
+        const latestLocal = readLocalSnapshot(
+          latest.current.data,
+          latest.current.localRaw,
+          latest.current.currentDate
+        );
+        if (latestLocal.raw !== pending.localRaw) {
+          setStatus({
+            kind: 'attention',
+            message: 'This device changed while its recovery copy was being preserved. The account was not replaced; review the current versions.'
+          });
+          setConflictState(null);
+          controlRef.current?.refresh();
+          return;
         }
         setCloudRecoveryRaw(savedRecovery);
         setConflictResolutionProgress({ choice, phase: 'saving' });
@@ -1310,6 +1445,54 @@ export function PreviewAccountSync({
         setSyncMessage('This device’s data is now saved to your account. The previous account version is recoverable.');
       }
     } catch (error) {
+      if (phase === 'recovery-archive'
+        && error instanceof PreviewAccountBackupError
+        && error.kind === 'stale') {
+        try {
+          const refreshedCloud = await currentApi.read();
+          if (!latest.current.isIdentityCurrent()) {
+            setConflictState(null);
+            setStatus({
+              kind: 'attention',
+              message: 'The signed-in account changed during recovery preservation. No account replacement was attempted; any recovery archive remains available.'
+            });
+            return;
+          }
+          if (refreshedCloud && refreshedCloud.revision !== pending.revision) {
+            const refreshed = validatePreviewAccountBackup(refreshedCloud, latest.current.currentDate);
+            const refreshedLocal = readLocalSnapshot(
+              latest.current.data,
+              latest.current.localRaw,
+              latest.current.currentDate
+            );
+            setConflictState({
+              localRaw: refreshedLocal.raw,
+              localEnvelope: refreshedLocal.envelope,
+              cloud: refreshed,
+              revision: refreshedCloud.revision,
+              updatedAt: refreshedCloud.updatedAt
+            });
+            setStatus({
+              kind: 'attention',
+              message: 'The account copy changed while its recovery archive was being created. The comparison is refreshed; choose again against the current revision. No replacement was attempted.'
+            });
+            return;
+          }
+          if (!refreshedCloud) {
+            setStatus({
+              kind: 'attention',
+              message: 'The account backup disappeared during recovery preservation. No replacement was attempted; refresh the comparison before choosing again.'
+            });
+            return;
+          }
+        } catch {
+          setStatus({
+            kind: 'attention',
+            message: 'The account revision changed during recovery preservation, but the latest copy could not be refreshed. No replacement was attempted; any recovery archive remains available.'
+          });
+          return;
+        }
+      }
       setStatus({
         kind: 'attention',
         message: conflictResolutionFailureMessage(error, phase, accountSaveStarted, accountSaveConfirmed)

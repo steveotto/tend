@@ -10,7 +10,10 @@ import {
   previewEnvelopesEqual,
   validatePreviewAccountBackup
 } from '../storage/preview-account-backup.ts';
-import type { PreviewAccountBackupApi } from '../storage/preview-account-backup.ts';
+import type {
+  PreviewAccountBackupApi,
+  PreviewAccountRecoveryArchive
+} from '../storage/preview-account-backup.ts';
 import {
   PREVIEW_STORAGE_KEY,
   preservePreviewBeforeCloudRestore,
@@ -206,6 +209,20 @@ function formatBackupDate(updatedAt: string | null): string {
   }).format(date);
 }
 
+function recoveryRevision(raw: string | null): number | null {
+  if (raw === null) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+    const revision = (value as Record<string, unknown>).revision;
+    return Number.isSafeInteger(revision) && (revision as number) > 0
+      ? revision as number
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function downloadRecovery(
   raw: string,
   filename = 'tend-preview-before-account-restore.json'
@@ -296,6 +313,9 @@ export function PreviewAccountBackupControls({
 }: PreviewAccountBackupControlsProps) {
   const [pending, setPending] = useState<PendingConfirmation | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [remoteRecoveryArchives, setRemoteRecoveryArchives] = useState<PreviewAccountRecoveryArchive[]>([]);
+  const [remoteRecoveryLoading, setRemoteRecoveryLoading] = useState(false);
+  const [remoteRecoveryError, setRemoteRecoveryError] = useState('');
   const [busy, setBusy] = useState(false);
   const [activeOperation, setActiveOperation] =
     useState<'backup' | 'restore' | 'download' | 'repair' | null>(null);
@@ -315,6 +335,9 @@ export function PreviewAccountBackupControls({
   );
   const operationInProgress = useRef(false);
   const statusRequestId = useRef(0);
+  const remoteRecoveryRequestId = useRef(0);
+  const activeAccountId = useRef(accountId);
+  activeAccountId.current = accountId;
   const identityCurrentRef = useRef(isIdentityCurrent);
   const exclusiveHeld = useRef(false);
   const repairSyncBaseline = useRef<PreviewAccountSyncState | null>(null);
@@ -322,6 +345,13 @@ export function PreviewAccountBackupControls({
   identityCurrentRef.current = isIdentityCurrent;
   const exclusiveChangeRef = useRef(onExclusiveChange);
   exclusiveChangeRef.current = onExclusiveChange;
+
+  useEffect(() => {
+    remoteRecoveryRequestId.current += 1;
+    setRemoteRecoveryArchives([]);
+    setRemoteRecoveryError('');
+    setRemoteRecoveryLoading(false);
+  }, [accountId]);
 
   function setExclusiveLocked(locked: boolean) {
     if (exclusiveHeld.current === locked) return;
@@ -805,6 +835,72 @@ export function PreviewAccountBackupControls({
     setAdvancedOpen(false);
   }
 
+  function openRecovery() {
+    setAdvancedOpen(true);
+    setRemoteRecoveryArchives([]);
+    setRemoteRecoveryError('');
+    if (!api?.listRecoveries) return;
+    const requestId = ++remoteRecoveryRequestId.current;
+    const requestedAccountId = accountId;
+    const isRequestCurrent = () => {
+      if (requestId !== remoteRecoveryRequestId.current
+        || activeAccountId.current !== requestedAccountId) return false;
+      return isIdentityCurrent();
+    };
+    let identityCurrent = false;
+    try {
+      identityCurrent = isIdentityCurrent();
+    } catch {
+      setRemoteRecoveryError('The signed-in account could not be verified. No recovery archive was changed.');
+      return;
+    }
+    if (!identityCurrent) {
+      setRemoteRecoveryError('The signed-in account changed. No recovery archive was changed.');
+      return;
+    }
+    setRemoteRecoveryLoading(true);
+    void api.listRecoveries().then(archives => {
+      if (!isRequestCurrent()) return;
+      const validArchives: PreviewAccountRecoveryArchive[] = [];
+      let invalidArchiveFound = false;
+      for (const archive of archives) {
+        try {
+          validatePreviewAccountBackup({
+            document: archive.document,
+            schemaVersion: archive.schemaVersion,
+            revision: archive.revision,
+            updatedAt: archive.updatedAt
+          }, currentDate);
+          validArchives.push(archive);
+        } catch {
+          invalidArchiveFound = true;
+        }
+      }
+      setRemoteRecoveryArchives(validArchives);
+      if (invalidArchiveFound) {
+        setRemoteRecoveryError(
+          'One or more preserved account copies failed validation. They were left unchanged and were not offered for download.'
+        );
+      }
+    }).catch(() => {
+      try {
+        if (isRequestCurrent()) {
+          setRemoteRecoveryError('The preserved account copies could not be loaded. No archive or account data was changed.');
+        }
+      } catch {
+        if (requestId === remoteRecoveryRequestId.current
+          && activeAccountId.current === requestedAccountId) {
+          setRemoteRecoveryError('The signed-in account could not be verified. No recovery archive was changed.');
+        }
+      }
+    }).finally(() => {
+      if (requestId === remoteRecoveryRequestId.current
+        && activeAccountId.current === requestedAccountId) {
+        setRemoteRecoveryLoading(false);
+      }
+    });
+  }
+
   const pendingBackup = pending?.kind === 'backup';
   const pendingRestore = pending?.kind === 'restore';
   const pendingRepair = pending?.kind === 'repair';
@@ -829,7 +925,7 @@ export function PreviewAccountBackupControls({
       <button
         type="button"
         className="preview-account-backup__entry"
-        onClick={() => setAdvancedOpen(true)}
+        onClick={openRecovery}
       >
         <span className="preview-account-backup__row-copy">
           <span className="preview-account-backup__row-title">Account recovery</span>
@@ -908,7 +1004,8 @@ export function PreviewAccountBackupControls({
             )}
             {(localRaw !== null || importRecoverySourceRaw !== null || importRecoveryRaw !== null
               || importRecoveryArchiveRaw !== null || localRecoveryRaw !== null || repairRecoveryRaw !== null
-              || cloudRecoveryRaw !== null || deviceRecoveryRaw !== null) && (
+              || cloudRecoveryRaw !== null || deviceRecoveryRaw !== null
+              || remoteRecoveryArchives.length > 0 || remoteRecoveryLoading || remoteRecoveryError !== '') && (
               <div className="preview-account-backup__rows preview-account-backup__recovery-files">
                 {localRaw !== null && (
                   <RecoveryActionRow
@@ -980,6 +1077,29 @@ export function PreviewAccountBackupControls({
                     )}
                   />
                 )}
+                {remoteRecoveryArchives
+                  .filter(archive => archive.revision !== recoveryRevision(cloudRecoveryRaw))
+                  .map(archive => (
+                    <RecoveryActionRow
+                      key={archive.revision}
+                      title={`Download preserved account copy · revision ${archive.revision}`}
+                      description={`Preserved before replacement; account copy last updated ${formatBackupDate(archive.updatedAt)}.`}
+                      onClick={() => {
+                        try {
+                          const raw = JSON.stringify(archive.document, null, 2);
+                          if (typeof raw !== 'string') throw new Error('not-serializable');
+                          setMessage(downloadRecovery(
+                            raw,
+                            `tend-preview-account-revision-${archive.revision}-recovery.json`
+                          ) ?? 'Previous account copy downloaded unchanged.');
+                        } catch {
+                          setRemoteRecoveryError(
+                            'This preserved account copy could not be serialized for download. It was left unchanged.'
+                          );
+                        }
+                      }}
+                    />
+                  ))}
                 {deviceRecoveryRaw !== null && (
                   <RecoveryActionRow
                     title="Download previous device copy"
@@ -991,6 +1111,12 @@ export function PreviewAccountBackupControls({
                   />
                 )}
               </div>
+            )}
+            {remoteRecoveryLoading && (
+              <p className="preview-account-backup__note">Loading preserved account copies…</p>
+            )}
+            {remoteRecoveryError && (
+              <p className="preview-account-backup__error" role="alert">{remoteRecoveryError}</p>
             )}
             {(importRecoveryError || localRecoveryError || repairRecoveryError || cloudRecoveryError || deviceRecoveryError) && (
               <p className="preview-account-backup__error" role="alert">

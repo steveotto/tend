@@ -1212,6 +1212,123 @@ describe('Preview account sync', () => {
     view.unmount();
   });
 
+  it('preserves the reviewed account revision through the authenticated archive API when browser writes silently no-op', async () => {
+    const { cloudData, storage: fixture } = makeImportedConflictFixture();
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    if (identity.kind !== 'authenticated') throw new Error('Synthetic account identity is invalid.');
+    const browserArchiveKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}:account-sync-cloud-recovery`;
+    const browserStorage = installSyntheticWindowStorage(browserArchiveKey);
+    const storage = browserPreviewStorage(identity);
+    for (const [key, value] of fixture.values) storage.setItem(key, value);
+
+    let record: PreviewAccountBackupRecord | null = structuredClone(cloudRecord(cloudData, 3));
+    const archives = new Map<number, {
+      document: unknown;
+      schemaVersion: number;
+      revision: number;
+      updatedAt: string;
+      preservedAt: string;
+    }>();
+    let recoveryWriterNoOp = true;
+    const maybeSingle = vi.fn(async () => ({
+      data: record
+        ? {
+            document: structuredClone(record.document),
+            revision: record.revision,
+            schema_version: record.schemaVersion,
+            updated_at: record.updatedAt
+          }
+        : null,
+      error: null
+    }));
+    const from = vi.fn(() => ({ select: vi.fn(() => ({ maybeSingle })) }));
+    const rpc = vi.fn(async (
+      functionName: string,
+      parameters: Record<string, unknown>
+    ) => {
+      if (functionName === 'tend_preserve_preview_backup') {
+        const expectedRevision = parameters.p_expected_revision as number;
+        if (!record || record.revision !== expectedRevision) {
+          return { data: null, error: { code: 'P0001', message: 'Stale Preview backup revision' } };
+        }
+        if (recoveryWriterNoOp) return { data: expectedRevision, error: null };
+        if (!archives.has(expectedRevision)) {
+          archives.set(expectedRevision, {
+            document: structuredClone(record.document),
+            schemaVersion: record.schemaVersion,
+            revision: record.revision,
+            updatedAt: record.updatedAt ?? '',
+            preservedAt: '2026-11-06T15:00:00.000Z'
+          });
+        }
+        return { data: expectedRevision, error: null };
+      }
+      if (functionName === 'tend_read_preview_backup_recovery') {
+        return {
+          data: structuredClone(archives.get(parameters.p_source_revision as number) ?? null),
+          error: null
+        };
+      }
+      if (functionName === 'tend_list_preview_backup_recoveries') {
+        return { data: [...archives.values()].map(value => structuredClone(value)), error: null };
+      }
+      if (functionName === 'tend_save_preview_backup') {
+        const expectedRevision = parameters.p_expected_revision as number;
+        if (!record || record.revision !== expectedRevision) {
+          return { data: null, error: { code: 'P0001', message: 'Stale Preview backup revision' } };
+        }
+        const document = parameters.p_document as PreviewAccountBackupRecord['document'];
+        record = {
+          document: structuredClone(document),
+          schemaVersion: parameters.p_schema_version as number,
+          revision: expectedRevision + 1,
+          updatedAt: '2026-11-06T15:01:00.000Z'
+        };
+        return { data: record.revision, error: null };
+      }
+      return { data: null, error: { code: 'PGRST202', message: 'Unknown RPC' } };
+    });
+    const api = createPreviewAccountBackupApi({ from, rpc } satisfies PreviewAccountBackupSupabaseClient);
+    const view = render(<Browser api={api} storage={storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+    expect(await screen.findByText(
+      'Read-only conflict check — phase: recovery-archive; error code: none; revision match: match; archive match: missing.'
+    )).toBeTruthy();
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await openTechnicalAlert()).textContent).toContain(
+      'The remote recovery archive was missing after preservation (account-archive-readback-missing). No account replacement was attempted.'
+    );
+    expect(record?.revision).toBe(3);
+    expect(archives.size).toBe(0);
+    expect(rpc.mock.calls.map(([name]) => name)).not.toContain('tend_save_preview_backup');
+    expect(browserStorage.noOpWriteCount()).toBe(0);
+    expect(browserStorage.values.get(browserArchiveKey)).toBeUndefined();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).not.toBeNull();
+
+    recoveryWriterNoOp = false;
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+    expect(await screen.findByText('Saved to your account')).toBeTruthy();
+    expect(record?.revision).toBe(4);
+    expect(archives.get(3)).toMatchObject({
+      document: cloudRecord(cloudData, 3).document,
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      revision: 3
+    });
+    expect(rpc.mock.calls.map(([name]) => name)).toContain('tend_preserve_preview_backup');
+    expect(rpc.mock.calls.map(([name]) => name)).toContain('tend_read_preview_backup_recovery');
+    expect(rpc.mock.calls.map(([name]) => name)).toContain('tend_save_preview_backup');
+    expect(browserStorage.noOpWriteCount()).toBe(0);
+    expect(browserStorage.values.get(browserArchiveKey)).toBeUndefined();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).not.toBeNull();
+    expect(JSON.parse(storage.getItem(PREVIEW_STORAGE_KEY)!).data.people[0]?.displayName)
+      .toBe('Imported local data');
+    expect(archives.size).toBe(1);
+    view.unmount();
+  });
+
   it('reports an unavailable recovery-storage writer before any archive or account write', async () => {
     const { cloudData, storage: fixture } = makeImportedConflictFixture();
     const identity = createAuthenticatedPreviewIdentity(accountId, 1);

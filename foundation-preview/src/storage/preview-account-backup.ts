@@ -16,9 +16,20 @@ export type PreviewAccountBackupRecord = {
   updatedAt: string | null;
 };
 
+export type PreviewAccountRecoveryArchive = {
+  document: unknown;
+  schemaVersion: number;
+  revision: number;
+  updatedAt: string;
+  preservedAt: string;
+};
+
 export type PreviewAccountBackupApi = {
   read: () => Promise<PreviewAccountBackupRecord | null>;
   save: (document: PreviewEnvelope, expectedRevision: number) => Promise<number>;
+  preserveRecovery?: (expectedRevision: number) => Promise<number>;
+  readRecovery?: (sourceRevision: number) => Promise<PreviewAccountRecoveryArchive | null>;
+  listRecoveries?: () => Promise<PreviewAccountRecoveryArchive[]>;
 };
 
 type SupabaseResult = {
@@ -32,19 +43,33 @@ export type PreviewAccountBackupSupabaseClient = {
       maybeSingle: () => PromiseLike<SupabaseResult>;
     };
   };
-  rpc: (
-    functionName: 'tend_save_preview_backup',
-    parameters: {
-      p_document: PreviewEnvelope;
-      p_expected_revision: number;
-      p_schema_version: number;
-    }
-  ) => PromiseLike<SupabaseResult>;
+  rpc: {
+    (
+      functionName: 'tend_save_preview_backup',
+      parameters: {
+        p_document: PreviewEnvelope;
+        p_expected_revision: number;
+        p_schema_version: number;
+      }
+    ): PromiseLike<SupabaseResult>;
+    (
+      functionName: 'tend_preserve_preview_backup',
+      parameters: { p_expected_revision: number }
+    ): PromiseLike<SupabaseResult>;
+    (
+      functionName: 'tend_read_preview_backup_recovery',
+      parameters: { p_source_revision: number }
+    ): PromiseLike<SupabaseResult>;
+    (
+      functionName: 'tend_list_preview_backup_recoveries',
+      parameters: Record<string, never>
+    ): PromiseLike<SupabaseResult>;
+  };
 };
 
 export class PreviewAccountBackupError extends Error {
   constructor(
-    readonly kind: 'stale' | 'request' | 'invalid',
+    readonly kind: 'stale' | 'request' | 'invalid' | 'recovery-conflict',
     message: string,
     readonly diagnostic?: PreviewValidationDiagnostic
   ) {
@@ -94,6 +119,63 @@ export function createPreviewAccountBackupApi(
     };
   }
 
+  function assertRevision(revision: number, label: string) {
+    if (!Number.isSafeInteger(revision) || revision < 1) {
+      throw new PreviewAccountBackupError(
+        'invalid',
+        `The ${label} revision is invalid. No account data was changed.`
+      );
+    }
+  }
+
+  function throwRecoveryRpcError(error: unknown, action: 'preserve' | 'read'): never {
+    const code = errorCode(error);
+    const message = isRecord(error) && typeof error.message === 'string'
+      ? error.message
+      : '';
+    if (code === 'P0001' && message === 'Stale Preview backup revision') {
+      throw new PreviewAccountBackupError(
+        'stale',
+        'The account backup changed before its recovery copy was preserved. No replacement was attempted; review the latest copy.'
+      );
+    }
+    if (code === 'P0001' && message === 'Preview recovery archive conflict') {
+      throw new PreviewAccountBackupError(
+        'recovery-conflict',
+        'A different recovery copy already exists for this account revision. It was left unchanged; no account data was replaced.'
+      );
+    }
+    throw new PreviewAccountBackupError(
+      'request',
+      action === 'preserve'
+        ? 'The previous account copy could not be preserved. No account replacement was attempted.'
+        : 'The preserved account copy could not be read. No account replacement was attempted.'
+    );
+  }
+
+  function parseRecoveryArchive(value: unknown): PreviewAccountRecoveryArchive {
+    if (!isRecord(value)
+      || !Number.isSafeInteger(value.revision)
+      || (value.revision as number) < 1
+      || !Number.isSafeInteger(value.schemaVersion)
+      || (value.schemaVersion as number) < 1
+      || typeof value.updatedAt !== 'string'
+      || typeof value.preservedAt !== 'string'
+      || !('document' in value)) {
+      throw new PreviewAccountBackupError(
+        'invalid',
+        'The preserved account copy is incomplete or invalid. No account data was replaced.'
+      );
+    }
+    return {
+      document: value.document,
+      schemaVersion: value.schemaVersion as number,
+      revision: value.revision as number,
+      updatedAt: value.updatedAt,
+      preservedAt: value.preservedAt
+    };
+  }
+
   return {
     read() {
       if (inFlightRead) return inFlightRead;
@@ -140,6 +222,40 @@ export function createPreviewAccountBackupApi(
         );
       }
       return revision;
+    },
+    async preserveRecovery(expectedRevision) {
+      assertRevision(expectedRevision, 'account backup');
+      const { data, error } = await client.rpc('tend_preserve_preview_backup', {
+        p_expected_revision: expectedRevision
+      });
+      if (error !== null) throwRecoveryRpcError(error, 'preserve');
+      const revision = typeof data === 'number' ? data : Number(data);
+      if (!Number.isSafeInteger(revision) || revision !== expectedRevision) {
+        throw new PreviewAccountBackupError(
+          'invalid',
+          'The recovery service returned an unexpected revision. No account replacement was attempted.'
+        );
+      }
+      return revision;
+    },
+    async readRecovery(sourceRevision) {
+      assertRevision(sourceRevision, 'recovery archive');
+      const { data, error } = await client.rpc('tend_read_preview_backup_recovery', {
+        p_source_revision: sourceRevision
+      });
+      if (error !== null) throwRecoveryRpcError(error, 'read');
+      return data === null ? null : parseRecoveryArchive(data);
+    },
+    async listRecoveries() {
+      const { data, error } = await client.rpc('tend_list_preview_backup_recoveries', {});
+      if (error !== null) throwRecoveryRpcError(error, 'read');
+      if (!Array.isArray(data)) {
+        throw new PreviewAccountBackupError(
+          'invalid',
+          'The account recovery archive list is incomplete or invalid.'
+        );
+      }
+      return data.map(parseRecoveryArchive);
     }
   };
 }

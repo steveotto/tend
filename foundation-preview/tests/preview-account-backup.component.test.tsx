@@ -1051,6 +1051,47 @@ describe('manual Preview account backup and restore', () => {
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
   });
 
+  it('lists and downloads a validated server-preserved account revision without writing either copy', async () => {
+    const user = userEvent.setup();
+    const data = fitnessData('Server-preserved account');
+    const document = createPreviewEnvelope(data);
+    const archive = {
+      document,
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      revision: 3,
+      updatedAt: '2026-11-04T12:00:00.000Z',
+      preservedAt: '2026-11-04T12:05:00.000Z'
+    };
+    const localData = fitnessData('Unchanged device');
+    const local = accountStorage(localData);
+    const save = vi.fn(async () => 4);
+    const listRecoveries = vi.fn(async () => [archive]);
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => null),
+      save,
+      listRecoveries
+    };
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:account-recovery');
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL: vi.fn()
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    renderControls(api, local.storage, localData, local.raw, undefined, () => true, accountA, false);
+    await user.click(screen.getByRole('button', { name: /Account recovery/ }));
+    const download = await screen.findByRole('button', {
+      name: /Download preserved account copy · revision 3/
+    });
+    await user.click(download);
+
+    expect(await screen.findByText('Previous account copy downloaded unchanged.')).toBeTruthy();
+    expect(listRecoveries).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(JSON.parse(await (createObjectURL.mock.calls[0]?.[0] as Blob).text())).toEqual(document);
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+  });
+
   it('backs up in one browser and restores Rhythms, settings and a linked workout exactly once in another', async () => {
     const user = userEvent.setup();
     const backend = memoryBackend();
@@ -1331,6 +1372,53 @@ describe('manual Preview account backup and restore', () => {
       p_schema_version: PREVIEW_SCHEMA_VERSION
     });
     expect(JSON.stringify(rpc.mock.calls)).not.toContain(accountA);
+  });
+
+  it('preserves, reads back, and lists immutable account recovery records through authenticated RPCs', async () => {
+    const document = createPreviewEnvelope(fitnessData('Remote recovery'));
+    const archive = {
+      document,
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      revision: 3,
+      updatedAt: '2026-11-04T12:00:00.000Z',
+      preservedAt: '2026-11-04T12:05:00.000Z'
+    };
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: 3, error: null })
+      .mockResolvedValueOnce({ data: archive, error: null })
+      .mockResolvedValueOnce({ data: [archive], error: null });
+    const api = createPreviewAccountBackupApi({
+      from: vi.fn(),
+      rpc
+    });
+
+    await expect(api.preserveRecovery?.(3)).resolves.toBe(3);
+    await expect(api.readRecovery?.(3)).resolves.toEqual(archive);
+    await expect(api.listRecoveries?.()).resolves.toEqual([archive]);
+    expect(rpc.mock.calls).toEqual([
+      ['tend_preserve_preview_backup', { p_expected_revision: 3 }],
+      ['tend_read_preview_backup_recovery', { p_source_revision: 3 }],
+      ['tend_list_preview_backup_recoveries', {}]
+    ]);
+    expect(JSON.stringify(rpc.mock.calls)).not.toContain(accountA);
+  });
+
+  it('distinguishes a stale account revision from an archive collision', async () => {
+    const staleRpc = vi.fn(async () => ({
+      data: null,
+      error: { code: 'P0001', message: 'Stale Preview backup revision' }
+    }));
+    const staleApi = createPreviewAccountBackupApi({ from: vi.fn(), rpc: staleRpc });
+    await expect(staleApi.preserveRecovery?.(3)).rejects.toMatchObject({ kind: 'stale' });
+
+    const collisionRpc = vi.fn(async () => ({
+      data: null,
+      error: { code: 'P0001', message: 'Preview recovery archive conflict' }
+    }));
+    const collisionApi = createPreviewAccountBackupApi({ from: vi.fn(), rpc: collisionRpc });
+    await expect(collisionApi.preserveRecovery?.(3)).rejects.toMatchObject({
+      kind: 'recovery-conflict'
+    });
   });
 
   it('shares an in-flight metadata read between sync and manual backup controls', async () => {

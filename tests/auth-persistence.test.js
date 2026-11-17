@@ -12,6 +12,7 @@ const authSource = fs.readFileSync(path.join(root, "app-auth.js"), "utf8");
 const coreSource = fs.readFileSync(path.join(root, "app-core.js"), "utf8");
 const migrationSource = fs.readFileSync(path.join(root, "supabase/migrations/202610160001_private_tend_accounts.sql"), "utf8");
 const staleRevisionMigrationSource = fs.readFileSync(path.join(root, "supabase/migrations/20261109164116_stale_revision_exceptions_p0001.sql"), "utf8");
+const previewRecoveryMigrationSource = fs.readFileSync(path.join(root, "supabase/migrations/202611170001_preview_backup_recovery_archives.sql"), "utf8");
 
 function storage() {
   const values = new Map();
@@ -468,4 +469,19 @@ test("migration grants and RLS policies enforce ownership and revision-checked w
   assert.match(permissionMigration, /grant select \(user_id, display_name\) on table public\.tend_profiles to authenticated/i);
   assert.match(permissionMigration, /grant update \(display_name\) on table public\.tend_profiles to authenticated/i);
   assert.match(permissionMigration, /grant insert \(user_id, display_name\) on table public\.tend_profiles to authenticated/i);
+});
+
+test("Preview account recovery archives are append-only, account-scoped, and revision-checked", () => {
+  assert.match(previewRecoveryMigrationSource, /create table if not exists public\.tend_preview_backup_recoveries/i);
+  assert.match(previewRecoveryMigrationSource, /primary key \(user_id, source_revision\)/i);
+  assert.match(previewRecoveryMigrationSource, /enable row level security/i);
+  assert.match(previewRecoveryMigrationSource, /using \(user_id = \(select auth\.uid\(\)\)\)/i);
+  assert.match(previewRecoveryMigrationSource, /revoke all on table public\.tend_preview_backup_recoveries from public, anon, authenticated/i);
+  assert.match(previewRecoveryMigrationSource, /function public\.tend_preserve_preview_backup\(\s*p_expected_revision bigint\s*\)[\s\S]*for update/i);
+  assert.match(previewRecoveryMigrationSource, /Stale Preview backup revision' using errcode = 'P0001'/i);
+  assert.match(previewRecoveryMigrationSource, /on conflict \(user_id, source_revision\) do nothing/i);
+  assert.match(previewRecoveryMigrationSource, /v_archived_document is distinct from v_document/i);
+  assert.match(previewRecoveryMigrationSource, /grant execute on function public\.tend_preserve_preview_backup\(bigint\) to authenticated/i);
+  assert.match(previewRecoveryMigrationSource, /grant execute on function public\.tend_read_preview_backup_recovery\(bigint\) to authenticated/i);
+  assert.doesNotMatch(previewRecoveryMigrationSource, /grant (?:insert|update|delete|all) on table public\.tend_preview_backup_recoveries/i);
 });
