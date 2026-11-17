@@ -2468,6 +2468,144 @@ async function main() {
             assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
             const root = page.locator('main.category-page--segmented:not([hidden])');
             await root.waitFor();
+            if (categoryName === 'Health & Fitness') {
+              const measureToggle = root.locator(
+                '.category-health-summary .health-score-breakdown__measure-toggle'
+              );
+              assert.equal(await measureToggle.count(), 1);
+              for (const viewportWidth of [375, 390, 430]) {
+                await page.setViewportSize({ width: viewportWidth, height: 844 });
+                const collapsedLayout = await root.evaluate(element => {
+                  const card = element.querySelector<HTMLElement>('.category-health-summary');
+                  const button = card?.querySelector<HTMLButtonElement>('.health-score-breakdown__measure-toggle');
+                  const panel = button ? document.getElementById(button.getAttribute('aria-controls') ?? '') : null;
+                  const heading = button?.closest('.health-score-breakdown__title')?.querySelector('h3');
+                  const titleGroup = heading?.querySelector('.health-score-breakdown__title-end');
+                  const titleText = titleGroup && [...titleGroup.childNodes].find(node => node.nodeType === Node.TEXT_NODE);
+                  if (!button || !panel || !card || !heading || !titleText) {
+                    throw new Error('Category Health summary is missing its measure disclosure.');
+                  }
+                  const titleRange = document.createRange();
+                  titleRange.selectNodeContents(titleText);
+                  const titleRects = [...titleRange.getClientRects()];
+                  const titleEnd = titleRects.at(-1);
+                  if (!titleEnd) throw new Error('Category Health heading has no rendered text.');
+                  const buttonRect = button.getBoundingClientRect();
+                  const cardRect = card.getBoundingClientRect();
+                  const buttonStyle = getComputedStyle(button);
+                  const icon = button.querySelector('svg');
+                  if (!icon) throw new Error('Category Health disclosure is missing its chevron.');
+                  const iconStyle = getComputedStyle(icon);
+                  const toggleRule = [...document.styleSheets]
+                    .filter(sheet => !sheet.href || new URL(sheet.href).origin === location.origin)
+                    .flatMap(sheet => [...sheet.cssRules])
+                    .find(rule => rule instanceof CSSStyleRule
+                      && rule.selectorText === '.health-score-breakdown__measure-toggle');
+                  if (!(toggleRule instanceof CSSStyleRule)) {
+                    throw new Error('Category Health disclosure styling rule is missing.');
+                  }
+                  return {
+                    expanded: button.getAttribute('aria-expanded'),
+                    hidden: panel.hidden,
+                    panelDisplay: getComputedStyle(panel).display,
+                    panelHeight: panel.getBoundingClientRect().height,
+                    buttonWidth: buttonRect.width,
+                    buttonHeight: buttonRect.height,
+                    titleButtonGap: buttonRect.left - titleEnd.right,
+                    buttonCenterOffset: Math.abs(
+                      buttonRect.top + buttonRect.height / 2 - (titleEnd.top + titleEnd.height / 2)
+                    ),
+                    border: toggleRule.style.border,
+                    borderRadius: buttonStyle.borderTopLeftRadius,
+                    backgroundColor: buttonStyle.backgroundColor,
+                    borderColor: buttonStyle.borderTopColor,
+                    cursor: buttonStyle.cursor,
+                    flexGrow: buttonStyle.flexGrow,
+                    flexShrink: buttonStyle.flexShrink,
+                    iconWidth: iconStyle.width,
+                    iconHeight: iconStyle.height,
+                    iconFill: iconStyle.fill,
+                    iconStroke: iconStyle.stroke,
+                    iconStrokeWidth: iconStyle.strokeWidth,
+                    iconStrokeLinecap: iconStyle.strokeLinecap,
+                    iconTransform: iconStyle.transform,
+                    buttonTransitionDuration: buttonStyle.transitionDuration,
+                    buttonTransitionTimingFunction: buttonStyle.transitionTimingFunction,
+                    iconTransitionDuration: iconStyle.transitionDuration,
+                    iconTransitionTimingFunction: iconStyle.transitionTimingFunction,
+                    buttonInsideCard: buttonRect.right <= cardRect.right + 1,
+                    viewportWidth: document.documentElement.clientWidth,
+                    documentWidth: document.documentElement.scrollWidth
+                  };
+                });
+                assert.equal(collapsedLayout.expanded, 'false');
+                assert.equal(collapsedLayout.hidden, true);
+                assert.equal(collapsedLayout.panelDisplay, 'none');
+                assert.equal(collapsedLayout.panelHeight, 0);
+                assert.deepEqual([collapsedLayout.buttonWidth, collapsedLayout.buttonHeight], [26, 26]);
+                assert.equal(collapsedLayout.titleButtonGap, 10);
+                assert.ok(collapsedLayout.buttonCenterOffset <= 1,
+                  `Category Health disclosure should align with the title line at ${viewportWidth}px / ${textSize}: ${JSON.stringify(collapsedLayout)}.`);
+                assert.equal(collapsedLayout.border, '1.5px solid var(--tend-line)');
+                assert.equal(collapsedLayout.borderRadius, '50%');
+                assert.equal(collapsedLayout.backgroundColor, 'rgb(255, 255, 255)');
+                assert.equal(collapsedLayout.borderColor, 'rgb(220, 228, 222)');
+                assert.equal(collapsedLayout.cursor, 'pointer');
+                assert.equal(collapsedLayout.flexGrow, '0');
+                assert.equal(collapsedLayout.flexShrink, '0');
+                assert.deepEqual([collapsedLayout.iconWidth, collapsedLayout.iconHeight], ['12px', '12px']);
+                assert.equal(collapsedLayout.iconFill, 'none');
+                assert.equal(collapsedLayout.iconStroke, 'rgb(94, 107, 99)');
+                assert.equal(collapsedLayout.iconStrokeWidth, '2px');
+                assert.equal(collapsedLayout.iconStrokeLinecap, 'round');
+                assert.equal(collapsedLayout.iconTransform, 'none');
+                assert.equal(collapsedLayout.buttonTransitionDuration, '0.2s, 0.2s');
+                assert.equal(collapsedLayout.buttonTransitionTimingFunction, 'ease, ease');
+                assert.equal(collapsedLayout.iconTransitionDuration, '0.2s');
+                assert.equal(collapsedLayout.iconTransitionTimingFunction, 'ease');
+                assert.equal(collapsedLayout.buttonInsideCard, true);
+                assert.equal(collapsedLayout.viewportWidth, viewportWidth);
+                assert.equal(collapsedLayout.documentWidth, viewportWidth);
+
+                await measureToggle.focus();
+                await page.keyboard.press('Enter');
+                await page.waitForTimeout(220);
+                const expandedLayout = await root.evaluate(element => {
+                  const button = element.querySelector<HTMLElement>('.category-health-summary')
+                    ?.querySelector<HTMLButtonElement>('.health-score-breakdown__measure-toggle');
+                  const panel = button ? document.getElementById(button.getAttribute('aria-controls') ?? '') : null;
+                  const icon = button?.querySelector('svg');
+                  if (!button || !panel || !icon) throw new Error('Category Health disclosure target disappeared.');
+                  const buttonStyle = getComputedStyle(button);
+                  const iconStyle = getComputedStyle(icon);
+                  return {
+                    expanded: button.getAttribute('aria-expanded'),
+                    hidden: panel.hidden,
+                    captions: panel.querySelectorAll('.health-score-measures__caption').length,
+                    backgroundColor: buttonStyle.backgroundColor,
+                    borderColor: buttonStyle.borderTopColor,
+                    iconStroke: iconStyle.stroke,
+                    iconTransform: iconStyle.transform,
+                    viewportWidth: document.documentElement.clientWidth,
+                    documentWidth: document.documentElement.scrollWidth
+                  };
+                });
+                assert.equal(expandedLayout.expanded, 'true');
+                assert.equal(expandedLayout.hidden, false);
+                assert.equal(expandedLayout.captions, 2);
+                assert.equal(expandedLayout.backgroundColor, 'rgb(36, 107, 82)');
+                assert.equal(expandedLayout.borderColor, 'rgb(36, 107, 82)');
+                assert.equal(expandedLayout.iconStroke, 'rgb(255, 255, 255)');
+                assert.match(expandedLayout.iconTransform, /matrix\(-1, 0, 0, -1/);
+                assert.equal(expandedLayout.viewportWidth, viewportWidth);
+                assert.equal(expandedLayout.documentWidth, viewportWidth);
+                assert.equal(await measureToggle.evaluate(button => getComputedStyle(button).outlineStyle), 'solid');
+                await page.keyboard.press('Enter');
+                await page.waitForTimeout(220);
+                assert.equal(await measureToggle.getAttribute('aria-expanded'), 'false');
+                await page.setViewportSize({ width: 375, height: 844 });
+              }
+            }
             const tabs = root.locator(':scope > [role="tablist"]');
             const tabMeasurements = [];
             for (const tabName of ['Foundations', 'Today', 'Rhythms'] as const) {
@@ -2541,6 +2679,58 @@ async function main() {
             await strengthSizeToggle.click();
           }
           assert.equal(await strengthSizeToggle.getAttribute('data-text-size'), textSize);
+          await bodyTab.click();
+          const strengthMeasureToggle = page.getByRole('button', {
+            name: /^(?:Show|Hide) Strength Health Consistency and On Track breakdown$/
+          });
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const collapsedLayout = await strengthMeasureToggle.evaluate(button => {
+              const panel = document.getElementById(button.getAttribute('aria-controls') ?? '');
+              const card = button.closest<HTMLElement>('.fitness-score-summary');
+              const title = button.closest('.health-score-breakdown__title')?.querySelector('h3');
+              const titleGroup = title?.querySelector('.health-score-breakdown__title-end');
+              const titleText = titleGroup && [...titleGroup.childNodes].find(node => node.nodeType === Node.TEXT_NODE);
+              if (!panel || !card || !title || !titleText) {
+                throw new Error('Strength Health summary is missing its disclosure target.');
+              }
+              const titleRange = document.createRange();
+              titleRange.selectNodeContents(titleText);
+              const titleRects = [...titleRange.getClientRects()];
+              const titleEnd = titleRects.at(-1);
+              if (!titleEnd) throw new Error('Strength Health heading has no rendered text.');
+              const buttonRect = button.getBoundingClientRect();
+              const cardRect = card.getBoundingClientRect();
+              return {
+                expanded: button.getAttribute('aria-expanded'),
+                hidden: panel.hidden,
+                panelHeight: panel.getBoundingClientRect().height,
+                buttonWidth: buttonRect.width,
+                buttonHeight: buttonRect.height,
+                titleButtonGap: buttonRect.left - titleEnd.right,
+                buttonInsideCard: buttonRect.right <= cardRect.right + 1,
+                viewportWidth: document.documentElement.clientWidth,
+                documentWidth: document.documentElement.scrollWidth
+              };
+            });
+            assert.equal(collapsedLayout.expanded, 'false');
+            assert.equal(collapsedLayout.hidden, true);
+            assert.equal(collapsedLayout.panelHeight, 0);
+            assert.deepEqual([collapsedLayout.buttonWidth, collapsedLayout.buttonHeight], [26, 26]);
+            assert.equal(collapsedLayout.titleButtonGap, 10,
+              `Strength disclosure must keep a 10px title gap at ${viewportWidth}px / ${textSize}.`);
+            assert.equal(collapsedLayout.buttonInsideCard, true);
+            assert.equal(collapsedLayout.viewportWidth, viewportWidth);
+            assert.equal(collapsedLayout.documentWidth, viewportWidth);
+            await strengthMeasureToggle.focus();
+            await page.keyboard.press('Enter');
+            assert.equal(await strengthMeasureToggle.getAttribute('aria-expanded'), 'true');
+            assert.equal(await strengthMeasureToggle.evaluate(button =>
+              getComputedStyle(button).outlineStyle), 'solid');
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), viewportWidth);
+            await page.keyboard.press('Enter');
+            assert.equal(await strengthMeasureToggle.getAttribute('aria-expanded'), 'false');
+          }
           await page.setViewportSize({ width: 390, height: 390 });
           await bodyTab.click();
           await page.getByRole('button', { name: 'Show Strength Health scoring details' }).click();

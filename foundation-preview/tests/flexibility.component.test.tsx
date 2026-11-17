@@ -231,9 +231,19 @@ describe('Flexibility foundation presentation', () => {
 
     expect(container.querySelector('.flexibility-summary')?.classList.contains('rhythm-history-view__score-card')).toBe(true);
     expect(screen.getByRole('heading', { name: 'Flexibility Health' })).toBeTruthy();
+    const measureToggle = screen.getByRole('button', {
+      name: 'Show Flexibility Health Consistency and On Track breakdown'
+    });
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(measureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    await user.click(measureToggle);
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('true');
     expect(container.querySelectorAll('.flexibility-summary .health-score-measures__item')).toHaveLength(2);
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuetext'))
       .toBe('60 out of 100');
+    expect(screen.getByText('Average Consistency across active linked stretch Rhythms.')).toBeTruthy();
+    expect(screen.getByText('Average On Track across active linked stretch Rhythms.')).toBeTruthy();
     expect(screen.getByText('These stretch Rhythms are not included in Flexibility Health because they are not linked to the Flexibility Foundation: Evening stretch. Link them in their Foundation associations to include their scores.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' })).toBeTruthy();
     expect(container.querySelector('.flexibility-map-card')?.compareDocumentPosition(

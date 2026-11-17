@@ -112,6 +112,17 @@ async function expandHealthDisclosure(
   if (toggle.getAttribute('aria-expanded') === 'false') await user.click(toggle);
 }
 
+async function expandHealthMeasureDisclosure(
+  user: ReturnType<typeof userEvent.setup>,
+  container: HTMLElement
+) {
+  const toggle = within(container).getByRole('button', {
+    name: /^Show .+ Consistency and On Track breakdown$/
+  });
+  if (toggle.getAttribute('aria-expanded') === 'false') await user.click(toggle);
+  return toggle;
+}
+
 async function showAnytime(user: ReturnType<typeof userEvent.setup>) {
   const tab = screen.getByRole('tab', { name: 'Flexible' });
   if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
@@ -1669,7 +1680,10 @@ describe('Tend Today preview', () => {
     expect(within(healthCard).getByRole('button', {
       name: 'Show Sabbath Health scoring details'
     })).toBeTruthy();
-    expect(healthCard.querySelector('.health-score-measures')).toBeNull();
+    const healthMeasuresToggle = within(healthCard).getByRole('button', {
+      name: 'Show Sabbath Health Consistency and On Track breakdown'
+    });
+    expect(document.getElementById(healthMeasuresToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
     expect(within(healthCard).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
     expect(within(healthCard).queryByRole('meter', { name: 'On Track score' })).toBeNull();
     expect(document.querySelector('.marriage-foundation-detail__scores')).toBeNull();
@@ -2638,6 +2652,7 @@ describe('Tend Today preview', () => {
     }));
     const details = screen.getByRole('dialog', { name: 'Season deletion fixture' });
     const history = within(details).getByRole('region', { name: 'History for Season deletion fixture' });
+    await expandHealthMeasureDisclosure(user, history);
     expect(within(history).getByRole('heading', { name: 'Seasons' })).toBeTruthy();
     expect(within(history).getByText('3 seasons')).toBeTruthy();
     await user.click(within(history).getByRole('button', { name: 'Show Seasons explanation' }));
@@ -2783,6 +2798,7 @@ describe('Tend Today preview', () => {
       name: historyButtonName('View scores and history for Season deletion fixture')
     }));
     const history = screen.getByRole('region', { name: 'History for Season deletion fixture' });
+    await expandHealthMeasureDisclosure(user, history);
     await user.click(within(history).getByRole('button', { name: 'Show Seasons explanation' }));
     await user.click(within(history).getByRole('button', { name: 'Edit First Season' }));
     let editor = screen.getByRole('dialog', { name: 'Edit season' });
@@ -2835,6 +2851,7 @@ describe('Tend Today preview', () => {
       name: historyButtonName('View scores and history for Season deletion fixture')
     }));
     const reloadedHistory = screen.getByRole('region', { name: 'History for Season deletion fixture' });
+    await expandHealthMeasureDisclosure(user, reloadedHistory);
     expect(['Health', 'Consistency', 'On Track'].map(metric =>
       within(reloadedHistory).getByRole('meter', { name: `${metric} score` }).getAttribute('aria-valuenow') ?? '—'
     )).toEqual(savedScores);
@@ -3182,6 +3199,7 @@ describe('Tend Today preview', () => {
     }));
     const historyDialog = screen.getByRole('dialog', { name: 'Daily connection' });
     const history = within(historyDialog).getByRole('region', { name: 'History for Daily connection' });
+    await expandHealthMeasureDisclosure(user, history);
     await user.click(within(history).getByRole('button', { name: 'Show Seasons explanation' }));
     await user.click(within(history).getByRole('button', { name: 'Edit Daily' }));
 
@@ -3253,6 +3271,7 @@ describe('Tend Today preview', () => {
     const reloadedHistory = within(reloadedDialog).getByRole('region', {
       name: 'History for Daily connection'
     });
+    await expandHealthMeasureDisclosure(user, reloadedHistory);
     expect(within(reloadedHistory).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow'))
       .toBe(scoreValues[0]);
     expect(within(reloadedHistory).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow'))
@@ -3585,6 +3604,7 @@ describe('Tend Today preview', () => {
       }));
       const historyDialog = await screen.findByRole('dialog', { name: 'Reload score fixture' });
       const history = within(historyDialog).getByRole('region', { name: 'History for Reload score fixture' });
+      await expandHealthMeasureDisclosure(user, history);
       await user.click(within(history).getByRole('button', {
         name: 'Show Consistency and On Track score details'
       }));
@@ -3657,6 +3677,7 @@ describe('Tend Today preview', () => {
       name: historyButtonName('View scores and history for New quarterly rhythm')
     }));
     const history = await screen.findByRole('region', { name: 'History for New quarterly rhythm' });
+    await expandHealthMeasureDisclosure(user, history);
     expect(within(history).getByRole('img', {
       name: 'On Track: Unscored because Starts with your first Tend.'
     })).toBeTruthy();
@@ -4455,7 +4476,13 @@ describe('Tend Today preview', () => {
     expect(within(practiceHealthCard).getByRole('meter', {
       name: 'Prayer Practice Health score'
     }).getAttribute('aria-valuetext')).toBe(`${formatScore(Number(faithCategoryScore))} out of 100`);
-    expect(practiceHealthCard.querySelector('.health-score-measures')).toBeNull();
+    const practiceMeasureToggle = within(practiceHealthCard).getByRole('button', {
+      name: 'Show Prayer Health Consistency and On Track breakdown'
+    });
+    expect(document.getElementById(practiceMeasureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    await user.click(practiceMeasureToggle);
+    expect(practiceMeasureToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(practiceHealthCard.querySelectorAll('.health-score-measures__item')).toHaveLength(2);
     await user.click(within(practiceHealthCard).getByRole('button', {
       name: 'Show Prayer Health scoring details'
     }));
@@ -5993,6 +6020,7 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('heading', { name: 'Marriage Health' })).toBeTruthy();
     expect(screen.queryByText('No scored Foundations yet')).toBeNull();
     const summary = screen.getByRole('region', { name: 'Marriage Health summary' });
+    await expandHealthMeasureDisclosure(user, summary);
     expect(within(summary).getByRole('img', { name: 'Marriage Health: Not enough data' })).toBeTruthy();
     expect(within(summary).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
     expect(within(summary).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
@@ -6077,7 +6105,11 @@ describe('Tend Today preview', () => {
     expect(within(foundationHealthCard).getByRole('img', {
       name: 'Connection Foundation Health: Not enough data'
     })).toBeTruthy();
-    expect(foundationHealthCard.querySelector('.health-score-measures')).toBeNull();
+    const foundationMeasureToggle = within(foundationHealthCard).getByRole('button', {
+      name: 'Show Connection Health Consistency and On Track breakdown'
+    });
+    const foundationMeasures = document.getElementById(foundationMeasureToggle.getAttribute('aria-controls')!)!;
+    expect(foundationMeasures.hidden).toBe(true);
     expect(within(foundationHealthCard).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
     expect(within(foundationHealthCard).queryByRole('meter', { name: 'On Track score' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Connection Health' })).toBeTruthy();
@@ -6089,6 +6121,14 @@ describe('Tend Today preview', () => {
     expect(manageLinks.classList.contains('mini')).toBe(true);
     expect(manageLinks.classList.contains('ghost')).toBe(true);
 
+    await user.click(foundationMeasureToggle);
+    expect(foundationMeasures.hidden).toBe(false);
+    expect(within(foundationHealthCard).getByRole('img', {
+      name: 'Consistency: Score unavailable'
+    })).toBeTruthy();
+    expect(within(foundationHealthCard).getByRole('img', {
+      name: 'On Track: Score unavailable'
+    })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Show Connection Health scoring details' }));
     const foundationDialog = screen.getByRole('dialog', { name: 'Connection Health details' });
     const foundationScoringToggle = within(foundationDialog)
@@ -6627,6 +6667,7 @@ describe('Tend Today preview', () => {
     expect(screen.queryByText('1 of 6 Foundations scored')).toBeNull();
     expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('85');
     const categorySummary = screen.getByRole('region', { name: 'Marriage Health summary' });
+    await expandHealthMeasureDisclosure(user, categorySummary);
     expect(within(categorySummary).getByText('80', { selector: '.rhythm-score-circle__value' })).toBeTruthy();
     expect(within(categorySummary).getByText('100', { selector: '.rhythm-score-circle__value' })).toBeTruthy();
     const unavailable = screen.getByRole('button', {
@@ -6706,6 +6747,7 @@ describe('Tend Today preview', () => {
     await user.click(historyOpener);
     const rhythmDialog = await screen.findByRole('dialog', { name: 'Foundation score fixture' });
     const history = within(rhythmDialog).getByRole('region', { name: 'History for Foundation score fixture' });
+    await expandHealthMeasureDisclosure(user, history);
     expect(within(history).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80');
     expect(within(history).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
     expect(within(history).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe('85');
@@ -7227,6 +7269,7 @@ describe('Tend Today preview', () => {
     await user.click(opener);
     const dialog = await screen.findByRole('dialog', { name: 'Daily connection' });
     const history = within(dialog).getByRole('region', { name: 'History for Daily connection' });
+    await expandHealthMeasureDisclosure(user, history);
     expect(within(history).getByRole('meter', { name: 'Health score' })).toBeTruthy();
     expect(within(history).getByRole('meter', { name: 'Consistency score' })).toBeTruthy();
     expect(within(history).getByRole('meter', { name: 'On Track score' })).toBeTruthy();
@@ -7403,9 +7446,15 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: /Open Strength foundation details/ }));
     const strengthSummary = screen.getByRole('heading', { name: 'Strength Health' }).closest('.fitness-score-summary');
     if (!(strengthSummary instanceof HTMLElement)) throw new Error('Strength Health summary is missing.');
-    expect(strengthSummary.querySelector('.health-score-measures')).toBeNull();
+    const strengthMeasuresToggle = within(strengthSummary).getByRole('button', {
+      name: 'Show Strength Health Consistency and On Track breakdown'
+    });
+    expect(strengthMeasuresToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(strengthMeasuresToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
     expect(within(strengthSummary).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
     expect(within(strengthSummary).queryByRole('meter', { name: 'On Track score' })).toBeNull();
+    await user.click(strengthMeasuresToggle);
+    expect(strengthMeasuresToggle.getAttribute('aria-expanded')).toBe('true');
     await user.click(within(strengthSummary).getByRole('button', { name: 'Show Strength Health scoring details' }));
     dialog = screen.getByRole('dialog', { name: 'Strength Health details' });
     expect(within(dialog).getByRole('button', { name: 'How this Strength Foundation was scored' })
@@ -7840,7 +7889,12 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: 'Health & Fitness' }));
     const summary = screen.getByRole('region', { name: 'Health & Fitness Health summary' });
     expect(within(summary).getByRole('heading', { name: 'Health & Fitness Health' })).toBeTruthy();
-    expect(within(summary).getByRole('group', { name: 'Consistency and On Track' })).toBeTruthy();
+    const measureToggle = within(summary).getByRole('button', {
+      name: 'Show Health & Fitness Health Consistency and On Track breakdown'
+    });
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(measureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    expect(within(summary).queryByRole('group', { name: 'Consistency and On Track' })).toBeNull();
     expect(within(summary).queryByText('1 of 10 stretch regions tracked')).toBeNull();
   });
 
@@ -7902,7 +7956,9 @@ describe('Tend Today preview', () => {
       screen.getByRole('heading', { name: 'Your body, at a glance' })
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    const strengthInfo = within(strengthHealthHeading.closest('.fitness-score-summary')!)
+    const strengthHealthSummary = strengthHealthHeading.closest('.fitness-score-summary') as HTMLElement;
+    await expandHealthMeasureDisclosure(user, strengthHealthSummary);
+    const strengthInfo = within(strengthHealthSummary)
       .getByRole('button', { name: 'Show Strength Health scoring details' });
     await user.click(strengthInfo);
     const strengthDialog = screen.getByRole('dialog', { name: 'Strength Health details' });
@@ -7937,14 +7993,20 @@ describe('Tend Today preview', () => {
       screen.getByRole('heading', { name: 'Weekly cardio' })
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getAllByRole('heading', { name: 'Cardio Health' })).toHaveLength(1);
-    expect(cardioHealthHeading.closest('.fitness-score-summary')?.classList)
+    const cardioHealthSummary = cardioHealthHeading.closest('.fitness-score-summary') as HTMLElement;
+    expect(cardioHealthSummary.classList)
       .toContain('foundation-health-card');
-    expect(within(cardioHealthHeading.closest('.fitness-score-summary')!)
+    expect(within(cardioHealthSummary)
       .getByRole('img', { name: 'Cardio Health: Not enough data' })).toBeTruthy();
-    expect(cardioHealthHeading.closest('.fitness-score-summary')?.querySelector('.health-score-measures'))
-      .toBeNull();
+    const cardioMeasureToggle = within(cardioHealthSummary).getByRole('button', {
+      name: 'Show Cardio Health Consistency and On Track breakdown'
+    });
+    expect(cardioMeasureToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(cardioMeasureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    await user.click(cardioMeasureToggle);
+    expect(cardioMeasureToggle.getAttribute('aria-expanded')).toBe('true');
 
-    const cardioInfo = within(cardioHealthHeading.closest('.fitness-score-summary')!)
+    const cardioInfo = within(cardioHealthSummary)
       .getByRole('button', { name: 'Show Cardio Health scoring details' });
     await user.click(cardioInfo);
     const cardioDialog = screen.getByRole('dialog', { name: 'Cardio Health details' });
@@ -8166,6 +8228,10 @@ describe('Tend Today preview', () => {
     expect(log.completionId).toBeTruthy();
     expect(saved.envelope.data.datedRhythmCompletions.filter(item => item.id === log.completionId)).toHaveLength(1);
     expect(saved.envelope.data.activeRhythmCompletions.filter(item => item.completionId === log.completionId)).toHaveLength(1);
+    await expandHealthMeasureDisclosure(
+      user,
+      screen.getByRole('region', { name: 'Health & Fitness Health summary' })
+    );
     const categoryScore = screen.getByRole('meter', { name: 'Health & Fitness Health score' })
       .getAttribute('aria-valuenow');
     const categoryConsistency = screen.getByRole('meter', { name: 'Consistency score' })
@@ -8197,8 +8263,13 @@ describe('Tend Today preview', () => {
     const strengthDetailScore = Number(
       screen.getByRole('meter', { name: 'Strength Health score' }).getAttribute('aria-valuenow')
     );
-    expect(screen.getByRole('meter', { name: 'Strength Health score' })
-      .closest('.fitness-score-summary')?.querySelector('.health-score-measures')).toBeNull();
+    const strengthSummary = screen.getByRole('meter', { name: 'Strength Health score' })
+      .closest('.fitness-score-summary') as HTMLElement;
+    const strengthMeasureToggle = within(strengthSummary).getByRole('button', {
+      name: 'Show Strength Health Consistency and On Track breakdown'
+    });
+    expect(strengthMeasureToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(strengthMeasureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
     expect(strengthCard.querySelector('.foundation-card__score')?.textContent)
       .toBe(String(Math.round(strengthDetailScore)));
     expect(strengthDetailScore).toBe(Number(categoryScore));
@@ -8375,8 +8446,13 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('region', { name: 'Weight Foundation' })).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Weight Health score' }).getAttribute('aria-valuenow'))
       .toBe('100');
-    expect(screen.getByRole('meter', { name: 'Weight Health score' })
-      .closest('.fitness-score-summary')?.querySelector('.health-score-measures')).toBeNull();
+    const weightSummary = screen.getByRole('meter', { name: 'Weight Health score' })
+      .closest('.fitness-score-summary') as HTMLElement;
+    const weightMeasureToggle = within(weightSummary).getByRole('button', {
+      name: 'Show Weight Health Consistency and On Track breakdown'
+    });
+    expect(weightMeasureToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(weightMeasureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
 
     await user.click(screen    .getByRole('button', { name: 'Weight tracking settings' }));
     const goalDialog = screen.getByRole('dialog', { name: 'Weight goals' });
@@ -8496,6 +8572,10 @@ describe('Tend Today preview', () => {
       .toHaveLength(1);
     expect(saved.envelope.data.activeRhythmCompletions.filter(item => item.completionId === run.completionId))
       .toHaveLength(1);
+    await expandHealthMeasureDisclosure(
+      user,
+      screen.getByRole('region', { name: 'Health & Fitness Health summary' })
+    );
     const categoryMeter = screen.getByRole('meter', { name: 'Health & Fitness Health score' });
     expect(categoryMeter.getAttribute('aria-valuenow')).toBe('9.375');
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');

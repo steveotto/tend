@@ -170,7 +170,8 @@ describe('Cardio preview presentation', () => {
     expect(onSaveFoundationAssociations).not.toHaveBeenCalled();
   });
 
-  it('shows separate weekly run/mileage measures, score, today strip, and all historical runs', () => {
+  it('shows separate weekly run/mileage measures, expandable score, today strip, and all historical runs', async () => {
+    const user = userEvent.setup();
     const data = saveCardioGoals({
       ...createCardioData(),
       runs: [
@@ -186,6 +187,12 @@ describe('Cardio preview presentation', () => {
       .getAllByRole('button', { name: 'Log run' })).toHaveLength(1);
     expect(screen.getByText('Runs this week')).toBeTruthy();
     expect(screen.getByText('Miles this week')).toBeTruthy();
+    const measureToggle = screen.getByRole('button', {
+      name: 'Show Cardio Health Consistency and On Track breakdown'
+    });
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(measureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    await user.click(measureToggle);
     const onTrack = screen.getByRole('meter', { name: 'On Track score' });
     expect(onTrack.getAttribute('aria-valuenow')).toBe('38');
     expect(onTrack.querySelector('.rhythm-score-circle__progress')?.getAttribute('stroke-dashoffset')).toBeTruthy();

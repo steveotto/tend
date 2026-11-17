@@ -1342,6 +1342,9 @@ describe('shared Rhythm history', () => {
           completionHistoryAvailable
         />
       );
+      fireEvent.click(screen.getByRole('button', {
+        name: 'Show Health Consistency and On Track breakdown'
+      }));
 
       const expectScores = (health: string, consistency: string, onTrack: string) => {
         expect(screen.getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe(health);
@@ -1625,6 +1628,9 @@ describe('shared Rhythm history', () => {
         onPersonSelect={() => undefined}
       />
     );
+    await user.click(screen.getByRole('button', {
+      name: 'Show Health Consistency and On Track breakdown'
+    }));
     const history = screen.getByRole('region', { name: 'History for Daily connection' });
     const title = within(history.querySelector('.rhythm-history-view__rhythm-header')!)
       .getByRole('heading', { name: 'Daily connection' });
@@ -1854,16 +1860,25 @@ describe('shared Rhythm history', () => {
       />
     );
 
-    expect(screen.getAllByRole('meter')).toHaveLength(3);
+    expect(screen.getAllByRole('meter')).toHaveLength(1);
     const healthMeter = screen.getByRole('meter', { name: 'Health score' });
     expect(Number(healthMeter.getAttribute('aria-valuenow'))).toBeCloseTo(76.98);
     expect(healthMeter.getAttribute('aria-valuetext')).toBe('77 out of 100');
     expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
     expect(screen.queryByText('75% Consistency · 25% On Track')).toBeNull();
+    expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    expect(screen.queryByRole('meter', { name: 'On Track score' })).toBeNull();
+    const measureToggle = screen.getByRole('button', {
+      name: 'Show Health Consistency and On Track breakdown'
+    });
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(measureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    await user.click(measureToggle);
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('79');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('70');
-    expect(screen.queryByText('Follow-through over time')).toBeNull();
-    expect(screen.queryByText('How caught up you are')).toBeNull();
+    expect(screen.getByText('Follow-through over time')).toBeTruthy();
+    expect(screen.getByText('How caught up you are')).toBeTruthy();
     const consistency = screen.getByRole('region', { name: 'Consistency' });
     const onTrack = screen.getByRole('region', { name: 'On Track' });
     const info = screen.getByRole('button', { name: 'Show Consistency and On Track score details' });
@@ -2502,6 +2517,9 @@ describe('shared Rhythm history', () => {
         completionHistoryAvailable
       />
     );
+    await user.click(screen.getByRole('button', {
+      name: 'Show Health Consistency and On Track breakdown'
+    }));
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('80');
     const consistency = screen.getByRole('meter', { name: 'Consistency score' });
     expect(consistency.getAttribute('aria-valuenow')).toBe('33');
@@ -2529,6 +2547,9 @@ describe('shared Rhythm history', () => {
         completionHistoryAvailable
       />
     );
+    await user.click(screen.getByRole('button', {
+      name: 'Show Health Consistency and On Track breakdown'
+    }));
 
     expect(screen.getByRole('button', { name: 'Logged moments (0)' })).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('80');
@@ -2617,6 +2638,9 @@ describe('shared Rhythm history', () => {
       />
     );
 
+    await user.click(screen.getByRole('button', {
+      name: 'Show Health Consistency and On Track breakdown'
+    }));
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('67');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('90');
     expect(screen.getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe('72.5');
@@ -2831,6 +2855,9 @@ describe('shared Rhythm history', () => {
     const structuredDailyWithoutStart = { ...todayConnection };
     render(<RhythmHistoryView rhythm={structuredDailyWithoutStart} />);
 
+    await user.click(screen.getByRole('button', {
+      name: 'Show Health Consistency and On Track breakdown'
+    }));
     expect(screen.getByRole('meter', { name: 'Health score' })).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Consistency score' })).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'On Track score' })).toBeTruthy();

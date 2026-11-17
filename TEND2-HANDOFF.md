@@ -1,5 +1,17 @@
 # Tend 2 Foundation handoff
 
+## Shared Health breakdown disclosure (local review)
+
+**Change:** Added one collapsed-by-default Consistency / On Track disclosure to the shared Health summary cards. Its 26px circular button follows the heading text, remains attached to its final word when the heading wraps, and shows a 12px outlined chevron that turns upward when expanded. The button exposes `aria-expanded` and `aria-controls` and has visible keyboard focus. Expanding reveals the existing gauges and captions without a collapsed layout gap; the score, progress bar, info action, scoring, and data remain unchanged.
+
+**Affected surfaces and reuse map:** `HealthScoreBreakdown` is the sole disclosure implementation. `CategoryHealthSummary` consumes it for category summaries; `FitnessScoreSummary` for Strength, Cardio, Weight, and Flexibility foundation summaries; `MarriageView` opts its Foundation summary into the same component while retaining its existing metadata and actions; and `RhythmHistoryView` uses it for Rhythm detail history. Person Overall Health and non-opted-in detail summaries retain their prior presentation. Compact Rhythm cards, People cards, and Person Overall Health's Rhythms / Connections / Prayer breakdown are unchanged.
+
+**Duplication review:** Pages only enable the typed `measureDisclosure` option on their existing shared card; there are no category-specific card copies, duplicated disclosure handlers, or parallel score/caption markup. Foundation/category metadata and the info dialogs remain composed through their existing components. The final-word inline group is a small shared layout detail that prevents the disclosure from wrapping away from its heading.
+
+**Verification:** Semantic typecheck passed; reader tests **7/7**; component suite **1,548/1,548 across 101 files**; legacy tests **177/177**; production React CSS browser contract passed with Classic `tend.css` blocked, including category and Strength disclosure layouts at **375/390/430px** with Small/Medium/Large text; production app and scoring builds passed (**240 app modules, 3 scoring modules**). The build retains the non-fatal >500 kB JavaScript chunk advisory. Tests cover collapsed/expanded behavior, keyboard activation, independent controls, zero and unavailable scores, info-action independence, and the chevron's geometry and color states.
+
+**Limits and release boundary:** Runtime/component tests protect the shared behavior and accessibility contract; the browser test verifies computed layout and overflow, not physical-device rendering or a screen-reader audit. Preview fixtures are synthetic. No scoring, storage, network, live account, or database behavior changed. Changes remain local and uncommitted; nothing was pushed, merged, or deployed.
+
 ## Strength workout release (shipped)
 
 **Publication:** PR [#82](https://github.com/steveotto/tend/pull/82) merged on 2026-11-15. Release commit: `623441f494a811297109e57e59e704113ac5acda`; the implementation commit is `03a37ff584e154738ff0cc6f7b8f0f16eaefad90`. The Cloudflare Pages check for the merged main commit completed successfully (check run `132843744032`, deployment `3a82ac7d-d298-44c3-b25d-ed0d5b88daff`, project `tend-beta`). `https://tendwhatmatters.com/` returned the newly built app assets `main-CdLSQBzG.js` and `main-DRvNQwnj.css`; the deployed JavaScript contains the Strength tabs, Rhythm selection, unlinked-save confirmation, workout browser, and History/Log workout labels. The deployed page presents the normal Tend sign-in screen, not a setup-incomplete gate.

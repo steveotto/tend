@@ -656,6 +656,7 @@ export function RhythmHistoryView({
             }}
             consistencyCaption={metricCopy.consistency.shortDescription}
             onTrackCaption={metricCopy.onTrack.shortDescription}
+            measureDisclosure
             ariaLabel="Health score summary"
             headingAction={(
               <HealthScoreInfoButton

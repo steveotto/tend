@@ -102,6 +102,7 @@ export function CategoryHealthSummary({
       healthLabel={title}
       ariaLabel={`${title} summary`}
       showMeasures
+      measureDisclosure
       consistency={consistencyMetric}
       onTrack={onTrackMetric}
       consistencyCaption="How regularly you show up"

@@ -93,7 +93,8 @@ function renderCategory({
 describe('shared Category Health summary', () => {
   afterEach(cleanup);
 
-  it('keeps the Health heading, overall bar, and titled gauges compact', () => {
+  it('starts collapsed and keyboard-toggles the titled gauges independently of scoring details', async () => {
+    const user = userEvent.setup();
     renderCategory({
       score: categoryScore({
         eligibleFoundationIds: ['connection', 'trust'],
@@ -106,21 +107,52 @@ describe('shared Category Health summary', () => {
     const root = screen.getByRole('region', { name: 'Marriage Health summary' });
     const header = root.querySelector('.health-score-breakdown__header')!;
     const bar = root.querySelector('.health-score-breakdown__header + .health-score-meter')!;
-    const measures = root.querySelector('.health-score-measures')!;
     expect(screen.getByRole('heading', { name: 'Marriage Health' })).toBeTruthy();
-    expect(root.querySelector('.health-score-breakdown__header button')).toBeTruthy();
+    const toggle = within(root).getByRole('button', {
+      name: 'Show Marriage Health Consistency and On Track breakdown'
+    });
+    const chevron = toggle.querySelector('svg');
+    expect(chevron?.getAttribute('viewBox')).toBe('0 0 12 12');
+    expect(chevron?.querySelector('path')?.getAttribute('d')).toBe('M2.5 4.5 6 8l3.5-3.5');
+    expect(toggle.textContent).toBe('');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(header.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(bar.compareDocumentPosition(measures) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const measures = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(measures.hidden).toBe(true);
     expect(root.querySelector('.rhythm-history-view__score-summary-divider')).toBeNull();
-    expect(measures.querySelectorAll('.rhythm-score-circle')).toHaveLength(2);
     expect(screen.getByRole('meter', { name: 'Marriage Health score' }).getAttribute('aria-valuenow')).toBe('86.875');
-    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('83');
-    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
+    expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+    expect(screen.queryByRole('meter', { name: 'On Track score' })).toBeNull();
     expect(screen.queryByText('2 of 6 Foundations scored')).toBeNull();
-    expect(screen.queryByText('How regularly you show up')).toBeNull();
-    expect(screen.queryByText('Whether your Rhythms are up to date')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'How your Health score is calculated' })).toBeNull();
     expect(document.querySelectorAll('.preview-score-meter, .category-health-meter')).toHaveLength(0);
+
+    toggle.focus();
+    await user.keyboard('{Enter}');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-label')).toBe('Hide Marriage Health Consistency and On Track breakdown');
+    expect(toggle.querySelector('svg')).toBe(chevron);
+    expect(measures.hidden).toBe(false);
+    expect(bar.compareDocumentPosition(measures) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(measures.querySelectorAll('.rhythm-score-circle')).toHaveLength(2);
+    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('83');
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
+    expect(screen.getByText('How regularly you show up')).toBeTruthy();
+    expect(screen.getByText('Whether your Rhythms are up to date')).toBeTruthy();
+
+    const info = within(root).getByRole('button', { name: 'Show Marriage Health scoring explanation' });
+    await user.click(info);
+    expect(info.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    await user.click(within(screen.getByRole('dialog', { name: 'Marriage Health details' }))
+      .getByRole('button', { name: 'Close Health details' }));
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+
+    toggle.focus();
+    await user.keyboard('{Enter}');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(measures.hidden).toBe(true);
+    expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
   });
 
   it('opens scoring details in a nested dialog and preserves the parent dialog state', async () => {
@@ -219,6 +251,48 @@ describe('shared Category Health summary', () => {
     expect(within(reopenedDialog).getByRole('button', { name: 'How this Category contributes' }).getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('keeps separate Category Health disclosures independent', async () => {
+    const user = userEvent.setup();
+    const score = categoryScore({
+      eligibleFoundationIds: ['one'],
+      consistency: 60,
+      onTrack: 80,
+      health: 65
+    });
+    render(
+      <>
+        <CategoryHealthSummary
+          title="Marriage Health"
+          itemTerm={{ singular: 'Foundation', plural: 'Foundations' }}
+          score={score}
+          explanation="Marriage fixture."
+          rollup={categoryRollup('Marriage Health')}
+        />
+        <CategoryHealthSummary
+          title="Faith Health"
+          itemTerm={{ singular: 'Practice', plural: 'Practices' }}
+          score={score}
+          explanation="Faith fixture."
+          rollup={categoryRollup('Faith Health')}
+        />
+      </>
+    );
+
+    const marriage = screen.getByRole('button', {
+      name: 'Show Marriage Health Consistency and On Track breakdown'
+    });
+    const faith = screen.getByRole('button', {
+      name: 'Show Faith Health Consistency and On Track breakdown'
+    });
+    expect(marriage.getAttribute('aria-controls')).not.toBe(faith.getAttribute('aria-controls'));
+    await user.click(marriage);
+    expect(marriage.getAttribute('aria-expanded')).toBe('true');
+    expect(faith.getAttribute('aria-expanded')).toBe('false');
+    await user.click(faith);
+    expect(marriage.getAttribute('aria-expanded')).toBe('true');
+    expect(faith.getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('explains unlinked Rhythm exclusions and exposes an accessible edit action', async () => {
     const user = userEvent.setup();
     const rhythm = { ...todayRhythms[0]!, id: 'legacy-faith-rhythm', title: 'Legacy prayer' };
@@ -246,9 +320,14 @@ describe('shared Category Health summary', () => {
     const user = userEvent.setup();
     const { rerender } = renderCategory();
     expect(screen.queryByText('No scored Foundations yet.')).toBeNull();
-    for (const name of ['Marriage Health: Not enough data', 'Consistency: Score unavailable', 'On Track: Score unavailable']) {
-      expect(screen.getByRole('img', { name })).toBeTruthy();
-    }
+    expect(screen.getByRole('img', { name: 'Marriage Health: Not enough data' })).toBeTruthy();
+    expect(screen.queryByRole('img', { name: 'Consistency: Score unavailable' })).toBeNull();
+    const measureToggle = screen.getByRole('button', {
+      name: 'Show Marriage Health Consistency and On Track breakdown'
+    });
+    await user.click(measureToggle);
+    expect(screen.getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Show Marriage Health scoring explanation' }));
     const unavailableDialog = screen.getByRole('dialog', { name: 'Marriage Health details' });
     const unavailableDetails = within(unavailableDialog).getByRole('region', {
@@ -261,6 +340,9 @@ describe('shared Category Health summary', () => {
     expect(within(unavailableDialog).getByLabelText('75% times unavailable equals unavailable')).toBeTruthy();
     expect(within(unavailableDialog).getByLabelText('25% times unavailable equals unavailable')).toBeTruthy();
     await user.click(within(unavailableDialog).getByRole('button', { name: 'Close Health details' }));
+    await user.click(screen.getByRole('button', {
+      name: 'Hide Marriage Health Consistency and On Track breakdown'
+    }));
 
     rerender(
       <CategoryHealthSummary
@@ -277,8 +359,17 @@ describe('shared Category Health summary', () => {
       />
     );
     for (const name of ['Marriage Health score', 'Consistency score', 'On Track score']) {
-      expect(screen.getByRole('meter', { name }).getAttribute('aria-valuenow')).toBe('0');
+      if (name === 'Marriage Health score') {
+        expect(screen.getByRole('meter', { name }).getAttribute('aria-valuenow')).toBe('0');
+      } else {
+        expect(screen.queryByRole('meter', { name })).toBeNull();
+      }
     }
+    await user.click(screen.getByRole('button', {
+      name: 'Show Marriage Health Consistency and On Track breakdown'
+    }));
+    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('0');
     expect([...document.querySelectorAll('.rhythm-score-circle__value')].map(node => node.textContent))
       .toEqual(['0', '0']);
     await user.click(screen.getByRole('button', { name: 'Show Marriage Health scoring explanation' }));

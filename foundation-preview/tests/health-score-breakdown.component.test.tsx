@@ -1,4 +1,5 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { HealthScoreBreakdown } from '../src/components/HealthScoreBreakdown.tsx';
 
@@ -96,5 +97,76 @@ describe('shared Health score breakdown', () => {
     expect(container.querySelector('.health-score-measures')).toBeNull();
     expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
     expect(screen.queryByRole('meter', { name: 'On Track score' })).toBeNull();
+  });
+
+  it('opts compact Fitness summaries into independent accessible measure disclosures', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <HealthScoreBreakdown
+          title="Weight Health"
+          score={0}
+          healthLabel="Weight Health"
+          consistency={{ score: 0 }}
+          onTrack={{ score: null }}
+          consistencyCaption="Scheduled weigh-ins."
+          onTrackCaption="Whether weigh-ins are caught up."
+          ariaLabel="Weight Health summary"
+          measureDisclosure
+          showMeasures={false}
+        />
+        <HealthScoreBreakdown
+          title="Flexibility Health"
+          score={null}
+          healthLabel="Flexibility Health"
+          consistency={{ score: 67 }}
+          onTrack={{ score: null }}
+          consistencyCaption="Stretching follow-through."
+          onTrackCaption="Not scored for Flexibility."
+          ariaLabel="Flexibility Health summary"
+          measureDisclosure
+          showMeasures={false}
+        />
+      </>
+    );
+
+    const weightToggle = screen.getByRole('button', {
+      name: 'Show Weight Health Consistency and On Track breakdown'
+    });
+    const flexibilityToggle = screen.getByRole('button', {
+      name: 'Show Flexibility Health Consistency and On Track breakdown'
+    });
+    const chevron = weightToggle.querySelector('svg');
+    expect(weightToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(flexibilityToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(chevron?.getAttribute('viewBox')).toBe('0 0 12 12');
+    expect(chevron?.getAttribute('aria-hidden')).toBe('true');
+    expect(chevron?.querySelector('path')?.getAttribute('d')).toBe('M2.5 4.5 6 8l3.5-3.5');
+    expect(weightToggle.children).toHaveLength(1);
+    expect(weightToggle.getAttribute('aria-controls')).not.toBe(flexibilityToggle.getAttribute('aria-controls'));
+    expect(document.getElementById(weightToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    expect(document.getElementById(flexibilityToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
+
+    weightToggle.focus();
+    await user.keyboard('{Enter}');
+    expect(weightToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(flexibilityToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('meter', { name: 'Weight Health score' }).getAttribute('aria-valuenow')).toBe('0');
+    const weight = screen.getByRole('region', { name: 'Weight Health summary' });
+    expect(within(weight).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
+    expect(within(weight).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(within(weight).getByText('Scheduled weigh-ins.')).toBeTruthy();
+    expect(within(weight).getByText('Whether weigh-ins are caught up.')).toBeTruthy();
+
+    await user.click(flexibilityToggle);
+    expect(weightToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(flexibilityToggle.getAttribute('aria-expanded')).toBe('true');
+    const flexibility = screen.getByRole('region', { name: 'Flexibility Health summary' });
+    expect(within(flexibility).getByRole('img', { name: 'Flexibility Health: Not enough data' })).toBeTruthy();
+    expect(within(flexibility).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('67');
+    expect(within(flexibility).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(within(flexibility).getByText('Stretching follow-through.')).toBeTruthy();
+    expect(within(flexibility).getByText('Not scored for Flexibility.')).toBeTruthy();
   });
 });

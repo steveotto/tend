@@ -182,6 +182,7 @@ export function FitnessScoreSummary({
         onTrack={{ score: onTrack }}
         consistencyCaption={consistencyCaption}
         onTrackCaption={onTrackCaption}
+        measureDisclosure
         headingAction={infoButton}
         showMeasures={showMeasures}
       />

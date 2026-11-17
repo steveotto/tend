@@ -5265,6 +5265,69 @@ dialog.health-score-details-dialog[open] {
   overflow-wrap: anywhere;
 }
 
+.health-score-breakdown__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.health-score-breakdown__title h3 {
+  line-height: 1.25;
+}
+
+.health-score-breakdown__title-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.health-score-breakdown__measure-toggle {
+  display: inline-flex;
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--tend-line);
+  border-radius: 50%;
+  background: var(--tend-surface);
+  cursor: pointer;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.health-score-breakdown__measure-toggle svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--tend-ink-soft, var(--tend-secondary));
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition: transform 200ms ease;
+}
+
+.health-score-breakdown__measure-toggle[aria-expanded='true'] {
+  border-color: var(--tend-forest);
+  background: var(--tend-forest);
+}
+
+.health-score-breakdown__measure-toggle[aria-expanded='true'] svg {
+  stroke: #ffffff;
+  transform: rotate(180deg);
+}
+
+.health-score-breakdown__measure-toggle:focus-visible {
+  outline: 2px solid var(--tend-forest, var(--forest));
+  outline-offset: 1px;
+}
+
+.health-score-breakdown__measures[hidden] {
+  display: none;
+}
+
 .health-score-breakdown__header > span {
   color: var(--tend-ink, var(--ink));
   font-size: var(--health-score-value-size, calc(1.5rem * var(--app-text-scale, 1)));
