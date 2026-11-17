@@ -338,6 +338,7 @@ describe('PreviewIdentityHost', () => {
     expect(screen.queryByRole('link', { name: 'Component catalogue' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Backup & recovery' }));
     expect(screen.getByLabelText('Import backup')).toBeTruthy();
+    await user.click(screen.getByText('Advanced recovery'));
     await user.click(screen.getByRole('button', { name: /Account recovery/ }));
     await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
     await screen.findByText('This device’s data was saved to your account.');

@@ -58,14 +58,16 @@ describe('Preview backup recovery controls', () => {
       />
     );
 
+    await user.click(screen.getByText('Advanced recovery'));
     await user.click(screen.getByRole('button', { name: /Download exact saved source/ }));
-    await user.click(screen.getByRole('button', { name: /Download current in-memory state/ }));
+    await user.click(screen.getByRole('button', { name: /Export backup/ }));
 
     expect(blobs).toHaveLength(2);
     expect(await blobs[0]!.text()).toBe(savedSource);
     const exported = parsePreviewBackup(await blobs[1]!.text(), currentDate);
     expect(exported.valid).toBe(true);
     if (exported.valid) expect(exported.envelope.data).toEqual(data);
+    expect(await screen.findByText(/These changes are not confirmed saved on this device/)).toBeTruthy();
     expect(onImport).not.toHaveBeenCalled();
   });
 

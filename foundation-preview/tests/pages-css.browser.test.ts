@@ -1050,6 +1050,7 @@ async function main() {
             return window.scrollY;
           });
           assert.ok(backgroundScrollY > 0, 'The recovery fixture should have a scrollable background to restore.');
+          await page.getByText('Advanced recovery').click();
           await page.getByRole('button', { name: /Account recovery/ }).click();
           const recoveryDialog = page.getByRole('dialog', { name: 'Account recovery' });
           await recoveryDialog.waitFor();

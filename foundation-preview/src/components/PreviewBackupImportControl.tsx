@@ -30,6 +30,7 @@ type PreviewBackupImportControlProps = {
   showExport?: boolean;
   presentation?: 'default' | 'recovery';
   accountScoped?: boolean;
+  advancedRecoveryInParent?: boolean;
 };
 
 export function PreviewBackupImportControl({
@@ -44,7 +45,8 @@ export function PreviewBackupImportControl({
   recoveryError = null,
   showExport = false,
   presentation = 'default',
-  accountScoped = false
+  accountScoped = false,
+  advancedRecoveryInParent = false
 }: PreviewBackupImportControlProps) {
   const [pending, setPending] = useState<PendingImport | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
@@ -92,6 +94,7 @@ export function PreviewBackupImportControl({
   }
 
   function exportCurrent() {
+    const hasUnconfirmedChanges = status.kind !== 'saved';
     const error = downloadText(
       presentation === 'recovery' && accountScoped
         ? 'tend-device-backup.json'
@@ -101,10 +104,10 @@ export function PreviewBackupImportControl({
     );
     setMessage(error
       ? { text: error, error: true }
-      : { text: presentation === 'recovery' && accountScoped
-        ? 'Device backup saved to your downloads.'
-        : presentation === 'recovery'
-          ? 'Preview backup downloaded.'
+      : { text: hasUnconfirmedChanges
+        ? 'Backup downloaded from current in-memory data. These changes are not confirmed saved on this device.'
+        : presentation === 'recovery' && accountScoped
+          ? 'Device backup saved to your downloads.'
           : 'Preview backup downloaded.', error: false });
   }
 
@@ -187,13 +190,11 @@ export function PreviewBackupImportControl({
                 disabled={status.kind === 'loading'}
               >
                 <span className="preview-backup-import__row-copy">
-                  <span className="preview-backup-import__row-title">
-                    {accountScoped ? 'Download current in-memory state' : 'Export backup'}
-                  </span>
+                  <span className="preview-backup-import__row-title">Export backup</span>
                   <span className="preview-backup-import__row-description">
-                    {accountScoped
-                      ? 'Export what this tab currently holds without saving or reading the stored copy.'
-                      : 'Save a preview backup file to this device.'}
+                    {status.kind === 'saved'
+                      ? 'Download the current data saved on this device.'
+                      : 'Download current in-memory changes; these may not be saved on this device yet.'}
                   </span>
                 </span>
                 <span className="preview-backup-import__row-action" aria-hidden="true">↓</span>
@@ -234,72 +235,86 @@ export function PreviewBackupImportControl({
               />
             </label>
           )}
-        {compactRecovery && accountScoped && currentRaw !== null && (
-          <button
-            type="button"
-            className="preview-backup-import__row"
-            onClick={downloadStoredSource}
-            disabled={status.kind === 'loading' || status.kind === 'conflict'}
-          >
-            <span className="preview-backup-import__row-copy">
-              <span className="preview-backup-import__row-title">Download exact saved source</span>
-              <span className="preview-backup-import__row-description">
-                Download the stored document unchanged, even if validation fails.
-              </span>
-            </span>
-            <span className="preview-backup-import__row-action" aria-hidden="true">↓</span>
-          </button>
-        )}
-        {recoverySourceRaw !== null && (
-          <button
-            type="button"
-            className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
-            onClick={() => downloadRecovery(recoverySourceRaw, accountScoped ? 'tend-original-backup.json' : 'tend-preview-original-import.json')}
-          >
-            {compactRecovery ? (
-              <span className="preview-backup-import__row-copy">
-                <span className="preview-backup-import__row-title">Original backup</span>
-                <span className="preview-backup-import__row-description">Download the preserved original file from the last import.</span>
-              </span>
-            ) : 'Download original imported backup'}
-          </button>
-        )}
-        {recoveryRaw !== null && (
-          <button
-            type="button"
-            className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
-            onClick={() => downloadRecovery(recoveryRaw, accountScoped ? 'tend-device-before-import.json' : 'tend-preview-before-import.json')}
-          >
-            {compactRecovery ? (
-              <span className="preview-backup-import__row-copy">
-                <span className="preview-backup-import__row-title">Pre-import device backup</span>
-                <span className="preview-backup-import__row-description">Recover data saved before the last import.</span>
-              </span>
-            ) : 'Download pre-import local data'}
-          </button>
-        )}
-        {recoveryArchiveRaw !== null && (
-          <button
-            type="button"
-            className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
-            onClick={() => downloadRecovery(recoveryArchiveRaw, accountScoped ? 'tend-import-recovery-archive.json' : 'tend-preview-import-recovery-archive.json')}
-          >
-            {compactRecovery ? (
-              <span className="preview-backup-import__row-copy">
-                <span className="preview-backup-import__row-title">Import recovery archive</span>
-                <span className="preview-backup-import__row-description">Download a preserved recovery copy.</span>
-              </span>
-            ) : 'Download import recovery archive'}
-          </button>
-        )}
       </div>
+      {!advancedRecoveryInParent && (currentRaw !== null || recoverySourceRaw !== null || recoveryRaw !== null
+        || recoveryArchiveRaw !== null || recoveryError !== null) && (
+        <details className="preview-account-backup__technical">
+          <summary>Advanced recovery</summary>
+          <div className={compactRecovery ? 'preview-backup-import__rows' : 'preview-data-controls__actions'}>
+            {currentRaw !== null && (
+              compactRecovery
+                ? (
+                  <button type="button" className="preview-backup-import__row" onClick={downloadStoredSource}>
+                    <span className="preview-backup-import__row-copy">
+                      <span className="preview-backup-import__row-title">Download exact saved source</span>
+                      <span className="preview-backup-import__row-description">Download the stored document unchanged, even if validation fails.</span>
+                    </span>
+                    <span className="preview-backup-import__row-action" aria-hidden="true">↓</span>
+                  </button>
+                )
+                : <button type="button" className="btn mini ghost" onClick={downloadStoredSource}>Download exact saved source</button>
+            )}
+            {recoverySourceRaw !== null && (
+              <button
+                type="button"
+                className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
+                onClick={() => downloadRecovery(
+                  recoverySourceRaw,
+                  accountScoped ? 'tend-device-original-backup.json' : 'tend-preview-original-import.json'
+                )}
+              >
+                {compactRecovery ? (
+                  <span className="preview-backup-import__row-copy">
+                    <span className="preview-backup-import__row-title">Original backup</span>
+                    <span className="preview-backup-import__row-description">Download the preserved original file from the last import.</span>
+                  </span>
+                ) : 'Download original imported backup'}
+              </button>
+            )}
+            {recoveryRaw !== null && (
+              <button
+                type="button"
+                className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
+                onClick={() => downloadRecovery(
+                  recoveryRaw,
+                  accountScoped ? 'tend-device-before-import.json' : 'tend-preview-before-import.json'
+                )}
+              >
+                {compactRecovery ? (
+                  <span className="preview-backup-import__row-copy">
+                    <span className="preview-backup-import__row-title">Pre-import device backup</span>
+                    <span className="preview-backup-import__row-description">Recover data saved before the last import.</span>
+                  </span>
+                ) : 'Download pre-import local data'}
+              </button>
+            )}
+            {recoveryArchiveRaw !== null && (
+              <button
+                type="button"
+                className={compactRecovery ? 'preview-backup-import__row' : 'btn mini ghost'}
+                onClick={() => downloadRecovery(
+                  recoveryArchiveRaw,
+                  accountScoped ? 'tend-device-import-recovery-archive.json' : 'tend-preview-import-recovery-archive.json'
+                )}
+              >
+                {compactRecovery ? (
+                  <span className="preview-backup-import__row-copy">
+                    <span className="preview-backup-import__row-title">Import recovery archive</span>
+                    <span className="preview-backup-import__row-description">Download a preserved recovery copy.</span>
+                  </span>
+                ) : 'Download import recovery archive'}
+              </button>
+            )}
+          </div>
+          {recoveryError && <p className="preview-data-controls__error" role="alert">{recoveryError}</p>}
+        </details>
+      )}
       {message && (
         <p className={message.error ? 'preview-data-controls__error' : 'preview-data-controls__message'}
           role={message.error ? 'alert' : 'status'}>
           {message.text}
         </p>
       )}
-      {recoveryError && <p className="preview-data-controls__error" role="alert">{recoveryError}</p>}
       {pending && (
         <MoneyGoalDialog
           title={accountScoped ? 'Replace data on this device?' : 'Replace preview data?'}

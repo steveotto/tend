@@ -3783,7 +3783,7 @@ describe('preview backup controls', () => {
     expect(loadPreview(window.localStorage, new Date().toISOString().slice(0, 10)).kind).toBe('loaded');
   });
 
-  it('imports locally from Settings without automatic account access when sync is off', async () => {
+  it('imports locally from Settings without uploading the import before explicit reconciliation', async () => {
     const user = userEvent.setup();
     const { createObjectURL } = setDownloadMocks();
     const identity = createAuthenticatedPreviewIdentity('11111111-1111-4111-8111-111111111111', 1);
@@ -3795,20 +3795,24 @@ describe('preview backup controls', () => {
     const imported = createSamplePreviewData();
     imported.goals[0]!.title = 'Synthetic imported goal';
     const sourceRaw = JSON.stringify(createPreviewEnvelope(imported), null, 2);
+    const readAccountBackup = vi.fn(async () => null);
+    const saveAccountBackup = vi.fn(async () => 1);
     const accountBackupApi: PreviewAccountBackupApi = {
-      read: vi.fn(async () => { throw new Error('Synthetic cloud read failure'); }),
-      save: vi.fn(async () => 1)
+      read: readAccountBackup,
+      save: saveAccountBackup
     };
 
     const app = testingRender(
       <App identity={identity} accountBackupApi={accountBackupApi} />
     );
+    await waitFor(() => expect(saveAccountBackup).toHaveBeenCalledTimes(1));
+    const accountSaveCountBeforeImport = saveAccountBackup.mock.calls.length;
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
     await user.click(await screen.findByRole('button', { name: /^Settings$/ }));
     await user.click(await screen.findByRole('button', { name: 'Backup & recovery' }));
-    expect(accountBackupApi.read).not.toHaveBeenCalled();
     expect(await screen.findByRole('heading', { name: 'Backup & recovery' })).toBeTruthy();
     const importInput = screen.getByLabelText('Import backup');
+    const readsBeforeImport = readAccountBackup.mock.calls.length;
     await user.upload(importInput, new File([sourceRaw], 'synthetic-preview.json', { type: 'application/json' }));
     const dialog = await screen.findByRole('dialog', { name: 'Replace data on this device?' });
     expect(within(dialog).getByText(/Your account copy is not overwritten unless you confirm a separate account upload/)).toBeTruthy();
@@ -3828,14 +3832,17 @@ describe('preview backup controls', () => {
     });
     expect(await createObjectURL.mock.calls[0]![0].text()).toBe(rawBeforeImport);
     expect(storage.getItem(PREVIEW_V39_RECOVERY_KEY)).toBe(previousRaw);
-    expect(accountBackupApi.save).not.toHaveBeenCalled();
+    await waitFor(() => expect(readAccountBackup.mock.calls.length).toBeGreaterThan(readsBeforeImport));
+    expect(saveAccountBackup).toHaveBeenCalledTimes(accountSaveCountBeforeImport);
 
+    const readsBeforeRemount = readAccountBackup.mock.calls.length;
     app.unmount();
     testingRender(<App identity={identity} accountBackupApi={accountBackupApi} />);
+    await waitFor(() => expect(readAccountBackup.mock.calls.length).toBeGreaterThan(readsBeforeRemount));
     expect(loadPreview(browserPreviewStorage(identity), '2026-10-21')).toMatchObject({
       kind: 'loaded',
       data: imported
     });
-    expect(accountBackupApi.save).not.toHaveBeenCalled();
+    expect(saveAccountBackup).toHaveBeenCalledTimes(accountSaveCountBeforeImport);
   });
 });

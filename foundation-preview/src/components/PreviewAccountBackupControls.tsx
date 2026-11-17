@@ -46,6 +46,10 @@ type PreviewAccountBackupControlsProps = {
   data: PreviewData;
   currentDate: string;
   localRaw: string | null;
+  importRecoveryRaw?: string | null;
+  importRecoverySourceRaw?: string | null;
+  importRecoveryArchiveRaw?: string | null;
+  importRecoveryError?: string | null;
   localRecoveryRaw: string | null;
   localRecoveryError?: string | null;
   repairRecoveryRaw?: string | null;
@@ -262,6 +266,10 @@ export function PreviewAccountBackupControls({
   data,
   currentDate,
   localRaw,
+  importRecoveryRaw = null,
+  importRecoverySourceRaw = null,
+  importRecoveryArchiveRaw = null,
+  importRecoveryError = null,
   localRecoveryRaw,
   localRecoveryError = null,
   repairRecoveryRaw = null,
@@ -898,8 +906,50 @@ export function PreviewAccountBackupControls({
                 {recoveryDisabledMessage}
               </p>
             )}
-            {(localRecoveryRaw !== null || repairRecoveryRaw !== null || cloudRecoveryRaw !== null || deviceRecoveryRaw !== null) && (
+            {(localRaw !== null || importRecoverySourceRaw !== null || importRecoveryRaw !== null
+              || importRecoveryArchiveRaw !== null || localRecoveryRaw !== null || repairRecoveryRaw !== null
+              || cloudRecoveryRaw !== null || deviceRecoveryRaw !== null) && (
               <div className="preview-account-backup__rows preview-account-backup__recovery-files">
+                {localRaw !== null && (
+                  <RecoveryActionRow
+                    title="Download exact saved source"
+                    description="Download this device’s stored document unchanged."
+                    onClick={() => setMessage(
+                      downloadRecovery(localRaw, 'tend-device-exact-saved-source.json')
+                        ?? 'Exact saved source downloaded unchanged.'
+                    )}
+                  />
+                )}
+                {importRecoverySourceRaw !== null && (
+                  <RecoveryActionRow
+                    title="Download original imported backup"
+                    description="Download the original file preserved at import."
+                    onClick={() => setMessage(
+                      downloadRecovery(importRecoverySourceRaw, 'tend-device-original-backup.json')
+                        ?? 'Original imported backup downloaded.'
+                    )}
+                  />
+                )}
+                {importRecoveryRaw !== null && (
+                  <RecoveryActionRow
+                    title="Download pre-import device copy"
+                    description="Download the device data preserved before the last import."
+                    onClick={() => setMessage(
+                      downloadRecovery(importRecoveryRaw, 'tend-device-before-import.json')
+                        ?? 'Pre-import device copy downloaded.'
+                    )}
+                  />
+                )}
+                {importRecoveryArchiveRaw !== null && (
+                  <RecoveryActionRow
+                    title="Download import recovery archive"
+                    description="Download the archive preserved during backup import."
+                    onClick={() => setMessage(
+                      downloadRecovery(importRecoveryArchiveRaw, 'tend-device-import-recovery-archive.json')
+                        ?? 'Import recovery archive downloaded.'
+                    )}
+                  />
+                )}
                 {localRecoveryRaw !== null && (
                   <RecoveryActionRow
                     title="Download pre-restore copy"
@@ -942,9 +992,9 @@ export function PreviewAccountBackupControls({
                 )}
               </div>
             )}
-            {(localRecoveryError || repairRecoveryError || cloudRecoveryError || deviceRecoveryError) && (
+            {(importRecoveryError || localRecoveryError || repairRecoveryError || cloudRecoveryError || deviceRecoveryError) && (
               <p className="preview-account-backup__error" role="alert">
-                {localRecoveryError || repairRecoveryError || cloudRecoveryError || deviceRecoveryError}
+                {importRecoveryError || localRecoveryError || repairRecoveryError || cloudRecoveryError || deviceRecoveryError}
               </p>
             )}
             {message && <p className="preview-account-backup__message" role="status">{message}</p>}

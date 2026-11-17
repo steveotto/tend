@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewAccountSync } from '../src/components/PreviewAccountSync.tsx';
 import { PreviewBackupImportControl } from '../src/components/PreviewBackupImportControl.tsx';
 import type { PreviewPersistenceStatus } from '../src/components/PreviewDataControls.tsx';
+import { createAuthenticatedPreviewIdentity } from '../src/domain/preview-identity.ts';
 import {
   createEmptyPreviewData,
   createPreviewEnvelope,
@@ -28,7 +29,9 @@ import {
   validatePreviewAccountBackup
 } from '../src/storage/preview-account-backup.ts';
 import {
+  browserPreviewStorage,
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
+  PREVIEW_ACCOUNT_STORAGE_PREFIX,
   PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   loadPreviewImportSyncGuard,
@@ -38,6 +41,7 @@ import type { PreviewStorage } from '../src/storage/preview-storage.ts';
 
 const currentDate = '2026-11-06';
 const accountId = 'a0000000-0000-4000-8000-000000000001';
+let restoreWindowLocalStorage: (() => void) | null = null;
 
 beforeEach(() => {
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
@@ -45,9 +49,39 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  restoreWindowLocalStorage?.();
+  restoreWindowLocalStorage = null;
   vi.restoreAllMocks();
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
 });
+
+function installSyntheticWindowStorage(noOpWriteKey?: string) {
+  const values = new Map<string, string>();
+  let noOpWriteCount = 0;
+  const storage: Storage = {
+    get length() {
+      return values.size;
+    },
+    clear: () => values.clear(),
+    getItem: key => values.get(key) ?? null,
+    key: index => [...values.keys()][index] ?? null,
+    removeItem: key => { values.delete(key); },
+    setItem: (key, value) => {
+      if (noOpWriteKey !== undefined && key === noOpWriteKey) {
+        noOpWriteCount += 1;
+        return;
+      }
+      values.set(key, String(value));
+    }
+  };
+  const previousDescriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: storage });
+  restoreWindowLocalStorage = () => {
+    if (previousDescriptor) Object.defineProperty(window, 'localStorage', previousDescriptor);
+    else Reflect.deleteProperty(window, 'localStorage');
+  };
+  return { values, noOpWriteCount: () => noOpWriteCount };
+}
 
 function makeStorage(initialData?: PreviewData) {
   const values = new Map<string, string>();
@@ -348,6 +382,18 @@ async function waitForRevision(
   await waitFor(() => expect(backendState.record?.revision).toBe(revision), { timeout: 5000 });
 }
 
+async function openAdvancedRecovery() {
+  const summary = screen.getByText('Advanced recovery');
+  if (!summary.closest('details')?.open) fireEvent.click(summary);
+  fireEvent.click(await screen.findByRole('button', { name: /Account recovery/ }));
+}
+
+async function openTechnicalAlert() {
+  const summary = await screen.findByText('Technical details');
+  if (!summary.closest('details')?.open) fireEvent.click(summary);
+  return screen.findByRole('alert');
+}
+
 describe('Preview account sync', () => {
   it('opens the separate recovery screen without another account read', async () => {
     const data = createSamplePreviewData();
@@ -375,7 +421,7 @@ describe('Preview account sync', () => {
     fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
     expect(screen.getByRole('button', { name: /Export backup/ })).toBeTruthy();
     expect(screen.getByLabelText('Import backup')).toBeTruthy();
-    expect(screen.getByText('Save a preview backup file to this device.')).toBeTruthy();
+    expect(screen.getByText('Download the current data saved on this device.')).toBeTruthy();
     expect(screen.getByText('Restore data from a file you saved.')).toBeTruthy();
     const backupFile = new File(
       [JSON.stringify(createPreviewEnvelope(data))],
@@ -389,7 +435,7 @@ describe('Preview account sync', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Replace preview data?' })).toBeNull());
     const readsBeforeRecovery = service.readCalls;
 
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     const recovery = screen.getByRole('dialog', { name: 'Account recovery' });
     expect(screen.getByText('Technical details').closest('details')?.hasAttribute('open')).toBe(false);
     expect(service.readCalls).toBe(readsBeforeRecovery);
@@ -495,7 +541,7 @@ describe('Preview account sync', () => {
     expect(service.saveCalls).toBe(0);
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(localRaw);
     fireEvent.click(screen.getByText('Backup & recovery'));
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     expect(screen.getByRole('button', { name: /Save this device’s copy to account/ }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByText('Cross-device sync is off. These account actions run only when you choose them.')).toBeTruthy();
@@ -787,7 +833,7 @@ describe('Preview account sync', () => {
 
     fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
+    expect((await openTechnicalAlert()).textContent).toContain(
       'The latest account copy could not be read or validated.'
     );
     expect(view.container.textContent).not.toContain('synthetic private account response');
@@ -824,7 +870,7 @@ describe('Preview account sync', () => {
       releaseRead?.(service.record);
     });
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
+    expect((await openTechnicalAlert()).textContent).toContain(
       'The signed-in account changed during conflict review.'
     );
     expect(service.saveCalls).toBe(0);
@@ -867,7 +913,7 @@ describe('Preview account sync', () => {
       releaseRead?.(service.record);
     });
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
+    expect((await openTechnicalAlert()).textContent).toContain(
       'An unexpected error stopped conflict resolution before the account write.'
     );
     expect(view.container.textContent).not.toContain('synthetic private identity exception');
@@ -1047,12 +1093,176 @@ describe('Preview account sync', () => {
 
     fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
+    expect((await openTechnicalAlert()).textContent).toContain(
       'The account copy changed while this conflict was open. The comparison is refreshed; choose again to use the current account revision.'
     );
     expect(service.saveCalls).toBe(0);
     expect(service.record?.revision).toBe(4);
     expect(storage.values.has(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`)).toBe(false);
+    view.unmount();
+  });
+
+  it('creates a missing recovery archive before saving and confirms a lost save response by read-back', async () => {
+    const { cloudData, storage: fixture } = makeImportedConflictFixture();
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    if (identity.kind !== 'authenticated') throw new Error('Synthetic account identity is invalid.');
+    const browserStorage = installSyntheticWindowStorage();
+    const storage = browserPreviewStorage(identity);
+    for (const [key, value] of fixture.values) storage.setItem(key, value);
+    const cloud = cloudRecord(cloudData, 3);
+    const recoveryKey = `${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`;
+    const accountRoot = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
+    const browserRecoveryKey = `${accountRoot}:account-sync-cloud-recovery`;
+    const otherAccountRoot = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:b0000000-0000-4000-8000-000000000002`;
+    browserStorage.values.set(`${otherAccountRoot}:account-sync-cloud-recovery`, 'other-account-archive');
+    const localRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    let record: PreviewAccountBackupRecord | null = structuredClone(cloud);
+    let saveCalls = 0;
+    let expectedRevisions: number[] = [];
+    let recoveryAtSave: string | null = null;
+    const api: PreviewAccountBackupApi = {
+      read: async () => record ? structuredClone(record) : null,
+      save: async (document, expectedRevision) => {
+        saveCalls += 1;
+        expectedRevisions = [...expectedRevisions, expectedRevision];
+        recoveryAtSave = browserStorage.values.get(browserRecoveryKey) ?? null;
+        if ((record?.revision ?? 0) !== expectedRevision) {
+          throw new PreviewAccountBackupError('stale', 'synthetic revision conflict');
+        }
+        record = {
+          document: structuredClone(document),
+          schemaVersion: document.schemaVersion,
+          revision: expectedRevision + 1,
+          updatedAt: '2026-11-06T15:00:00.000Z'
+        };
+        throw new Error('synthetic response lost after account save');
+      }
+    };
+    const view = render(<Browser api={api} storage={storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    expect(browserStorage.values.has(browserRecoveryKey)).toBe(false);
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+    expect(await screen.findByText(
+      'Read-only conflict check — phase: recovery-archive; error code: none; revision match: match; archive match: missing.'
+    )).toBeTruthy();
+    expect(browserStorage.values.has(browserRecoveryKey)).toBe(false);
+    expect(saveCalls).toBe(0);
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+    expect(await screen.findByText('Saved to your account')).toBeTruthy();
+
+    expect(saveCalls).toBe(1);
+    expect(expectedRevisions).toEqual([3]);
+    expect(record?.revision).toBe(4);
+    expect((record?.document as { data: PreviewData }).data.people[0]?.displayName)
+      .toBe('Imported local data');
+    expect(recoveryAtSave).not.toBeNull();
+    expect(browserStorage.values.get(browserRecoveryKey)).toBe(recoveryAtSave);
+    expect(browserStorage.values.has(recoveryKey)).toBe(false);
+    expect(browserStorage.values.get(accountRoot)).toBe(localRaw);
+    expect(browserStorage.values.get(`${otherAccountRoot}:account-sync-cloud-recovery`))
+      .toBe('other-account-archive');
+    expect(JSON.parse(recoveryAtSave!)).toMatchObject({
+      accountId,
+      revision: 3,
+      document: cloud.document,
+      updatedAt: cloud.updatedAt
+    });
+    view.unmount();
+  });
+
+  it('classifies a silent no-op through the production browser adapter and keeps the archive missing', async () => {
+    const { cloudData, storage: fixture } = makeImportedConflictFixture();
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    if (identity.kind !== 'authenticated') throw new Error('Synthetic account identity is invalid.');
+    const browserArchiveKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}:account-sync-cloud-recovery`;
+    const browserStorage = installSyntheticWindowStorage(browserArchiveKey);
+    const storage = browserPreviewStorage(identity);
+    for (const [key, value] of fixture.values) storage.setItem(key, value);
+    const localRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    expect(localRaw).not.toBeNull();
+
+    const service = backend(cloudRecord(cloudData, 3));
+    const view = render(<Browser api={service.api} storage={storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    const report = 'Read-only conflict check — phase: recovery-archive; error code: none; revision match: match; archive match: missing.';
+    const readsBeforeFirstCheck = service.readCalls;
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+    await waitFor(() => expect(service.readCalls).toBe(readsBeforeFirstCheck + 1));
+    expect(screen.getByText(report)).toBeTruthy();
+    expect(storage.getItem(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`)).toBeNull();
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+    expect((await openTechnicalAlert()).textContent).toContain(
+      'Recovery archive read-back was missing (archive-readback-missing). No account write was attempted; no archive was visible after writing.'
+    );
+    expect(browserStorage.noOpWriteCount()).toBe(1);
+    expect(browserStorage.values.get(browserArchiveKey)).toBeUndefined();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(localRaw);
+    expect(service.saveCalls).toBe(0);
+
+    const readsBeforeFreshCheck = service.readCalls;
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+    await waitFor(() => expect(service.readCalls).toBe(readsBeforeFreshCheck + 1));
+    expect(screen.getByText(report)).toBeTruthy();
+    expect(storage.getItem(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`)).toBeNull();
+    expect(service.saveCalls).toBe(0);
+    view.unmount();
+  });
+
+  it('reports an unavailable recovery-storage writer before any archive or account write', async () => {
+    const { cloudData, storage: fixture } = makeImportedConflictFixture();
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    if (identity.kind !== 'authenticated') throw new Error('Synthetic account identity is invalid.');
+    const browserStorage = installSyntheticWindowStorage();
+    const productionStorage = browserPreviewStorage(identity);
+    for (const [key, value] of fixture.values) productionStorage.setItem(key, value);
+    const storage = new Proxy(productionStorage, {
+      get(target, property, receiver) {
+        if (property === 'setItem') return undefined;
+        return Reflect.get(target, property, receiver);
+      }
+    });
+    const service = backend(cloudRecord(cloudData, 3));
+    const view = render(<Browser api={service.api} storage={storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await openTechnicalAlert()).textContent).toContain(
+      'Recovery storage is unavailable (storage-unavailable). No account write was attempted; existing archives were not changed.'
+    );
+    expect(browserStorage.values.get(`${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}:account-sync-cloud-recovery`))
+      .toBeUndefined();
+    expect(service.saveCalls).toBe(0);
+    view.unmount();
+  });
+
+  it('reports mismatched recovery read-back without attempting the account save', async () => {
+    const { cloudData, storage: fixture } = makeImportedConflictFixture();
+    const recoveryKey = `${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`;
+    const mismatchedRaw = '{"synthetic":"mismatched-read-back"}';
+    const storage: PreviewStorage = {
+      getItem: key => key === recoveryKey
+        ? fixture.values.get(recoveryKey) ?? null
+        : fixture.storage.getItem(key),
+      setItem: (key, value) => {
+        fixture.storage.setItem(key, key === recoveryKey ? mismatchedRaw : value);
+      }
+    };
+    const service = backend(cloudRecord(cloudData, 3));
+    const view = render(<Browser api={service.api} storage={storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await openTechnicalAlert()).textContent).toContain(
+      'Recovery archive read-back mismatched (archive-readback-mismatch). No account write was attempted; do not clear or replace any archive.'
+    );
+    expect(fixture.values.get(recoveryKey)).toBe(mismatchedRaw);
+    expect(service.saveCalls).toBe(0);
     view.unmount();
   });
 
@@ -1101,7 +1311,7 @@ describe('Preview account sync', () => {
 
     fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
+    expect((await openTechnicalAlert()).textContent).toContain(
       'A different account recovery copy already exists. It was left unchanged; no account write was attempted.'
     );
     expect(service.saveCalls).toBe(0);
@@ -1126,8 +1336,8 @@ describe('Preview account sync', () => {
 
     fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
-      'The recovery archive could not be verified. No account write was attempted; the archive may have been created.'
+    expect((await openTechnicalAlert()).textContent).toContain(
+      'The recovery archive write failed (archive-write-failed). No account write was attempted; the archive may have been created. Do not clear it.'
     );
     expect(view.container.textContent).not.toContain('synthetic private storage detail');
     expect(service.saveCalls).toBe(0);
@@ -1157,7 +1367,7 @@ describe('Preview account sync', () => {
 
     fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
+    expect((await openTechnicalAlert()).textContent).toContain(
       'The account save may have completed, but its result could not be confirmed. Check the account status before retrying; no automatic retry was made.'
     );
     expect(view.container.textContent).not.toContain('synthetic private');
@@ -1183,7 +1393,7 @@ describe('Preview account sync', () => {
 
     fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
+    expect((await openTechnicalAlert()).textContent).toContain(
       'The account copy was confirmed, but local recovery or sync bookkeeping could not be completed.'
     );
     expect(view.container.textContent).not.toContain('synthetic private metadata detail');
@@ -1399,7 +1609,7 @@ describe('Preview account sync', () => {
     await screen.findByRole('heading', { name: 'This device and your account have different copies' });
 
     fireEvent.click(screen.getByText('Backup & recovery'));
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     fireEvent.click(view.getByRole('button', { name: /Save this device’s copy to account/ }));
     await screen.findByRole('heading', { name: 'Replace account copy?' });
     expect(service.saveCalls).toBe(0);
@@ -1433,7 +1643,7 @@ describe('Preview account sync', () => {
     await screen.findByRole('heading', { name: 'This device and your account have different copies' });
 
     fireEvent.click(screen.getByText('Backup & recovery'));
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     fireEvent.click(view.getByRole('button', { name: /Replace this device’s data with account copy/ }));
     await screen.findByRole('heading', { name: 'Replace this device’s data?' });
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(deviceRaw);
@@ -1579,7 +1789,7 @@ describe('Preview account sync', () => {
       .toBe(localRecovery);
     expect(service.record?.revision).toBe(2);
     fireEvent.click(screen.getByText('Backup & recovery'));
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     expect(view.container.textContent).toContain('Download previous device copy');
     view.unmount();
   });
@@ -1715,7 +1925,7 @@ describe('Preview account sync', () => {
 
     await screen.findByText(/Needs attention|Could not validate/i);
     fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     await screen.findByRole('dialog', { name: 'Account recovery' });
     fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
     await screen.findByText(/Workout: Lower Body/);
@@ -1785,7 +1995,7 @@ describe('Preview account sync', () => {
 
     await screen.findByText(/Needs attention|Could not validate/i);
     fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
     await screen.findByText(/Workout: Lower Body/);
     fireEvent.click(screen.getByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
@@ -1816,7 +2026,7 @@ describe('Preview account sync', () => {
     expect(service.saveCalls).toBe(1);
     expect(service.record?.revision).toBe(5);
 
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
     await screen.findByText(/passed backup validation/);
     expect(service.saveCalls).toBe(1);
@@ -1840,7 +2050,7 @@ describe('Preview account sync', () => {
 
     await screen.findByText(/Needs attention|Could not validate/i);
     fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
     await screen.findByText(/Workout: Lower Body/);
     fireEvent.click(screen.getByRole('button', { name: /Repair this workout’s broken Rhythm link/ }));
@@ -1883,7 +2093,7 @@ describe('Preview account sync', () => {
 
     await screen.findByText(/Needs attention|Could not validate/i);
     fireEvent.click(screen.getByRole('button', { name: /Backup & recovery/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await openAdvancedRecovery();
     await screen.findByRole('dialog', { name: 'Account recovery' });
     fireEvent.click(screen.getByRole('button', { name: /Check data/ }));
     await screen.findByText(/Workout: Lower Body/);

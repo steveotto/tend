@@ -3547,6 +3547,10 @@ function PreviewWorkspace({
             localIsPristine={localIsPristine}
             currentDate={currentDate}
             localRaw={expectedRaw.current}
+            importRecoveryRaw={importRecoveryCopy}
+            importRecoverySourceRaw={importRecoverySourceCopy}
+            importRecoveryArchiveRaw={importRecoveryArchive}
+            importRecoveryError={importRecoveryError}
             localRecoveryRaw={cloudRestoreRecoveryCopy}
             localRecoveryError={cloudRestoreRecoveryError}
             repairRecoveryRaw={strengthRepairRecoveryCopy}
@@ -3566,7 +3570,7 @@ function PreviewWorkspace({
                   : null
             }
             onRetryLocalSave={retrySave}
-            autoSyncEnabled={import.meta.env.VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED === 'true'}
+            autoSyncEnabled
             visible={destination === 'more'}
             onOpenRecovery={() => {
               setMoreSettingsOpen(true);
@@ -3613,6 +3617,7 @@ function PreviewWorkspace({
               showExport
               presentation="recovery"
               accountScoped
+              advancedRecoveryInParent
             />
           </PreviewAccountSync>
         )}

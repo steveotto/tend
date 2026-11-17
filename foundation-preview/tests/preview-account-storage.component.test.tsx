@@ -298,14 +298,17 @@ describe('account-isolated Preview storage', () => {
     await user.click(screen.getByRole('button', { name: 'More, settings' }));
     await user.click(screen.getByRole('button', { name: /^Settings$/ }));
     await user.click(screen.getByRole('button', { name: 'Backup & recovery' }));
-    await user.click(screen.getByRole('button', { name: /Download exact saved source/ }));
+    await user.click(screen.getByRole('button', { name: /Export backup/ }));
     expect(downloadBlobs).toHaveLength(1);
-    expect(await downloadBlobs[0]!.text()).toBe(savedAccountARaw);
-    await user.click(screen.getByRole('button', { name: /Download current in-memory state/ }));
-    expect(downloadBlobs).toHaveLength(2);
-    const exported = parsePreviewBackup(await downloadBlobs[1]!.text(), '2026-11-01');
+    const exported = parsePreviewBackup(await downloadBlobs[0]!.text(), '2026-11-01');
     expect(exported.valid).toBe(true);
     if (exported.valid) expect(exported.envelope.data.people[0]?.displayName).toBe('Account A');
+    await user.click(screen.getByText('Advanced recovery'));
+    await user.click(screen.getByRole('button', { name: /Account recovery/ }));
+    await user.click(screen.getByRole('button', { name: /Download exact saved source/ }));
+    expect(downloadBlobs).toHaveLength(2);
+    expect(await downloadBlobs[1]!.text()).toBe(savedAccountARaw);
+    await user.click(screen.getByRole('button', { name: 'Close Account recovery' }));
 
     const importedData = createPreviewEnvelope(accountData('Imported A'));
     await user.upload(

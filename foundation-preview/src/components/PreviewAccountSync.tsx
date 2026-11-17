@@ -72,6 +72,23 @@ type ConflictResolutionPhase =
   | 'save-verification'
   | 'post-save-bookkeeping';
 
+type RecoveryArchiveFailureCode =
+  | 'storage-unavailable'
+  | 'archive-read-failed'
+  | 'archive-write-failed'
+  | 'archive-readback-failed'
+  | 'archive-readback-missing'
+  | 'archive-readback-mismatch'
+  | 'archive-serialization-failed'
+  | 'archive-invalid';
+
+class RecoveryArchivePersistenceError extends Error {
+  constructor(readonly code: RecoveryArchiveFailureCode) {
+    super(code);
+    this.name = 'RecoveryArchivePersistenceError';
+  }
+}
+
 type SyncStatus =
   | { kind: 'checking' }
   | { kind: 'device' }
@@ -95,6 +112,10 @@ type PreviewAccountSyncProps = {
   localIsPristine: boolean;
   currentDate: string;
   localRaw: string | null;
+  importRecoveryRaw?: string | null;
+  importRecoverySourceRaw?: string | null;
+  importRecoveryArchiveRaw?: string | null;
+  importRecoveryError?: string | null;
   localRecoveryRaw: string | null;
   localRecoveryError: string | null;
   repairRecoveryRaw: string | null;
@@ -127,11 +148,28 @@ function conflictResolutionFailureMessage(
 ): string {
   const safeMessages = new Set([
     'A different account recovery copy already exists. It was left unchanged; no account write was attempted.',
-    'The saved account recovery copy could not be validated. Download or preserve it before retrying; no account write was attempted.',
-    'The account recovery copy could not be verified. No account write was attempted.',
-    'A different device recovery copy already exists. Download or preserve it before using the account version again.',
-    'The previous device version could not be preserved. Nothing was replaced.'
+    'A different device recovery copy already exists. Download or preserve it before using the account version again.'
   ]);
+  if (error instanceof RecoveryArchivePersistenceError) {
+    switch (error.code) {
+      case 'storage-unavailable':
+        return 'Recovery storage is unavailable (storage-unavailable). No account write was attempted; existing archives were not changed.';
+      case 'archive-read-failed':
+        return 'The recovery archive could not be read (archive-read-failed). No account write was attempted; no archive was overwritten.';
+      case 'archive-write-failed':
+        return 'The recovery archive write failed (archive-write-failed). No account write was attempted; the archive may have been created. Do not clear it.';
+      case 'archive-readback-failed':
+        return 'Recovery archive read-back failed (archive-readback-failed). No account write was attempted; do not clear the archive.';
+      case 'archive-readback-missing':
+        return 'Recovery archive read-back was missing (archive-readback-missing). No account write was attempted; no archive was visible after writing.';
+      case 'archive-readback-mismatch':
+        return 'Recovery archive read-back mismatched (archive-readback-mismatch). No account write was attempted; do not clear or replace any archive.';
+      case 'archive-serialization-failed':
+        return 'The recovery archive could not be serialized (archive-serialization-failed). No archive or account write was attempted.';
+      case 'archive-invalid':
+        return 'The existing recovery archive is invalid (archive-invalid). It was left unchanged; no account write was attempted.';
+    }
+  }
   if (error instanceof Error && safeMessages.has(error.message)) return error.message;
   if (accountSaveConfirmed) {
     return 'The account copy was confirmed, but local recovery or sync bookkeeping could not be completed. Check Save & sync before retrying; no second account write was attempted.';
@@ -146,6 +184,49 @@ function conflictResolutionFailureMessage(
     return 'The recovery archive could not be verified. No account write was attempted; the archive may have been created. Do not clear it; use the read-only conflict check before proceeding.';
   }
   return 'An unexpected error stopped conflict resolution before the account write. No account write was attempted; the conflict and recovery archive were left in place. Use the read-only conflict check before proceeding.';
+}
+
+function hasPreviewStorage(storage: PreviewStorage | null | undefined): storage is PreviewStorage {
+  return storage !== null
+    && storage !== undefined
+    && typeof storage.getItem === 'function'
+    && typeof storage.setItem === 'function';
+}
+
+function readRecoveryArchive(storage: PreviewStorage, key: string, readBack = false): string | null {
+  if (!hasPreviewStorage(storage)) throw new RecoveryArchivePersistenceError('storage-unavailable');
+  try {
+    return storage.getItem(key);
+  } catch {
+    throw new RecoveryArchivePersistenceError(readBack ? 'archive-readback-failed' : 'archive-read-failed');
+  }
+}
+
+function writeAndVerifyMissingRecoveryArchive(
+  storage: PreviewStorage,
+  key: string,
+  raw: string
+): string {
+  if (!hasPreviewStorage(storage)) throw new RecoveryArchivePersistenceError('storage-unavailable');
+  try {
+    storage.setItem(key, raw);
+  } catch {
+    throw new RecoveryArchivePersistenceError('archive-write-failed');
+  }
+  const savedRaw = readRecoveryArchive(storage, key, true);
+  if (savedRaw === null) throw new RecoveryArchivePersistenceError('archive-readback-missing');
+  if (savedRaw !== raw) throw new RecoveryArchivePersistenceError('archive-readback-mismatch');
+  return savedRaw;
+}
+
+function serializeRecoveryArchive(value: unknown): string {
+  try {
+    const raw = JSON.stringify(value);
+    if (typeof raw !== 'string') throw new Error('not-serializable');
+    return raw;
+  } catch {
+    throw new RecoveryArchivePersistenceError('archive-serialization-failed');
+  }
 }
 
 function accountReadErrorCode(error: unknown): ConflictReadOnlyCheckReport['errorCode'] {
@@ -198,6 +279,23 @@ function conflictProgressMessage(progress: ConflictResolutionProgress): string {
   }
   if (progress.phase === 'preserving') return 'Preserving this device’s copy…';
   return 'Applying the account copy to this device…';
+}
+
+function syncAttentionSummary(message: string): string {
+  if (message.includes('archive-readback-missing')) {
+    return 'The previous account version could not be verified, so the account was not updated.';
+  }
+  if (message.includes('archive-write-failed') || message.includes('archive-readback-failed')
+    || message.includes('archive-readback-mismatch')) {
+    return 'The previous account version could not be safely preserved, so the account was not updated.';
+  }
+  if (message.includes('latest account copy could not be read')) {
+    return 'The account copy could not be checked. No upload was made.';
+  }
+  if (message.includes('may have completed') || message.includes('could not be confirmed')) {
+    return 'The account save needs confirmation before another upload.';
+  }
+  return 'Automatic sync did not finish. Review the details before retrying.';
 }
 
 function resolvePendingImportGuard(storage: PreviewStorage): string | null {
@@ -293,6 +391,10 @@ export function PreviewAccountSync({
   localIsPristine,
   currentDate,
   localRaw,
+  importRecoveryRaw = null,
+  importRecoverySourceRaw = null,
+  importRecoveryArchiveRaw = null,
+  importRecoveryError = null,
   localRecoveryRaw,
   localRecoveryError,
   repairRecoveryRaw,
@@ -1089,15 +1191,15 @@ export function PreviewAccountSync({
         phase = 'recovery-archive';
         setConflictResolutionProgress({ choice, phase: 'preserving' });
         if (local.raw !== null) {
-          const priorDeviceRecovery = storage.getItem(syncDeviceRecoveryKey);
+          const priorDeviceRecovery = readRecoveryArchive(storage, syncDeviceRecoveryKey);
           if (priorDeviceRecovery !== null && priorDeviceRecovery !== local.raw) {
             throw new Error('A different device recovery copy already exists. Download or preserve it before using the account version again.');
           }
-          if (priorDeviceRecovery === null) storage.setItem(syncDeviceRecoveryKey, local.raw);
-          const savedDeviceRecovery = storage.getItem(syncDeviceRecoveryKey);
-          if (savedDeviceRecovery !== local.raw) {
-            throw new Error('The previous device version could not be preserved. Nothing was replaced.');
-          }
+          const savedDeviceRecovery = priorDeviceRecovery === null
+            ? writeAndVerifyMissingRecoveryArchive(storage, syncDeviceRecoveryKey, local.raw)
+            : readRecoveryArchive(storage, syncDeviceRecoveryKey, true);
+          if (savedDeviceRecovery === null) throw new RecoveryArchivePersistenceError('archive-readback-missing');
+          if (savedDeviceRecovery !== local.raw) throw new RecoveryArchivePersistenceError('archive-readback-mismatch');
           setDeviceRecoveryRaw(savedDeviceRecovery);
         }
         setConflictResolutionProgress({ choice, phase: 'restoring' });
@@ -1124,8 +1226,8 @@ export function PreviewAccountSync({
           updatedAt: latestCloud.updatedAt,
           preservedAt: new Date().toISOString()
         };
-        const recoveryRaw = JSON.stringify(cloudRecovery);
-        const priorRecovery = storage.getItem(syncCloudRecoveryKey);
+        const recoveryRaw = serializeRecoveryArchive(cloudRecovery);
+        const priorRecovery = readRecoveryArchive(storage, syncCloudRecoveryKey);
         if (priorRecovery !== null) {
           const archiveMatch = compareAccountRecoveryArchive(
             priorRecovery,
@@ -1135,20 +1237,18 @@ export function PreviewAccountSync({
             latest.current.currentDate
           );
           if (archiveMatch === 'invalid') {
-            throw new Error('The saved account recovery copy could not be validated. Download or preserve it before retrying; no account write was attempted.');
+            throw new RecoveryArchivePersistenceError('archive-invalid');
           }
           if (archiveMatch !== 'match') {
             throw new Error('A different account recovery copy already exists. It was left unchanged; no account write was attempted.');
           }
-        } else {
-          storage.setItem(syncCloudRecoveryKey, recoveryRaw);
         }
-        const savedRecovery = storage.getItem(syncCloudRecoveryKey);
-        const recoveryPreserved = priorRecovery === null
-          ? savedRecovery === recoveryRaw
-          : savedRecovery === priorRecovery;
-        if (!recoveryPreserved) {
-          throw new Error('The account recovery copy could not be verified. No account write was attempted.');
+        const savedRecovery = priorRecovery === null
+          ? writeAndVerifyMissingRecoveryArchive(storage, syncCloudRecoveryKey, recoveryRaw)
+          : readRecoveryArchive(storage, syncCloudRecoveryKey, true);
+        if (savedRecovery === null) throw new RecoveryArchivePersistenceError('archive-readback-missing');
+        if (priorRecovery !== null && savedRecovery !== priorRecovery) {
+          throw new RecoveryArchivePersistenceError('archive-readback-mismatch');
         }
         setCloudRecoveryRaw(savedRecovery);
         setConflictResolutionProgress({ choice, phase: 'saving' });
@@ -1266,7 +1366,9 @@ export function PreviewAccountSync({
                     ? 'Your latest changes were confirmed in your account.'
                     : status.kind === 'conflict'
                       ? 'Your device and account copies differ. Choose which copy to keep.'
-                      : '';
+                      : status.kind === 'attention'
+                        ? syncAttentionSummary(status.message)
+                        : '';
 
   return (
     <>
@@ -1311,14 +1413,23 @@ export function PreviewAccountSync({
               </button>
             )}
           </div>
-          {status.kind === 'attention' && api && (
-            <p className="preview-account-sync__error" role="alert">{status.message}</p>
+          {!localSaveConfirmed && (
+            <button
+              type="button"
+              className="btn mini ghost preview-account-sync__retry"
+              disabled={localSaveStatus === 'saving' || manualBusy}
+              onClick={onRetryLocalSave}
+            >
+              Try saving again
+            </button>
           )}
-          {!localSaveConfirmed && localSaveError && (
-            <div className="preview-account-sync__error" role="alert">
-              <p>{localSaveError}</p>
-              <button type="button" className="btn mini ghost" onClick={onRetryLocalSave}>Try saving again</button>
-            </div>
+          {(status.kind === 'attention' || !localSaveConfirmed) && (
+            <details className="preview-account-backup__technical">
+              <summary>Technical details</summary>
+              {status.kind === 'attention' && <p role="alert">{status.message}</p>}
+              {!localSaveConfirmed && localSaveError && <p role="alert">{localSaveError}</p>}
+              <p>Account identity: {accountId.slice(-4)}.</p>
+            </details>
           )}
           {syncMessage && status.kind !== 'attention' && status.kind !== 'conflict' && (
             <p className="preview-account-sync__message" role="status">{syncMessage}</p>
@@ -1333,6 +1444,12 @@ export function PreviewAccountSync({
               <h4 id="preview-account-sync-conflict-title">This device and your account have different copies</h4>
               <p>
                 Automatic sync paused. Choose one version to keep; the other is preserved as a recovery copy. Tend will not merge these changes.
+              </p>
+              <p>
+                <strong>Keep this device’s copy:</strong> save this device’s data to the account and preserve the current account copy.
+              </p>
+              <p>
+                <strong>Use the account copy:</strong> replace this device’s data with the account version and preserve the current device copy.
               </p>
               {formatTime(conflict.updatedAt) && <p>Account copy updated: {formatTime(conflict.updatedAt)}.</p>}
               {conflictResolutionProgress && (
@@ -1395,42 +1512,49 @@ export function PreviewAccountSync({
       {recoveryPortalTarget && createPortal((
         <section className="settings-section preview-account-recovery" aria-label="Account recovery tools">
           {children}
-          <PreviewAccountBackupControls
-            api={api}
-            accountId={accountId}
-            storage={storage}
-            data={data}
-            currentDate={currentDate}
-            localRaw={localRaw}
-            localRecoveryRaw={localRecoveryRaw}
-            localRecoveryError={localRecoveryError}
-            repairRecoveryRaw={repairRecoveryRaw}
-            repairRecoveryError={repairRecoveryError}
-            cloudRecoveryRaw={cloudRecoveryRaw}
-            cloudRecoveryError={cloudRecoveryError}
-            deviceRecoveryRaw={deviceRecoveryRaw}
-            deviceRecoveryError={deviceRecoveryError}
-            autoSyncEnabled={autoSyncEnabled}
-            enabled={enabled && !manualBusy && (!autoSyncEnabled || (status.kind !== 'saving' && status.kind !== 'checking'))}
-            localSaveConfirmed={localSaveConfirmed}
-            localSavePending={localSaveStatus === 'loading' || localSaveStatus === 'saving'}
-            recoveryOperationLocked={manualBusy || manualOperationLocked}
-            syncBusy={autoSyncEnabled && (status.kind === 'saving' || status.kind === 'checking')}
-            syncStatus={status.kind}
-            verifiedAccountStatus={verifiedAccountStatus?.accountId === accountId
-              ? verifiedAccountStatus.status
-              : null}
-            isIdentityCurrent={isIdentityCurrent}
-            onRestore={onRestore}
-            onRepair={onRepair}
-            onRepairRecoveryChanged={onRepairRecoveryChanged}
-            onRecoveryChanged={() => {}}
-            onExclusiveChange={locked => {
-              setManualBusy(locked);
-              onManualOperationLockChange(locked);
-            }}
-            onOperationFinished={() => controlRef.current?.refresh()}
-          />
+          <details className="preview-account-backup__technical">
+            <summary>Advanced recovery</summary>
+            <PreviewAccountBackupControls
+              api={api}
+              accountId={accountId}
+              storage={storage}
+              data={data}
+              currentDate={currentDate}
+              localRaw={localRaw}
+              importRecoveryRaw={importRecoveryRaw}
+              importRecoverySourceRaw={importRecoverySourceRaw}
+              importRecoveryArchiveRaw={importRecoveryArchiveRaw}
+              importRecoveryError={importRecoveryError}
+              localRecoveryRaw={localRecoveryRaw}
+              localRecoveryError={localRecoveryError}
+              repairRecoveryRaw={repairRecoveryRaw}
+              repairRecoveryError={repairRecoveryError}
+              cloudRecoveryRaw={cloudRecoveryRaw}
+              cloudRecoveryError={cloudRecoveryError}
+              deviceRecoveryRaw={deviceRecoveryRaw}
+              deviceRecoveryError={deviceRecoveryError}
+              autoSyncEnabled={autoSyncEnabled}
+              enabled={enabled && !manualBusy && (!autoSyncEnabled || (status.kind !== 'saving' && status.kind !== 'checking'))}
+              localSaveConfirmed={localSaveConfirmed}
+              localSavePending={localSaveStatus === 'loading' || localSaveStatus === 'saving'}
+              recoveryOperationLocked={manualBusy || manualOperationLocked}
+              syncBusy={autoSyncEnabled && (status.kind === 'saving' || status.kind === 'checking')}
+              syncStatus={status.kind}
+              verifiedAccountStatus={verifiedAccountStatus?.accountId === accountId
+                ? verifiedAccountStatus.status
+                : null}
+              isIdentityCurrent={isIdentityCurrent}
+              onRestore={onRestore}
+              onRepair={onRepair}
+              onRepairRecoveryChanged={onRepairRecoveryChanged}
+              onRecoveryChanged={() => {}}
+              onExclusiveChange={locked => {
+                setManualBusy(locked);
+                onManualOperationLockChange(locked);
+              }}
+              onOperationFinished={() => controlRef.current?.refresh()}
+            />
+          </details>
         </section>
       ), recoveryPortalTarget)}
     </>
