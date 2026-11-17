@@ -213,11 +213,15 @@ function Browser({
     setRaw(result.raw);
   }
 
-  function restore(next: PreviewData, expectedRaw: string | null): string | null {
+  function restore(
+    next: PreviewData,
+    expectedRaw: string | null,
+    restoreKind?: 'manual-recovery'
+  ): string | null {
     onRestoreCall?.();
     const result = writePreview(storage, next, expectedRaw, {
       currentDate,
-      operation: 'replace'
+      operation: restoreKind === 'manual-recovery' ? 'cloud-restore' : 'replace'
     });
     if (result.kind === 'saved') {
       setData(next);
@@ -372,6 +376,86 @@ function brokenLowerBodyWorkoutData(): PreviewData {
       completionId: 'synthetic-missing-completion'
     }]
   };
+  return data;
+}
+
+function repairedAccountWithHistory(): PreviewData {
+  const date = '2026-10-19';
+  const now = new Date(`${currentDate}T23:59:00.000Z`);
+  const timeOfDay = rhythmTimeValueFromLabel('Anytime');
+  if (timeOfDay === undefined) throw new Error('Could not create synthetic Rhythm time fixture.');
+  const rhythmIds = Array.from({ length: 19 }, (_, index) =>
+    `user-rhythm-00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
+  const rhythms: PreviewData['savedRhythms'] = rhythmIds.map((id, index) => ({
+    id,
+    title: `Synthetic Strength Rhythm ${index + 1}`,
+    description: 'Synthetic linked workout fixture',
+    cadence: 'Daily',
+    timeLabel: 'Anytime',
+    timeOfDay,
+    personIds: [],
+    categoryIds: ['health'],
+    schedule: { frequency: 'daily' },
+    personal: false,
+    createdLocalDate: date,
+    createdTimeZone: 'UTC',
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: [],
+    healthLogCapability: 'workout'
+  }));
+  const completions = Array.from({ length: 92 }, (_, index) => {
+    const effectiveDate = index === 0
+      ? date
+      : new Date(Date.UTC(2026, 7, index)).toISOString().slice(0, 10);
+    const completion = prepareDatedRhythmCompletion({
+      id: `synthetic-restore-completion-${String(index + 1).padStart(3, '0')}`,
+      rhythmId: rhythmIds[index % rhythmIds.length]!,
+      effectiveDate,
+      hour: 10,
+      minute: index % 60,
+      period: 'AM',
+      timeZone: 'UTC',
+      memory: `Synthetic recovery history ${index + 1}`
+    }, now);
+    if (!completion.valid) throw new Error('Could not create synthetic Rhythm completion history.');
+    return completion.record;
+  });
+  let workouts: PreviewData['strength']['workouts'] = [];
+  for (let index = 0; index < 7; index += 1) {
+    const workout = index === 0
+      ? saveStrengthWorkoutLog(workouts, {
+        id: 'synthetic-repaired-lower-body',
+        date,
+        muscleIds: ['hamstrings'],
+        workoutName: 'Lower Body',
+        notes: 'Synthetic repaired workout.',
+        rhythmId: rhythmIds[0]!,
+        rhythmOccurrence: date,
+        completionId: completions[0]!.id
+      })
+      : saveStrengthWorkoutLog(workouts, {
+        id: `synthetic-other-workout-${index}`,
+        date: `2026-10-${String(19 + index).padStart(2, '0')}`,
+        muscleIds: ['hamstrings'],
+        workoutName: `Synthetic workout ${index + 1}`
+      });
+    if (!workout.valid) throw new Error('Could not create synthetic workout history.');
+    workouts = workout.workouts;
+  }
+
+  const data = createSamplePreviewData();
+  data.savedRhythms = rhythms;
+  data.rhythmHistoryIds = rhythmIds;
+  data.completedRhythmIds = rhythmIds;
+  data.datedRhythmCompletions = completions;
+  data.activeRhythmCompletions = rhythms.map((rhythm, index) => ({
+    rhythmId: rhythm.id,
+    completionId: completions[index]!.id
+  }));
+  data.rhythmCompletionOverrides = [];
+  data.removedSeedCompletionIds = [];
+  data.archivedRhythmIds = [];
+  data.strength = { ...data.strength, workouts };
   return data;
 }
 
@@ -1773,6 +1857,98 @@ describe('Preview account sync', () => {
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(deviceRaw);
     expect(service.record?.revision).toBe(2);
     view.unmount();
+  });
+
+  it('restores a validated account copy over an invalid device source without losing history or uploading it', async () => {
+    const invalidDeviceData = brokenLowerBodyWorkoutData();
+    const storage = makeStorage(invalidDeviceData);
+    const invalidDeviceRaw = storage.values.get(PREVIEW_STORAGE_KEY);
+    if (!invalidDeviceRaw) throw new Error('Synthetic invalid device source is missing.');
+    const accountData = repairedAccountWithHistory();
+    const accountRecord = cloudRecord(accountData, 5);
+    expect(validatePreviewAccountBackup(accountRecord, currentDate).data).toEqual(accountData);
+    const unarchivedStorage = makeStorage(invalidDeviceData);
+    const unarchivedRaw = unarchivedStorage.values.get(PREVIEW_STORAGE_KEY);
+    if (!unarchivedRaw) throw new Error('Synthetic invalid device source is missing.');
+    expect(writePreview(unarchivedStorage.storage, accountData, unarchivedRaw, {
+      currentDate,
+      operation: 'cloud-restore'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'cloud-restore-source-not-preserved' }
+    });
+    expect(unarchivedStorage.values.get(PREVIEW_STORAGE_KEY)).toBe(unarchivedRaw);
+    const invalidAccountStorage = makeStorage(invalidDeviceData);
+    const invalidAccountRaw = invalidAccountStorage.values.get(PREVIEW_STORAGE_KEY);
+    if (!invalidAccountRaw) throw new Error('Synthetic invalid device source is missing.');
+    invalidAccountStorage.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, invalidAccountRaw);
+    expect(writePreview(invalidAccountStorage.storage, invalidDeviceData, invalidAccountRaw, {
+      currentDate,
+      operation: 'cloud-restore'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'cloud-restore-target-invalid' }
+    });
+    expect(invalidAccountStorage.values.get(PREVIEW_STORAGE_KEY)).toBe(invalidAccountRaw);
+    const service = backend(accountRecord);
+    const view = render(<Browser
+      api={service.api}
+      storage={storage.storage}
+      localSaveConfirmed={false}
+      localSaveStatus="corrupt"
+    />);
+
+    fireEvent.click(screen.getByText('Backup & recovery'));
+    await openAdvancedRecovery();
+    const restoreButton = view.getByRole('button', {
+      name: /Replace this device’s data with account copy/
+    });
+    expect(restoreButton.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(restoreButton);
+    await screen.findByRole('heading', { name: 'Replace this device’s data?' });
+    expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(invalidDeviceRaw);
+    expect(service.saveCalls).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replace this device’s data' }));
+    await waitFor(() => expect(view.getByTestId('person-name').textContent)
+      .toBe(accountData.people[0]?.displayName));
+
+    expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(invalidDeviceRaw);
+    const restoredRaw = storage.values.get(PREVIEW_STORAGE_KEY);
+    if (!restoredRaw) throw new Error('The account copy was not persisted on the device.');
+    const restored = parsePreviewBackup(restoredRaw, currentDate);
+    if (!restored.valid) throw new Error(`The restored device copy is invalid: ${restored.message}`);
+    expect(restored.envelope.data.strength.workouts).toHaveLength(7);
+    expect(restored.envelope.data.strength.workouts[0]).toMatchObject({
+      id: 'synthetic-repaired-lower-body',
+      date: '2026-10-19',
+      rhythmId: accountData.savedRhythms[0]?.id,
+      rhythmOccurrence: '2026-10-19',
+      completionId: accountData.datedRhythmCompletions[0]?.id
+    });
+    expect(restored.envelope.data.datedRhythmCompletions).toHaveLength(92);
+    expect(restored.envelope.data.rhythmHistoryIds).toHaveLength(19);
+    expect(restored.envelope.data.rhythmHistoryIds).toEqual(accountData.rhythmHistoryIds);
+    expect(service.saveCalls).toBe(0);
+    expect(service.record?.revision).toBe(5);
+
+    fireEvent.click(view.getByRole('button', { name: /Check data/ }));
+    expect(await screen.findByText(/passed backup validation/i)).toBeTruthy();
+    view.unmount();
+
+    const reloaded = render(<Browser api={service.api} storage={storage.storage} />);
+    await waitFor(() => expect(reloaded.getByTestId('person-name').textContent)
+      .toBe(accountData.people[0]?.displayName));
+    const reloadedRaw = storage.values.get(PREVIEW_STORAGE_KEY);
+    expect(reloadedRaw).toBe(restoredRaw);
+    expect(parsePreviewBackup(reloadedRaw!, currentDate).valid).toBe(true);
+    fireEvent.click(screen.getByText('Backup & recovery'));
+    await openAdvancedRecovery();
+    fireEvent.click(reloaded.getByRole('button', { name: /Check data/ }));
+    expect(await screen.findByText(/passed backup validation/i)).toBeTruthy();
+    expect(service.saveCalls).toBe(0);
+    expect(service.record?.revision).toBe(5);
+    reloaded.unmount();
   });
 
   it('keeps offline edits locally through a remount and syncs them after reconnecting', async () => {

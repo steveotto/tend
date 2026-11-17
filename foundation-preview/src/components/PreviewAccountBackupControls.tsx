@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { parsePreviewBackup } from '../domain/preview-state.ts';
 import type {
   PreviewData,
   PreviewEnvelope,
@@ -63,6 +64,7 @@ type PreviewAccountBackupControlsProps = {
   deviceRecoveryError?: string | null;
   autoSyncEnabled?: boolean;
   enabled: boolean;
+  restoreInvalidDeviceAvailable?: boolean;
   localSaveConfirmed: boolean;
   localSavePending?: boolean;
   recoveryOperationLocked?: boolean;
@@ -70,7 +72,11 @@ type PreviewAccountBackupControlsProps = {
   verifiedAccountStatus?: VerifiedAccountStatus | null;
   syncStatus: PreviewAccountSyncState;
   isIdentityCurrent: () => boolean;
-  onRestore: (data: PreviewData, expectedLocalRaw: string | null) => string | null;
+  onRestore: (
+    data: PreviewData,
+    expectedLocalRaw: string | null,
+    restoreKind?: 'manual-recovery'
+  ) => string | null;
   onRepair: (data: PreviewData, expectedLocalRaw: string) => string | null;
   onRepairRecoveryChanged?: () => void;
   onRecoveryChanged: (raw: string | null) => void;
@@ -297,6 +303,7 @@ export function PreviewAccountBackupControls({
   deviceRecoveryError = null,
   autoSyncEnabled = true,
   enabled,
+  restoreInvalidDeviceAvailable = false,
   localSaveConfirmed,
   localSavePending = false,
   recoveryOperationLocked = false,
@@ -570,7 +577,8 @@ export function PreviewAccountBackupControls({
   }
 
   async function beginRestore() {
-    if (!enabled || syncBusy || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
+    if ((!enabled && !restoreInvalidDeviceAvailable)
+      || syncBusy || !api || busy || operationInProgress.current || !isIdentityCurrent()) return;
     setExclusiveLocked(true);
     operationInProgress.current = true;
     statusRequestId.current += 1;
@@ -597,12 +605,20 @@ export function PreviewAccountBackupControls({
         revision: cloud.revision,
         updatedAt: cloud.updatedAt
       });
-      const localEnvelope = createValidatedPreviewAccountDocument(data, currentDate);
+      let localEnvelope: PreviewEnvelope | null = null;
+      if (!restoreInvalidDeviceAvailable) {
+        if (localRaw === null) {
+          localEnvelope = createValidatedPreviewAccountDocument(data, currentDate);
+        } else {
+          const local = parsePreviewBackup(localRaw, currentDate);
+          if (local.valid) localEnvelope = local.envelope;
+        }
+      }
       if (storage.getItem(PREVIEW_STORAGE_KEY) !== localRaw) {
         setError('This browser’s preview changed while the account backup was being read. No local data was changed.');
         return;
       }
-      if (previewEnvelopesEqual(validated.envelope, localEnvelope)) {
+      if (localEnvelope !== null && previewEnvelopesEqual(validated.envelope, localEnvelope)) {
         setMessage('This device already matches the account copy.');
         return;
       }
@@ -799,7 +815,7 @@ export function PreviewAccountBackupControls({
         return;
       }
       if (!isIdentityCurrent()) return;
-      const writeError = onRestore(validated.data, pending.expectedLocalRaw);
+      const writeError = onRestore(validated.data, pending.expectedLocalRaw, 'manual-recovery');
       if (writeError) {
         setPending(null);
         setError(writeError);
@@ -908,11 +924,14 @@ export function PreviewAccountBackupControls({
     ? currentApprovedRepairCandidate(data, currentDate)
     : null;
   const accountActionDisabled = !enabled || syncBusy || !api || busy;
+  const restoreActionDisabled = (!enabled && !restoreInvalidDeviceAvailable) || syncBusy || !api || busy;
   const repairActionDisabled = accountActionDisabled || !autoSyncEnabled || syncStatus === 'conflict'
     || !accountId.trim();
   const recoveryDisabledMessage = !localSaveConfirmed
     ? localSavePending
       ? 'This device’s local save is still in progress. Close Account recovery to view Save & sync; closing will not cancel an operation already started.'
+      : restoreInvalidDeviceAvailable
+        ? 'This device’s saved copy could not be validated. Account sync is paused; the validated account copy can replace it after you confirm and the exact device source is preserved.'
       : 'This device’s local save is not confirmed. Close Account recovery to review Save & sync before retrying; account sync will not start until the local save succeeds.'
     : syncBusy
       ? `This device’s local save is confirmed. Account sync is ${syncStatus === 'checking' ? 'checking' : 'saving'}; close Account recovery to view Save & sync. Closing will not cancel a confirmed operation.`
@@ -985,7 +1004,7 @@ export function PreviewAccountBackupControls({
               <RecoveryActionRow
                 title="Replace this device’s data with account copy"
                 description="Replace local data with the account copy. This is not a merge."
-                disabled={accountActionDisabled}
+                disabled={restoreActionDisabled}
                 busy={activeOperation === 'restore'}
                 onClick={() => void beginRestore()}
               />

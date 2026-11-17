@@ -49,11 +49,17 @@ import {
   PREVIEW_SCHEMA_VERSION
 } from '../src/domain/preview-state.ts';
 import {
+  browserPreviewStorage,
   PREVIEW_STORAGE_KEY,
+  PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
   PREVIEW_V3_RECOVERY_KEY,
   PREVIEW_V5_RECOVERY_KEY
 } from '../src/storage/preview-storage.ts';
+import type {
+  PreviewAccountBackupApi,
+  PreviewAccountBackupRecord
+} from '../src/storage/preview-account-backup.ts';
 import { createAuthenticatedPreviewIdentity } from '../src/domain/preview-identity.ts';
 import { installMemoryStorage, type MemoryStorage } from './memory-storage.ts';
 import { historyButtonName } from './history-button-name.ts';
@@ -707,6 +713,103 @@ describe('Tend Today preview', () => {
     testingRender(<App identity={secondIdentity} />);
     await openPreviewSettings(user, 'categories');
     expect((screen.getByRole('switch', { name: 'Faith' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('restores a valid account copy over invalid saved bytes without a stale autosave', async () => {
+    const user = userEvent.setup();
+    const accountId = 'c0000000-0000-4000-8000-000000000046';
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    const storage = browserPreviewStorage(identity);
+    const invalidData = createSamplePreviewData();
+    const date = localDateString(new Date());
+    const rhythmId = 'user-rhythm-00000000-0000-4000-8000-000000000046';
+    invalidData.savedRhythms = [{
+      id: rhythmId,
+      title: 'Synthetic Strength Rhythm',
+      description: 'Synthetic invalid device fixture',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: ['health'],
+      schedule: { frequency: 'daily' },
+      personal: false,
+      createdLocalDate: date,
+      createdTimeZone: 'UTC',
+      primaryFoundationId: 'health-strength',
+      secondaryFoundationIds: [],
+      healthLogCapability: 'workout'
+    }];
+    invalidData.rhythmHistoryIds = [rhythmId];
+    invalidData.completedRhythmIds = [];
+    invalidData.activeRhythmCompletions = [];
+    invalidData.datedRhythmCompletions = [];
+    invalidData.strength = {
+      ...invalidData.strength,
+      workouts: [{
+        id: 'synthetic-invalid-device-workout',
+        date,
+        muscleIds: ['hamstrings'],
+        workoutName: 'Lower Body',
+        rhythmId,
+        rhythmOccurrence: date,
+        completionId: 'synthetic-missing-completion'
+      }]
+    };
+    const invalidRaw = JSON.stringify(createPreviewEnvelope(invalidData));
+    storage.setItem(PREVIEW_STORAGE_KEY, invalidRaw);
+
+    const accountData = createSamplePreviewData();
+    const accountPerson = accountData.people[0];
+    if (!accountPerson) throw new Error('Synthetic account fixture is missing its first person.');
+    accountData.people[0] = { ...accountPerson, displayName: 'Synthetic restored account' };
+    const accountRecord: PreviewAccountBackupRecord = {
+      document: createPreviewEnvelope(accountData),
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      revision: 5,
+      updatedAt: '2026-11-06T12:00:00.000Z'
+    };
+    const accountBackupApi: PreviewAccountBackupApi = {
+      read: vi.fn(async () => structuredClone(accountRecord)),
+      save: vi.fn(async () => {
+        throw new Error('The restore must not upload the device copy.');
+      })
+    };
+
+    const firstView = testingRender(<App identity={identity} accountBackupApi={accountBackupApi} />);
+    await openPreviewSettings(user, 'backup-recovery');
+    const advancedRecovery = screen.getByText('Advanced recovery');
+    if (!advancedRecovery.closest('details')?.open) await user.click(advancedRecovery);
+    await user.click(await screen.findByRole('button', { name: /Account recovery/ }));
+    await user.click(await screen.findByRole('button', {
+      name: /Replace this device’s data with account copy/
+    }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace this device’s data?' });
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(invalidRaw);
+    await user.click(within(confirmation).getByRole('button', { name: 'Replace this device’s data' }));
+    expect(await screen.findByText(/account copy replaced this device’s data/i)).toBeTruthy();
+    expect(storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(invalidRaw);
+
+    const restoredRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    if (!restoredRaw) throw new Error('The account copy was not stored on this device.');
+    const restored = parsePreviewBackup(restoredRaw, date);
+    if (!restored.valid) throw new Error(`The restored account copy is invalid: ${restored.message}`);
+    expect(restored.envelope.data.people[0]?.displayName).toBe('Synthetic restored account');
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    expect(await screen.findByText(/passed backup validation/i)).toBeTruthy();
+    expect(accountBackupApi.save).not.toHaveBeenCalled();
+    firstView.unmount();
+    testingRender(<App identity={identity} accountBackupApi={accountBackupApi} />);
+    await screen.findByRole('button', { name: 'More, settings' });
+    await openPreviewSettings(user, 'backup-recovery');
+    const reloadedAdvancedRecovery = screen.getByText('Advanced recovery');
+    if (!reloadedAdvancedRecovery.closest('details')?.open) await user.click(reloadedAdvancedRecovery);
+    await user.click(await screen.findByRole('button', { name: /Account recovery/ }));
+    await user.click(screen.getByRole('button', { name: /Check data/ }));
+    expect(await screen.findByText(/passed backup validation/i)).toBeTruthy();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(restoredRaw);
+    expect(storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(invalidRaw);
+    expect(accountBackupApi.save).not.toHaveBeenCalled();
   });
 
   it('shows an unavailable Overall Health state and direct Settings action when every category is disabled', async () => {

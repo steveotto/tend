@@ -162,7 +162,7 @@ export type PreviewWriteOptions = {
   allowTargetedRepair?: boolean;
   currentDate?: string;
   importSourceRaw?: string;
-  operation?: 'save' | 'import' | 'reset' | 'replace' | 'repair';
+  operation?: 'save' | 'import' | 'reset' | 'replace' | 'repair' | 'cloud-restore';
 };
 
 export type PreviewStorageDiagnostic = {
@@ -550,6 +550,40 @@ export function writePreview(
       };
     }
     const raw = JSON.stringify(createPreviewEnvelope(data));
+    let cloudRestoreArchiveVerified = false;
+    if (operation === 'cloud-restore') {
+      if (!options.currentDate || !parsePreviewBackup(raw, options.currentDate).valid) {
+        return {
+          kind: 'error',
+          message: 'The account copy did not pass local validation. The device data was not replaced.',
+          diagnostic: diagnosticForWriteFailure(
+            storage,
+            expectedRaw,
+            options.currentDate,
+            operation,
+            'cloud-restore-target-invalid',
+            'not-detected'
+          )
+        };
+      }
+      if (expectedRaw !== null) {
+        if (storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== expectedRaw) {
+          return {
+            kind: 'error',
+            message: 'The exact device source was not verified in the pre-restore recovery copy. No device data was replaced.',
+            diagnostic: diagnosticForWriteFailure(
+              storage,
+              expectedRaw,
+              options.currentDate,
+              operation,
+              'cloud-restore-source-not-preserved',
+              'not-detected'
+            )
+          };
+        }
+        cloudRestoreArchiveVerified = true;
+      }
+    }
     if (operation === 'repair') {
       repairRaw = raw;
       const repaired = options.currentDate
@@ -609,7 +643,9 @@ export function writePreview(
           )
         };
       }
-      const allowInvalidSource = options.allowUnrecoverableReplacement === true || targetedRepair;
+      const allowInvalidSource = options.allowUnrecoverableReplacement === true
+        || targetedRepair
+        || cloudRestoreArchiveVerified;
       if (!source.valid && !allowInvalidSource) {
         return {
           kind: 'error',
@@ -626,7 +662,7 @@ export function writePreview(
           )
         };
       }
-      if (!source.valid && sourceVersion === null && allowInvalidSource) {
+      if (!source.valid && sourceVersion === null && allowInvalidSource && operation !== 'cloud-restore') {
         const recovery = preserveUnclassifiedSourceRecovery(storage, expectedRaw);
         if (recovery.kind !== 'preserved') {
           return {

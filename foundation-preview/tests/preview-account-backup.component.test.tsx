@@ -166,7 +166,7 @@ function renderControls(
       onRestore={onRestore ?? ((nextData, expectedRaw) => {
         const result = writePreview(storage, nextData, expectedRaw, {
           currentDate,
-          operation: 'replace'
+          operation: 'cloud-restore'
         });
         return result.kind === 'saved'
           ? null

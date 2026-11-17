@@ -3166,7 +3166,7 @@ function PreviewWorkspace({
   function finishWrite(
     resultData: PreviewData,
     allowUnrecoverableReplacement = false,
-    operation: 'save' | 'import' | 'reset' | 'replace' = 'save',
+    operation: 'save' | 'import' | 'reset' | 'replace' | 'cloud-restore' = 'save',
     importSourceRaw?: string
   ): string | null {
     const written = writeCurrentPreview(resultData, expectedRaw.current, {
@@ -3580,14 +3580,18 @@ function PreviewWorkspace({
             manualOperationLocked={manualBackupLocked}
             isIdentityCurrent={() => isIdentityCurrent()
               && (isAccountBackupIdentityCurrent?.() ?? true)}
-            onRestore={(data, expectedLocalRaw) => {
+            onRestore={(data, expectedLocalRaw, restoreKind) => {
               if (!isIdentityCurrent()) {
                 return 'Preview identity changed. No local data was replaced.';
               }
               if (expectedRaw.current !== expectedLocalRaw) {
                 return 'This browser’s preview changed after confirmation. No local data was replaced.';
               }
-              const writeError = finishWrite(data, false, 'replace');
+              const writeError = finishWrite(
+                data,
+                false,
+                restoreKind === 'manual-recovery' ? 'cloud-restore' : 'replace'
+              );
               if (!writeError) refreshCloudRestoreRecoveryCopy();
               return writeError;
             }}

@@ -136,7 +136,11 @@ type PreviewAccountSyncProps = {
   onOpenRecovery: () => void;
   manualOperationLocked: boolean;
   isIdentityCurrent: () => boolean;
-  onRestore: (data: PreviewData, expectedLocalRaw: string | null) => string | null;
+  onRestore: (
+    data: PreviewData,
+    expectedLocalRaw: string | null,
+    restoreKind?: 'manual-recovery'
+  ) => string | null;
   onRepair: (data: PreviewData, expectedLocalRaw: string) => string | null;
   onManualOperationLockChange: (locked: boolean) => void;
 };
@@ -1717,6 +1721,11 @@ export function PreviewAccountSync({
               deviceRecoveryRaw={deviceRecoveryRaw}
               deviceRecoveryError={deviceRecoveryError}
               autoSyncEnabled={autoSyncEnabled}
+              restoreInvalidDeviceAvailable={
+                !localSaveConfirmed
+                && localRaw !== null
+                && (localSaveStatus === 'corrupt' || localSaveStatus === 'unsupported')
+              }
               enabled={enabled && !manualBusy && (!autoSyncEnabled || (status.kind !== 'saving' && status.kind !== 'checking'))}
               localSaveConfirmed={localSaveConfirmed}
               localSavePending={localSaveStatus === 'loading' || localSaveStatus === 'saving'}
