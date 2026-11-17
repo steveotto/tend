@@ -244,8 +244,10 @@ export function validateCheckInDraft(
     errors.effectiveDate = 'A check-in cannot be before the starting date.';
   } else if (draft.effectiveDate > currentDate) {
     errors.effectiveDate = 'An observed balance check-in cannot be in the future.';
-  } else if (correctingCheckIn && draft.effectiveDate !== correctingCheckIn.effectiveDate) {
-    errors.effectiveDate = 'The date of an existing check-in cannot be changed while correcting it.';
+  } else if (correctingCheckIn && goal.checkIns.some(checkIn =>
+    checkIn.id !== correctingCheckIn.id && checkIn.effectiveDate === draft.effectiveDate
+  )) {
+    errors.effectiveDate = 'Another check-in already occupies this date. Choose a different date; corrections will not replace or merge it.';
   }
   if (parseMoneyInput(draft.balance, goal.currency) === null) {
     errors.balance = 'Enter a valid balance for this currency.';

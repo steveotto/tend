@@ -5948,8 +5948,21 @@ describe('Tend Today preview', () => {
     expect(within(goal).getByText('Manual sample observation')).toBeTruthy();
   });
 
-  it('corrects a same-date check-in with history and restores it after remount', async () => {
+  it('corrects a check-in date with history, rejects collisions, and restores it after remount', async () => {
     const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const starterReserve = data.goals.find(item => item.id === 'sample-savings')!;
+    const originalCheckIn = starterReserve.checkIns.find(item => item.id === 'sample-savings-check-in-2')!;
+    starterReserve.checkIns = starterReserve.checkIns.map(item => item.id === originalCheckIn.id
+      ? { ...item, note: 'Original check-in note' }
+      : item);
+    starterReserve.correctionHistory = [{
+      effectiveDate: '2026-10-05',
+      previousBalanceMinor: 110_000,
+      previousNote: 'Earlier correction history note',
+      replacedAt: '2026-10-20T10:00:00.000Z'
+    }];
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
     const openFinances = async () => {
       await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
       await user.click(await screen.findByRole('tab', { name: 'Goals' }));
@@ -5960,20 +5973,87 @@ describe('Tend Today preview', () => {
     await user.click(within(goal).getByRole('button', { name: 'View details for Starter reserve' }));
     let details = screen.getByRole('dialog', { name: 'Starter reserve' });
     let detailCard = within(details).getByRole('article', { name: 'Starter reserve' });
+    const rawBeforeCorrection = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
     await user.click(within(detailCard).getAllByRole('button', { name: 'Correct' })[0]!);
     const dialog = screen.getByRole('dialog', { name: 'Correct balance check-in' });
-    expect(within(dialog).getByRole('status').textContent).toContain('retains the previous value');
-    expect(within(dialog).getByRole('status').textContent).toContain('date is fixed');
-    expect(within(dialog).getByLabelText('Effective date').hasAttribute('readonly')).toBe(true);
+    const effectiveDate = within(dialog).getByLabelText('Effective date') as HTMLInputElement;
+    expect(effectiveDate.type).toBe('date');
+    expect(effectiveDate.value).toBe(originalCheckIn.effectiveDate);
+    expect(effectiveDate.hasAttribute('readonly')).toBe(false);
+    expect(effectiveDate.min).toBe(starterReserve.startDate);
+    expect(within(dialog).getByRole('status').textContent)
+      .toBe('Your previous check-in details are kept in correction history.');
+
+    fireEvent.change(effectiveDate, { target: { value: '2026-10-08' } });
+    expect(within(dialog).getByRole('alert').textContent)
+      .toContain('Another check-in already occupies this date');
     const balance = within(dialog).getByLabelText('Current balance');
     await user.clear(balance);
-    await user.type(balance, '1350.00');
+    await user.type(balance, '9999.00');
+    await user.type(within(dialog).getByLabelText('Note (optional)'), 'Canceled edit');
     await user.click(within(dialog).getByRole('button', { name: 'Save correction' }));
+    expect(within(dialog).getByText(/Another check-in already occupies this date/).textContent)
+      .toContain('Another check-in already occupies this date');
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(rawBeforeCorrection);
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    details = screen.getByRole('dialog', { name: 'Starter reserve' });
+    detailCard = within(details).getByRole('article', { name: 'Starter reserve' });
+    expect(within(detailCard).getByText(/Recorded Oct 18, 2026/)).toBeTruthy();
+    expect(within(detailCard).getByText('Original check-in note')).toBeTruthy();
+    expect(within(detailCard).getByText(/previous value \$1,100\.00/)).toBeTruthy();
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(rawBeforeCorrection);
+
+    await user.click(within(detailCard).getAllByRole('button', { name: 'Correct' })[0]!);
+    const validCorrection = screen.getByRole('dialog', { name: 'Correct balance check-in' });
+    const validDate = within(validCorrection).getByLabelText('Effective date');
+    fireEvent.change(validDate, { target: { value: '2026-10-20' } });
+    const correctedBalance = within(validCorrection).getByLabelText('Current balance');
+    await user.clear(correctedBalance);
+    await user.type(correctedBalance, '1350.00');
+    const correctedNote = within(validCorrection).getByLabelText('Note (optional)');
+    await user.clear(correctedNote);
+    await user.type(correctedNote, 'Corrected balance note');
+    expect(within(validCorrection).getByRole('button', { name: 'Save correction' })).toBeTruthy();
+    await user.click(within(validCorrection).getByRole('button', { name: 'Save correction' }));
 
     details = screen.getByRole('dialog', { name: 'Starter reserve' });
     detailCard = within(details).getByRole('article', { name: 'Starter reserve' });
     expect(within(detailCard).getByText('$1,350.00')).toBeTruthy();
-    expect(within(detailCard).getByText(/previous value \$1,250\.00/)).toBeTruthy();
+    expect(within(detailCard).getByText(/Recorded Oct 20, 2026/)).toBeTruthy();
+    expect(within(detailCard).getByText('Corrected balance note')).toBeTruthy();
+    expect(within(detailCard).getByText(/Oct 18, 2026: previous value \$1,250\.00/)).toBeTruthy();
+    expect(within(detailCard).getByText('Original check-in note')).toBeTruthy();
+    expect(within(detailCard).getByText(/previous value \$1,100\.00/)).toBeTruthy();
+    const saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      const savedGoal = saved.envelope.data.goals.find(item => item.id === starterReserve.id)!;
+      expect(savedGoal.checkIns).toHaveLength(2);
+      expect(savedGoal.checkIns.find(item => item.id === originalCheckIn.id)).toMatchObject({
+        effectiveDate: '2026-10-20',
+        balanceMinor: 135_000,
+        note: 'Corrected balance note'
+      });
+      expect(savedGoal.correctionHistory).toEqual([
+        {
+          effectiveDate: '2026-10-05',
+          previousBalanceMinor: 110_000,
+          previousNote: 'Earlier correction history note',
+          replacedAt: '2026-10-20T10:00:00.000Z'
+        },
+        {
+          effectiveDate: '2026-10-18',
+          previousBalanceMinor: 125_000,
+          previousNote: 'Original check-in note',
+          replacedAt: expect.any(String)
+        }
+      ]);
+    }
+
     await user.click(within(details).getByRole('button', { name: 'Close goal details' }));
     await user.click(screen.getByRole('button', { name: 'Today' }));
     await openFinances();
@@ -5989,6 +6069,8 @@ describe('Tend Today preview', () => {
     details = screen.getByRole('dialog', { name: 'Starter reserve' });
     detailCard = within(details).getByRole('article', { name: 'Starter reserve' });
     expect(within(detailCard).getByText(/previous value \$1,250\.00/)).toBeTruthy();
+    expect(within(detailCard).getByText('Corrected balance note')).toBeTruthy();
+    expect(within(detailCard).getByText(/previous value \$1,100\.00/)).toBeTruthy();
   });
 
   it('routes Faith to shared Practice terminology and scoped scoring, then returns to Today', async () => {

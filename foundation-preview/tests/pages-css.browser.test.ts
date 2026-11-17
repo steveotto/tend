@@ -3872,6 +3872,15 @@ async function main() {
                 }));
                 await detailsTrigger.click();
                 const details = page.getByRole('dialog', { name: detailTitle });
+                const detailCard = details.getByRole('article', { name: detailTitle });
+                if (await detailCard.getByRole('button', { name: 'Correct' }).count() === 0) {
+                  await detailCard.getByRole('button', { name: 'Record check-in' }).click();
+                  const recordCheckIn = page.getByRole('dialog', { name: 'Record balance check-in' });
+                  await recordCheckIn.getByLabel('Effective date').fill('2026-10-18');
+                  await recordCheckIn.getByLabel('Current balance').fill('1250');
+                  await recordCheckIn.getByRole('button', { name: 'Save check-in' }).click();
+                  await detailCard.getByRole('button', { name: 'Correct' }).first().waitFor();
+                }
                 const detailsGeometry = await details.evaluate(dialog => {
                   const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
                   if (!surface) throw new Error('Goal details need a scrollable surface.');
@@ -3903,6 +3912,63 @@ async function main() {
                 assert.equal(await page.evaluate(() => document.body.style.overflow), 'hidden');
                 assert.equal(await details.getByRole('heading', { name: 'Recorded check-ins' }).isVisible(), true);
                 assert.equal(await details.getByRole('button', { name: 'Close goal details' }).isVisible(), true);
+
+                await page.setViewportSize({ width: viewportWidth, height: 400 });
+                await details.getByRole('button', { name: 'Correct' }).first().click();
+                const correction = page.getByRole('dialog', { name: 'Correct balance check-in' });
+                const correctionDate = correction.getByLabel('Effective date');
+                const dateField = await correctionDate.evaluate(input => ({
+                  type: (input as HTMLInputElement).type,
+                  value: (input as HTMLInputElement).value,
+                  min: (input as HTMLInputElement).min,
+                  max: (input as HTMLInputElement).max,
+                  readOnly: (input as HTMLInputElement).readOnly
+                }));
+                assert.equal(dateField.type, 'date');
+                assert.equal(dateField.value, '2026-10-18');
+                assert.equal(dateField.min, '2026-10-01');
+                assert.ok(dateField.max);
+                assert.equal(dateField.readOnly, false);
+                await correctionDate.fill('2026-10-19');
+                assert.equal(await correctionDate.inputValue(), '2026-10-19');
+                const correctionLayout = await correction.evaluate(dialog => {
+                  const rect = dialog.getBoundingClientRect();
+                  const scrollRegion = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+                  if (!scrollRegion) throw new Error('The correction form needs a scrollable body.');
+                  const scrollStyle = getComputedStyle(scrollRegion);
+                  scrollRegion.scrollTop = scrollRegion.scrollHeight;
+                  return {
+                    left: rect.left,
+                    top: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                    viewportWidth: document.documentElement.clientWidth,
+                    viewportHeight: document.documentElement.clientHeight,
+                    overflowY: scrollStyle.overflowY,
+                    scrollable: scrollRegion.scrollHeight > scrollRegion.clientHeight,
+                    scrollTop: scrollRegion.scrollTop,
+                    documentWidth: document.documentElement.scrollWidth
+                  };
+                });
+                const { scrollTop, ...correctionBounds } = correctionLayout;
+                assert.deepEqual(correctionBounds, {
+                  left: 0,
+                  top: 0,
+                  width: viewportWidth,
+                  height: 400,
+                  viewportWidth,
+                  viewportHeight: 400,
+                  overflowY: 'auto',
+                  scrollable: true,
+                  documentWidth: viewportWidth
+                });
+                assert.ok(scrollTop > 0);
+                const cancelCorrection = correction.getByRole('button', { name: 'Cancel' });
+                await cancelCorrection.scrollIntoViewIfNeeded();
+                assert.equal(await cancelCorrection.isVisible(), true);
+                await cancelCorrection.click();
+                await page.setViewportSize({ width: viewportWidth, height: 844 });
+
                 await details.getByRole('button', { name: 'Close goal details' }).click();
                 await page.waitForFunction(label =>
                   document.activeElement?.getAttribute('aria-label') === label, detailsLabel);

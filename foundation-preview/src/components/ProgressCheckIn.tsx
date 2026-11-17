@@ -9,6 +9,7 @@ import {
   type MoneyGoal
 } from '../domain/money-goals.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { PersonDateField } from './PersonDateField.tsx';
 
 type ProgressCheckInProps = {
   goal: MoneyGoal;
@@ -25,7 +26,12 @@ export function ProgressCheckIn({ goal, checkIn, currentDate, onSave, onClose }:
     note: checkIn?.note ?? ''
   }));
   const [errors, setErrors] = useState<CheckInDraftErrors>({});
-  const duplicateDate = goal.checkIns.find(item => item.effectiveDate === draft.effectiveDate);
+  const duplicateDate = checkIn
+    ? undefined
+    : goal.checkIns.find(item => item.effectiveDate === draft.effectiveDate);
+  const conflictingCheckIn = checkIn
+    ? goal.checkIns.find(item => item.id !== checkIn.id && item.effectiveDate === draft.effectiveDate)
+    : undefined;
 
   function update(field: keyof CheckInDraft, value: string) {
     setDraft(previous => ({ ...previous, [field]: value }));
@@ -50,22 +56,34 @@ export function ProgressCheckIn({ goal, checkIn, currentDate, onSave, onClose }:
     <MoneyGoalDialog
       title={checkIn ? 'Correct balance check-in' : 'Record balance check-in'}
       intro={`${goal.title} · ${goal.currency}. Enter an observed balance, not a payment amount.`}
+      phoneFullScreen
+      scrollableBody
       onClose={onClose}
     >
       <form onSubmit={submit} noValidate>
           <div className="goal-field">
             <label htmlFor="check-in-date">Effective date</label>
-            <input
+            <PersonDateField
               id="check-in-date"
-              type={checkIn ? 'text' : 'date'}
+              label="Effective date"
               value={draft.effectiveDate}
-              readOnly={Boolean(checkIn)}
-              aria-readonly={Boolean(checkIn)}
-              aria-invalid={Boolean(errors.effectiveDate)}
-              aria-describedby={errors.effectiveDate ? 'check-in-error-effectiveDate' : undefined}
-              onChange={event => update('effectiveDate', event.currentTarget.value)}
+              min={goal.startDate}
+              max={currentDate}
+              required
+              showClearButton={false}
+              invalid={Boolean(errors.effectiveDate || conflictingCheckIn)}
+              describedBy={conflictingCheckIn
+                ? 'check-in-conflict-effectiveDate'
+                : errors.effectiveDate
+                  ? 'check-in-error-effectiveDate'
+                  : undefined}
+              onChange={value => update('effectiveDate', value)}
             />
-            {fieldError('effectiveDate')}
+            {conflictingCheckIn ? (
+              <span className="goal-field-error" id="check-in-conflict-effectiveDate" role="alert">
+                Another check-in already occupies this date. Choose a different date; corrections will not replace or merge it.
+              </span>
+            ) : fieldError('effectiveDate')}
           </div>
           <div className="goal-field">
             <label htmlFor="check-in-balance">Current balance</label>
@@ -88,16 +106,18 @@ export function ProgressCheckIn({ goal, checkIn, currentDate, onSave, onClose }:
               onChange={event => update('note', event.currentTarget.value)}
             />
           </div>
-          {duplicateDate && (
+          {checkIn ? (
             <p className="check-in-correction-notice" role="status">
-              {checkIn
-                ? 'The effective date is fixed while correcting this check-in. Saving replaces its value and retains the previous value in this preview’s correction history.'
-                : 'A check-in already exists for this date. Saving replaces it and retains its previous value in this preview’s correction history.'}
+              Your previous check-in details are kept in correction history.
+            </p>
+          ) : duplicateDate && (
+            <p className="check-in-correction-notice" role="status">
+              A check-in already exists for this date. Saving replaces it and retains its previous value in this preview’s correction history.
             </p>
           )}
           {Object.keys(errors).length > 0 && <p className="goal-form-error-summary" role="alert">Review the highlighted check-in fields.</p>}
           <div className="money-goal-dialog__actions">
-            <button type="submit" className="btn mini">{duplicateDate ? 'Save correction' : 'Save check-in'}</button>
+            <button type="submit" className="btn mini">{checkIn || duplicateDate ? 'Save correction' : 'Save check-in'}</button>
             <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
           </div>
       </form>

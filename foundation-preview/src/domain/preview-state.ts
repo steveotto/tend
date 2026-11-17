@@ -524,7 +524,7 @@ function validateGoal(
   for (const correction of value.correctionHistory) {
     if (!isRecord(correction) || !hasOnlyKeys(correction, correctionKeys)) return false;
     if (typeof correction.effectiveDate !== 'string' || !isValidDate(correction.effectiveDate)
-      || !effectiveDates.has(correction.effectiveDate)) return false;
+      || correction.effectiveDate < value.startDate || correction.effectiveDate > currentDate) return false;
     if (!isMinorUnitAmount(correction.previousBalanceMinor)
       || !isOptionalText(correction.previousNote)
       || !isCanonicalTimestamp(correction.replacedAt)) return false;

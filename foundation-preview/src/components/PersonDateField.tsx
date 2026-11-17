@@ -6,7 +6,11 @@ export function PersonDateField({
   value,
   invalid,
   describedBy,
-  onChange
+  onChange,
+  min,
+  max,
+  required = false,
+  showClearButton = true
 }: {
   id: string;
   label: string;
@@ -14,6 +18,10 @@ export function PersonDateField({
   invalid?: boolean;
   describedBy?: string | undefined;
   onChange: (value: string) => void;
+  min?: string;
+  max?: string;
+  required?: boolean;
+  showClearButton?: boolean;
 }) {
   const [editingPartialDate, setEditingPartialDate] = useState(false);
   const partialDate = /^\d{2}-\d{2}$/.test(value);
@@ -29,11 +37,14 @@ export function PersonDateField({
         aria-label={label}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
+        min={min}
+        max={max}
+        required={required || undefined}
         onFocus={() => setEditingPartialDate(true)}
         onBlur={() => setEditingPartialDate(false)}
         onChange={event => onChange(event.currentTarget.value)}
       />
-      {value && (
+      {showClearButton && value && (
         <button
           type="button"
           className="person-date-field__clear"
