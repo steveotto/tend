@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { PreviewData, PreviewEnvelope } from '../domain/preview-state.ts';
 import {
+  PreviewAccountBackupError,
   createValidatedPreviewAccountDocument,
   previewEnvelopesEqual,
   validatePreviewAccountBackup
@@ -54,6 +55,23 @@ type ConflictResolutionProgress = {
   phase: 'checking' | 'preserving' | 'saving' | 'verifying' | 'restoring';
 };
 
+type ConflictReadOnlyCheckReport = {
+  phase: 'account-read' | 'identity-change' | 'revision-conflict' | 'recovery-archive' | 'unexpected';
+  errorCode: 'none' | 'request' | 'invalid' | 'stale' | 'unknown' | 'storage-unavailable' | 'archive-invalid' | 'archive-mismatch' | 'unexpected';
+  revisionMatch: 'match' | 'mismatch' | 'not-checked';
+  archiveMatch: 'match' | 'mismatch' | 'missing' | 'invalid' | 'unavailable' | 'not-checked';
+};
+
+type ConflictResolutionPhase =
+  | 'account-read'
+  | 'identity-check'
+  | 'revision-check'
+  | 'device-check'
+  | 'recovery-archive'
+  | 'account-save'
+  | 'save-verification'
+  | 'post-save-bookkeeping';
+
 type SyncStatus =
   | { kind: 'checking' }
   | { kind: 'device' }
@@ -103,6 +121,7 @@ function messageFor(error: unknown): string {
 
 function conflictResolutionFailureMessage(
   error: unknown,
+  phase: ConflictResolutionPhase,
   accountSaveStarted: boolean,
   accountSaveConfirmed: boolean
 ): string {
@@ -117,9 +136,57 @@ function conflictResolutionFailureMessage(
   if (accountSaveConfirmed) {
     return 'The account copy was confirmed, but local recovery or sync bookkeeping could not be completed. Check Save & sync before retrying; no second account write was attempted.';
   }
-  return accountSaveStarted
-    ? 'The account save may have completed, but its result could not be confirmed. Check the account status before retrying; no automatic retry was made.'
-    : 'The account and recovery state could not be verified. No account write was attempted; review the conflict before retrying.';
+  if (accountSaveStarted) {
+    return 'The account save may have completed, but its result could not be confirmed. Check the account status before retrying; no automatic retry was made.';
+  }
+  if (phase === 'account-read') {
+    return 'The latest account copy could not be read or validated. No recovery archive or account write was attempted; use the read-only conflict check before proceeding.';
+  }
+  if (phase === 'recovery-archive') {
+    return 'The recovery archive could not be verified. No account write was attempted; the archive may have been created. Do not clear it; use the read-only conflict check before proceeding.';
+  }
+  return 'An unexpected error stopped conflict resolution before the account write. No account write was attempted; the conflict and recovery archive were left in place. Use the read-only conflict check before proceeding.';
+}
+
+function accountReadErrorCode(error: unknown): ConflictReadOnlyCheckReport['errorCode'] {
+  if (error instanceof PreviewAccountBackupError) return error.kind;
+  return 'unknown';
+}
+
+function compareAccountRecoveryArchive(
+  priorRaw: string | null,
+  accountId: string,
+  latestCloud: PreviewAccountBackupRecord,
+  validated: ValidatedPreviewAccountBackup,
+  currentDate: string
+): ConflictReadOnlyCheckReport['archiveMatch'] {
+  if (priorRaw === null) return 'missing';
+  try {
+    const existing: unknown = JSON.parse(priorRaw);
+    if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) return 'invalid';
+    const value = existing as Record<string, unknown>;
+    const existingDocument = value.document;
+    if (value.accountId !== accountId || value.revision !== latestCloud.revision) return 'mismatch';
+    if (typeof existingDocument !== 'object' || existingDocument === null || Array.isArray(existingDocument)) {
+      return 'invalid';
+    }
+    const schemaVersion = (existingDocument as { schemaVersion?: unknown }).schemaVersion;
+    if (typeof schemaVersion !== 'number') return 'invalid';
+    const existingRecord: PreviewAccountBackupRecord = {
+      document: existingDocument,
+      schemaVersion,
+      revision: latestCloud.revision,
+      updatedAt: latestCloud.updatedAt
+    };
+    const existingValidated = validatePreviewAccountBackup(existingRecord, currentDate);
+    return previewEnvelopesEqual(existingValidated.envelope, validated.envelope) ? 'match' : 'mismatch';
+  } catch {
+    return 'invalid';
+  }
+}
+
+function conflictReadOnlyCheckMessage(report: ConflictReadOnlyCheckReport): string {
+  return `Read-only conflict check — phase: ${report.phase}; error code: ${report.errorCode}; revision match: ${report.revisionMatch}; archive match: ${report.archiveMatch}.`;
 }
 
 function conflictProgressMessage(progress: ConflictResolutionProgress): string {
@@ -257,6 +324,10 @@ export function PreviewAccountSync({
   const [conflictResolutionProgress, setConflictResolutionProgress] =
     useState<ConflictResolutionProgress | null>(null);
   const conflictResolutionInFlight = useRef(false);
+  const [conflictReadOnlyCheckBusy, setConflictReadOnlyCheckBusy] = useState(false);
+  const conflictReadOnlyCheckInFlight = useRef(false);
+  const [conflictReadOnlyCheckReport, setConflictReadOnlyCheckReport] =
+    useState<ConflictReadOnlyCheckReport | null>(null);
   const [cloudRecoveryRaw, setCloudRecoveryRaw] = useState<string | null>(null);
   const [cloudRecoveryError, setCloudRecoveryError] = useState('');
   const [deviceRecoveryRaw, setDeviceRecoveryRaw] = useState<string | null>(null);
@@ -738,26 +809,239 @@ export function PreviewAccountSync({
     controlRef.current?.changed();
   }, [data, localRaw, enabled, autoSyncEnabled, conflict]);
 
+  async function checkConflictReadOnly() {
+    const pending = conflict;
+    const current = latest.current;
+    const currentApi = current.api;
+    if (conflictReadOnlyCheckInFlight.current
+      || conflictResolutionInFlight.current
+      || manualBusy
+      || manualOperationLocked
+      || !pending
+      || !currentApi
+      || !current.autoSyncEnabled) return;
+
+    try {
+      if (!current.isIdentityCurrent()) {
+        setConflictReadOnlyCheckReport({
+          phase: 'identity-change',
+          errorCode: 'none',
+          revisionMatch: 'not-checked',
+          archiveMatch: 'not-checked'
+        });
+        setStatus({
+          kind: 'attention',
+          message: 'The signed-in account changed during conflict review. No account data was changed; reopen Save & sync for the current account.'
+        });
+        return;
+      }
+    } catch {
+      setConflictReadOnlyCheckReport({
+        phase: 'unexpected',
+        errorCode: 'unexpected',
+        revisionMatch: 'not-checked',
+        archiveMatch: 'not-checked'
+      });
+      return;
+    }
+
+    conflictReadOnlyCheckInFlight.current = true;
+    setConflictReadOnlyCheckBusy(true);
+    setConflictReadOnlyCheckReport(null);
+    let revisionMatch: ConflictReadOnlyCheckReport['revisionMatch'] = 'not-checked';
+    let archiveMatch: ConflictReadOnlyCheckReport['archiveMatch'] = 'not-checked';
+    try {
+      let latestCloud: PreviewAccountBackupRecord | null;
+      try {
+        latestCloud = await currentApi.read();
+      } catch (error) {
+        setConflictReadOnlyCheckReport({
+          phase: 'account-read',
+          errorCode: accountReadErrorCode(error),
+          revisionMatch,
+          archiveMatch
+        });
+        return;
+      }
+
+      let identityCurrent = false;
+      try {
+        identityCurrent = latest.current.isIdentityCurrent();
+      } catch {
+        setConflictReadOnlyCheckReport({
+          phase: 'unexpected',
+          errorCode: 'unexpected',
+          revisionMatch,
+          archiveMatch
+        });
+        return;
+      }
+      if (!identityCurrent) {
+        setConflictReadOnlyCheckReport({
+          phase: 'identity-change',
+          errorCode: 'none',
+          revisionMatch,
+          archiveMatch
+        });
+        setStatus({
+          kind: 'attention',
+          message: 'The signed-in account changed during conflict review. No account data was changed; reopen Save & sync for the current account.'
+        });
+        return;
+      }
+
+      if (!latestCloud || latestCloud.revision !== pending.revision) {
+        revisionMatch = 'mismatch';
+        if (latestCloud) {
+          let validated: ValidatedPreviewAccountBackup;
+          try {
+            validated = validatePreviewAccountBackup(latestCloud, latest.current.currentDate);
+          } catch (error) {
+            setConflictReadOnlyCheckReport({
+              phase: 'account-read',
+              errorCode: accountReadErrorCode(error),
+              revisionMatch,
+              archiveMatch
+            });
+            return;
+          }
+          const local = readLocalSnapshot(
+            latest.current.data,
+            latest.current.localRaw,
+            latest.current.currentDate
+          );
+          setConflictState({
+            localRaw: local.raw,
+            localEnvelope: local.envelope,
+            cloud: validated,
+            revision: latestCloud.revision,
+            updatedAt: latestCloud.updatedAt
+          });
+          setStatus({
+            kind: 'attention',
+            message: 'The account copy changed while this conflict was open. The comparison is refreshed; choose again to use the current account revision. No overwrite was attempted.'
+          });
+        } else {
+          setStatus({
+            kind: 'attention',
+            message: 'The account backup disappeared while this conflict was open. No data was changed; refresh the comparison before choosing again.'
+          });
+        }
+        setConflictReadOnlyCheckReport({
+          phase: 'revision-conflict',
+          errorCode: 'none',
+          revisionMatch,
+          archiveMatch
+        });
+        return;
+      }
+
+      revisionMatch = 'match';
+      let validated: ValidatedPreviewAccountBackup;
+      try {
+        validated = validatePreviewAccountBackup(latestCloud, latest.current.currentDate);
+      } catch (error) {
+        setConflictReadOnlyCheckReport({
+          phase: 'account-read',
+          errorCode: accountReadErrorCode(error),
+          revisionMatch,
+          archiveMatch
+        });
+        return;
+      }
+
+      let priorRecovery: string | null;
+      try {
+        priorRecovery = current.storage.getItem(syncCloudRecoveryKey);
+      } catch {
+        setConflictReadOnlyCheckReport({
+          phase: 'recovery-archive',
+          errorCode: 'storage-unavailable',
+          revisionMatch,
+          archiveMatch: 'unavailable'
+        });
+        return;
+      }
+      archiveMatch = compareAccountRecoveryArchive(
+        priorRecovery,
+        current.accountId,
+        latestCloud,
+        validated,
+        current.currentDate
+      );
+      setConflictReadOnlyCheckReport({
+        phase: 'recovery-archive',
+        errorCode: archiveMatch === 'invalid'
+          ? 'archive-invalid'
+          : archiveMatch === 'mismatch'
+            ? 'archive-mismatch'
+            : 'none',
+        revisionMatch,
+        archiveMatch
+      });
+    } catch {
+      setConflictReadOnlyCheckReport({
+        phase: 'unexpected',
+        errorCode: 'unexpected',
+        revisionMatch,
+        archiveMatch
+      });
+    } finally {
+      conflictReadOnlyCheckInFlight.current = false;
+      setConflictReadOnlyCheckBusy(false);
+    }
+  }
+
   async function resolveConflict(choice: 'cloud' | 'device') {
     const pending = conflict;
     const currentApi = latest.current.api;
     if (conflictResolutionInFlight.current
+      || conflictReadOnlyCheckInFlight.current
       || manualOperationLocked
       || !pending
       || !currentApi
-      || !latest.current.autoSyncEnabled
-      || !latest.current.isIdentityCurrent()) return;
+      || !latest.current.autoSyncEnabled) return;
+    let identityCurrent = false;
+    try {
+      identityCurrent = latest.current.isIdentityCurrent();
+    } catch {
+      setStatus({
+        kind: 'attention',
+        message: 'An unexpected error prevented account identity verification. No recovery archive or account write was attempted.'
+      });
+      return;
+    }
+    if (!identityCurrent) {
+      setConflictState(null);
+      setStatus({
+        kind: 'attention',
+        message: 'The signed-in account changed during conflict review. No recovery archive or account write was attempted; reopen Save & sync for the current account.'
+      });
+      return;
+    }
     conflictResolutionInFlight.current = true;
     setConflictResolutionProgress({ choice, phase: 'checking' });
+    setConflictReadOnlyCheckReport(null);
     setManualBusy(true);
     onManualOperationLockChange(true);
     let accountSaveStarted = false;
     let accountSaveConfirmed = false;
+    let phase: ConflictResolutionPhase = 'account-read';
     try {
       const latestCloud = await currentApi.read();
-      if (!latest.current.isIdentityCurrent()) return;
+      phase = 'identity-check';
+      if (!latest.current.isIdentityCurrent()) {
+        setConflictState(null);
+        setStatus({
+          kind: 'attention',
+          message: 'The signed-in account changed during conflict review. No recovery archive or account write was attempted; reopen Save & sync for the current account.'
+        });
+        return;
+      }
+      phase = 'revision-check';
       if (!latestCloud || latestCloud.revision !== pending.revision) {
         if (latestCloud) {
+          phase = 'account-read';
           const local = readLocalSnapshot(
             latest.current.data,
             latest.current.localRaw,
@@ -773,14 +1057,19 @@ export function PreviewAccountSync({
           });
           setStatus({
             kind: 'attention',
-            message: 'The account copy changed while this conflict was open. No overwrite was attempted; review the updated account copy.'
+            message: 'The account copy changed while this conflict was open. The comparison is refreshed; choose again to use the current account revision. No overwrite was attempted.'
           });
         } else {
-          setStatus({ kind: 'attention', message: 'The account backup changed or disappeared. No data was replaced.' });
+          setStatus({
+            kind: 'attention',
+            message: 'The account backup disappeared while this conflict was open. No data was changed; refresh the comparison before choosing again.'
+          });
         }
         return;
       }
+      phase = 'account-read';
       const validated = validatePreviewAccountBackup(latestCloud, latest.current.currentDate);
+      phase = 'device-check';
       const local = readLocalSnapshot(
         latest.current.data,
         latest.current.localRaw,
@@ -797,6 +1086,7 @@ export function PreviewAccountSync({
       }
 
       if (choice === 'cloud') {
+        phase = 'recovery-archive';
         setConflictResolutionProgress({ choice, phase: 'preserving' });
         if (local.raw !== null) {
           const priorDeviceRecovery = storage.getItem(syncDeviceRecoveryKey);
@@ -825,6 +1115,7 @@ export function PreviewAccountSync({
         setStatus({ kind: 'account', savedAt: latestCloud.updatedAt });
         setSyncMessage('Account data was saved on this device. Your previous local copy is recoverable.');
       } else {
+        phase = 'recovery-archive';
         setConflictResolutionProgress({ choice, phase: 'preserving' });
         const cloudRecovery = {
           accountId,
@@ -836,33 +1127,17 @@ export function PreviewAccountSync({
         const recoveryRaw = JSON.stringify(cloudRecovery);
         const priorRecovery = storage.getItem(syncCloudRecoveryKey);
         if (priorRecovery !== null) {
-          let matches = false;
-          try {
-            const existing: unknown = JSON.parse(priorRecovery);
-            if (typeof existing === 'object' && existing !== null && !Array.isArray(existing)) {
-              const value = existing as Record<string, unknown>;
-              const existingDocument = value.document;
-              if (value.accountId === accountId
-                && value.revision === latestCloud.revision
-                && typeof existingDocument === 'object'
-                && existingDocument !== null
-                && !Array.isArray(existingDocument)) {
-                const existingRecord = {
-                  document: existingDocument,
-                  schemaVersion: (existingDocument as { schemaVersion?: number }).schemaVersion,
-                  revision: latestCloud.revision,
-                  updatedAt: latestCloud.updatedAt
-                } as PreviewAccountBackupRecord;
-                matches = previewEnvelopesEqual(
-                  validatePreviewAccountBackup(existingRecord, latest.current.currentDate).envelope,
-                  validated.envelope
-                );
-              }
-            }
-          } catch {
+          const archiveMatch = compareAccountRecoveryArchive(
+            priorRecovery,
+            accountId,
+            latestCloud,
+            validated,
+            latest.current.currentDate
+          );
+          if (archiveMatch === 'invalid') {
             throw new Error('The saved account recovery copy could not be validated. Download or preserve it before retrying; no account write was attempted.');
           }
-          if (!matches) {
+          if (archiveMatch !== 'match') {
             throw new Error('A different account recovery copy already exists. It was left unchanged; no account write was attempted.');
           }
         } else {
@@ -877,6 +1152,7 @@ export function PreviewAccountSync({
         }
         setCloudRecoveryRaw(savedRecovery);
         setConflictResolutionProgress({ choice, phase: 'saving' });
+        phase = 'account-save';
         accountSaveStarted = true;
         let savedRevision: number;
         let savedAt: string | null;
@@ -886,6 +1162,7 @@ export function PreviewAccountSync({
           savedAt = new Date().toISOString();
         } catch {
           setConflictResolutionProgress({ choice, phase: 'verifying' });
+          phase = 'save-verification';
           let observed: PreviewAccountBackupRecord | null;
           try {
             observed = await currentApi.read();
@@ -917,7 +1194,9 @@ export function PreviewAccountSync({
             throw new Error('The account save may have completed, but no account copy was available to confirm it. Check the account status before retrying; no automatic retry was made.');
           }
         }
+        phase = 'identity-check';
         if (!latest.current.isIdentityCurrent()) return;
+        phase = 'post-save-bookkeeping';
         const guardError = resolvePendingImportGuard(storage);
         if (guardError) throw new Error(guardError);
         saveMetadata(storage, {
@@ -933,7 +1212,7 @@ export function PreviewAccountSync({
     } catch (error) {
       setStatus({
         kind: 'attention',
-        message: conflictResolutionFailureMessage(error, accountSaveStarted, accountSaveConfirmed)
+        message: conflictResolutionFailureMessage(error, phase, accountSaveStarted, accountSaveConfirmed)
       });
     } finally {
       conflictResolutionInFlight.current = false;
@@ -1018,7 +1297,7 @@ export function PreviewAccountSync({
                 </p>
               )}
             </div>
-            {status.kind === 'attention' && api && autoSyncEnabled && localSaveConfirmed && (
+            {status.kind === 'attention' && api && autoSyncEnabled && localSaveConfirmed && !conflict && (
               <button
                 type="button"
                 className="btn mini ghost preview-account-sync__retry"
@@ -1048,7 +1327,7 @@ export function PreviewAccountSync({
             <div
               className="preview-account-sync__conflict"
               role="group"
-              aria-busy={conflictResolutionProgress !== null}
+              aria-busy={conflictResolutionProgress !== null || conflictReadOnlyCheckBusy}
               aria-labelledby="preview-account-sync-conflict-title"
             >
               <h4 id="preview-account-sync-conflict-title">This device and your account have different copies</h4>
@@ -1061,11 +1340,21 @@ export function PreviewAccountSync({
                   {conflictProgressMessage(conflictResolutionProgress)}
                 </p>
               )}
+              {conflictReadOnlyCheckBusy && (
+                <p className="preview-account-sync__message" role="status">
+                  Checking the current account revision and recovery archive (read-only)…
+                </p>
+              )}
+              {conflictReadOnlyCheckReport && (
+                <p className="preview-account-sync__message" role="status">
+                  {conflictReadOnlyCheckMessage(conflictReadOnlyCheckReport)}
+                </p>
+              )}
               <div className="preview-account-sync__actions">
                 <button
                   type="button"
                   className="btn mini"
-                  disabled={manualBusy || manualOperationLocked}
+                  disabled={manualBusy || manualOperationLocked || conflictReadOnlyCheckBusy}
                   onClick={() => void resolveConflict('device')}
                 >
                   {conflictResolutionProgress?.choice === 'device'
@@ -1075,10 +1364,18 @@ export function PreviewAccountSync({
                 <button
                   type="button"
                   className="btn mini ghost"
-                  disabled={manualBusy || manualOperationLocked}
+                  disabled={manualBusy || manualOperationLocked || conflictReadOnlyCheckBusy}
                   onClick={() => void resolveConflict('cloud')}
                 >
                   {conflictResolutionProgress?.choice === 'cloud' ? 'Applying…' : 'Use the account copy'}
+                </button>
+                <button
+                  type="button"
+                  className="btn mini ghost"
+                  disabled={manualBusy || manualOperationLocked || conflictReadOnlyCheckBusy}
+                  onClick={() => void checkConflictReadOnly()}
+                >
+                  {conflictReadOnlyCheckBusy ? 'Checking…' : 'Check conflict state (read-only)'}
                 </button>
               </div>
             </div>

@@ -770,6 +770,270 @@ describe('Preview account sync', () => {
     view.unmount();
   });
 
+  it('distinguishes an account-read failure without exposing the error or attempting a write', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    let failReads = false;
+    const api: PreviewAccountBackupApi = {
+      read: async () => {
+        if (failReads) throw new PreviewAccountBackupError('request', 'synthetic private account response');
+        return service.api.read();
+      },
+      save: service.api.save
+    };
+    const view = render(<Browser api={api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    failReads = true;
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The latest account copy could not be read or validated.'
+    );
+    expect(view.container.textContent).not.toContain('synthetic private account response');
+    expect(service.saveCalls).toBe(0);
+    expect(storage.values.has(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`)).toBe(false);
+    view.unmount();
+  });
+
+  it('reports identity changes during conflict review without preserving or saving either copy', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    let identityCurrent = true;
+    let holdReads = false;
+    let releaseRead: ((record: PreviewAccountBackupRecord | null) => void) | null = null;
+    const api: PreviewAccountBackupApi = {
+      read: () => {
+        if (!holdReads) return service.api.read();
+        return new Promise(resolve => {
+          releaseRead = resolve;
+        });
+      },
+      save: service.api.save
+    };
+    const view = render(
+      <Browser api={api} storage={storage.storage} isIdentityCurrent={() => identityCurrent} />
+    );
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    holdReads = true;
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+    expect(await screen.findByText('Checking the latest account copy…')).toBeTruthy();
+    identityCurrent = false;
+    await act(async () => {
+      releaseRead?.(service.record);
+    });
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'The signed-in account changed during conflict review.'
+    );
+    expect(service.saveCalls).toBe(0);
+    expect(storage.values.has(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`)).toBe(false);
+    view.unmount();
+  });
+
+  it('sanitizes unexpected exceptions separately from an account identity change', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    let throwOnIdentityCheck = false;
+    let holdReads = false;
+    let releaseRead: ((record: PreviewAccountBackupRecord | null) => void) | null = null;
+    const api: PreviewAccountBackupApi = {
+      read: () => {
+        if (!holdReads) return service.api.read();
+        return new Promise(resolve => {
+          releaseRead = resolve;
+        });
+      },
+      save: service.api.save
+    };
+    const view = render(
+      <Browser
+        api={api}
+        storage={storage.storage}
+        isIdentityCurrent={() => {
+          if (throwOnIdentityCheck) throw new Error('synthetic private identity exception');
+          return true;
+        }}
+      />
+    );
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    holdReads = true;
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+    expect(await screen.findByText('Checking the latest account copy…')).toBeTruthy();
+    throwOnIdentityCheck = true;
+    await act(async () => {
+      releaseRead?.(service.record);
+    });
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'An unexpected error stopped conflict resolution before the account write.'
+    );
+    expect(view.container.textContent).not.toContain('synthetic private identity exception');
+    expect(service.saveCalls).toBe(0);
+    expect(storage.values.has(`${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`)).toBe(false);
+    view.unmount();
+  });
+
+  it('runs a read-only check that reports account-read failure using sanitized fields only', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    let failReads = false;
+    const api: PreviewAccountBackupApi = {
+      read: async () => {
+        if (failReads) throw new PreviewAccountBackupError('request', 'synthetic private account response');
+        return service.api.read();
+      },
+      save: service.api.save
+    };
+    const view = render(<Browser api={api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    const before = new Map(storage.values);
+    failReads = true;
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+
+    expect(await screen.findByText(
+      'Read-only conflict check — phase: account-read; error code: request; revision match: not-checked; archive match: not-checked.'
+    )).toBeTruthy();
+    expect(view.container.textContent).not.toContain('synthetic private account response');
+    expect([...storage.values.entries()]).toEqual([...before.entries()]);
+    expect(service.saveCalls).toBe(0);
+    view.unmount();
+  });
+
+  it('reports identity changes in the read-only check without performing another account read', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    let identityCurrent = true;
+    const view = render(
+      <Browser api={service.api} storage={storage.storage} isIdentityCurrent={() => identityCurrent} />
+    );
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    const readsBeforeCheck = service.readCalls;
+    identityCurrent = false;
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+
+    expect(await screen.findByText(
+      'Read-only conflict check — phase: identity-change; error code: none; revision match: not-checked; archive match: not-checked.'
+    )).toBeTruthy();
+    expect(service.readCalls).toBe(readsBeforeCheck);
+    expect(service.saveCalls).toBe(0);
+    view.unmount();
+  });
+
+  it('reports an existing recovery archive mismatch read-only and leaves it unchanged', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const cloud = cloudRecord(cloudData, 3);
+    const service = backend(cloud);
+    const recoveryKey = `${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`;
+    const priorRecovery = JSON.stringify({
+      accountId,
+      revision: cloud.revision,
+      document: createPreviewEnvelope(createEmptyPreviewData()),
+      updatedAt: cloud.updatedAt,
+      preservedAt: '2026-10-01T00:00:00.000Z'
+    });
+    storage.values.set(recoveryKey, priorRecovery);
+    const view = render(<Browser api={service.api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    const before = new Map(storage.values);
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+
+    expect(await screen.findByText(
+      'Read-only conflict check — phase: recovery-archive; error code: archive-mismatch; revision match: match; archive match: mismatch.'
+    )).toBeTruthy();
+    expect([...storage.values.entries()]).toEqual([...before.entries()]);
+    expect(service.saveCalls).toBe(0);
+    view.unmount();
+  });
+
+  it('reports an unreadable recovery archive without revealing details or changing storage', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    const recoveryKey = `${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`;
+    let failRecoveryRead = false;
+    const diagnosticStorage: PreviewStorage = {
+      getItem: key => {
+        if (failRecoveryRead && key === recoveryKey) throw new Error('synthetic private archive detail');
+        return storage.storage.getItem(key);
+      },
+      setItem: storage.storage.setItem
+    };
+    const view = render(<Browser api={service.api} storage={diagnosticStorage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    const before = new Map(storage.values);
+    failRecoveryRead = true;
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+
+    expect(await screen.findByText(
+      'Read-only conflict check — phase: recovery-archive; error code: storage-unavailable; revision match: match; archive match: unavailable.'
+    )).toBeTruthy();
+    expect(view.container.textContent).not.toContain('synthetic private archive detail');
+    expect([...storage.values.entries()]).toEqual([...before.entries()]);
+    expect(service.saveCalls).toBe(0);
+    view.unmount();
+  });
+
+  it('refreshes a changed account comparison read-only and requires a new explicit choice', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    const view = render(<Browser api={service.api} storage={storage.storage} />);
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    const newerCloud = createSamplePreviewData();
+    newerCloud.people = newerCloud.people.map((person, index) =>
+      index === 0 ? { ...person, displayName: 'Newer account data' } : person
+    );
+    service.replace(cloudRecord(newerCloud, 4));
+    const before = new Map(storage.values);
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+
+    expect(await screen.findByText(
+      'Read-only conflict check — phase: revision-conflict; error code: none; revision match: mismatch; archive match: not-checked.'
+    )).toBeTruthy();
+    expect(service.saveCalls).toBe(0);
+    expect([...storage.values.entries()]).toEqual([...before.entries()]);
+    expect(within(view.container).queryByRole('button', { name: 'Try again' })).toBeNull();
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
+    await waitForRevision(service, 5);
+    expect(service.expectedRevisions).toEqual([4]);
+    expect(service.saveCalls).toBe(1);
+    view.unmount();
+  });
+
+  it('reports unexpected identity-check exceptions without exposing their details', async () => {
+    const { cloudData, storage } = makeImportedConflictFixture();
+    const service = backend(cloudRecord(cloudData, 3));
+    let throwOnIdentityCheck = false;
+    const view = render(
+      <Browser
+        api={service.api}
+        storage={storage.storage}
+        isIdentityCurrent={() => {
+          if (throwOnIdentityCheck) throw new Error('synthetic private identity detail');
+          return true;
+        }}
+      />
+    );
+    await screen.findByRole('heading', { name: 'This device and your account have different copies' });
+    throwOnIdentityCheck = true;
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Check conflict state (read-only)' }));
+
+    expect(await screen.findByText(
+      'Read-only conflict check — phase: unexpected; error code: unexpected; revision match: not-checked; archive match: not-checked.'
+    )).toBeTruthy();
+    expect(view.container.textContent).not.toContain('synthetic private identity detail');
+    expect(service.saveCalls).toBe(0);
+    view.unmount();
+  });
+
   it('rechecks the conflict revision before preserving or saving a copy', async () => {
     const { cloudData, storage } = makeImportedConflictFixture();
     const service = backend(cloudRecord(cloudData, 3));
@@ -784,7 +1048,7 @@ describe('Preview account sync', () => {
     fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
 
     expect((await screen.findByRole('alert')).textContent).toContain(
-      'The account copy changed while this conflict was open. No overwrite was attempted; review the updated account copy.'
+      'The account copy changed while this conflict was open. The comparison is refreshed; choose again to use the current account revision.'
     );
     expect(service.saveCalls).toBe(0);
     expect(service.record?.revision).toBe(4);
@@ -846,7 +1110,7 @@ describe('Preview account sync', () => {
     view.unmount();
   });
 
-  it('reports a recovery-preservation failure without exposing details or writing to the account', async () => {
+  it('reports a recovery-archive failure without exposing details or writing to the account', async () => {
     const { cloudData, storage } = makeImportedConflictFixture();
     const service = backend(cloudRecord(cloudData, 3));
     const recoveryKey = `${PREVIEW_STORAGE_KEY}:account-sync-cloud-recovery`;
@@ -863,7 +1127,7 @@ describe('Preview account sync', () => {
     fireEvent.click(within(view.container).getByRole('button', { name: 'Keep this device’s copy' }));
 
     expect((await screen.findByRole('alert')).textContent).toContain(
-      'The account and recovery state could not be verified. No account write was attempted; review the conflict before retrying.'
+      'The recovery archive could not be verified. No account write was attempted; the archive may have been created.'
     );
     expect(view.container.textContent).not.toContain('synthetic private storage detail');
     expect(service.saveCalls).toBe(0);
