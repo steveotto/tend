@@ -7,6 +7,11 @@ import { loadEnv } from 'vite';
 
 const projectRoot = import.meta.dirname;
 const legacyStyles = path.resolve(projectRoot, '..', 'tend.css');
+const buildId = (
+  process.env.CF_PAGES_COMMIT_SHA?.trim()
+  || process.env.GITHUB_SHA?.trim()
+  || 'local'
+).slice(0, 7);
 
 function legacyStylesPlugin(isPagesBuild: boolean): Plugin {
   return {
@@ -96,6 +101,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: '/',
+    define: {
+      __TEND_BUILD_ID__: JSON.stringify(buildId)
+    },
     plugins: [
       react(),
       legacyStylesPlugin(isPagesBuild),

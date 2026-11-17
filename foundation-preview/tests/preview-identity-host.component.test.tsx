@@ -156,6 +156,7 @@ describe('PreviewIdentityHost', () => {
     await screen.findByRole('heading', { name: 'Sign in with Tend' });
     expect(screen.getByText('Tend', { selector: '.preview-login__eyebrow' })).toBeTruthy();
     expect(screen.getByText('Sign in with your Tend email and password to continue.')).toBeTruthy();
+    expect(screen.getByText(/^Build /)).toBeTruthy();
     expect(screen.queryByText(/Preview|separate local copy/i)).toBeNull();
   });
 

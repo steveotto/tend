@@ -22,6 +22,7 @@ import {
 } from '../storage/preview-storage.ts';
 import type { PreviewStorage } from '../storage/preview-storage.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { PreviewBuildLabel } from './PreviewBuildLabel.tsx';
 
 type PendingConfirmation =
   | {
@@ -77,6 +78,7 @@ type PreviewAccountBackupControlsProps = {
     expectedLocalRaw: string | null,
     restoreKind?: 'manual-recovery'
   ) => string | null;
+  onRestoreFailure?: (message: string | null) => void;
   onRepair: (data: PreviewData, expectedLocalRaw: string) => string | null;
   onRepairRecoveryChanged?: () => void;
   onRecoveryChanged: (raw: string | null) => void;
@@ -312,6 +314,7 @@ export function PreviewAccountBackupControls({
   syncStatus,
   isIdentityCurrent,
   onRestore,
+  onRestoreFailure,
   onRepair,
   onRepairRecoveryChanged,
   onRecoveryChanged,
@@ -353,6 +356,11 @@ export function PreviewAccountBackupControls({
   const exclusiveChangeRef = useRef(onExclusiveChange);
   exclusiveChangeRef.current = onExclusiveChange;
 
+  function reportRestoreFailure(message: string) {
+    setError(message);
+    onRestoreFailure?.(message);
+  }
+
   useEffect(() => {
     remoteRecoveryRequestId.current += 1;
     setRemoteRecoveryArchives([]);
@@ -392,6 +400,7 @@ export function PreviewAccountBackupControls({
   function checkDeviceData() {
     setMessage('');
     setError('');
+    onRestoreFailure?.(null);
     setMissingCompletionInspection(null);
     setRepairSyncOutcome(null);
     setRepairSyncPending(false);
@@ -586,19 +595,31 @@ export function PreviewAccountBackupControls({
     setActiveOperation('restore');
     setMessage('');
     setError('');
+    onRestoreFailure?.(null);
+    setMissingCompletionInspection(null);
+    setRepairSyncOutcome(null);
+    setRepairSyncPending(false);
+    let restorePhase = 'device source check';
     let keepLockedForConfirmation = false;
     try {
       if (storage.getItem(PREVIEW_STORAGE_KEY) !== localRaw) {
-        setError('This browser’s preview changed since it was saved. Save or reload the current preview before restoring.');
+        reportRestoreFailure('Restore stopped during device source check: this browser’s preview changed since it was saved. Save or reload the current preview before restoring.');
         return;
       }
+      restorePhase = 'account read';
       const cloud = await api.read();
-      if (!isIdentityCurrent()) return;
+      if (!isIdentityCurrent()) {
+        reportRestoreFailure('Restore stopped during account identity check: the signed-in account changed. No local data was replaced.');
+        return;
+      }
       if (!cloud) {
         setBackupStatus({ kind: 'empty' });
-        setMessage('No account backup was found. This browser’s data was not changed.');
+        const message = 'Restore stopped during account read: no account backup was found. This browser’s data was not changed.';
+        setMessage(message);
+        reportRestoreFailure(message);
         return;
       }
+      restorePhase = 'account validation';
       const validated = validatePreviewAccountBackup(cloud, currentDate);
       setBackupStatus({
         kind: 'available',
@@ -607,6 +628,7 @@ export function PreviewAccountBackupControls({
       });
       let localEnvelope: PreviewEnvelope | null = null;
       if (!restoreInvalidDeviceAvailable) {
+        restorePhase = 'device source validation';
         if (localRaw === null) {
           localEnvelope = createValidatedPreviewAccountDocument(data, currentDate);
         } else {
@@ -614,8 +636,9 @@ export function PreviewAccountBackupControls({
           if (local.valid) localEnvelope = local.envelope;
         }
       }
+      restorePhase = 'device source check';
       if (storage.getItem(PREVIEW_STORAGE_KEY) !== localRaw) {
-        setError('This browser’s preview changed while the account backup was being read. No local data was changed.');
+        reportRestoreFailure('Restore stopped during device source check: this browser’s preview changed while the account backup was being read. No local data was changed.');
         return;
       }
       if (localEnvelope !== null && previewEnvelopesEqual(validated.envelope, localEnvelope)) {
@@ -623,7 +646,7 @@ export function PreviewAccountBackupControls({
         return;
       }
       if (storage.getItem(PREVIEW_STORAGE_KEY) !== localRaw) {
-        setError('This browser’s preview changed since it was saved. Save or reload the current preview before restoring.');
+        reportRestoreFailure('Restore stopped during device source check: this browser’s preview changed since it was saved. Save or reload the current preview before restoring.');
         return;
       }
       setPending({
@@ -635,9 +658,12 @@ export function PreviewAccountBackupControls({
       keepLockedForConfirmation = true;
     } catch (requestError) {
       if (isIdentityCurrent()) {
-        setBackupStatus({ kind: 'unavailable', message: errorMessage(requestError) });
+        const message = `Restore stopped during ${restorePhase}: ${errorMessage(requestError)}`;
+        setBackupStatus({ kind: 'unavailable', message });
+        reportRestoreFailure(message);
+      } else {
+        reportRestoreFailure('Restore stopped during account identity check: the signed-in account changed. No local data was replaced.');
       }
-      setError(errorMessage(requestError));
     } finally {
       operationInProgress.current = false;
       setBusy(false);
@@ -697,6 +723,12 @@ export function PreviewAccountBackupControls({
         setError('The signed-in account changed after confirmation. No repair was made.');
         setExclusiveLocked(false);
         onOperationFinished?.();
+      } else if (pending.kind === 'restore') {
+        setPending(null);
+        setMissingCompletionInspection(null);
+        reportRestoreFailure('Restore stopped during account identity check: the signed-in account changed. No local data was replaced.');
+        setExclusiveLocked(false);
+        onOperationFinished?.();
       }
       return;
     }
@@ -707,6 +739,13 @@ export function PreviewAccountBackupControls({
     setActiveOperation(pending.kind);
     setMessage('');
     setError('');
+    if (pending.kind === 'restore') {
+      onRestoreFailure?.(null);
+      setMissingCompletionInspection(null);
+      setRepairSyncOutcome(null);
+      setRepairSyncPending(false);
+    }
+    let restorePhase = 'account read';
     try {
       if (pending.kind === 'repair') {
         if (!autoSyncEnabled || syncStatus === 'conflict'
@@ -795,41 +834,71 @@ export function PreviewAccountBackupControls({
       }
 
       const latestCloud = await api.read();
-      if (!isIdentityCurrent()) return;
-      if (!latestCloud || latestCloud.revision !== pending.expectedRevision) {
+      if (!isIdentityCurrent()) {
         setPending(null);
-        setError('The account backup changed after confirmation. No data was replaced; review the latest copy and try again.');
+        reportRestoreFailure('Restore stopped during account identity check: the signed-in account changed. No local data was replaced.');
         return;
       }
+      restorePhase = 'account revision check';
+      if (!latestCloud || latestCloud.revision !== pending.expectedRevision) {
+        setPending(null);
+        reportRestoreFailure('Restore stopped during account revision check: the account backup changed after confirmation. No data was replaced; review the latest copy and try again.');
+        return;
+      }
+      restorePhase = 'account validation';
       const validated = validatePreviewAccountBackup(latestCloud, currentDate);
+      restorePhase = 'device source check';
       if (storage.getItem(PREVIEW_STORAGE_KEY) !== pending.expectedLocalRaw
         || pending.expectedLocalRaw !== localRaw) {
         setPending(null);
-        setError('This browser’s preview changed after confirmation. No data was replaced; review the current copy and try again.');
+        reportRestoreFailure('Restore stopped during device source check: this browser’s preview changed after confirmation. No data was replaced; review the current copy and try again.');
         return;
       }
+      restorePhase = 'recovery preservation';
       const recovery = preservePreviewBeforeCloudRestore(storage, pending.expectedLocalRaw);
       if (recovery.kind !== 'preserved' && recovery.kind !== 'not-needed') {
         setPending(null);
-        setError(recovery.message);
+        reportRestoreFailure(`Restore stopped during recovery preservation: ${recovery.message}`);
         return;
       }
-      if (!isIdentityCurrent()) return;
+      if (!isIdentityCurrent()) {
+        setPending(null);
+        reportRestoreFailure('Restore stopped during account identity check: the signed-in account changed. The device copy was preserved; no replacement was made.');
+        return;
+      }
+      restorePhase = 'local replacement';
       const writeError = onRestore(validated.data, pending.expectedLocalRaw, 'manual-recovery');
       if (writeError) {
         setPending(null);
-        setError(writeError);
+        reportRestoreFailure(`Restore stopped during local replacement: ${writeError}`);
         return;
       }
       onRecoveryChanged(pending.expectedLocalRaw);
       setPending(null);
+      setMissingCompletionInspection(null);
+      setRepairSyncOutcome(null);
+      setRepairSyncPending(false);
+      setBackupStatus({
+        kind: 'available',
+        revision: latestCloud.revision,
+        updatedAt: latestCloud.updatedAt
+      });
+      onRestoreFailure?.(null);
       setMessage('The account copy replaced this device’s data. The previous device copy is available as a recovery copy.');
     } catch (requestError) {
       setPending(null);
       if (isIdentityCurrent()) {
-        setBackupStatus({ kind: 'unavailable', message: errorMessage(requestError) });
+        const message = pending.kind === 'restore'
+          ? `Restore stopped during ${restorePhase}: ${errorMessage(requestError)}`
+          : errorMessage(requestError);
+        setBackupStatus({ kind: 'unavailable', message });
+        if (pending.kind === 'restore') reportRestoreFailure(message);
+        else setError(message);
+      } else {
+        if (pending.kind === 'restore') {
+          reportRestoreFailure('Restore stopped during account identity check: the signed-in account changed. No local data was replaced.');
+        }
       }
-      setError(errorMessage(requestError));
     } finally {
       operationInProgress.current = false;
       setBusy(false);
@@ -1174,6 +1243,7 @@ export function PreviewAccountBackupControls({
                 {backupStatus.kind === 'unavailable' && backupStatus.message}
               </p>
               <p>Account identity: {accountId.slice(-4)}.</p>
+              <PreviewBuildLabel />
             </details>
           </div>
           {pendingBackup && (

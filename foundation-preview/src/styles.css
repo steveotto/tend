@@ -8270,6 +8270,16 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   line-height: 1.55;
 }
 
+.preview-build-label {
+  color: var(--ink-soft, #66736b);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.preview-login__build {
+  margin: 20px 0 0;
+}
+
 .preview-login__form {
   display: grid;
   gap: 16px;

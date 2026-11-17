@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+declare const __TEND_BUILD_ID__: string;
+
 interface ImportMetaEnv {
   readonly VITE_PREVIEW_ACCESS_READY?: string;
   readonly VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED?: string;

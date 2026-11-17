@@ -472,6 +472,7 @@ export function PreviewAccountSync({
   const [conflict, setConflictState] = useState<SyncConflict | null>(null);
   const [syncMessage, setSyncMessage] = useState('');
   const [manualBusy, setManualBusy] = useState(false);
+  const [restoreFailure, setRestoreFailure] = useState<string | null>(null);
   const [conflictResolutionProgress, setConflictResolutionProgress] =
     useState<ConflictResolutionProgress | null>(null);
   const conflictResolutionInFlight = useRef(false);
@@ -507,6 +508,9 @@ export function PreviewAccountSync({
   const skipNextManualUnlockRefresh = useRef(false);
   const previousLocalInputs = useRef({ data, localRaw });
   const previousAuthRefreshSequence = useRef(authRefreshSequence);
+  useEffect(() => {
+    setRestoreFailure(null);
+  }, [accountId]);
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
@@ -1614,7 +1618,9 @@ export function PreviewAccountSync({
             <details className="preview-account-backup__technical">
               <summary>Technical details</summary>
               {status.kind === 'attention' && <p role="alert">{status.message}</p>}
-              {!localSaveConfirmed && localSaveError && <p role="alert">{localSaveError}</p>}
+              {!localSaveConfirmed && restoreFailure && <p role="alert">{restoreFailure}</p>}
+              {!localSaveConfirmed && !manualBusy && !restoreFailure && localSaveError
+                && <p role="alert">{localSaveError}</p>}
               <p>Account identity: {accountId.slice(-4)}.</p>
             </details>
           )}
@@ -1737,6 +1743,7 @@ export function PreviewAccountSync({
                 : null}
               isIdentityCurrent={isIdentityCurrent}
               onRestore={onRestore}
+              onRestoreFailure={setRestoreFailure}
               onRepair={onRepair}
               onRepairRecoveryChanged={onRepairRecoveryChanged}
               onRecoveryChanged={() => {}}

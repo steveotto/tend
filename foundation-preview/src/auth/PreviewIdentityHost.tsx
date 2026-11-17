@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { App } from '../App.tsx';
+import { PreviewBuildLabel } from '../components/PreviewBuildLabel.tsx';
 import { createAuthenticatedPreviewIdentity } from '../domain/preview-identity.ts';
 import type { PreviewIdentityState } from '../domain/preview-identity.ts';
 import { createPreviewAccountBackupApi } from '../storage/preview-account-backup.ts';
@@ -458,6 +459,7 @@ function PreviewAuthLayout({
         <h1 id="preview-login-title">{title}</h1>
         <p>{description}</p>
         {children}
+        <PreviewBuildLabel className="preview-login__build" />
         <p className="preview-login__classic">
           Need account help? <a href={classicUrl}>Open Tend Classic</a>
         </p>

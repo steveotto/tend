@@ -11,7 +11,9 @@ import postcss from 'postcss';
 
 const testsDirectory = import.meta.dirname;
 const previewDirectory = path.resolve(testsDirectory, '..');
-const artifactDirectory = path.resolve(previewDirectory, 'dist');
+const artifactDirectory = path.resolve(
+  process.env.TEND_PAGES_ARTIFACT_DIR ?? path.resolve(previewDirectory, 'dist')
+);
 
 async function availablePort(): Promise<number> {
   const server = createServer();
@@ -95,7 +97,7 @@ describe('Pages production artifact', () => {
     const server = spawn(path.resolve(previewDirectory, 'node_modules/.bin/wrangler'), [
       'pages',
       'dev',
-      'dist',
+      artifactDirectory,
       '--ip',
       '127.0.0.1',
       '--port',

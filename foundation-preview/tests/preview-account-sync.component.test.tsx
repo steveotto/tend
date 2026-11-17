@@ -38,6 +38,10 @@ import {
   writePreview
 } from '../src/storage/preview-storage.ts';
 import type { PreviewStorage } from '../src/storage/preview-storage.ts';
+import {
+  brokenLowerBodyWorkoutData,
+  repairedAccountWithHistory
+} from './fixtures/account-restore.ts';
 
 const currentDate = '2026-11-06';
 const accountId = 'a0000000-0000-4000-8000-000000000001';
@@ -158,6 +162,7 @@ function Browser({
   email,
   localSaveConfirmed = true,
   localSaveStatus = localSaveConfirmed ? 'saved' : 'saving',
+  localSaveError = null,
   recoveryActions,
   isIdentityCurrent = () => true,
   onRestoreCall
@@ -171,6 +176,7 @@ function Browser({
   email?: string;
   localSaveConfirmed?: boolean;
   localSaveStatus?: PreviewPersistenceStatus['kind'];
+  localSaveError?: string | null;
   recoveryActions?: ReactNode;
   isIdentityCurrent?: () => boolean;
   onRestoreCall?: () => void;
@@ -195,7 +201,7 @@ function Browser({
   const [localSave, setLocalSave] = useState({
     confirmed: localSaveConfirmed,
     status: localSaveStatus,
-    error: null as string | null
+    error: localSaveError
   });
 
   function editPerson(label: string) {
@@ -334,129 +340,6 @@ function makeImportedConflictFixture() {
   const storage = makeStorage(importedData);
   markAsImported(storage, importedData);
   return { cloudData, importedData, storage };
-}
-
-function brokenLowerBodyWorkoutData(): PreviewData {
-  const date = '2026-10-19';
-  const rhythmId = 'user-rhythm-00000000-0000-4000-8000-000000000091';
-  const data = createSamplePreviewData();
-  const timeOfDay = rhythmTimeValueFromLabel('Anytime');
-  if (timeOfDay === undefined) throw new Error('Could not create synthetic Rhythm time fixture.');
-  data.savedRhythms = [{
-    id: rhythmId,
-    title: 'Synthetic Strength Rhythm',
-    description: 'Synthetic linked workout fixture',
-    cadence: 'Daily',
-    timeLabel: 'Anytime',
-    timeOfDay,
-    personIds: [],
-    categoryIds: ['health'],
-    schedule: { frequency: 'daily' },
-    personal: false,
-    createdLocalDate: date,
-    createdTimeZone: 'UTC',
-    primaryFoundationId: 'health-strength',
-    secondaryFoundationIds: [],
-    healthLogCapability: 'workout'
-  }];
-  data.rhythmHistoryIds = [rhythmId];
-  data.completedRhythmIds = [];
-  data.activeRhythmCompletions = [];
-  data.datedRhythmCompletions = [];
-  data.strength = {
-    ...data.strength,
-    workouts: [{
-      id: 'synthetic-lower-body',
-      date,
-      muscleIds: ['hamstrings'],
-      workoutName: 'Lower Body',
-      notes: 'Keep synthetic workout details.',
-      rhythmId,
-      rhythmOccurrence: date,
-      completionId: 'synthetic-missing-completion'
-    }]
-  };
-  return data;
-}
-
-function repairedAccountWithHistory(): PreviewData {
-  const date = '2026-10-19';
-  const now = new Date(`${currentDate}T23:59:00.000Z`);
-  const timeOfDay = rhythmTimeValueFromLabel('Anytime');
-  if (timeOfDay === undefined) throw new Error('Could not create synthetic Rhythm time fixture.');
-  const rhythmIds = Array.from({ length: 19 }, (_, index) =>
-    `user-rhythm-00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`);
-  const rhythms: PreviewData['savedRhythms'] = rhythmIds.map((id, index) => ({
-    id,
-    title: `Synthetic Strength Rhythm ${index + 1}`,
-    description: 'Synthetic linked workout fixture',
-    cadence: 'Daily',
-    timeLabel: 'Anytime',
-    timeOfDay,
-    personIds: [],
-    categoryIds: ['health'],
-    schedule: { frequency: 'daily' },
-    personal: false,
-    createdLocalDate: date,
-    createdTimeZone: 'UTC',
-    primaryFoundationId: 'health-strength',
-    secondaryFoundationIds: [],
-    healthLogCapability: 'workout'
-  }));
-  const completions = Array.from({ length: 92 }, (_, index) => {
-    const effectiveDate = index === 0
-      ? date
-      : new Date(Date.UTC(2026, 7, index)).toISOString().slice(0, 10);
-    const completion = prepareDatedRhythmCompletion({
-      id: `synthetic-restore-completion-${String(index + 1).padStart(3, '0')}`,
-      rhythmId: rhythmIds[index % rhythmIds.length]!,
-      effectiveDate,
-      hour: 10,
-      minute: index % 60,
-      period: 'AM',
-      timeZone: 'UTC',
-      memory: `Synthetic recovery history ${index + 1}`
-    }, now);
-    if (!completion.valid) throw new Error('Could not create synthetic Rhythm completion history.');
-    return completion.record;
-  });
-  let workouts: PreviewData['strength']['workouts'] = [];
-  for (let index = 0; index < 7; index += 1) {
-    const workout = index === 0
-      ? saveStrengthWorkoutLog(workouts, {
-        id: 'synthetic-repaired-lower-body',
-        date,
-        muscleIds: ['hamstrings'],
-        workoutName: 'Lower Body',
-        notes: 'Synthetic repaired workout.',
-        rhythmId: rhythmIds[0]!,
-        rhythmOccurrence: date,
-        completionId: completions[0]!.id
-      })
-      : saveStrengthWorkoutLog(workouts, {
-        id: `synthetic-other-workout-${index}`,
-        date: `2026-10-${String(19 + index).padStart(2, '0')}`,
-        muscleIds: ['hamstrings'],
-        workoutName: `Synthetic workout ${index + 1}`
-      });
-    if (!workout.valid) throw new Error('Could not create synthetic workout history.');
-    workouts = workout.workouts;
-  }
-
-  const data = createSamplePreviewData();
-  data.savedRhythms = rhythms;
-  data.rhythmHistoryIds = rhythmIds;
-  data.completedRhythmIds = rhythmIds;
-  data.datedRhythmCompletions = completions;
-  data.activeRhythmCompletions = rhythms.map((rhythm, index) => ({
-    rhythmId: rhythm.id,
-    completionId: completions[index]!.id
-  }));
-  data.rhythmCompletionOverrides = [];
-  data.removedSeedCompletionIds = [];
-  data.archivedRhythmIds = [];
-  data.strength = { ...data.strength, workouts };
-  return data;
 }
 
 async function waitForRevision(
@@ -1864,7 +1747,10 @@ describe('Preview account sync', () => {
     const storage = makeStorage(invalidDeviceData);
     const invalidDeviceRaw = storage.values.get(PREVIEW_STORAGE_KEY);
     if (!invalidDeviceRaw) throw new Error('Synthetic invalid device source is missing.');
-    const accountData = repairedAccountWithHistory();
+    const unrelatedRecoveryArchive = '{"preserve":"synthetic unrelated recovery archive"}';
+    storage.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, invalidDeviceRaw);
+    storage.values.set(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY, unrelatedRecoveryArchive);
+    const accountData = repairedAccountWithHistory(currentDate);
     const accountRecord = cloudRecord(accountData, 5);
     expect(validatePreviewAccountBackup(accountRecord, currentDate).data).toEqual(accountData);
     const unarchivedStorage = makeStorage(invalidDeviceData);
@@ -1891,15 +1777,24 @@ describe('Preview account sync', () => {
     });
     expect(invalidAccountStorage.values.get(PREVIEW_STORAGE_KEY)).toBe(invalidAccountRaw);
     const service = backend(accountRecord);
+    const onRestoreCall = vi.fn();
     const view = render(<Browser
       api={service.api}
       storage={storage.storage}
       localSaveConfirmed={false}
       localSaveStatus="corrupt"
+      localSaveError="The saved preview could not be validated. Diagnostic: preview.strength.completion-link.invalid."
+      onRestoreCall={onRestoreCall}
     />);
 
     fireEvent.click(screen.getByText('Backup & recovery'));
     await openAdvancedRecovery();
+    fireEvent.click(view.getByRole('button', { name: /Check data/ }));
+    expect((await screen.findAllByRole('alert')).some(alert =>
+      alert.textContent?.includes('preview.strength.completion-link.invalid')
+    )).toBe(true);
+    expect(screen.getByText(/Workout: Lower Body\. Date: 2026-10-19\./)).toBeTruthy();
+
     const restoreButton = view.getByRole('button', {
       name: /Replace this device’s data with account copy/
     });
@@ -1907,13 +1802,17 @@ describe('Preview account sync', () => {
     fireEvent.click(restoreButton);
     await screen.findByRole('heading', { name: 'Replace this device’s data?' });
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(invalidDeviceRaw);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/Workout: Lower Body\. Date: 2026-10-19\./)).toBeNull();
     expect(service.saveCalls).toBe(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Replace this device’s data' }));
     await waitFor(() => expect(view.getByTestId('person-name').textContent)
       .toBe(accountData.people[0]?.displayName));
 
+    expect(onRestoreCall).toHaveBeenCalledTimes(1);
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(invalidDeviceRaw);
+    expect(storage.values.get(PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY)).toBe(unrelatedRecoveryArchive);
     const restoredRaw = storage.values.get(PREVIEW_STORAGE_KEY);
     if (!restoredRaw) throw new Error('The account copy was not persisted on the device.');
     const restored = parsePreviewBackup(restoredRaw, currentDate);
@@ -1931,6 +1830,8 @@ describe('Preview account sync', () => {
     expect(restored.envelope.data.rhythmHistoryIds).toEqual(accountData.rhythmHistoryIds);
     expect(service.saveCalls).toBe(0);
     expect(service.record?.revision).toBe(5);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/Workout: Lower Body\. Date: 2026-10-19\./)).toBeNull();
 
     fireEvent.click(view.getByRole('button', { name: /Check data/ }));
     expect(await screen.findByText(/passed backup validation/i)).toBeTruthy();
@@ -1949,6 +1850,52 @@ describe('Preview account sync', () => {
     expect(service.saveCalls).toBe(0);
     expect(service.record?.revision).toBe(5);
     reloaded.unmount();
+  });
+
+  it('reports a recovery-preservation failure instead of leaving an obsolete device diagnostic', async () => {
+    const invalidDeviceData = brokenLowerBodyWorkoutData();
+    const storage = makeStorage(invalidDeviceData);
+    const invalidDeviceRaw = storage.values.get(PREVIEW_STORAGE_KEY);
+    if (!invalidDeviceRaw) throw new Error('Synthetic invalid device source is missing.');
+    const conflictingArchive = '{"preserve":"different earlier device copy"}';
+    storage.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, conflictingArchive);
+    const service = backend(cloudRecord(repairedAccountWithHistory(currentDate), 5));
+    const onRestoreCall = vi.fn();
+    const view = render(<Browser
+      api={service.api}
+      storage={storage.storage}
+      localSaveConfirmed={false}
+      localSaveStatus="corrupt"
+      localSaveError="The saved preview could not be validated. Diagnostic: preview.strength.completion-link.invalid."
+      onRestoreCall={onRestoreCall}
+    />);
+
+    fireEvent.click(screen.getByText('Backup & recovery'));
+    await openAdvancedRecovery();
+    fireEvent.click(view.getByRole('button', { name: /Check data/ }));
+    expect((await screen.findAllByRole('alert')).some(alert =>
+      alert.textContent?.includes('preview.strength.completion-link.invalid')
+    )).toBe(true);
+
+    fireEvent.click(view.getByRole('button', {
+      name: /Replace this device’s data with account copy/
+    }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Replace this device’s data?' });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/Workout: Lower Body\. Date: 2026-10-19\./)).toBeNull();
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Replace this device’s data' }));
+
+    await waitFor(() => expect(screen.getAllByRole('alert').some(alert =>
+      alert.textContent?.includes('Restore stopped during recovery preservation')
+    )).toBe(true));
+    expect(screen.getAllByRole('alert').every(alert =>
+      !alert.textContent?.includes('preview.strength.completion-link.invalid')
+    )).toBe(true);
+    expect(onRestoreCall).not.toHaveBeenCalled();
+    expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(invalidDeviceRaw);
+    expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(conflictingArchive);
+    expect(service.saveCalls).toBe(0);
+    view.unmount();
   });
 
   it('keeps offline edits locally through a remount and syncs them after reconnecting', async () => {

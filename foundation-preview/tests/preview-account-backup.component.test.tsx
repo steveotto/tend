@@ -1208,7 +1208,8 @@ describe('manual Preview account backup and restore', () => {
     backend.records.set(accountA, accountBackupRecord(createPreviewEnvelope(fitnessData('New remote')), 2));
     await user.click(within(confirmation).getByRole('button', { name: 'Replace this device’s data' }));
 
-    await screen.findByRole('alert');
+    expect((await screen.findByRole('alert')).textContent)
+      .toMatch(/Restore stopped during account revision check/);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
   });
@@ -1236,11 +1237,13 @@ describe('manual Preview account backup and restore', () => {
     });
     expect(screen.queryByRole('dialog', { name: 'Replace this device’s data?' })).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Account recovery' })).toBeTruthy();
+    expect((await screen.findByRole('alert')).textContent)
+      .toMatch(/Restore stopped during account identity check/);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBeNull();
   });
 
-  it('does not report restore success or replace local data when the recovery snapshot cannot be written', async () => {
+  it('does not report restore success when local replacement fails after preservation', async () => {
     const user = userEvent.setup();
     const backend = memoryBackend();
     const remoteData = fitnessData('Remote');
@@ -1260,7 +1263,8 @@ describe('manual Preview account backup and restore', () => {
     const confirmation = await screen.findByRole('dialog', { name: 'Replace this device’s data?' });
     await user.click(within(confirmation).getByRole('button', { name: 'Replace this device’s data' }));
 
-    expect((await screen.findByRole('alert')).textContent).toMatch(/could not be saved on this device/i);
+    expect((await screen.findByRole('alert')).textContent)
+      .toMatch(/Restore stopped during local replacement:.*could not be saved on this device/i);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(local.raw);
     expect(screen.queryByText(/The account copy replaced this device’s data/)).toBeNull();
@@ -1280,7 +1284,8 @@ describe('manual Preview account backup and restore', () => {
     renderControls(api, local.storage, data, local.raw);
     await user.click(screen.getByRole('button', { name: /Replace this device’s data with account copy/ }));
 
-    expect((await screen.findByRole('alert')).textContent).toMatch(/simulated network failure/i);
+    expect((await screen.findByRole('alert')).textContent)
+      .toMatch(/Restore stopped during account read:.*simulated network failure/i);
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
     expect(api.save).not.toHaveBeenCalled();
   });
