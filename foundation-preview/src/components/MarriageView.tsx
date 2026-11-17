@@ -59,6 +59,7 @@ import type { RhythmCategoryId } from '../domain/rhythm-editor.ts';
 import type { RhythmFrequencyRecommendation } from '../domain/rhythm-schedule.ts';
 import { resolvePersonCategoryGroups } from '../domain/person-categories.ts';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
+import { AreaIcon } from './AreaIcon.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
@@ -498,6 +499,7 @@ export function MarriageView({
           <CategoryHeader
             title={categoryLabel}
             titleId={`${categoryToken}-title`}
+            icon={<AreaIcon id={categoryId} />}
             subtitle={categoryDescription}
             trailing={categoryConfig?.headerTrailing ?? (categoryId === 'marriage' ? (
               marriagePeople.length > 0
@@ -531,7 +533,8 @@ export function MarriageView({
           <CategoryHealthSummary
             key={categoryConfig?.categoryId ?? 'marriage'}
             score={categoryScore}
-            title={`${categoryLabel} Health`}
+            title="Health"
+            contextTitle={`${categoryLabel} Health`}
             itemTerm={foundationTerm}
             explanation={categoryConfig?.scoreExplanationIntro ?? ''}
             scoringEvidence={categoryScoringEvidence}
@@ -1013,7 +1016,8 @@ function FoundationList({
             />
             <HealthScoreBreakdown
               className="rhythm-history-view__score-card foundation-health-card"
-              title={`${selectedFoundation.name} Health`}
+              title="Health"
+              measureDisclosureLabel={`${selectedFoundation.name} Health`}
               score={selectedFoundationScore?.health ?? null}
               healthLabel={`${selectedFoundation.name} ${foundationTerm.singular} Health`}
               ariaLabel={`${selectedFoundation.name} Health summary`}

@@ -11,6 +11,7 @@ import { BackButton } from './BackButton.tsx';
 import type { CardioViewProps } from './CardioView.tsx';
 import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
+import { AreaIcon } from './AreaIcon.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { FoundationCard } from './Cards.tsx';
 import { FoundationDetailHeader } from './FoundationDetailHeader.tsx';
@@ -563,11 +564,13 @@ export function HealthFitnessView({
           <CategoryHeader
             title="Health & Fitness"
             titleId="health-fitness-title"
+            icon={<AreaIcon id="health" />}
             subtitle="Structure beats good intentions"
           />
 
           <CategoryHealthSummary
-            title="Health & Fitness Health"
+            title="Health"
+            contextTitle="Health & Fitness Health"
             score={healthScore}
             itemTerm={{ singular: 'measure', plural: 'measures' }}
             explanation="Health & Fitness Health averages available Strength, Cardio, Weight, and Flexibility measures; each measure uses its own eligible evidence."

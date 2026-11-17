@@ -223,7 +223,7 @@ export function FriendshipsView({
       <CategoryHeader
         title="Friendships"
         titleId="friendships-page-title"
-        trailing={<span className="menu-area-icon"><AreaIcon id="friendships" variant="today-summary" /></span>}
+        icon={<AreaIcon id="friendships" />}
       />
       <div className="faith-view-nav marriage-view-nav" role="tablist" aria-label="Friendships">
         {friendshipTabs.map((item, index) => (
