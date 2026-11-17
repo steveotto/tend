@@ -26,6 +26,7 @@ import type {
 import {
   loadPreview,
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
+  PREVIEW_IMPORT_RECOVERY_KEY,
   PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
   preservePreviewBeforeCloudRestore,
@@ -1343,16 +1344,51 @@ describe('manual Preview account backup and restore', () => {
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
   });
 
-  it('does not overwrite a different existing pre-restore recovery copy', () => {
+  it('appends the exact device source when an earlier pre-restore copy occupies the recovery slot', () => {
     const data = fitnessData('Local');
     const local = accountStorage(data);
-    local.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, '{"preserved":"earlier copy"}');
+    const earlierRecovery = '{"preserved":"earlier copy"}';
+    const earlierArchiveCopy = '{"preserved":"earlier archived copy"}';
+    const earlierArchiveSource = '{"preserved":"original imported source"}';
+    const earlierArchive = JSON.stringify({
+      format: 'tend.preview-import-recovery',
+      schemaVersion: 1,
+      copies: [earlierArchiveCopy],
+      sources: [earlierArchiveSource]
+    });
+    local.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierRecovery);
+    local.values.set(PREVIEW_IMPORT_RECOVERY_KEY, earlierArchive);
 
-    expect(preservePreviewBeforeCloudRestore(local.storage, local.raw)).toMatchObject({
-      kind: 'conflict'
+    expect(preservePreviewBeforeCloudRestore(local.storage, local.raw)).toEqual({ kind: 'preserved' });
+    expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecovery);
+    expect(JSON.parse(local.storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY) ?? '')).toEqual({
+      format: 'tend.preview-import-recovery',
+      schemaVersion: 1,
+      copies: [earlierArchiveCopy, local.raw],
+      sources: [earlierArchiveSource]
+    });
+  });
+
+  it('does not replace the device source when the append-only recovery archive write is not persisted', () => {
+    const data = fitnessData('Local');
+    const local = accountStorage(data);
+    const earlierRecovery = '{"preserved":"earlier copy"}';
+    local.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierRecovery);
+    const noOpArchiveStorage: PreviewStorage = {
+      getItem: key => local.storage.getItem(key),
+      setItem: (key, value) => {
+        if (key !== PREVIEW_IMPORT_RECOVERY_KEY) local.storage.setItem(key, value);
+      }
+    };
+
+    expect(preservePreviewBeforeCloudRestore(noOpArchiveStorage, local.raw)).toMatchObject({
+      kind: 'error',
+      message: expect.stringMatching(/could not be verified in the append-only recovery archive/i)
     });
     expect(local.storage.getItem(PREVIEW_STORAGE_KEY)).toBe(local.raw);
-    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe('{"preserved":"earlier copy"}');
+    expect(local.storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecovery);
+    expect(local.storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY)).toBeNull();
   });
 
   it('uses the authenticated client without accepting a client-supplied account id', async () => {

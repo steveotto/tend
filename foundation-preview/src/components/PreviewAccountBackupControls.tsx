@@ -81,6 +81,7 @@ type PreviewAccountBackupControlsProps = {
   onRestoreFailure?: (message: string | null) => void;
   onRepair: (data: PreviewData, expectedLocalRaw: string) => string | null;
   onRepairRecoveryChanged?: () => void;
+  onRecoveryArchiveChanged?: () => void;
   onRecoveryChanged: (raw: string | null) => void;
   onExclusiveChange?: (locked: boolean) => void;
   onOperationFinished?: () => void;
@@ -317,6 +318,7 @@ export function PreviewAccountBackupControls({
   onRestoreFailure,
   onRepair,
   onRepairRecoveryChanged,
+  onRecoveryArchiveChanged,
   onRecoveryChanged,
   onExclusiveChange,
   onOperationFinished
@@ -861,6 +863,7 @@ export function PreviewAccountBackupControls({
         reportRestoreFailure(`Restore stopped during recovery preservation: ${recovery.message}`);
         return;
       }
+      onRecoveryArchiveChanged?.();
       if (!isIdentityCurrent()) {
         setPending(null);
         reportRestoreFailure('Restore stopped during account identity check: the signed-in account changed. The device copy was preserved; no replacement was made.');
@@ -1117,21 +1120,21 @@ export function PreviewAccountBackupControls({
                 )}
                 {importRecoveryRaw !== null && (
                   <RecoveryActionRow
-                    title="Download pre-import device copy"
-                    description="Download the device data preserved before the last import."
+                    title="Download preserved device copy"
+                    description="Download the most recent device copy saved before a replacement."
                     onClick={() => setMessage(
-                      downloadRecovery(importRecoveryRaw, 'tend-device-before-import.json')
-                        ?? 'Pre-import device copy downloaded.'
+                      downloadRecovery(importRecoveryRaw, 'tend-device-preserved-copy.json')
+                        ?? 'Preserved device copy downloaded.'
                     )}
                   />
                 )}
                 {importRecoveryArchiveRaw !== null && (
                   <RecoveryActionRow
-                    title="Download import recovery archive"
-                    description="Download the archive preserved during backup import."
+                    title="Download recovery archive"
+                    description="Download the append-only archive of preserved device copies and original backup files."
                     onClick={() => setMessage(
-                      downloadRecovery(importRecoveryArchiveRaw, 'tend-device-import-recovery-archive.json')
-                        ?? 'Import recovery archive downloaded.'
+                      downloadRecovery(importRecoveryArchiveRaw, 'tend-device-recovery-archive.json')
+                        ?? 'Recovery archive downloaded.'
                     )}
                   />
                 )}

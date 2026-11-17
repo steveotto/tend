@@ -31,6 +31,7 @@ import {
 import {
   browserPreviewStorage,
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
+  PREVIEW_IMPORT_RECOVERY_KEY,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
   PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY,
   PREVIEW_STORAGE_KEY,
@@ -1859,6 +1860,8 @@ describe('Preview account sync', () => {
     if (!invalidDeviceRaw) throw new Error('Synthetic invalid device source is missing.');
     const conflictingArchive = '{"preserve":"different earlier device copy"}';
     storage.values.set(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, conflictingArchive);
+    const invalidAppendOnlyArchive = '{"format":"tend.preview-import-recovery","schemaVersion":1,"copies":[]}';
+    storage.values.set(PREVIEW_IMPORT_RECOVERY_KEY, invalidAppendOnlyArchive);
     const service = backend(cloudRecord(repairedAccountWithHistory(currentDate), 5));
     const onRestoreCall = vi.fn();
     const view = render(<Browser
@@ -1894,6 +1897,7 @@ describe('Preview account sync', () => {
     expect(onRestoreCall).not.toHaveBeenCalled();
     expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(invalidDeviceRaw);
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(conflictingArchive);
+    expect(storage.values.get(PREVIEW_IMPORT_RECOVERY_KEY)).toBe(invalidAppendOnlyArchive);
     expect(service.saveCalls).toBe(0);
     view.unmount();
   });

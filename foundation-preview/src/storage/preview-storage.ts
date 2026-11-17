@@ -497,13 +497,93 @@ export function preservePreviewBeforeCloudRestore(
   storage: PreviewStorage,
   expectedRaw: string | null
 ): PreviewRecoveryPreservationResult {
-  return preservePreviewInRecoverySlot(storage, expectedRaw, PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, {
+  const slotMessages: RecoveryPreservationMessages = {
     sourceChangedBefore: 'This browser’s preview changed before it could be preserved. Nothing was restored.',
     conflictingCopy: 'An earlier pre-restore recovery copy contains different data. Download or preserve that copy before trying another restore.',
     sourceChangedDuring: 'This browser’s preview changed while its recovery copy was being made. Nothing was restored.',
     unverifiedCopy: 'The exact pre-restore recovery copy could not be verified. Nothing was restored.',
     writeFailed: message => `The pre-restore recovery copy could not be saved: ${message}`
-  });
+  };
+  try {
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw) {
+      return { kind: 'conflict', message: slotMessages.sourceChangedBefore };
+    }
+    if (expectedRaw === null) return { kind: 'not-needed' };
+
+    const existing = storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY);
+    if (existing === null) {
+      return preservePreviewInRecoverySlot(
+        storage,
+        expectedRaw,
+        PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
+        slotMessages
+      );
+    }
+    if (existing === expectedRaw) {
+      if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw
+        || storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== expectedRaw) {
+        return { kind: 'conflict', message: slotMessages.sourceChangedDuring };
+      }
+      return { kind: 'preserved' };
+    }
+
+    const previousArchiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
+    const archive = previousArchiveRaw === null
+      ? { copies: [] as string[], sources: [] as string[] }
+      : parseImportRecoveryArchive(previousArchiveRaw);
+    const alreadyPreserved = archive.copies.includes(expectedRaw);
+    const nextArchiveRaw = previousArchiveRaw !== null && alreadyPreserved
+      ? previousArchiveRaw
+      : JSON.stringify({
+          format: previewImportRecoveryFormat,
+          schemaVersion: 1,
+          copies: [...archive.copies, expectedRaw],
+          sources: archive.sources
+        });
+
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw
+      || storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== existing
+      || storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY) !== previousArchiveRaw) {
+      return {
+        kind: 'conflict',
+        message: 'The device source or an earlier recovery copy changed during preservation. Nothing was restored.'
+      };
+    }
+    if (!alreadyPreserved) storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, nextArchiveRaw);
+
+    const verifiedArchiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
+    if (verifiedArchiveRaw === null || verifiedArchiveRaw !== nextArchiveRaw) {
+      return {
+        kind: 'error',
+        message: 'The device source could not be verified in the append-only recovery archive. The earlier pre-restore copy was left unchanged; nothing was restored.'
+      };
+    }
+    if (!parseImportRecoveryArchive(verifiedArchiveRaw).copies.includes(expectedRaw)) {
+      return {
+        kind: 'error',
+        message: 'The device source could not be verified in the append-only recovery archive. The earlier pre-restore copy was left unchanged; nothing was restored.'
+      };
+    }
+    if (storage.getItem(PREVIEW_STORAGE_KEY) !== expectedRaw
+      || storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== existing) {
+      return {
+        kind: 'conflict',
+        message: 'The device source or earlier pre-restore copy changed during preservation. Nothing was restored.'
+      };
+    }
+    return { kind: 'preserved' };
+  } catch (error) {
+    return {
+      kind: 'error',
+      message: `The earlier pre-restore copy was left unchanged, but the additional recovery copy could not be verified. Nothing was restored. ${errorMessage(error)}`
+    };
+  }
+}
+
+function isCloudRestoreSourcePreserved(storage: PreviewStorage, expectedRaw: string): boolean {
+  if (storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) === expectedRaw) return true;
+  const archiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
+  return archiveRaw !== null && parseImportRecoveryArchive(archiveRaw).copies.includes(expectedRaw);
 }
 
 export function preservePreviewBeforeStrengthRepair(
@@ -567,10 +647,10 @@ export function writePreview(
         };
       }
       if (expectedRaw !== null) {
-        if (storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY) !== expectedRaw) {
+        if (!isCloudRestoreSourcePreserved(storage, expectedRaw)) {
           return {
             kind: 'error',
-            message: 'The exact device source was not verified in the pre-restore recovery copy. No device data was replaced.',
+            message: 'The exact device source was not verified in a recovery copy. No device data was replaced.',
             diagnostic: diagnosticForWriteFailure(
               storage,
               expectedRaw,

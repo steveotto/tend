@@ -3556,6 +3556,7 @@ function PreviewWorkspace({
             repairRecoveryRaw={strengthRepairRecoveryCopy}
             repairRecoveryError={strengthRepairRecoveryError}
             onRepairRecoveryChanged={refreshStrengthRepairRecoveryCopy}
+            onRecoveryArchiveChanged={refreshImportRecoveryCopy}
             enabled={hydrated && autoSaveEnabled && persistenceStatus.kind === 'saved'}
             localSaveConfirmed={persistenceStatus.kind === 'saved'}
             localSaveStatus={persistenceStatus.kind}

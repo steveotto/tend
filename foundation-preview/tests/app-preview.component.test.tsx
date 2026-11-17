@@ -16,7 +16,7 @@ import { addOrUpdateConnection, setFriendCadence } from '../src/domain/friendshi
 import { hasFoundationIcon } from '../src/components/MarriageIcon.tsx';
 import { createStrengthGuidedSession, startStrengthSessionRestTimer } from '../src/domain/strength.ts';
 import { createFlexibilityData, flexibilityRoutineSuggestions } from '../src/domain/flexibility.ts';
-import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
+import type { StrengthSavedWorkout, StrengthWorkoutLog } from '../src/domain/strength.ts';
 import type { SavedRhythm } from '../src/domain/rhythm-editor.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import {
@@ -52,6 +52,7 @@ import {
   browserPreviewStorage,
   PREVIEW_STORAGE_KEY,
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
+  PREVIEW_IMPORT_RECOVERY_KEY,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
   PREVIEW_V3_RECOVERY_KEY,
   PREVIEW_V5_RECOVERY_KEY
@@ -758,13 +759,78 @@ describe('Tend Today preview', () => {
     };
     const invalidRaw = JSON.stringify(createPreviewEnvelope(invalidData));
     storage.setItem(PREVIEW_STORAGE_KEY, invalidRaw);
+    const earlierRecoveryRaw = JSON.stringify({ preserved: 'earlier pre-restore copy' });
+    const earlierArchiveCopy = JSON.stringify({ preserved: 'earlier archived device copy' });
+    const earlierArchiveSource = JSON.stringify({ preserved: 'earlier imported source' });
+    storage.setItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY, earlierRecoveryRaw);
+    storage.setItem(PREVIEW_IMPORT_RECOVERY_KEY, JSON.stringify({
+      format: 'tend.preview-import-recovery',
+      schemaVersion: 1,
+      copies: [earlierArchiveCopy],
+      sources: [earlierArchiveSource]
+    }));
 
     const accountData = createSamplePreviewData();
     const accountPerson = accountData.people[0];
     if (!accountPerson) throw new Error('Synthetic account fixture is missing its first person.');
     accountData.people[0] = { ...accountPerson, displayName: 'Synthetic restored account' };
+    const rhythmIds = Array.from({ length: 19 }, (_, index) =>
+      `user-rhythm-00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
+    );
+    accountData.savedRhythms = rhythmIds.map((id, index): SavedRhythm => ({
+      id,
+      title: `Synthetic account Rhythm ${index + 1}`,
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      timeOfDay: 'anytime',
+      personIds: [],
+      categoryIds: ['health'],
+      schedule: { frequency: 'daily' },
+      personal: false,
+      createdLocalDate: date,
+      createdTimeZone: 'UTC',
+      primaryFoundationId: 'health-strength',
+      secondaryFoundationIds: [],
+      healthLogCapability: 'workout'
+    }));
+    accountData.archivedRhythmIds = [];
+    accountData.rhythmHistoryIds = rhythmIds;
+    accountData.completedRhythmIds = rhythmIds;
+    accountData.activeRhythmCompletions = [];
+    accountData.datedRhythmCompletions = Array.from({ length: 92 }, (_, index) => {
+      const minuteOfDay = index === 0 ? 10 * 60 : (index - 1) * 15;
+      const hour = String(Math.floor(minuteOfDay / 60)).padStart(2, '0');
+      const minute = String(minuteOfDay % 60).padStart(2, '0');
+      const localTime = `${hour}:${minute}`;
+      const timestamp = `${date}T${localTime}:00.000Z`;
+      return {
+        id: `synthetic-account-completion-${index}`,
+        rhythmId: rhythmIds[index % rhythmIds.length]!,
+        effectiveDate: date,
+        localTime,
+        timeZone: 'UTC',
+        completedAt: timestamp,
+        recordedAt: `${date}T${localTime}:01.000Z`
+      };
+    });
+    accountData.strength.workouts = Array.from({ length: 7 }, (_, index): StrengthWorkoutLog => ({
+      id: `synthetic-account-workout-${index}`,
+      date,
+      muscleIds: ['hamstrings'],
+      ...(index === 0 ? {
+        workoutName: 'Lower Body',
+        rhythmId: rhythmIds[0]!,
+        rhythmOccurrence: date,
+        completionId: 'synthetic-account-completion-0'
+      } : {})
+    }));
+    const accountDocument = createPreviewEnvelope(accountData);
+    const validatedAccount = parsePreviewBackup(JSON.stringify(accountDocument), date);
+    if (!validatedAccount.valid) {
+      throw new Error(`Synthetic account fixture is invalid: ${validatedAccount.message}`);
+    }
     const accountRecord: PreviewAccountBackupRecord = {
-      document: createPreviewEnvelope(accountData),
+      document: accountDocument,
       schemaVersion: PREVIEW_SCHEMA_VERSION,
       revision: 5,
       updatedAt: '2026-11-06T12:00:00.000Z'
@@ -788,13 +854,28 @@ describe('Tend Today preview', () => {
     expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(invalidRaw);
     await user.click(within(confirmation).getByRole('button', { name: 'Replace this device’s data' }));
     expect(await screen.findByText(/account copy replaced this device’s data/i)).toBeTruthy();
-    expect(storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(invalidRaw);
+    expect(storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecoveryRaw);
+    expect(await screen.findByRole('button', { name: /Download recovery archive/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Download preserved device copy/ })).toBeTruthy();
+
+    const recoveryArchiveRaw = storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY);
+    expect(JSON.parse(recoveryArchiveRaw ?? '')).toEqual({
+      format: 'tend.preview-import-recovery',
+      schemaVersion: 1,
+      copies: [earlierArchiveCopy, invalidRaw],
+      sources: [earlierArchiveSource]
+    });
 
     const restoredRaw = storage.getItem(PREVIEW_STORAGE_KEY);
     if (!restoredRaw) throw new Error('The account copy was not stored on this device.');
     const restored = parsePreviewBackup(restoredRaw, date);
     if (!restored.valid) throw new Error(`The restored account copy is invalid: ${restored.message}`);
     expect(restored.envelope.data.people[0]?.displayName).toBe('Synthetic restored account');
+    expect(restored.envelope.data.strength.workouts).toHaveLength(7);
+    expect(restored.envelope.data.datedRhythmCompletions).toHaveLength(92);
+    expect(restored.envelope.data.rhythmHistoryIds).toHaveLength(19);
+    expect(restored.envelope.data.strength.workouts[0]?.completionId)
+      .toBe(restored.envelope.data.datedRhythmCompletions[0]?.id);
     await user.click(screen.getByRole('button', { name: /Check data/ }));
     expect(await screen.findByText(/passed backup validation/i)).toBeTruthy();
     expect(accountBackupApi.save).not.toHaveBeenCalled();
@@ -808,7 +889,8 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: /Check data/ }));
     expect(await screen.findByText(/passed backup validation/i)).toBeTruthy();
     expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(restoredRaw);
-    expect(storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(invalidRaw);
+    expect(storage.getItem(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(earlierRecoveryRaw);
+    expect(storage.getItem(PREVIEW_IMPORT_RECOVERY_KEY)).toBe(recoveryArchiveRaw);
     expect(accountBackupApi.save).not.toHaveBeenCalled();
   });
 

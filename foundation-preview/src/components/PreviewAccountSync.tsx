@@ -126,6 +126,7 @@ type PreviewAccountSyncProps = {
   repairRecoveryRaw: string | null;
   repairRecoveryError: string | null;
   onRepairRecoveryChanged: () => void;
+  onRecoveryArchiveChanged?: () => void;
   enabled: boolean;
   localSaveConfirmed: boolean;
   localSaveStatus: PreviewPersistenceStatus['kind'];
@@ -449,6 +450,7 @@ export function PreviewAccountSync({
   repairRecoveryRaw,
   repairRecoveryError,
   onRepairRecoveryChanged,
+  onRecoveryArchiveChanged,
   enabled,
   localSaveConfirmed,
   localSaveStatus,
@@ -1746,6 +1748,7 @@ export function PreviewAccountSync({
               onRestoreFailure={setRestoreFailure}
               onRepair={onRepair}
               onRepairRecoveryChanged={onRepairRecoveryChanged}
+              {...(onRecoveryArchiveChanged ? { onRecoveryArchiveChanged } : {})}
               onRecoveryChanged={() => {}}
               onExclusiveChange={locked => {
                 setManualBusy(locked);
