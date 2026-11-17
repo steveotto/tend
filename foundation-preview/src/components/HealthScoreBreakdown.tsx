@@ -1,4 +1,4 @@
-import { forwardRef, useId } from 'react';
+import { forwardRef, useId, useState } from 'react';
 import type { KeyboardEventHandler, ReactNode } from 'react';
 import { scoreTone } from '../domain/score-tone.ts';
 import { formatScore } from '../domain/score-display.ts';
@@ -55,6 +55,7 @@ type HealthScoreBreakdownProps = Omit<HealthScoreMeasuresProps, 'healthScore'> &
   headingAction?: ReactNode;
   showMeasures?: boolean;
   showMeasureCaptions?: boolean;
+  measureDisclosure?: boolean;
   children?: ReactNode;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
 };
@@ -72,11 +73,30 @@ export function HealthScoreBreakdown({
   headingAction,
   showMeasures = true,
   showMeasureCaptions = false,
+  measureDisclosure = false,
   children,
   onKeyDown,
   className = ''
 }: HealthScoreBreakdownProps) {
+  const [measuresExpanded, setMeasuresExpanded] = useState(false);
+  const measuresId = useId();
+  const titleBoundary = title.lastIndexOf(' ');
+  const titlePrefix = titleBoundary >= 0 ? title.slice(0, titleBoundary + 1) : '';
+  const titleSuffix = title.slice(titleBoundary + 1);
   const displayScore = score === null || !Number.isFinite(score) ? null : formatScore(score);
+  const hasMeasures = showMeasures || measureDisclosure;
+  const measures = hasMeasures ? (
+    <HealthScoreMeasures
+      consistency={consistency}
+      onTrack={onTrack}
+      healthScore={score}
+      consistencyCaption={consistencyCaption}
+      onTrackCaption={onTrackCaption}
+      showCaptions={measureDisclosure || showMeasureCaptions}
+      healthLabel={healthLabel}
+      showHealthMeter={false}
+    />
+  ) : null;
 
   return (
     <section
@@ -85,25 +105,47 @@ export function HealthScoreBreakdown({
       onKeyDown={onKeyDown}
     >
       <header className="health-score-breakdown__header">
-        <h3 id={titleId}>{title}</h3>
+        {measureDisclosure && hasMeasures ? (
+          <div className="health-score-breakdown__title">
+            <h3 id={titleId} aria-label={title}>
+              {titlePrefix}
+              <span className="health-score-breakdown__title-end">
+                {titleSuffix}
+                <button
+                  type="button"
+                  className="health-score-breakdown__measure-toggle"
+                  aria-label={`${measuresExpanded ? 'Hide' : 'Show'} ${title} Consistency and On Track breakdown`}
+                  aria-expanded={measuresExpanded}
+                  aria-controls={measuresId}
+                  onClick={() => setMeasuresExpanded(expanded => !expanded)}
+                >
+                  <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+                    <path d="M2.5 4.5 6 8l3.5-3.5" />
+                  </svg>
+                </button>
+              </span>
+            </h3>
+          </div>
+        ) : (
+          <h3 id={titleId}>{title}</h3>
+        )}
         <span className={displayScore === null ? 'is-unavailable' : undefined}>
           {displayScore ?? '—'}
         </span>
         {headingAction}
       </header>
       <HealthScoreMeter score={score} label={healthLabel} />
-      {showMeasures && (
-        <HealthScoreMeasures
-          consistency={consistency}
-          onTrack={onTrack}
-          healthScore={score}
-          consistencyCaption={consistencyCaption}
-          onTrackCaption={onTrackCaption}
-          showCaptions={showMeasureCaptions}
-          healthLabel={healthLabel}
-          showHealthMeter={false}
-        />
-      )}
+      {measureDisclosure
+        ? measures && (
+          <div
+            id={measuresId}
+            className="health-score-breakdown__measures"
+            hidden={!measuresExpanded}
+          >
+            {measures}
+          </div>
+        )
+        : measures}
       {children}
     </section>
   );

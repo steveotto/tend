@@ -1021,7 +1021,7 @@ function FoundationList({
               onTrack={foundationOnTrack}
               consistencyCaption="How often you show up."
               onTrackCaption="How caught up you are."
-              showMeasures={false}
+              measureDisclosure
               headingAction={(
                 <HealthScoreInfoButton
                   ref={scoreInfoButtonRef}

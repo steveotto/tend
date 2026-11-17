@@ -831,6 +831,15 @@ describe('Strength preview presentation', () => {
     const overallScores = document.querySelector('.strength-page > .fitness-score-summary') as HTMLElement;
     expect(overallScores.classList.contains('rhythm-history-view__score-card')).toBe(true);
     expect(within(overallScores).getByRole('img', { name: 'Strength Health: Not enough data' })).toBeTruthy();
+    const measureToggle = within(overallScores).getByRole('button', {
+      name: 'Show Strength Health Consistency and On Track breakdown'
+    });
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('false');
+    const measuresPanel = document.getElementById(measureToggle.getAttribute('aria-controls')!);
+    expect(measuresPanel?.hidden).toBe(true);
+    expect(within(overallScores).queryByRole('img', { name: 'Consistency: Score unavailable' })).toBeNull();
+    await user.click(measureToggle);
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('true');
     expect(within(overallScores).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
     expect(within(overallScores).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
     expect(within(overallScores).queryByText('No approved overall Strength Health aggregate is available.')).toBeNull();

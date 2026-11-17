@@ -129,8 +129,22 @@ describe('Weight preview presentation', () => {
     expect(screen.getByRole('meter', { name: 'Weight Health score' }).getAttribute('aria-valuenow')).toBe('70');
     expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
     expect(screen.queryByRole('meter', { name: 'On Track score' })).toBeNull();
+    const measureToggle = screen.getByRole('button', {
+      name: 'Show Weight Health Consistency and On Track breakdown'
+    });
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(measureToggle.getAttribute('aria-controls')!)?.hidden).toBe(true);
+    await user.click(measureToggle);
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80');
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('40');
+    expect(screen.getByText('Scheduled Weight-linked weigh-in Rhythms.')).toBeTruthy();
+    expect(screen.getByText('Whether weigh-ins due on those Rhythms are caught up.')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Show Weight Health scoring details' }));
+    const info = screen.getByRole('button', { name: 'Show Weight Health scoring details' });
+    await user.click(info);
+    expect(info.getAttribute('aria-expanded')).toBe('true');
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('true');
     const dialog = screen.getByRole('dialog', { name: 'Weight Health details' });
     expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(within(dialog).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80');
@@ -147,6 +161,9 @@ describe('Weight preview presentation', () => {
       'Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it.'
     )).toBeTruthy();
     expect(within(scoringDialog).getByText(/Goal Progress score do not affect it/)).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
+    expect(measureToggle.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('preserves zero and unavailable states in Weight Health details', async () => {
@@ -164,6 +181,12 @@ describe('Weight preview presentation', () => {
     expect(screen.getByRole('img', { name: 'Weight Health: Not enough data' })).toBeTruthy();
     expect(screen.queryByRole('meter', { name: 'Consistency score' })).toBeNull();
     expect(screen.queryByRole('img', { name: 'On Track: Score unavailable' })).toBeNull();
+    const measureToggle = screen.getByRole('button', {
+      name: 'Show Weight Health Consistency and On Track breakdown'
+    });
+    await user.click(measureToggle);
+    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
+    expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Show Weight Health scoring details' }));
     const dialog = screen.getByRole('dialog', { name: 'Weight Health details' });

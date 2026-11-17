@@ -260,7 +260,7 @@ describe('Finance goals view', () => {
     const panel = screen.getByRole('tabpanel', { name: 'Rhythms' });
     expect(within(panel).getByText('No Rhythms are linked to Finances yet.')).toBeTruthy();
     expect(within(panel).queryByText('Review savings transfer')).toBeNull();
-    expect(screen.getByText('Finance Health')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Finance Health' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Finance Health: Not enough data' })).toBeTruthy();
   });
 
