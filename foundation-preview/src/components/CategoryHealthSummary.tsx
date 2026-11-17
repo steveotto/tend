@@ -11,6 +11,7 @@ import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 
 type CategoryHealthSummaryProps = {
   title: string;
+  contextTitle?: string;
   itemTerm: {
     singular: string;
     plural: string;
@@ -30,6 +31,7 @@ type CategoryHealthSummaryProps = {
 
 export function CategoryHealthSummary({
   title,
+  contextTitle = title,
   itemTerm,
   score,
   explanation,
@@ -99,10 +101,11 @@ export function CategoryHealthSummary({
       title={title}
       titleId={titleId}
       score={score.health}
-      healthLabel={title}
-      ariaLabel={`${title} summary`}
+      healthLabel={contextTitle}
+      ariaLabel={`${contextTitle} summary`}
       showMeasures
       measureDisclosure
+      measureDisclosureLabel={contextTitle}
       consistency={consistencyMetric}
       onTrack={onTrackMetric}
       consistencyCaption="How regularly you show up"
@@ -110,7 +113,7 @@ export function CategoryHealthSummary({
       headingAction={(
         <HealthScoreInfoButton
           ref={infoButtonRef}
-          label={`Show ${title} scoring explanation`}
+          label={`Show ${contextTitle} scoring explanation`}
           expanded={expanded}
           controls={detailsId}
           onClick={() => setExpanded(current => !current)}
@@ -118,13 +121,13 @@ export function CategoryHealthSummary({
       )}
     >
       {expanded && (
-        <HealthScoreDetailsDialog title={`${title} details`} onClose={closeDetails}>
-          <div id={detailsId} className="category-health-summary__details" role="region" aria-label={`${title} calculation details`}>
+        <HealthScoreDetailsDialog title={`${contextTitle} details`} onClose={closeDetails}>
+          <div id={detailsId} className="category-health-summary__details" role="region" aria-label={`${contextTitle} calculation details`}>
             <HealthScoreDetailsContent
-              title={title}
-              ariaLabel={`${title} calculation details`}
+              title={contextTitle}
+              ariaLabel={`${contextTitle} calculation details`}
               score={score.health}
-              healthLabel={title}
+              healthLabel={contextTitle}
               consistency={consistencyMetric}
               onTrack={onTrackMetric}
               consistencyCaption="How regularly you show up"

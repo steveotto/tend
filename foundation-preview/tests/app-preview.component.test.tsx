@@ -6099,7 +6099,10 @@ describe('Tend Today preview', () => {
     expect(screen.queryByRole('button', { name: /Your partner/ })).toBeNull();
     const personShortcut = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
     expect(personShortcut.closest('.category-header')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Marriage Health' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
+    const categoryHero = screen.getByRole('heading', { name: 'Marriage' }).closest('.category-header');
+    expect(categoryHero?.classList.contains('category-header--hero')).toBe(true);
+    expect(categoryHero?.querySelector('.page-hero-header__icon[aria-hidden="true"] .area-svg-icon')).toBeTruthy();
     expect(screen.queryByText('No scored Foundations yet')).toBeNull();
     const summary = screen.getByRole('region', { name: 'Marriage Health summary' });
     await expandHealthMeasureDisclosure(user, summary);
@@ -6183,6 +6186,8 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('button', { name: 'All Foundations' })).toBeTruthy();
     const foundationHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
     expect(within(foundationHeader).queryByRole('img')).toBeNull();
+    expect(foundationHeader.classList.contains('foundation-detail-header--hero')).toBe(true);
+    expect(foundationHeader.querySelector('.page-hero-header__icon--foundation[aria-hidden="true"] .marriage-svg-icon')).toBeTruthy();
     const foundationHealthCard = screen.getByRole('region', { name: 'Connection Health summary' });
     expect(within(foundationHealthCard).getByRole('img', {
       name: 'Connection Foundation Health: Not enough data'
@@ -6194,7 +6199,7 @@ describe('Tend Today preview', () => {
     expect(foundationMeasures.hidden).toBe(true);
     expect(within(foundationHealthCard).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
     expect(within(foundationHealthCard).queryByRole('meter', { name: 'On Track score' })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Connection Health' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
     expect(document.querySelector('.marriage-foundation-detail__scores')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 0' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add Rhythm' })).toBeTruthy();
@@ -6523,7 +6528,7 @@ describe('Tend Today preview', () => {
     const detailParts = Array.from(foundationDetail.children);
     expect(detailParts.map(element => element.className)).toEqual([
       'tend-back-button',
-      'foundation-detail-header',
+      'foundation-detail-header foundation-detail-header--hero',
       'health-score-breakdown rhythm-history-view__score-card foundation-health-card',
       'marriage-foundation-support'
     ]);
@@ -6782,7 +6787,7 @@ describe('Tend Today preview', () => {
     expect(within(foundationHeader).queryByRole('img')).toBeNull();
     const foundationHealthCard = screen.getByRole('region', { name: 'Connection Health summary' });
     expect(foundationHealthCard.querySelector('.health-score-breakdown__header > span')?.textContent).toBe('85');
-    expect(screen.getByRole('heading', { name: 'Connection Health' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
     expect(document.querySelector('.marriage-foundation-detail__scores')).toBeNull();
     const showFoundationInfo = within(foundationHealthCard)
       .getByRole('button', { name: 'Show Connection Health scoring details' });
@@ -7486,7 +7491,7 @@ describe('Tend Today preview', () => {
 
     expect(screen.getByRole('heading', { name: 'Health & Fitness' })).toBeTruthy();
     expect(screen.getByText('Structure beats good intentions')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Health & Fitness Health' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
     const categoryHeader = screen.getByRole('heading', { name: 'Health & Fitness' }).closest('.category-header');
     expect(categoryHeader).toBeTruthy();
     expect(categoryHeader?.querySelector('h2')).toBe(screen.getByRole('heading', { name: 'Health & Fitness' }));
@@ -7970,7 +7975,7 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Health & Fitness' }));
     const summary = screen.getByRole('region', { name: 'Health & Fitness Health summary' });
-    expect(within(summary).getByRole('heading', { name: 'Health & Fitness Health' })).toBeTruthy();
+    expect(within(summary).getByRole('heading', { name: 'Health' })).toBeTruthy();
     const measureToggle = within(summary).getByRole('button', {
       name: 'Show Health & Fitness Health Consistency and On Track breakdown'
     });
@@ -8022,7 +8027,7 @@ describe('Tend Today preview', () => {
     if (!(strengthHeader instanceof HTMLElement)) throw new Error('Strength detail header is missing.');
     expect(within(strengthHeader)
       .getByText('Your training, workouts, and muscle balance.')).toBeTruthy();
-    expect(strengthHeader.querySelector('.foundation-card__icon .marriage-svg-icon')).toBeTruthy();
+    expect(strengthHeader.querySelector('.page-hero-header__icon--foundation .marriage-svg-icon')).toBeTruthy();
     expect(strengthHeader.querySelector('.foundation-card__progress')).toBeNull();
     expect(screen.getByRole('button', { name: 'All Foundations' })).toBeTruthy();
     const strengthHealthHeading = screen.getByRole('heading', { name: 'Strength Health' });
@@ -8066,7 +8071,7 @@ describe('Tend Today preview', () => {
     if (!(cardioHeader instanceof HTMLElement)) throw new Error('Cardio detail header is missing.');
     expect(within(cardioHeader)
       .getByText('Your activity and weekly goals.')).toBeTruthy();
-    expect(cardioHeader.querySelector('.foundation-card__icon .marriage-svg-icon')).toBeTruthy();
+    expect(cardioHeader.querySelector('.page-hero-header__icon--foundation .marriage-svg-icon')).toBeTruthy();
     expect(cardioHeader.querySelector('.foundation-card__progress')).toBeNull();
     const cardioHealthHeading = screen.getByRole('heading', { name: 'Cardio Health' });
     expect(cardioHeader.compareDocumentPosition(cardioHealthHeading) & Node.DOCUMENT_POSITION_FOLLOWING)
@@ -8118,7 +8123,7 @@ describe('Tend Today preview', () => {
     if (!(weightHeader instanceof HTMLElement)) throw new Error('Weight detail header is missing.');
     expect(within(weightHeader)
       .getByText('Your measurements and goal progress.')).toBeTruthy();
-    expect(weightHeader.querySelector('.foundation-card__icon .marriage-svg-icon')).toBeTruthy();
+    expect(weightHeader.querySelector('.page-hero-header__icon--foundation .marriage-svg-icon')).toBeTruthy();
     expect(weightHeader.querySelector('.foundation-card__progress')).toBeNull();
     const weightHealthHeading = screen.getByRole('heading', { name: 'Weight Health' });
     expect(weightHeader.compareDocumentPosition(weightHealthHeading) & Node.DOCUMENT_POSITION_FOLLOWING)

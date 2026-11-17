@@ -28,6 +28,7 @@ import { GoalEditor } from './GoalEditor.tsx';
 import { GoalCard } from './Cards.tsx';
 import { ProgressCheckIn } from './ProgressCheckIn.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
+import { AreaIcon } from './AreaIcon.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
 import type { FinanceGoalTemplate } from '../domain/finance-goal-templates.ts';
@@ -238,11 +239,13 @@ export function FinanceGoalsView({
       <CategoryHeader
         title="Finances"
         titleId="finances-heading"
+        icon={<AreaIcon id="finances" />}
         subtitle="Track balance goals and the Rhythms that support them."
         trailing={<span className="hint">Illustrative preview · taxonomy not finalized</span>}
       />
       <CategoryHealthSummary
-        title="Finance Health"
+        title="Health"
+        contextTitle="Finance Health"
         score={financeHealthScore}
         itemTerm={{ singular: 'Rhythm', plural: 'Rhythms' }}
         explanation="Finance Health reflects eligible Rhythms explicitly linked to the current Finance Foundation. Goal balances, targets, check-ins, and completion never affect it."

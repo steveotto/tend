@@ -5074,6 +5074,89 @@ a:focus-visible {
   margin: 16px 0 0;
 }
 
+.category-header--hero {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+  padding: 24px 22px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--tend-forest) 0%, #2a6e56 100%);
+  color: #fff;
+}
+
+.category-header--hero::before,
+.category-header--hero::after {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  content: "";
+  pointer-events: none;
+}
+
+.category-header--hero::before {
+  top: -40px;
+  right: -40px;
+  width: 160px;
+  height: 160px;
+}
+
+.category-header--hero::after {
+  right: -60px;
+  bottom: -60px;
+  width: 120px;
+  height: 120px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.category-header--hero .category-header__copy,
+.category-header--hero .category-header__trailing {
+  position: relative;
+  z-index: 1;
+}
+
+.category-header--hero .category-header__copy {
+  padding-right: 64px;
+}
+
+.category-header--hero .category-header__copy h2 {
+  color: #fff;
+  font-size: calc(26px * var(--app-text-scale, 1));
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.category-header--hero .category-header__copy p {
+  max-width: 90%;
+  margin-top: 8px;
+  color: #d8e6de;
+  font-size: calc(14px * var(--app-text-scale, 1));
+  line-height: 1.5;
+}
+
+.page-hero-header__icon {
+  position: absolute;
+  top: 24px;
+  right: 22px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+}
+
+.page-hero-header__icon--category {
+  color: #fff;
+}
+
+.page-hero-header__icon--category .area-svg-icon {
+  width: 44px;
+  height: 44px;
+}
+
 .category-header__copy {
   min-width: 0;
 }
@@ -5106,9 +5189,33 @@ a:focus-visible {
   min-width: 0;
 }
 
+.category-header--hero .category-header__trailing {
+  justify-content: flex-start;
+}
+
 .category-header__trailing .hint {
   color: var(--tend-secondary, var(--ink-soft));
   font-size: var(--tend-type-metadata, calc(0.8125rem * var(--app-text-scale, 1)));
+}
+
+.category-header--hero .category-header__trailing .hint {
+  color: #d8e6de;
+}
+
+.category-header--hero .marriage-person-shortcut,
+.category-header--hero .marriage-person-shortcut__chevron,
+.category-header--hero .marriage-people-empty p {
+  color: #fff;
+}
+
+.category-header--hero .marriage-person-shortcut {
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.category-header--hero .marriage-people-empty .btn {
+  border-color: rgb(255 255 255 / 0.65);
+  color: #fff;
 }
 
 .marriage-spouse-shortcut {
@@ -9493,17 +9600,22 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .foundation-detail-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
+  position: relative;
+  display: block;
   min-width: 0;
-  padding: 8px 0 12px;
-  border-bottom: 1px solid var(--tend-line, var(--line));
+  overflow: hidden;
+  padding: 24px 22px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 20px;
+  background: var(--tend-cream, #f4f1e8);
 }
 
 .foundation-detail-header__copy {
   min-width: 0;
+}
+
+.foundation-detail-header--hero .foundation-detail-header__copy {
+  padding-right: 64px;
 }
 
 .foundation-detail-header__title-row {
@@ -9518,9 +9630,10 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;
-  color: var(--tend-ink, var(--ink));
-  font-size: calc(1.25rem * var(--app-text-scale, 1));
-  font-weight: 700;
+  color: var(--tend-forest);
+  font-size: calc(26px * var(--app-text-scale, 1));
+  font-weight: 800;
+  letter-spacing: -0.01em;
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
@@ -9536,12 +9649,46 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   color: #fff;
 }
 
+.page-hero-header__icon--foundation {
+  border-radius: 12px;
+  background: var(--tend-forest);
+}
+
 .foundation-detail-header__copy p {
-  margin: 5px 0 0;
-  color: var(--tend-secondary, var(--ink-soft));
-  font-size: calc(0.875rem * var(--app-text-scale, 1));
-  line-height: 1.4;
+  margin: 8px 0 0;
+  color: var(--tend-ink-soft, var(--tend-secondary, var(--ink-soft)));
+  font-size: calc(14px * var(--app-text-scale, 1));
+  line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 359px) {
+  .category-header--hero,
+  .foundation-detail-header--hero {
+    padding-right: 22px;
+  }
+
+  .category-header--hero .category-header__copy {
+    padding-right: 0;
+  }
+
+  .foundation-detail-header--hero .foundation-detail-header__copy {
+    padding-right: 0;
+  }
+
+  .category-header--hero .page-hero-header__icon,
+  .foundation-detail-header--hero .page-hero-header__icon {
+    display: none;
+  }
+}
+
+.foundation-detail-header__icon {
+  color: #fff;
+}
+
+.foundation-detail-header__icon .marriage-svg-icon {
+  width: 24px;
+  height: 24px;
 }
 
 .tend-back-button {

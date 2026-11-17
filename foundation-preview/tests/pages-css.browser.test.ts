@@ -3771,9 +3771,130 @@ async function main() {
                   assert.equal(await panel.getByText(foundation.emptyRhythms, { exact: true }).isVisible(), true);
                 }
               }
+
             }
           }
         }
+      }
+
+      if (identity === 'dashboard') {
+        const categorySizeToggle = page.locator('.mobile-display-toggle');
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (await categorySizeToggle.getAttribute('data-text-size') === 'small') break;
+          await categorySizeToggle.click();
+        }
+        assert.equal(await categorySizeToggle.getAttribute('data-text-size'), 'small');
+        const areaNavigation = page.getByRole('navigation', { name: 'Areas' });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await areaNavigation.getByRole('button', { name: 'Marriage', exact: true }).click();
+        const categoryHero = page.locator('.category-header--hero');
+        await categoryHero.waitFor();
+        const categoryHeroStyle = await categoryHero.evaluate(element => {
+          const title = element.querySelector<HTMLElement>('h2');
+          const icon = element.querySelector<HTMLElement>('.page-hero-header__icon');
+          if (!title || !icon) throw new Error('Category hero is missing its title or icon.');
+          const headerStyle = getComputedStyle(element);
+          const titleStyle = getComputedStyle(title);
+          const subtitleStyle = getComputedStyle(element.querySelector('p')!);
+          const iconStyle = getComputedStyle(icon);
+          return {
+            background: headerStyle.backgroundImage,
+            borderRadius: headerStyle.borderRadius,
+            padding: headerStyle.padding,
+            titleFontSize: titleStyle.fontSize,
+            titleFontWeight: titleStyle.fontWeight,
+            titleColor: titleStyle.color,
+            subtitleColor: subtitleStyle.color,
+            subtitleMaxWidth: subtitleStyle.maxWidth,
+            iconColor: iconStyle.color,
+            iconWidth: iconStyle.width,
+            iconHeight: iconStyle.height,
+            iconHiddenFromAccessibility: icon.getAttribute('aria-hidden')
+          };
+        });
+        assert.match(categoryHeroStyle.background, /linear-gradient/);
+        assert.equal(categoryHeroStyle.borderRadius, '20px');
+        assert.equal(categoryHeroStyle.padding, '24px 22px');
+        assert.equal(categoryHeroStyle.titleFontSize, '26px');
+        assert.equal(categoryHeroStyle.titleFontWeight, '800');
+        assert.equal(categoryHeroStyle.titleColor, 'rgb(255, 255, 255)');
+        assert.equal(categoryHeroStyle.subtitleColor, 'rgb(216, 230, 222)');
+        assert.equal(categoryHeroStyle.subtitleMaxWidth, '90%');
+        assert.equal(categoryHeroStyle.iconColor, 'rgb(255, 255, 255)');
+        assert.equal(categoryHeroStyle.iconWidth, '44px');
+        assert.equal(categoryHeroStyle.iconHeight, '44px');
+        assert.equal(categoryHeroStyle.iconHiddenFromAccessibility, 'true');
+        await page.setViewportSize({ width: 375, height: 844 });
+        const categoryIconSpacing = await categoryHero.evaluate(element => {
+          const title = element.querySelector<HTMLElement>('h2');
+          const icon = element.querySelector<HTMLElement>('.page-hero-header__icon');
+          if (!title || !icon) throw new Error('Category hero is incomplete.');
+          const titleRect = title.getBoundingClientRect();
+          const iconRect = icon.getBoundingClientRect();
+          return {
+            documentWidth: document.documentElement.scrollWidth,
+            viewportWidth: document.documentElement.clientWidth,
+            titleRight: titleRect.right,
+            iconLeft: iconRect.left,
+            iconDisplay: getComputedStyle(icon).display
+          };
+        });
+        assert.equal(categoryIconSpacing.documentWidth, 375);
+        assert.equal(categoryIconSpacing.viewportWidth, 375);
+        assert.ok(categoryIconSpacing.titleRight <= categoryIconSpacing.iconLeft);
+        assert.equal(categoryIconSpacing.iconDisplay, 'grid');
+        await page.setViewportSize({ width: 359, height: 844 });
+        assert.equal(await categoryHero.locator('.page-hero-header__icon').evaluate(
+          element => getComputedStyle(element).display
+        ), 'none');
+
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await areaNavigation.getByRole('button', { name: 'Health & Fitness', exact: true }).click();
+        await page.getByRole('button', { name: 'Open Strength foundation details' }).click();
+        const foundationHero = page.locator('.foundation-detail-header--hero')
+          .filter({ hasText: 'Your training, workouts, and muscle balance.' });
+        await foundationHero.waitFor();
+        const foundationHeroStyle = await foundationHero.evaluate(element => {
+          const title = element.querySelector<HTMLElement>('h2');
+          const icon = element.querySelector<HTMLElement>('.page-hero-header__icon');
+          if (!title || !icon) throw new Error('Foundation hero is missing its title or icon.');
+          const subtitle = element.querySelector<HTMLElement>('p');
+          if (!subtitle) throw new Error('Foundation hero is missing its description.');
+          return {
+            background: getComputedStyle(element).backgroundColor,
+            borderColor: getComputedStyle(element).borderTopColor,
+            borderRadius: getComputedStyle(element).borderRadius,
+            padding: getComputedStyle(element).padding,
+            titleFontSize: getComputedStyle(title).fontSize,
+            titleFontWeight: getComputedStyle(title).fontWeight,
+            titleColor: getComputedStyle(title).color,
+            subtitleFontSize: getComputedStyle(subtitle).fontSize,
+            subtitleColor: getComputedStyle(subtitle).color,
+            iconBackground: getComputedStyle(icon).backgroundColor,
+            iconColor: getComputedStyle(icon).color,
+            iconWidth: getComputedStyle(icon).width,
+            iconHeight: getComputedStyle(icon).height,
+            iconHiddenFromAccessibility: icon.getAttribute('aria-hidden')
+          };
+        });
+        assert.equal(foundationHeroStyle.background, 'rgb(244, 241, 232)');
+        assert.equal(foundationHeroStyle.borderColor, 'rgb(220, 228, 222)');
+        assert.equal(foundationHeroStyle.borderRadius, '20px');
+        assert.equal(foundationHeroStyle.padding, '24px 22px');
+        assert.equal(foundationHeroStyle.titleFontSize, '26px');
+        assert.equal(foundationHeroStyle.titleFontWeight, '800');
+        assert.equal(foundationHeroStyle.titleColor, 'rgb(36, 107, 82)');
+        assert.equal(foundationHeroStyle.subtitleFontSize, '14px');
+        assert.equal(foundationHeroStyle.subtitleColor, 'rgb(94, 107, 99)');
+        assert.equal(foundationHeroStyle.iconBackground, 'rgb(36, 107, 82)');
+        assert.equal(foundationHeroStyle.iconColor, 'rgb(255, 255, 255)');
+        assert.equal(foundationHeroStyle.iconWidth, '44px');
+        assert.equal(foundationHeroStyle.iconHeight, '44px');
+        assert.equal(foundationHeroStyle.iconHiddenFromAccessibility, 'true');
+        await page.setViewportSize({ width: 359, height: 844 });
+        assert.equal(await foundationHero.locator('.page-hero-header__icon').evaluate(
+          element => getComputedStyle(element).display
+        ), 'none');
       }
 
       if (identity === 'dashboard') {

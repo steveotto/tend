@@ -56,6 +56,7 @@ type HealthScoreBreakdownProps = Omit<HealthScoreMeasuresProps, 'healthScore'> &
   showMeasures?: boolean;
   showMeasureCaptions?: boolean;
   measureDisclosure?: boolean;
+  measureDisclosureLabel?: string;
   children?: ReactNode;
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
 };
@@ -74,6 +75,7 @@ export function HealthScoreBreakdown({
   showMeasures = true,
   showMeasureCaptions = false,
   measureDisclosure = false,
+  measureDisclosureLabel,
   children,
   onKeyDown,
   className = ''
@@ -83,6 +85,7 @@ export function HealthScoreBreakdown({
   const titleBoundary = title.lastIndexOf(' ');
   const titlePrefix = titleBoundary >= 0 ? title.slice(0, titleBoundary + 1) : '';
   const titleSuffix = title.slice(titleBoundary + 1);
+  const disclosureLabel = measureDisclosureLabel ?? title;
   const displayScore = score === null || !Number.isFinite(score) ? null : formatScore(score);
   const hasMeasures = showMeasures || measureDisclosure;
   const measures = hasMeasures ? (
@@ -114,7 +117,7 @@ export function HealthScoreBreakdown({
                 <button
                   type="button"
                   className="health-score-breakdown__measure-toggle"
-                  aria-label={`${measuresExpanded ? 'Hide' : 'Show'} ${title} Consistency and On Track breakdown`}
+                  aria-label={`${measuresExpanded ? 'Hide' : 'Show'} ${disclosureLabel} Consistency and On Track breakdown`}
                   aria-expanded={measuresExpanded}
                   aria-controls={measuresId}
                   onClick={() => setMeasuresExpanded(expanded => !expanded)}
