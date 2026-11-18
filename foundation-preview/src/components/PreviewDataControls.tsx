@@ -116,6 +116,8 @@ type PreviewDataControlsProps = {
   v40RecoveryError?: string | null;
   v41RecoveryCopy?: string | null;
   v42RecoveryCopy?: string | null;
+  v43RecoveryCopy?: string | null;
+  v44RecoveryCopy?: string | null;
 };
 
 export function PreviewDataControls({
@@ -210,7 +212,9 @@ export function PreviewDataControls({
   v40RecoveryCopy = null,
   v40RecoveryError = null,
   v41RecoveryCopy = null,
-  v42RecoveryCopy = null
+  v42RecoveryCopy = null,
+  v43RecoveryCopy = null,
+  v44RecoveryCopy = null
 }: PreviewDataControlsProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
@@ -794,6 +798,26 @@ export function PreviewDataControls({
             Download original v42 recovery backup
           </button>
         )}
+        {v43RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v43-recovery.json',
+              v43RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v43 recovery backup downloaded.')}>
+            Download original v43 recovery backup
+          </button>
+        )}
+        {v44RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v44-recovery.json',
+              v44RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v44 recovery backup downloaded.')}>
+            Download original v44 recovery backup
+          </button>
+        )}
         {showImportControls && (
           <label className="btn mini ghost preview-data-controls__file-button">
             Dry-run Classic Tend import
@@ -834,6 +858,14 @@ export function PreviewDataControls({
               <dt>Source schema</dt><dd>{status.diagnostic.sourceSchemaVersion ?? 'unknown'}</dd>
               <dt>Application schema</dt><dd>{status.diagnostic.applicationSchemaVersion}</dd>
               <dt>Rejected rule</dt><dd>{status.diagnostic.rejectedRule}</dd>
+              {status.diagnostic.failurePath && (
+                <><dt>Failure path</dt><dd>{status.diagnostic.failurePath}</dd></>
+              )}
+              {status.diagnostic.sourceValidationCode && status.diagnostic.sourceValidationPath && (
+                <><dt>Source validation</dt>
+                  <dd>{status.diagnostic.sourceValidationCode} at {status.diagnostic.sourceValidationPath}</dd>
+                </>
+              )}
               <dt>Recovery-key lookup</dt><dd>{status.diagnostic.recoveryKeyLookup}</dd>
               <dt>Migration validation</dt><dd>{status.diagnostic.migrationValidation}</dd>
               <dt>Concurrent change</dt><dd>{status.diagnostic.concurrentModification}</dd>

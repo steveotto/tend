@@ -51,6 +51,8 @@ import {
   PREVIEW_V40_RECOVERY_KEY,
   PREVIEW_V41_RECOVERY_KEY,
   PREVIEW_V42_RECOVERY_KEY,
+  PREVIEW_V43_RECOVERY_KEY,
+  PREVIEW_V44_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4RecoveryKeyForRaw,
   proposedV4SourceVersionForRaw
@@ -100,7 +102,9 @@ export {
   PREVIEW_V39_RECOVERY_KEY,
   PREVIEW_V40_RECOVERY_KEY,
   PREVIEW_V41_RECOVERY_KEY,
-  PREVIEW_V42_RECOVERY_KEY
+  PREVIEW_V42_RECOVERY_KEY,
+  PREVIEW_V43_RECOVERY_KEY,
+  PREVIEW_V44_RECOVERY_KEY
 };
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
@@ -174,6 +178,9 @@ export type PreviewStorageDiagnostic = {
   migrationValidation: 'valid' | 'invalid' | 'not-run';
   concurrentModification: 'detected' | 'not-detected' | 'not-checked';
   latestDraft: 'failed';
+  failurePath?: string;
+  sourceValidationCode?: string;
+  sourceValidationPath?: string;
   failureDetail?: string;
 };
 
@@ -375,6 +382,7 @@ function diagnosticForWriteFailure(
   const validation = sourceRaw !== null && currentDate
     ? parsePreviewBackup(sourceRaw, currentDate)
     : null;
+  const sourceValidation = validation && !validation.valid ? validation.diagnostic : undefined;
   const mappedRecoveryKey = sourceRaw === null ? null : proposedV4RecoveryKeyForRaw(sourceRaw);
   const recoveryKey = operation === 'repair'
     ? PREVIEW_STRENGTH_REPAIR_RECOVERY_KEY
@@ -406,6 +414,17 @@ function diagnosticForWriteFailure(
     migrationValidation: validation === null ? 'not-run' : validation.valid ? 'valid' : 'invalid',
     concurrentModification,
     latestDraft: 'failed',
+    ...(rejectedRule.startsWith('immutable-recovery-')
+      ? { failurePath: 'schemaVersion' }
+      : rejectedRule === 'source-validation-failed' && sourceValidation
+        ? { failurePath: sourceValidation.path }
+        : {}),
+    ...(sourceValidation
+      ? {
+          sourceValidationCode: sourceValidation.code,
+          sourceValidationPath: sourceValidation.path
+        }
+      : {}),
     ...(failureDetail ? { failureDetail } : {})
   };
 }
@@ -1398,6 +1417,22 @@ export function loadV41RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
 export function loadV42RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V42_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV43RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V43_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV44RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V44_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

@@ -172,6 +172,14 @@ describe('Pages production artifact', () => {
     assert.deepEqual(undefinedProperties, [], 'all referenced CSS custom properties should be defined');
   });
 
+  it('keeps React token assets separate from the Classic shell copy', () => {
+    const reactTokens = readFileSync(path.resolve(artifactDirectory, 'brand/tend-tokens.css'), 'utf8');
+    const classicTokens = readFileSync(path.resolve(artifactDirectory, 'classic/brand/tend-tokens.css'), 'utf8');
+
+    assert.match(reactTokens, /--tend-tool-zone-background:\s*#EEF2F7/i);
+    assert.doesNotMatch(classicTokens, /--tend-tool-zone-background/i);
+  });
+
   it('keeps React Pages entries independent from the Classic stylesheet', () => {
     for (const entry of ['index.html', 'app-preview.html']) {
       const html = readFileSync(path.resolve(artifactDirectory, entry), 'utf8');

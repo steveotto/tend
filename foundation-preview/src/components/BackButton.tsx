@@ -3,11 +3,16 @@ import type { ReactNode } from 'react';
 type Props = {
   children: ReactNode;
   onClick: () => void;
+  variant?: 'plain';
 };
 
-export function BackButton({ children, onClick }: Props) {
+export function BackButton({ children, onClick, variant }: Props) {
   return (
-    <button type="button" className="tend-back-button" onClick={onClick}>
+    <button
+      type="button"
+      className={`tend-back-button${variant ? ` tend-back-button--${variant}` : ''}`}
+      onClick={onClick}
+    >
       <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
         <path d="m10 3-5 5 5 5" />
       </svg>

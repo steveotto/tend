@@ -1,5 +1,6 @@
 import {
   areas,
+  canonicalFoundationId,
   foundationCatalogue,
   foundationTerminologyForCategory,
   type FoundationPreview,
@@ -22,14 +23,15 @@ export function foundationRhythmIds(
   return [...new Set([
     ...(rhythm.primaryFoundationId ? [rhythm.primaryFoundationId] : []),
     ...(rhythm.secondaryFoundationIds ?? [])
-  ])];
+  ].map(canonicalFoundationId))];
 }
 
 export function foundationCategoryId(
   foundationId: string,
   foundations: readonly FoundationPreview[] = foundationCatalogue
 ): RhythmCategoryId | undefined {
-  const foundation = foundations.find(item => item.id === foundationId);
+  const canonicalId = canonicalFoundationId(foundationId);
+  const foundation = foundations.find(item => item.id === canonicalId);
   return foundation?.categoryId;
 }
 
@@ -54,7 +56,7 @@ export function missingRequiredFoundationCategories(
   const required = requiredFoundationCategories(categoryIds, foundations);
   return required.filter(categoryId => !foundationIds.some(id =>
     foundations.some(foundation =>
-      foundation.id === id
+      foundation.id === canonicalFoundationId(id)
       && foundation.categoryId === categoryId
       && foundation.lifecycle === 'active'
       && foundation.capabilities.rhythms
@@ -85,7 +87,9 @@ export function foundationOwnershipError(
   foundationIds: readonly string[],
   foundations: readonly FoundationPreview[] = foundationCatalogue
 ): string | undefined {
-  const unresolved = foundationIds.filter(id => !foundations.some(foundation => foundation.id === id));
+  const unresolved = foundationIds.filter(id => !foundations.some(
+    foundation => foundation.id === canonicalFoundationId(id)
+  ));
   if (unresolved.length > 0) {
     const term = categoryIds.length === 1
       ? foundationTerminologyForCategory(categoryIds[0]).singular
@@ -95,7 +99,7 @@ export function foundationOwnershipError(
   }
 
   const knownFoundations = foundationIds
-    .map(id => foundations.find(foundation => foundation.id === id)!);
+    .map(id => foundations.find(foundation => foundation.id === canonicalFoundationId(id))!);
   const unassigned = knownFoundations.filter(foundation => {
     return !categoryIds.includes(foundation.categoryId);
   });
@@ -122,8 +126,13 @@ export function removeFoundationLinksForCategory(
   secondaryFoundationIds: string[];
   removedIds: string[];
 } {
-  const existingIds = foundationRhythmIds(rhythm);
-  const removedIds = existingIds.filter(id => foundationCategoryId(id, foundations) === categoryId);
+  const existingIds = [
+    ...(rhythm.primaryFoundationId ? [rhythm.primaryFoundationId] : []),
+    ...(rhythm.secondaryFoundationIds ?? [])
+  ];
+  const removedIds = [...new Set(
+    existingIds.filter(id => foundationCategoryId(id, foundations) === categoryId)
+  )];
   const remainingIds = existingIds.filter(id => !removedIds.includes(id));
   const primaryFoundationId = rhythm.primaryFoundationId && remainingIds.includes(rhythm.primaryFoundationId)
     ? rhythm.primaryFoundationId
@@ -163,7 +172,7 @@ export function isRhythmLinkedToFoundation(
   rhythm: Pick<RhythmPreview, 'primaryFoundationId' | 'secondaryFoundationIds'>,
   foundationId: string
 ): boolean {
-  return foundationRhythmIds(rhythm).includes(foundationId);
+  return foundationRhythmIds(rhythm).includes(canonicalFoundationId(foundationId));
 }
 
 export function saveFoundationRhythmAssociations(
@@ -174,7 +183,8 @@ export function saveFoundationRhythmAssociations(
   changes: readonly FoundationRhythmAssociationChange[],
   foundations: readonly FoundationPreview[] = foundationCatalogue
 ): FoundationRhythmAssociationResult {
-  if (!foundations.some(foundation => foundation.id === foundationId)) {
+  const canonicalRequestedFoundationId = canonicalFoundationId(foundationId);
+  if (!foundations.some(foundation => foundation.id === canonicalRequestedFoundationId)) {
     return { error: 'This linked Practice or Foundation is unavailable.' };
   }
 
@@ -209,11 +219,11 @@ export function saveFoundationRhythmAssociations(
     const rhythm = rhythmsById.get(rhythmId)!;
     const existing = savedById.get(rhythmId);
     const existingIds = foundationRhythmIds(rhythm);
-    const currentLinked = existingIds.includes(foundationId);
+    const currentLinked = existingIds.includes(canonicalRequestedFoundationId);
     if (archivedRhythmIds.includes(rhythmId)) {
       if (linked !== currentLinked) {
         const term = foundationTerminologyForCategory(
-          foundationCategoryId(foundationId, foundations)
+          foundationCategoryId(canonicalRequestedFoundationId, foundations)
         ).singular;
         return { error: `Restore this Rhythm before changing its ${term} associations.` };
       }
@@ -222,7 +232,9 @@ export function saveFoundationRhythmAssociations(
     if (linked === currentLinked) continue;
 
     if (!existing) return { error: 'A selected Rhythm is no longer available.' };
-    const nextIds = linked ? [...existingIds, foundationId] : existingIds.filter(id => id !== foundationId);
+    const nextIds = linked
+      ? [...existingIds, canonicalRequestedFoundationId]
+      : existingIds.filter(id => id !== canonicalRequestedFoundationId);
     const ownershipError = foundationOwnershipError(existing.categoryIds, nextIds, foundations);
     if (ownershipError) return { error: ownershipError };
     const missingCategories = missingRequiredFoundationCategories(existing.categoryIds, nextIds, foundations);

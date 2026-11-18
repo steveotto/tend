@@ -58,7 +58,12 @@ const foundationIcons: Record<string, string> = {
   'health-strength': healthStrengthIcon,
   'health-cardio': healthCardioIcon,
   'health-weight': healthWeightIcon,
-  'health-flexibility': healthFlexibilityIcon
+  'health-flexibility': healthFlexibilityIcon,
+  'finance-planning-spending': communicationIcon,
+  'finance-saving-reserves': heartPlusIcon,
+  'finance-debt-reduction': connectionIcon,
+  'finance-investing-future': spiritualGrowthIcon,
+  'finance-generosity': faithGenerosityIcon
 };
 
 export function hasFoundationIcon(id: string): boolean {

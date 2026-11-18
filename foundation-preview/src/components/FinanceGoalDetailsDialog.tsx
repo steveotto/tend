@@ -1,12 +1,13 @@
 import type { MoneyGoal } from '../domain/money-goals.ts';
-import type { RhythmPreview } from '../domain/preview-data.ts';
+import type { FoundationPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import { GoalCard } from './Cards.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
 export function FinanceGoalDetailsDialog({
   goal,
-  financeFoundationId,
+  foundations,
+  financeFoundationIds,
   financeCategoryEnabled,
   financeRhythms,
   rhythms,
@@ -18,7 +19,8 @@ export function FinanceGoalDetailsDialog({
   onClose
 }: {
   goal: MoneyGoal;
-  financeFoundationId: string;
+  foundations: readonly FoundationPreview[];
+  financeFoundationIds: ReadonlySet<string>;
   financeCategoryEnabled: boolean;
   financeRhythms: readonly RhythmPreview[];
   rhythms: readonly RhythmPreview[];
@@ -49,6 +51,13 @@ export function FinanceGoalDetailsDialog({
       onClose={onClose}
     >
       <div className="finance-goal-details">
+        <p className="finance-goal-details__foundation">
+          Related Finance Foundation:{' '}
+          {goal.foundationId
+            ? foundations.find(foundation => foundation.id === goal.foundationId)?.name
+              ?? `Unavailable saved reference (${goal.foundationId})`
+            : 'Unassigned'}
+        </p>
         <GoalCard
           goal={goal}
           presentation="details"
@@ -68,7 +77,7 @@ export function FinanceGoalDetailsDialog({
                 const isArchived = archivedRhythms.some(item => item.id === rhythmId);
                 const foundationLinked = activeFinanceIds.has(rhythmId)
                   && rhythm !== undefined
-                  && foundationRhythmIds(rhythm).includes(financeFoundationId);
+                  && foundationRhythmIds(rhythm).some(id => financeFoundationIds.has(id));
                 const status = !rhythm
                   ? `Unavailable saved reference: ${rhythmId}`
                   : isArchived
@@ -77,7 +86,7 @@ export function FinanceGoalDetailsDialog({
                       ? 'Finance Foundation link unavailable; saved goal link retained.'
                       : !financeCategoryEnabled
                         ? 'Finances is disabled; saved link retained.'
-                        : 'Linked to the Finance Foundation.';
+                        : 'Linked to a Finance Foundation.';
                 return (
                   <li key={rhythmId}>
                     <strong>{rhythm?.title ?? 'Unavailable Rhythm'}</strong>

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CatalogApp } from '../src/CatalogApp.tsx';
 import { AreaIcon } from '../src/components/AreaIcon.tsx';
+import { CategoryHeader } from '../src/components/CategoryHeader.tsx';
 import marriageCategorySvg from '../src/assets/tend-approved-icons/categories/marriage.svg?raw';
 import healthFlexibilitySvg from '../src/assets/tend-approved-icons/foundations/health-flexibility.svg?raw';
 import { CategoryHealthBadge, FoundationCard, FoundationProgress, GoalCard, RhythmCard, ScoreMeter } from '../src/components/Cards.tsx';
@@ -11,6 +12,7 @@ import { MarriageIcon } from '../src/components/MarriageIcon.tsx';
 import { RhythmCategoryBadges } from '../src/components/RhythmCategoryBadges.tsx';
 import { historyButtonName } from './history-button-name.ts';
 import { PersonBadge, PersonBadgeList } from '../src/components/PersonBadge.tsx';
+import { ToolZone, ToolZoneTrendingUpIcon } from '../src/components/ToolZone.tsx';
 import { RhythmDetailsDialog } from '../src/components/RhythmDetailsDialog.tsx';
 import { RhythmMetadata } from '../src/components/RhythmMetadata.tsx';
 import { RhythmSuggestionPicker } from '../src/components/RhythmSuggestionPicker.tsx';
@@ -18,7 +20,7 @@ import { formatScore } from '../src/domain/score-display.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 import {
-  financeFoundation,
+  financeFoundations,
   areas,
   goals,
   rhythmLastActivityLabel,
@@ -36,6 +38,70 @@ import {
 afterEach(cleanup);
 
 describe('shared preview components', () => {
+  it('renders an accessible ToolZone with optional explanation and header actions', async () => {
+    const user = userEvent.setup();
+    const onExplain = vi.fn();
+    const { container, rerender } = render(
+      <ToolZone
+        icon={<ToolZoneTrendingUpIcon />}
+        purposeLabel="Progress tracker"
+        subtitle="Track the outcomes your Rhythms support."
+        scoringFootnote="Goal balances don’t change your Health score."
+        headerAction={<button type="button">Add goal</button>}
+        explanationAction={<button type="button" aria-label="About goal scoring" onClick={onExplain}>i</button>}
+      >
+        <div role="group" aria-label="Synthetic goal cards">Goal cards</div>
+      </ToolZone>
+    );
+
+    const zone = screen.getByRole('region', { name: 'Progress tracker' });
+    expect(within(zone).getByText('Track the outcomes your Rhythms support.')).toBeTruthy();
+    expect(within(zone).getByText('Goal balances don’t change your Health score.')).toBeTruthy();
+    expect(within(zone).getByRole('button', { name: 'Add goal' })).toBeTruthy();
+    expect(within(zone).getByRole('button', { name: 'About goal scoring' })).toBeTruthy();
+    expect(within(zone).getByRole('group', { name: 'Synthetic goal cards' })).toBeTruthy();
+    expect(container.querySelector('.tool-zone__icon')?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelector('.tool-zone__icon svg')?.getAttribute('focusable')).toBe('false');
+
+    await user.click(within(zone).getByRole('button', { name: 'About goal scoring' }));
+    expect(onExplain).toHaveBeenCalledOnce();
+
+    rerender(
+      <ToolZone
+        icon={<ToolZoneTrendingUpIcon />}
+        purposeLabel="Progress tracker"
+        subtitle="Track the outcomes your Rhythms support."
+        scoringFootnote="Goal balances don’t change your Health score."
+      >
+        <div role="group" aria-label="Synthetic goal cards">Goal cards</div>
+      </ToolZone>
+    );
+    expect(screen.queryByRole('button', { name: 'About goal scoring' })).toBeNull();
+  });
+
+  it('places the shared Home link before each category hero and invokes its navigation action', async () => {
+    const user = userEvent.setup();
+    const onHome = vi.fn();
+    const { container } = render(
+      <CategoryHeader
+        title="Faith"
+        titleId="faith-title"
+        icon={<AreaIcon id="faith" />}
+        onHome={onHome}
+        subtitle="Faith practices that help you make room for God in everyday life."
+      />
+    );
+    const stack = container.querySelector<HTMLElement>('.category-header-stack')!;
+    const home = within(stack).getByRole('button', { name: 'Home' });
+    const hero = stack.querySelector('.category-header--hero');
+    expect(home.className).toContain('tend-back-button--plain');
+    expect(stack.firstElementChild).toBe(home);
+    expect(home.nextElementSibling).toBe(hero);
+
+    await user.click(home);
+    expect(onHome).toHaveBeenCalledOnce();
+  });
+
   it('shows no-history wording before and after the due window and preserves qualifying dates', () => {
     const noHistory = { completionHistory: [] };
     for (const asOfDate of ['2026-10-25', '2026-11-01']) {
@@ -516,22 +582,25 @@ describe('shared preview components', () => {
     )).toBe(false);
   });
 
-  it('supports an explicit local lifecycle change for a completable Finance milestone', () => {
-    const { rerender } = render(
-      <FoundationCard foundation={financeFoundation} onComplete={() => undefined} />
+  it('renders the five shared Finance Foundations', () => {
+    const { container } = render(
+      <div>
+        {financeFoundations.map(foundation => (
+          <FoundationCard foundation={foundation} key={foundation.id} />
+        ))}
+      </div>
     );
 
-    expect(screen.getByText('In progress')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Mark milestone complete' })).toBeTruthy();
-    rerender(
-      <FoundationCard
-        foundation={financeFoundation}
-        lifecycle="completed"
-        onReopen={() => undefined}
-      />
-    );
-    expect(screen.getByText('Completed')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Reopen milestone' })).toBeTruthy();
+    expect(container.querySelectorAll('.foundation-card')).toHaveLength(5);
+    for (const name of [
+      'Planning & Spending',
+      'Saving & Reserves',
+      'Debt Reduction',
+      'Investing & Future',
+      'Generosity'
+    ]) {
+      expect(screen.getByRole('heading', { name })).toBeTruthy();
+    }
   });
 
   it('uses the same goal-card structure for increasing savings and decreasing debt', () => {
@@ -1401,20 +1470,20 @@ describe('shared preview components', () => {
     }
   });
 
-  it('changes only the local fixture through a keyboard-operable milestone action', async () => {
-    const user = userEvent.setup();
+  it('shows the five Finance Foundations in the catalogue preview without milestone actions', () => {
     render(<CatalogApp />);
 
-    await user.tab();
-    await user.tab();
-    const completeButton = screen.getByRole('button', { name: 'Mark milestone complete' });
-    expect(document.activeElement).toBe(completeButton);
-    await user.keyboard('{Enter}');
-
-    expect(screen.getByText('Completed')).toBeTruthy();
-    expect(screen.getByText(/Not confirmed/, { selector: '.rhythm-cadence' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Reopen milestone' }));
-    expect(screen.getByText('In progress')).toBeTruthy();
+    const finance = screen.getByRole('region', { name: 'Finances' });
+    for (const name of [
+      'Planning & Spending',
+      'Saving & Reserves',
+      'Debt Reduction',
+      'Investing & Future',
+      'Generosity'
+    ]) {
+      expect(within(finance).getByRole('heading', { name })).toBeTruthy();
+    }
+    expect(within(finance).queryByRole('button', { name: /Mark milestone complete/ })).toBeNull();
   });
 
   it('clamps shared score-meter markers to endpoints and omits the marker when unavailable', () => {
@@ -1624,6 +1693,8 @@ describe('shared preview components', () => {
     expect(within(communityHeader as HTMLElement).getByRole('heading', { name: 'Community' })).toBeTruthy();
     expect(within(communityHeader as HTMLElement).getByText(community.description)).toBeTruthy();
     expect(within(sabbathHeader as HTMLElement).getByText(sabbath.description)).toBeTruthy();
+    expect(communityHeader?.querySelectorAll('.foundation-detail-header__circle').length).toBe(3);
+    expect(communityHeader?.querySelector('.foundation-detail-header__circles')?.getAttribute('aria-hidden')).toBe('true');
     expect(container.querySelector('.foundation-detail-header__actions')).toBeNull();
     expect(container.querySelector('.foundation-detail-header .category-health-badge')).toBeNull();
   });

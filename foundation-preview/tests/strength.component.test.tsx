@@ -874,8 +874,10 @@ describe('Strength preview presentation', () => {
 
     const settingsButtons = screen.getAllByRole('button', { name: 'Strength settings' });
     expect(settingsButtons).toHaveLength(1);
+    expect(settingsButtons[0]?.getAttribute('aria-expanded')).toBe('false');
     await user.click(settingsButtons[0]!);
     expect(screen.getByRole('dialog', { name: 'Strength settings' })).toBeTruthy();
+    expect(settingsButtons[0]?.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('keeps the overall score once and shows actual measures in Fitness Health details', async () => {
@@ -1579,7 +1581,13 @@ describe('Strength preview presentation', () => {
     expect(document.activeElement).toBe(bodySection);
     expect(bodySection.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('heading', { name: 'Body overview' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Your body, at a glance' })).toBeTruthy();
+    const bodyInsights = screen.getByRole('region', { name: 'Body insights' });
+    expect(within(bodyInsights).getByText('See which muscles you’ve trained and what’s ready next.')).toBeTruthy();
+    expect(within(bodyInsights).getByText('Your linked Rhythms determine Strength Health.')).toBeTruthy();
+    expect(within(bodyInsights).getByRole('button', { name: 'Strength settings' })).toBeTruthy();
+    expect(within(bodyInsights).getByRole('group', { name: 'Body map view' })).toBeTruthy();
+    expect(within(bodyInsights).getByRole('group', { name: 'Muscle training status' })).toBeTruthy();
+    expect(within(bodyInsights).queryByRole('heading', { name: 'Your body, at a glance' })).toBeNull();
     const trainingStatus = screen.getByRole('meter', { name: 'Strength training status score' });
     expect(trainingStatus.closest('.strength-section-heading__subtitle')).toBeTruthy();
     expect(trainingStatus.textContent).toContain('Training status');

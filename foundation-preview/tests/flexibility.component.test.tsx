@@ -123,9 +123,13 @@ describe('Flexibility foundation presentation', () => {
     const frontRegionIds = [...frontMap.querySelectorAll<SVGPathElement>('[data-region]')]
       .map(region => region.dataset.region);
     expect(frontRegionIds).toEqual(['neck', 'shoulders', 'chest', 'abs', 'hip-flexors', 'quads']);
-    expect(container.querySelector('.flexibility-map-card')?.classList.contains('strength-card')).toBe(true);
-    expect(container.querySelector('.flexibility-map-card')?.querySelector('.strength-card-heading')).toBeTruthy();
-    expect(screen.getByText('Choose a region to see its stretch status.')).toBeTruthy();
+    const bodyInsights = screen.getByRole('region', { name: 'Body insights' });
+    expect(bodyInsights.classList.contains('flexibility-map-card')).toBe(true);
+    expect(within(bodyInsights).getByText('Explore your stretch coverage and readiness.')).toBeTruthy();
+    expect(within(bodyInsights).getByText('Your linked Rhythms determine Flexibility Health.')).toBeTruthy();
+    expect(within(bodyInsights).getByRole('button', { name: 'Stretch interval settings' })).toBeTruthy();
+    expect(within(bodyInsights).queryByRole('heading', { name: 'Your body, at a glance' })).toBeNull();
+    expect(within(bodyInsights).getByRole('group', { name: 'Body map view' })).toBeTruthy();
     expect(container.querySelector('.flexibility-map-layout')).toBeNull();
     expect([...frontList.querySelectorAll<HTMLButtonElement>('.flexibility-region')]
       .map(row => row.querySelector('strong')?.textContent))
@@ -265,7 +269,7 @@ describe('Flexibility foundation presentation', () => {
     await waitFor(() => {
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' }));
     });
-    expect(screen.getByRole('heading', { name: 'Body overview' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Body insights' })).toBeTruthy();
     expect(screen.getByRole('tablist', { name: 'Flexibility sections' })).toBeTruthy();
     expect(screen.queryByText('Suggested next stretch')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Daily Stretch' })).toBeNull();
@@ -278,8 +282,11 @@ describe('Flexibility foundation presentation', () => {
     expect(screen.getByRole('heading', { name: 'History' })).toBeTruthy();
 
     await user.click(screen.getByRole('tab', { name: 'Body' }));
-    await user.click(screen.getByRole('button', { name: 'Stretch interval settings' }));
+    const settingsButton = screen.getByRole('button', { name: 'Stretch interval settings' });
+    expect(settingsButton.getAttribute('aria-expanded')).toBe('false');
+    await user.click(settingsButton);
     const intervalDialog = screen.getByRole('dialog', { name: 'Stretch intervals' });
+    expect(settingsButton.getAttribute('aria-expanded')).toBe('true');
     expect(intervalDialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(intervalDialog.querySelector('.flexibility-settings-dialog__body')).toBeTruthy();
   });

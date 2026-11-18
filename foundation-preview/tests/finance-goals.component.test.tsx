@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FinanceGoalsView } from '../src/components/FinanceGoalsView.tsx';
-import { financeFoundation, foundationCatalogue, goals, syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
+import { FINANCE_SAVING_RESERVES_ID, financeFoundations, foundationCatalogue, goals, syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { GoalRhythmAssociationChange, MoneyGoal } from '../src/domain/money-goals.ts';
 
@@ -15,7 +15,7 @@ const financeRhythm: RhythmPreview = {
   cadence: 'Weekly',
   timeLabel: 'Friday',
   categoryIds: ['finances'],
-  primaryFoundationId: financeFoundation.id,
+  primaryFoundationId: FINANCE_SAVING_RESERVES_ID,
   secondaryFoundationIds: []
 };
 
@@ -50,7 +50,7 @@ function renderFinance({
     <FinanceGoalsView
       goals={goalData}
       currentDate="2026-10-21"
-      financeFoundation={financeFoundation}
+      financeFoundations={financeFoundations}
       financeCategoryEnabled={financeCategoryEnabled}
       rhythms={rhythms}
       archivedRhythms={archivedRhythms}
@@ -82,6 +82,39 @@ function renderFinance({
 }
 
 describe('Finance goals view', () => {
+  it('shows five shared Foundation cards and opens a Foundation detail with Health and linked Rhythms', async () => {
+    const user = userEvent.setup();
+    const { callbacks } = renderFinance();
+    const overview = screen.getByRole('tabpanel', { name: 'Overview' });
+    const home = screen.getByRole('button', { name: 'Home' });
+    expect(home.className).toContain('tend-back-button--plain');
+    await user.click(home);
+    expect(callbacks.onToday).toHaveBeenCalledOnce();
+    for (const name of [
+      'Planning & Spending',
+      'Saving & Reserves',
+      'Debt Reduction',
+      'Investing & Future',
+      'Generosity'
+    ]) {
+      expect(within(overview).getByRole('button', { name: new RegExp(`Open ${name}`) })).toBeTruthy();
+    }
+
+    await user.click(within(overview).getByRole('button', { name: /Open Saving & Reserves/ }));
+    expect(screen.getByRole('heading', { name: 'Saving & Reserves' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Finances' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
+    expect(screen.getByRole('main').querySelector('.category-header--hero')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Back to Finance Overview' }).className)
+      .toContain('tend-back-button--plain');
+    expect(screen.getByRole('img', { name: 'Saving & Reserves Health: Not enough data' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Linked Rhythms · 1' })).toBeTruthy();
+    expect(screen.getByText('Review savings transfer')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to Finance Overview' }));
+    expect(screen.getByRole('heading', { name: 'Finances' })).toBeTruthy();
+    expect(screen.getByRole('tabpanel', { name: 'Overview' })).toBeTruthy();
+  });
+
   it('defaults to Overview, keeps balances separate, and navigates to Goals', async () => {
     const user = userEvent.setup();
     renderFinance();
@@ -98,8 +131,10 @@ describe('Finance goals view', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Goals' }));
     expect(screen.getByRole('tab', { name: 'Goals' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('heading', { name: 'My goals' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '+ Add' })).toBeTruthy();
+    const progressTracker = screen.getByRole('region', { name: 'Progress tracker' });
+    expect(within(progressTracker).getByText('Track the outcomes your Rhythms support.')).toBeTruthy();
+    expect(within(progressTracker).getByText('Goal balances don’t change your Health score.')).toBeTruthy();
+    expect(within(progressTracker).getByRole('button', { name: '+ Add' })).toBeTruthy();
   });
 
   it('uses the shared arrow, Home, and End keyboard pattern for panel tabs', async () => {
@@ -175,7 +210,7 @@ describe('Finance goals view', () => {
     let details = screen.getByRole('dialog', { name: 'Starter reserve' });
     expect(within(details).getByRole('region', { name: 'Correction history for Starter reserve' })).toBeTruthy();
     expect(within(details).getByText('Unavailable saved reference: missing-rhythm')).toBeTruthy();
-    expect(within(details).getByText('Linked to the Finance Foundation.')).toBeTruthy();
+    expect(within(details).getByText('Linked to a Finance Foundation.')).toBeTruthy();
 
     await user.click(within(details).getAllByRole('button', { name: 'Correct' })[0]!);
     expect(screen.getByRole('dialog', { name: 'Correct balance check-in' })).toBeTruthy();
@@ -233,13 +268,26 @@ describe('Finance goals view', () => {
 
   it('closes goal-link management before starting the shared Rhythm editor', async () => {
     const user = userEvent.setup();
-    const { callbacks } = renderFinance();
+    const { callbacks } = renderFinance({
+      goalData: [
+        { ...goals[0]!, foundationId: FINANCE_SAVING_RESERVES_ID },
+        ...goals.slice(1)
+      ]
+    });
     await user.click(screen.getByRole('tab', { name: 'Goals' }));
     await user.click(screen.getAllByRole('button', { name: 'Add a supporting Rhythm' })[0]!);
     const dialog = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
     await user.click(within(dialog).getByRole('button', { name: 'Create a Finance Rhythm' }));
 
     expect(callbacks.onCreateRhythmFromGoal).toHaveBeenCalledOnce();
+    expect(callbacks.onCreateRhythmFromGoal).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        goalId: goals[0]!.id,
+        foundationId: FINANCE_SAVING_RESERVES_ID,
+        onFinished: expect.any(Function)
+      })
+    );
     expect(screen.queryByRole('dialog', { name: 'Supporting Rhythms' })).toBeNull();
   });
 
@@ -260,7 +308,7 @@ describe('Finance goals view', () => {
     const panel = screen.getByRole('tabpanel', { name: 'Rhythms' });
     expect(within(panel).getByText('No Rhythms are linked to Finances yet.')).toBeTruthy();
     expect(within(panel).queryByText('Review savings transfer')).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Finance Health' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Finance Health: Not enough data' })).toBeTruthy();
   });
 

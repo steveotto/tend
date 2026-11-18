@@ -19,6 +19,11 @@ import {
   type MoneyGoal
 } from '../src/domain/money-goals.ts';
 import { goals } from '../src/domain/preview-data.ts';
+import {
+  createPreviewEnvelope,
+  createSamplePreviewData,
+  validatePreviewEnvelope
+} from '../src/domain/preview-state.ts';
 
 afterEach(cleanup);
 
@@ -181,6 +186,132 @@ describe('money goal domain', () => {
     ]);
   });
 
+  it('allows a date-only correction and preserves its prior date, balance, note, and history', () => {
+    const original = { ...savings.checkIns[1]!, note: 'Original check-in note' };
+    const previousHistory = {
+      effectiveDate: '2026-10-04',
+      previousBalanceMinor: 105_000,
+      previousNote: 'Earlier correction note',
+      replacedAt: '2026-10-20T10:00:00.000Z'
+    };
+    const goal: MoneyGoal = {
+      ...savings,
+      checkIns: [savings.checkIns[0]!, original],
+      correctionHistory: [previousHistory]
+    };
+    const corrected = saveCheckIn(goal, {
+      effectiveDate: '2026-10-20',
+      balance: '1250.00',
+      note: 'Original check-in note'
+    }, '2026-10-21T13:00:00.000Z', '2026-10-21', original);
+
+    expect(corrected.errors).toEqual({});
+    expect(corrected.corrected).toBe(true);
+    expect(corrected.goal?.id).toBe(goal.id);
+    expect(corrected.goal?.checkIns).toEqual([
+      savings.checkIns[0],
+      {
+        id: original.id,
+        effectiveDate: '2026-10-20',
+        balanceMinor: 125_000,
+        note: 'Original check-in note'
+      }
+    ]);
+    expect(corrected.goal?.correctionHistory).toEqual([
+      previousHistory,
+      {
+        effectiveDate: '2026-10-18',
+        previousBalanceMinor: 125_000,
+        previousNote: 'Original check-in note',
+        replacedAt: '2026-10-21T13:00:00.000Z'
+      }
+    ]);
+    expect(latestCheckIn(corrected.goal!)).toMatchObject({
+      id: original.id,
+      effectiveDate: '2026-10-20',
+      balanceMinor: 125_000
+    });
+    expect(goalTimeline(corrected.goal!).actual.map(point => point.date)).toEqual([
+      '2026-10-08',
+      '2026-10-20'
+    ]);
+
+    const data = createSamplePreviewData();
+    data.goals = data.goals.map(item => item.id === goal.id ? corrected.goal! : item);
+    expect(validatePreviewEnvelope(createPreviewEnvelope(data), '2026-10-21')).toMatchObject({
+      valid: true,
+      envelope: {
+        data: {
+          goals: expect.arrayContaining([
+            expect.objectContaining({ id: goal.id, correctionHistory: corrected.goal?.correctionHistory })
+          ])
+        }
+      }
+    });
+  });
+
+  it('combines date, balance, and note corrections and updates chart and progress ordering', () => {
+    const original = { ...savings.checkIns[1]!, note: 'Original balance note' };
+    const goal: MoneyGoal = {
+      ...savings,
+      checkIns: [savings.checkIns[0]!, original],
+      correctionHistory: [{
+        effectiveDate: '2026-10-05',
+        previousBalanceMinor: 110_000,
+        previousNote: 'Saved historical note',
+        replacedAt: '2026-10-20T10:00:00.000Z'
+      }]
+    };
+    const corrected = saveCheckIn(goal, {
+      effectiveDate: '2026-10-20',
+      balance: '1350.00',
+      note: 'Corrected balance note'
+    }, '2026-10-21T13:00:00.000Z', '2026-10-21', original);
+    const updatedGoal = corrected.goal!;
+
+    expect(updatedGoal.checkIns.find(checkIn => checkIn.id === original.id)).toEqual({
+      id: original.id,
+      effectiveDate: '2026-10-20',
+      balanceMinor: 135_000,
+      note: 'Corrected balance note'
+    });
+    expect(updatedGoal.correctionHistory).toEqual([
+      goal.correctionHistory[0],
+      {
+        effectiveDate: '2026-10-18',
+        previousBalanceMinor: 125_000,
+        previousNote: 'Original balance note',
+        replacedAt: '2026-10-21T13:00:00.000Z'
+      }
+    ]);
+    expect(latestCheckIn(updatedGoal)?.id).toBe(original.id);
+    expect(latestCheckIn(updatedGoal)?.effectiveDate).toBe('2026-10-20');
+    expect(latestCheckIn(updatedGoal)?.balanceMinor).toBe(135_000);
+    expect(goalProgressPercentage(updatedGoal, latestCheckIn(updatedGoal)!.balanceMinor)).toBe(9);
+    expect(goalTimeline(updatedGoal).actual).toEqual([
+      { date: '2026-10-08', value: 112_500 },
+      { date: '2026-10-20', value: 135_000 }
+    ]);
+  });
+
+  it('rejects a corrected date occupied by another check-in without changing either record', () => {
+    const original = savings.checkIns[1]!;
+    const draft = {
+      effectiveDate: '2026-10-08',
+      balance: '1350.00',
+      note: 'Must not replace the other check-in'
+    };
+    const errors = validateCheckInDraft(savings, draft, '2026-10-21', original);
+    expect(errors.effectiveDate).toContain('already occupies this date');
+    expect(errors.effectiveDate).toContain('will not replace or merge it');
+
+    const result = saveCheckIn(savings, draft, '2026-10-21T13:00:00.000Z', '2026-10-21', original);
+    expect(result.goal).toBeUndefined();
+    expect(result.errors.effectiveDate).toContain('already occupies this date');
+    expect(savings.checkIns).toEqual(goals[0]!.checkIns);
+    expect(savings.correctionHistory).toEqual([]);
+  });
+
   it('preserves valid backward progress and rejects check-ins before the goal starts', () => {
     const backwards = saveCheckIn(savings, {
       effectiveDate: '2026-10-20',
@@ -211,25 +342,6 @@ describe('money goal domain', () => {
       note: ''
     }, '2026-10-21');
     expect(future.effectiveDate).toContain('cannot be in the future');
-
-    const original = savings.checkIns[1]!;
-    const changedDateDraft = {
-      effectiveDate: '2026-10-19',
-      balance: '1300.00',
-      note: 'Incorrectly moved date'
-    };
-    const dateChangeErrors = validateCheckInDraft(savings, changedDateDraft, '2026-10-21', original);
-    expect(dateChangeErrors.effectiveDate).toContain('cannot be changed');
-    const rejectedCorrection = saveCheckIn(
-      savings,
-      changedDateDraft,
-      '2026-10-21T13:00:00.000Z',
-      '2026-10-21',
-      original
-    );
-    expect(rejectedCorrection.goal).toBeUndefined();
-    expect(rejectedCorrection.errors.effectiveDate).toContain('cannot be changed');
-    expect(savings.checkIns).toHaveLength(2);
 
     const rejectedFuture = saveCheckIn(
       savings,

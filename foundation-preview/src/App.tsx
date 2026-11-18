@@ -60,7 +60,7 @@ import { APP_DISPLAY_VERSION } from './domain/app-version.ts';
 import { resolvePersonCategory, resolvePersonCategoryGroups, setPersonCategory } from './domain/person-categories.ts';
 import {
   marriageRhythms,
-  financeFoundation,
+  financeFoundations,
   foundationCatalogue,
   faithRhythmSuggestionGroups,
   faithRhythmSuggestions,
@@ -72,6 +72,7 @@ import {
   peopleForRhythm,
   syntheticPrayerRequests,
   todayRhythms,
+  canonicalFoundationId,
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
   type CategoryId,
@@ -236,6 +237,8 @@ import {
   loadV40RecoveryCopy,
   loadV41RecoveryCopy,
   loadV42RecoveryCopy,
+  loadV43RecoveryCopy,
+  loadV44RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
   loadStrengthRepairRecoveryCopy,
   loadPreviewImportRecovery,
@@ -630,6 +633,8 @@ function PreviewWorkspace({
   const [v40RecoveryError, setV40RecoveryError] = useState<string | null>(null);
   const [v41RecoveryCopy, setV41RecoveryCopy] = useState<string | null>(null);
   const [v42RecoveryCopy, setV42RecoveryCopy] = useState<string | null>(null);
+  const [v43RecoveryCopy, setV43RecoveryCopy] = useState<string | null>(null);
+  const [v44RecoveryCopy, setV44RecoveryCopy] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -696,6 +701,7 @@ function PreviewWorkspace({
     id: string;
     rhythm?: (typeof todayRhythms)[number];
     initialDraft?: RhythmDraft;
+    goalAssociation?: { goalId: string };
     suggestionSourceId?: string;
     recommendedFrequency?: RhythmFrequencyRecommendation;
     frequencyGuidance?: string;
@@ -726,6 +732,10 @@ function PreviewWorkspace({
     setV41RecoveryCopy(v41Recovery.kind === 'loaded' ? v41Recovery.raw : null);
     const v42Recovery = loadV42RecoveryCopy(previewStorage);
     setV42RecoveryCopy(v42Recovery.kind === 'loaded' ? v42Recovery.raw : null);
+    const v43Recovery = loadV43RecoveryCopy(previewStorage);
+    setV43RecoveryCopy(v43Recovery.kind === 'loaded' ? v43Recovery.raw : null);
+    const v44Recovery = loadV44RecoveryCopy(previewStorage);
+    setV44RecoveryCopy(v44Recovery.kind === 'loaded' ? v44Recovery.raw : null);
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -1264,6 +1274,10 @@ function PreviewWorkspace({
     }
     const v42 = loadV42RecoveryCopy(previewStorage);
     setV42RecoveryCopy(v42.kind === 'loaded' ? v42.raw : null);
+    const v43 = loadV43RecoveryCopy(previewStorage);
+    setV43RecoveryCopy(v43.kind === 'loaded' ? v43.raw : null);
+    const v44 = loadV44RecoveryCopy(previewStorage);
+    setV44RecoveryCopy(v44.kind === 'loaded' ? v44.raw : null);
   }
 
   function refreshV10RecoveryCopy() {
@@ -2038,6 +2052,7 @@ function PreviewWorkspace({
     options?: {
       id?: string;
       initialDraft?: RhythmDraft;
+      goalAssociation?: { goalId: string };
       suggestionSourceId?: string;
       recommendedFrequency?: RhythmFrequencyRecommendation;
       frequencyGuidance?: string;
@@ -2049,6 +2064,7 @@ function PreviewWorkspace({
     setRhythmEditor({
       id: options?.id ?? rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
       ...(options?.initialDraft ? { initialDraft: options.initialDraft } : {}),
+      ...(options?.goalAssociation ? { goalAssociation: options.goalAssociation } : {}),
       ...(options?.suggestionSourceId ? { suggestionSourceId: options.suggestionSourceId } : {}),
       ...(options?.recommendedFrequency ? { recommendedFrequency: options.recommendedFrequency } : {}),
       ...(options?.frequencyGuidance ? { frequencyGuidance: options.frequencyGuidance } : {}),
@@ -2156,9 +2172,42 @@ function PreviewWorkspace({
     );
     const savedRhythms = result.savedRhythms;
     if (!savedRhythms) return result.errors;
+    let updatedGoals = previewData.goals;
+    if (rhythmEditor.goalAssociation) {
+      const goal = previewData.goals.find(item =>
+        item.id === rhythmEditor.goalAssociation!.goalId
+      );
+      if (!goal) return { form: 'This goal is no longer available; no Rhythm or goal link was saved.' };
+      const hasFinanceFoundation = [
+        draft.primaryFoundationId,
+        ...(draft.secondaryFoundationIds ?? [])
+      ].some((id): id is string => typeof id === 'string'
+        && financeFoundations.some(foundation =>
+          foundation.lifecycle === 'active' && foundation.id === canonicalFoundationId(id)
+        ));
+      if (!isCategoryEnabled(previewData.categoryPreferences, 'finances')
+        || !draft.categoryIds.includes('finances')
+        || !hasFinanceFoundation) {
+        return {
+          form: 'Choose an active Finance Foundation and keep this Rhythm in the Finance category to link it to the goal.'
+        };
+      }
+      const association = updateGoalSupportingRhythms(
+        goal,
+        [{ rhythmId: rhythmEditor.id, linked: true }],
+        new Set([rhythmEditor.id])
+      );
+      if (!association.goal) {
+        return { form: association.error ?? 'The Rhythm could not be linked to this goal.' };
+      }
+      updatedGoals = previewData.goals.map(item =>
+        item.id === goal.id ? association.goal! : item
+      );
+    }
     const nextData: PreviewData = {
       ...previewData,
       savedRhythms,
+      goals: updatedGoals,
       ...(isCategoryEnabled(previewData.categoryPreferences, 'health')
         && draft.categoryIds.includes('health')
         && (draft.healthLogCapability === 'workout'
@@ -2244,12 +2293,18 @@ function PreviewWorkspace({
     }
     if (written.kind === 'error') {
       setAutoSaveEnabled(false);
+      const failureDetail = written.diagnostic
+        ? ` (${written.diagnostic.rejectedRule}${written.diagnostic.failurePath
+          ? ` at ${written.diagnostic.failurePath}`
+          : ''})`
+        : '';
+      const message = `${written.message}${failureDetail}`;
       setPersistenceStatus({
         kind: 'error',
-        message: written.message,
+        message,
         ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
       });
-      return `Preview could not save this ${action}. ${written.message}`;
+      return `Preview could not save this ${action}. ${message}`;
     }
     expectedRaw.current = written.raw;
     externalRaw.current = null;
@@ -3097,7 +3152,9 @@ function PreviewWorkspace({
       userRhythms
         .filter(rhythm =>
           rhythm.categoryIds?.includes('finances')
-          && foundationRhythmIds(rhythm).includes(financeFoundation.id)
+          && foundationRhythmIds(rhythm).some(id =>
+            financeFoundations.some(foundation => foundation.id === id)
+          )
           && isCategoryEnabled(previewData.categoryPreferences, 'finances')
         )
         .map(rhythm => rhythm.id)
@@ -3377,6 +3434,7 @@ function PreviewWorkspace({
   const healthFitnessView = hydrated && (healthFitnessVisited || destination === 'health') ? (
     <HealthFitnessView
       people={peopleWithPhotos}
+      onHome={() => navigate('today')}
       hidden={destination !== 'health' || profilePersonId !== null}
       strength={{
         data: previewData.strength,
@@ -3885,6 +3943,7 @@ function PreviewWorkspace({
                 onPersonSelect={openPersonProfile}
                 onOpenPeople={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
+                onHome={() => navigate('today')}
                 userRhythms={marriageCategoryRhythms}
                 archivedRhythms={archivedMarriageRhythms}
                 foundationRhythms={marriageCategoryRhythms}
@@ -3940,6 +3999,7 @@ function PreviewWorkspace({
                 onPersonSelect={openPersonProfile}
                 onOpenPeople={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
+                onHome={() => navigate('today')}
                 userRhythms={parentingCategoryRhythms}
                 archivedRhythms={archivedParentingRhythms}
                 foundationRhythms={parentingCategoryRhythms}
@@ -3997,6 +4057,7 @@ function PreviewWorkspace({
                 onPersonSelect={openPersonProfile}
                 onOpenPeople={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
+                onHome={() => navigate('today')}
                 userRhythms={faithCategoryRhythms}
                 archivedRhythms={archivedFaithRhythms}
                 foundationRhythms={faithCategoryRhythms}
@@ -4070,6 +4131,7 @@ function PreviewWorkspace({
                 onPersonSelect={openPersonProfile}
                 onOpenPeople={() => navigate('people')}
                 onOpenCategory={categoryId => navigate(categoryId)}
+                onHome={() => navigate('today')}
                 userRhythms={friendshipCategoryRhythms}
                 archivedRhythms={archivedFriendshipRhythms}
                 foundationRhythms={friendshipCategoryRhythms}
@@ -4100,7 +4162,7 @@ function PreviewWorkspace({
               <FinanceGoalsView
                 goals={moneyGoals}
                 currentDate={currentDate}
-                financeFoundation={financeFoundation}
+                financeFoundations={financeFoundations}
                 financeCategoryEnabled={isCategoryEnabled(previewData.categoryPreferences, 'finances')}
                 rhythms={userRhythms}
                 archivedRhythms={archivedUserRhythms}
@@ -4122,9 +4184,13 @@ function PreviewWorkspace({
                     primaryFoundationId: foundationId
                   }
                 })}
-                onCreateRhythmFromGoal={(event, onFinished) => openRhythmEditor(event, undefined, {
-                  initialDraft: createRhythmDraft(['finances']),
-                  returnToSuggestions: onFinished
+                onCreateRhythmFromGoal={(event, context) => openRhythmEditor(event, undefined, {
+                  initialDraft: {
+                    ...createRhythmDraft(['finances']),
+                    ...(context.foundationId ? { primaryFoundationId: context.foundationId } : {})
+                  },
+                  goalAssociation: { goalId: context.goalId },
+                  returnToSuggestions: context.onFinished
                 })}
                 onTendRhythm={openCompletion}
                 onUndoRhythm={undoTend}
@@ -4134,6 +4200,8 @@ function PreviewWorkspace({
                 onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
                 onOpenCategory={categoryId => navigate(categoryId)}
                 onToday={() => navigate('today')}
+                foundationNavigationRequest={foundationNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
               />
             )
           : destination === 'people'
@@ -4209,6 +4277,8 @@ function PreviewWorkspace({
           v40RecoveryCopy={v40RecoveryCopy} v40RecoveryError={v40RecoveryError}
           v41RecoveryCopy={v41RecoveryCopy}
           v42RecoveryCopy={v42RecoveryCopy}
+          v43RecoveryCopy={v43RecoveryCopy}
+          v44RecoveryCopy={v44RecoveryCopy}
         />
       )}
       {healthFitnessView}

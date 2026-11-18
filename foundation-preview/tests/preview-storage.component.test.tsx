@@ -57,6 +57,10 @@ import {
   loadV40RecoveryCopy,
   loadV41RecoveryCopy,
   loadV42RecoveryCopy,
+  loadV43RecoveryCopy,
+  loadV44RecoveryCopy,
+  createPreviewStorageScope,
+  PREVIEW_ACCOUNT_STORAGE_PREFIX,
   loadV39RecoveryCopy,
   PREVIEW_V19_RECOVERY_KEY,
   PREVIEW_RAW_RECOVERY_KEY,
@@ -95,6 +99,8 @@ import {
   PREVIEW_V40_RECOVERY_KEY,
   PREVIEW_V41_RECOVERY_KEY,
   PREVIEW_V42_RECOVERY_KEY,
+  PREVIEW_V43_RECOVERY_KEY,
+  PREVIEW_V44_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -148,6 +154,8 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V32_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V33_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V34_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V43_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V44_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -161,6 +169,19 @@ function sampleWithHistory(): PreviewData {
   });
   data.completedRhythmIds = ['sample-pray-together'];
   return data;
+}
+
+function olderSchemaRaw(version: 43 | 44, data = sampleWithHistory()): string {
+  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    schemaVersion: number;
+    data: { goals: Array<Record<string, unknown>> };
+  };
+  envelope.schemaVersion = version;
+  for (const goal of envelope.data.goals) {
+    delete goal.foundationId;
+    if (version === 43) delete goal.supportingRhythmIds;
+  }
+  return JSON.stringify(envelope);
 }
 
 function versionOneRaw(data: PreviewData): string {
@@ -766,6 +787,109 @@ describe('synthetic preview storage adapter and envelope', () => {
       sourceSchemaVersion: PREVIEW_SCHEMA_VERSION,
       envelope: { data: { categoryPreferences } }
     });
+  });
+
+  it.each([43, 44] as const)(
+    'preserves schema v%s exactly while creating a workout, saving schema 45, and reloading repeatedly',
+    schemaVersion => {
+      const currentDate = '2026-10-31';
+      const raw = `\n${olderSchemaRaw(schemaVersion)}\n`;
+      const accountId = '11111111-1111-4111-8111-111111111111';
+      const accountRoot = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
+      const previousArchive = 'synthetic v42 archive remains unchanged';
+      const { storage, values } = storageFixture({
+        [accountRoot]: raw,
+        [`${accountRoot}:v42-recovery`]: previousArchive
+      });
+      const scope = createPreviewStorageScope(
+        storage,
+        createAuthenticatedPreviewIdentity(accountId, 1)
+      );
+      if (!scope) throw new Error('Synthetic account storage scope was not created.');
+
+      const loaded = loadPreview(scope.storage, currentDate);
+      expect(loaded.kind).toBe('loaded');
+      if (loaded.kind !== 'loaded') return;
+      const originalGoal = structuredClone(loaded.data.goals[0]!);
+      const firstDraft = structuredClone(loaded.data);
+      firstDraft.strength.savedWorkouts.push({
+        id: `synthetic-v${schemaVersion}-chest-triceps`,
+        name: 'Chest & Triceps',
+        muscleIds: ['chest', 'triceps'],
+        sharedWith: []
+      });
+
+      const firstSave = writePreview(scope.storage, firstDraft, loaded.raw, { currentDate });
+      expect(firstSave.kind).toBe('saved');
+      const recoveryKey = `${accountRoot}:v${schemaVersion}-recovery`;
+      expect(values.get(recoveryKey)).toBe(raw);
+      expect((schemaVersion === 43 ? loadV43RecoveryCopy : loadV44RecoveryCopy)(scope.storage))
+        .toEqual({ kind: 'loaded', raw });
+      expect(values.get(`${accountRoot}:v42-recovery`)).toBe(previousArchive);
+      expect(values.get(PREVIEW_STORAGE_KEY)).toBeUndefined();
+      expect(values.get(accountRoot)).not.toBe(raw);
+
+      const afterFirst = loadPreview(scope.storage, currentDate);
+      expect(afterFirst.kind).toBe('loaded');
+      if (afterFirst.kind !== 'loaded') return;
+      expect(afterFirst.data.strength.savedWorkouts).toContainEqual(
+        expect.objectContaining({ name: 'Chest & Triceps', muscleIds: ['chest', 'triceps'] })
+      );
+      expect(afterFirst.data.goals[0]?.checkIns).toEqual(originalGoal.checkIns);
+      expect(afterFirst.data.goals[0]?.correctionHistory).toEqual(originalGoal.correctionHistory);
+
+      const secondDraft = structuredClone(afterFirst.data);
+      secondDraft.strength.savedWorkouts.push({
+        id: `synthetic-v${schemaVersion}-back-biceps`,
+        name: 'Back & Biceps',
+        muscleIds: ['back', 'biceps'],
+        sharedWith: []
+      });
+      const secondSave = writePreview(scope.storage, secondDraft, afterFirst.raw, { currentDate });
+      expect(secondSave.kind).toBe('saved');
+      expect(values.get(recoveryKey)).toBe(raw);
+      expect(values.get(`${accountRoot}:v42-recovery`)).toBe(previousArchive);
+
+      const afterSecond = loadPreview(scope.storage, currentDate);
+      expect(afterSecond.kind).toBe('loaded');
+      if (afterSecond.kind !== 'loaded') return;
+      expect(afterSecond.data.strength.savedWorkouts.map(workout => workout.name))
+        .toContain('Chest & Triceps');
+      expect(afterSecond.data.strength.savedWorkouts.map(workout => workout.name))
+        .toContain('Back & Biceps');
+      expect(afterSecond.data.goals[0]?.checkIns).toEqual(originalGoal.checkIns);
+      expect(afterSecond.data.goals[0]?.correctionHistory).toEqual(originalGoal.correctionHistory);
+    }
+  );
+
+  it('keeps the active schema v44 source and a conflicting recovery archive unchanged on save failure', () => {
+    const currentDate = '2026-10-31';
+    const raw = olderSchemaRaw(44);
+    const conflictingArchive = 'different synthetic v44 recovery';
+    const { storage, values } = storageFixture({
+      [PREVIEW_STORAGE_KEY]: raw,
+      [PREVIEW_V44_RECOVERY_KEY]: conflictingArchive
+    });
+    const loaded = loadPreview(storage, currentDate);
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    const attempted = structuredClone(loaded.data);
+    attempted.strength.savedWorkouts.push({
+      id: 'synthetic-conflicted-workout',
+      name: 'Chest & Triceps',
+      muscleIds: ['chest', 'triceps'],
+      sharedWith: []
+    });
+
+    const result = writePreview(storage, attempted, loaded.raw, { currentDate });
+    expect(result).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-conflict' }
+    });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(values.get(PREVIEW_V44_RECOVERY_KEY)).toBe(conflictingArchive);
+    expect(parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY)!, currentDate).valid).toBe(true);
+    expect(values.get(PREVIEW_STORAGE_KEY)).not.toContain('Chest & Triceps');
   });
 
   it('retains the Appearance preference from the alternate schema v40 document', () => {
@@ -3162,6 +3286,47 @@ async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Pr
 }
 
 describe('preview backup controls', () => {
+  it('shows privacy-safe save failure code and path and offers the v44 recovery archive', async () => {
+    const user = userEvent.setup();
+    const raw = olderSchemaRaw(44);
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={sampleWithHistory()}
+        status={{
+          kind: 'error',
+          message: 'Save blocked.',
+          diagnostic: {
+            operation: 'save',
+            sourceSchemaVersion: 44,
+            applicationSchemaVersion: 45,
+            rejectedRule: 'immutable-recovery-key-unavailable',
+            recoveryKeyLookup: 'no-supported-key',
+            migrationValidation: 'valid',
+            concurrentModification: 'not-detected',
+            latestDraft: 'failed',
+            failurePath: 'schemaVersion'
+          }
+        }}
+        currentDate="2026-10-21"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v44RecoveryCopy={raw}
+      />
+    );
+
+    await user.click(screen.getByText('Technical save diagnostic'));
+    const diagnostic = screen.getByText('Technical save diagnostic').closest('details')!;
+    expect(within(diagnostic).getByText('immutable-recovery-key-unavailable')).toBeTruthy();
+    expect(within(diagnostic).getByText('schemaVersion')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Download original v44 recovery backup' }));
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
+  });
+
   it('exports the explicit envelope and imports the backup through confirmation', async () => {
     const user = userEvent.setup();
     const data = sampleWithHistory();

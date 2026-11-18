@@ -1459,20 +1459,75 @@ export function rhythmLastTendedLabel(
   return `Next due ${date}`;
 }
 
-export const financeFoundation: FoundationPreview = {
-  id: 'finance-example-milestone',
-  category: 'Finances',
-  categoryId: 'finances',
-  name: 'Emergency reserve · example milestone',
-  description: 'A sample completable milestone. This is illustrative, not a finalized Finances taxonomy.',
-  capabilities: {
-    rhythms: true,
-    numericGoals: true,
-    completion: 'milestone'
-  },
-  lifecycle: 'active',
-  sampleOnly: true
+export const LEGACY_FINANCE_FOUNDATION_ID = 'finance-example-milestone';
+export const FINANCE_PLANNING_SPENDING_ID = 'finance-planning-spending';
+export const FINANCE_SAVING_RESERVES_ID = 'finance-saving-reserves';
+export const FINANCE_DEBT_REDUCTION_ID = 'finance-debt-reduction';
+export const FINANCE_INVESTING_FUTURE_ID = 'finance-investing-future';
+export const FINANCE_GENEROSITY_ID = 'finance-generosity';
+
+export function canonicalFoundationId(id: string): string {
+  return id === LEGACY_FINANCE_FOUNDATION_ID ? FINANCE_SAVING_RESERVES_ID : id;
+}
+
+const financeFoundationCapabilities: FoundationCapabilities = {
+  rhythms: true,
+  numericGoals: true,
+  completion: 'ongoing'
 };
+
+export const financeFoundations = [
+  {
+    id: FINANCE_PLANNING_SPENDING_ID,
+    category: 'Finances',
+    categoryId: 'finances',
+    name: 'Planning & Spending',
+    description: 'Give your money direction and spend intentionally.',
+    capabilities: financeFoundationCapabilities,
+    lifecycle: 'active',
+    iconId: FINANCE_PLANNING_SPENDING_ID
+  },
+  {
+    id: FINANCE_SAVING_RESERVES_ID,
+    category: 'Finances',
+    categoryId: 'finances',
+    name: 'Saving & Reserves',
+    description: 'Build a cushion and prepare for future needs.',
+    capabilities: financeFoundationCapabilities,
+    lifecycle: 'active',
+    iconId: FINANCE_SAVING_RESERVES_ID
+  },
+  {
+    id: FINANCE_DEBT_REDUCTION_ID,
+    category: 'Finances',
+    categoryId: 'finances',
+    name: 'Debt Reduction',
+    description: 'Make steady progress toward reducing debt.',
+    capabilities: financeFoundationCapabilities,
+    lifecycle: 'active',
+    iconId: FINANCE_DEBT_REDUCTION_ID
+  },
+  {
+    id: FINANCE_INVESTING_FUTURE_ID,
+    category: 'Finances',
+    categoryId: 'finances',
+    name: 'Investing & Future',
+    description: 'Give your longer-term financial plans regular attention.',
+    capabilities: financeFoundationCapabilities,
+    lifecycle: 'active',
+    iconId: FINANCE_INVESTING_FUTURE_ID
+  },
+  {
+    id: FINANCE_GENEROSITY_ID,
+    category: 'Finances',
+    categoryId: 'finances',
+    name: 'Generosity',
+    description: 'Make financial giving intentional.',
+    capabilities: financeFoundationCapabilities,
+    lifecycle: 'active',
+    iconId: FINANCE_GENEROSITY_ID
+  }
+] satisfies readonly FoundationPreview[];
 
 export const foundationCatalogue: readonly FoundationPreview[] = [
   ...marriageFoundations,
@@ -1480,7 +1535,7 @@ export const foundationCatalogue: readonly FoundationPreview[] = [
   ...friendshipFoundations,
   ...faithPractices,
   ...healthFoundations,
-  financeFoundation
+  ...financeFoundations
 ];
 
 export const goals: GoalPreview[] = [
