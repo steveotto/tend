@@ -15,7 +15,10 @@
   --tend-tool-zone-accent-secondary: #6B87A8;
   --tend-tool-zone-ink: #46596F;
   --tend-tool-zone-selection: #E3EBF4;
-  --tend-tool-zone-silhouette: #DCE7F2;
+  --tend-tool-zone-silhouette: #D7E0EE;
+  --tend-tool-zone-silhouette-stroke: #B3C2D9;
+  --tend-tool-zone-muscle-selected: #4A6B94;
+  --tend-tool-zone-muscle-selected-stroke: #2F4A6E;
   --tend-font-ui: 'Inter', system-ui, sans-serif;
   --tend-font-editorial: 'Newsreader', Georgia, serif;
   --tend-radius-card: 20px;

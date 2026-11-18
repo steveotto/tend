@@ -232,12 +232,23 @@ async function verifyBodyToolPalette(
     return { fill: style.fill, stroke: style.stroke, strokeWidth: style.strokeWidth };
   });
   assert.deepEqual(selectedPathStyle, {
-    fill: 'rgb(115, 128, 120)',
-    stroke: 'rgb(74, 107, 148)',
-    strokeWidth: '3px'
+    fill: 'rgb(74, 107, 148)',
+    stroke: 'rgb(47, 74, 110)',
+    strokeWidth: '2px'
   });
 
-  const scoredFill = await selectedPath.evaluate(path => {
+  const silhouettePath = zone.locator('.strength-body-svg > g[aria-hidden="true"] path').first();
+  const silhouetteStyle = await silhouettePath.evaluate(path => {
+    const style = getComputedStyle(path);
+    return { fill: style.fill, stroke: style.stroke };
+  });
+  assert.deepEqual(silhouetteStyle, {
+    fill: 'rgb(215, 224, 238)',
+    stroke: 'rgb(179, 194, 217)'
+  });
+
+  const unselectedPath = map.locator('.strength-body-muscle[aria-pressed="false"]').first();
+  const scoredFill = await unselectedPath.evaluate(path => {
     const originalFill = path.getAttribute('fill');
     path.setAttribute('fill', 'var(--score-green)');
     const fill = getComputedStyle(path).fill;
@@ -260,7 +271,6 @@ async function verifyBodyToolPalette(
   assert.equal(await unavailableStatus.evaluate(status => getComputedStyle(status).backgroundColor),
     'rgb(115, 128, 120)');
 
-  const unselectedPath = map.locator('.strength-body-muscle[aria-pressed="false"]').first();
   await unselectedPath.scrollIntoViewIfNeeded();
   const hoverPoint = await unselectedPath.evaluate(element => {
     const path = element as SVGPathElement;
@@ -337,11 +347,34 @@ async function verifyBodyToolPalette(
   });
   await page.getByRole('button', { name: settingsCloseName }).click();
   assert.equal(await settings.getAttribute('aria-expanded'), 'false');
+
+  const logAction = zone.getByRole('button', { name: /^Log / }).first();
+  if (await logAction.count()) {
+    assert.deepEqual(await logAction.evaluate(button => {
+      const style = getComputedStyle(button);
+      return { background: style.backgroundColor, border: style.borderColor, color: style.color };
+    }), {
+      background: 'rgba(0, 0, 0, 0)',
+      border: 'rgb(74, 107, 148)',
+      color: 'rgb(74, 107, 148)'
+    });
+  }
+
   if (previousViewport) await page.setViewportSize(previousViewport);
 }
 
 async function verifyFinanceGoalToolPalette(page: Page): Promise<void> {
   const zone = page.getByRole('region', { name: 'Progress tracker' });
+  const addButton = zone.locator('.tool-zone__actions .btn').first();
+  assert.deepEqual(await addButton.evaluate(button => {
+    const style = getComputedStyle(button);
+    return { background: style.backgroundColor, border: style.borderColor, color: style.color };
+  }), {
+    background: 'rgba(0, 0, 0, 0)',
+    border: 'rgb(74, 107, 148)',
+    color: 'rgb(74, 107, 148)'
+  });
+
   const progressTrack = zone.locator('.goal-progress__track').first();
   const progressFill = progressTrack.locator(':scope > span');
   await progressFill.waitFor({ state: 'visible' });
@@ -353,6 +386,16 @@ async function verifyFinanceGoalToolPalette(page: Page): Promise<void> {
     background: 'rgb(227, 235, 244)',
     fill: 'rgb(74, 107, 148)'
   });
+
+  const goalCard = zone.locator('.goal-card').first();
+  assert.equal(await goalCard.evaluate(card => getComputedStyle(card).borderColor),
+    'rgb(215, 223, 233)');
+  const supportingRhythmsButton = zone.locator('.goal-card__support .goal-text-button').first();
+  assert.equal(await supportingRhythmsButton.evaluate(button => getComputedStyle(button).color),
+    'rgb(74, 107, 148)');
+  await supportingRhythmsButton.focus();
+  assert.equal(await supportingRhythmsButton.evaluate(button => getComputedStyle(button).outlineColor),
+    'rgb(74, 107, 148)');
 
   const typeBadge = zone.locator('.goal-card__type').first();
   const badgeColors = await typeBadge.evaluate(badge => {
@@ -475,6 +518,12 @@ async function main() {
 
       const page = await context.newPage();
       const classicCssRequests: string[] = [];
+      const tokenStylesheetResponses: number[] = [];
+      page.on('response', response => {
+        if (new URL(response.url()).pathname === '/brand/tend-tokens.css') {
+          tokenStylesheetResponses.push(response.status());
+        }
+      });
       await page.route('**/tend.css', async route => {
         classicCssRequests.push(route.request().url());
         await route.abort();
@@ -483,6 +532,12 @@ async function main() {
       await page.route('https://fonts.googleapis.com/**', route => route.abort());
       await page.route('https://fonts.gstatic.com/**', route => route.abort());
       await page.goto(`${baseUrl}/app-preview.html?identity=${identity}`);
+      await page.waitForFunction(() =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue('--tend-tool-zone-background').trim() === '#EEF2F7'
+      );
+      assert.deepEqual(tokenStylesheetResponses, [200],
+        'The production artifact must load the shared ToolZone token stylesheet.');
 
       if (identity === 'signed-out') {
         await page.getByRole('heading', { name: 'Sign in with Tend' }).waitFor();
