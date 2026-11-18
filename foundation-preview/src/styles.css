@@ -14963,6 +14963,37 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   overflow-wrap: anywhere;
 }
 
+.tool-zone__actions .btn,
+.tool-zone__content .btn {
+  border-color: var(--tend-tool-zone-accent);
+  color: var(--tend-tool-zone-accent);
+}
+
+.tool-zone__actions .btn:not(.ghost),
+.tool-zone__content .btn:not(.ghost) {
+  background: var(--tend-tool-zone-accent);
+  color: var(--tend-surface);
+}
+
+.tool-zone__actions .btn.ghost,
+.tool-zone__content .btn.ghost {
+  background: transparent;
+  color: var(--tend-tool-zone-accent);
+}
+
+.tool-zone__actions .btn:hover,
+.tool-zone__content .btn:hover {
+  border-color: var(--tend-tool-zone-accent);
+  background: var(--tend-tool-zone-selection);
+  color: var(--tend-tool-zone-accent);
+}
+
+.tool-zone__actions .btn:focus-visible,
+.tool-zone__content .btn:focus-visible {
+  outline: 2px solid var(--tend-tool-zone-accent);
+  outline-offset: 2px;
+}
+
 .tool-zone .settings-icon-button {
   border-color: var(--tend-tool-zone-line);
   color: var(--tend-tool-zone-accent);
@@ -15000,16 +15031,22 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 
 .tool-zone .strength-body-svg > g[aria-hidden="true"] {
   fill: var(--tend-tool-zone-silhouette);
+  stroke: var(--tend-tool-zone-silhouette-stroke);
   pointer-events: none;
 }
 
-.tool-zone .strength-body-muscle:hover,
-.tool-zone .strength-body-muscle[aria-pressed="true"] {
+.tool-zone .strength-body-muscle:hover:not([aria-pressed="true"]),
+.tool-zone .strength-body-muscle:focus-visible:not([aria-pressed="true"]) {
   stroke: var(--tend-tool-zone-accent);
+  stroke-width: 2px;
+  filter: none;
 }
 
-.tool-zone .strength-body-muscle:focus-visible {
-  stroke: var(--tend-tool-zone-accent);
+.tool-zone .strength-body-muscle[aria-pressed="true"] {
+  fill: var(--tend-tool-zone-muscle-selected);
+  stroke: var(--tend-tool-zone-muscle-selected-stroke);
+  stroke-width: 2px;
+  filter: none;
 }
 
 .tool-zone .strength-muscle-row:hover,
@@ -26412,10 +26449,23 @@ button.person-health-component-score:focus-visible {
   background: var(--tend-tool-zone-accent);
 }
 
+.tend-app-preview .tool-zone .goal-card {
+  border-color: var(--tend-tool-zone-line);
+}
+
 .tend-app-preview .tool-zone .goal-card__type {
   border-color: var(--tend-tool-zone-line);
   background: var(--tend-tool-zone-selection);
   color: var(--tend-tool-zone-accent);
+}
+
+.tend-app-preview .tool-zone .goal-card__support .goal-text-button {
+  color: var(--tend-tool-zone-accent);
+}
+
+.tend-app-preview .tool-zone .goal-card__support .goal-text-button:focus-visible {
+  outline: 2px solid var(--tend-tool-zone-accent);
+  outline-offset: 2px;
 }
 
 .tend-app-preview .tool-zone .goal-card__support {
