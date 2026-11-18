@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import type { FoundationLifecycle } from '../../src/domain/capabilities.ts';
 import {
-  financeFoundation,
+  financeFoundations,
   foundationCatalogue,
   goals,
   marriageFoundation,
@@ -21,12 +20,10 @@ import { FoundationCard, GoalCard, RhythmCard, ScoreMeter } from './components/C
 import { PersonProfileView } from './components/PersonProfileView.tsx';
 
 export function CatalogApp() {
-  const [financeLifecycle, setFinanceLifecycle] = useState<FoundationLifecycle>(financeFoundation.lifecycle);
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | null>(null);
   const [friendships, setFriendships] = useState<FriendshipData>(createFriendshipData);
   const peopleGroups: PersonPickerGroup[] = createPersonPickerGroups();
   const people = syntheticPeople;
-  const financeFoundationView = { ...financeFoundation, lifecycle: financeLifecycle };
   const selectedPerson = selectedPersonId === null ? null : personById(people, selectedPersonId);
 
   return (
@@ -84,14 +81,13 @@ export function CatalogApp() {
             <p className="eyebrow">Category example</p>
             <h2 id="finances-heading">Finances</h2>
           </div>
-          <span className="section-note">Sample only · taxonomy not finalized</span>
+          <span className="section-note">Five shared Foundations</span>
         </div>
-        <FoundationCard
-          foundation={financeFoundationView}
-          lifecycle={financeLifecycle}
-          onComplete={() => setFinanceLifecycle('completed')}
-          onReopen={() => setFinanceLifecycle('active')}
-        />
+        <div className="marriage-foundation-list">
+          {financeFoundations.map(foundation => (
+            <FoundationCard foundation={foundation} key={foundation.id} />
+          ))}
+        </div>
 
         <div className="subsection-heading">
           <div>

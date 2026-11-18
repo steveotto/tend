@@ -19,7 +19,7 @@ type GoalRhythmOption = {
 
 export function GoalRhythmAssociationDialog({
   goal,
-  financeFoundationId,
+  financeFoundationIds,
   financeCategoryEnabled,
   eligibleRhythms,
   rhythms,
@@ -29,7 +29,7 @@ export function GoalRhythmAssociationDialog({
   onClose
 }: {
   goal: MoneyGoal;
-  financeFoundationId: string;
+  financeFoundationIds: ReadonlySet<string>;
   financeCategoryEnabled: boolean;
   eligibleRhythms: readonly RhythmPreview[];
   rhythms: readonly RhythmPreview[];
@@ -73,8 +73,8 @@ export function GoalRhythmAssociationDialog({
         ? 'Finances is disabled. This existing link is preserved and cannot be newly added.'
         : !record.rhythm.categoryIds?.includes('finances')
           ? 'No longer in the Finance category. This existing link is preserved.'
-          : !foundationRhythmIds(record.rhythm).includes(financeFoundationId)
-            ? 'Not linked to the Finance Foundation. This existing goal link is preserved.'
+          : !foundationRhythmIds(record.rhythm).some(id => financeFoundationIds.has(id))
+            ? 'Not linked to a Finance Foundation. This existing goal link is preserved.'
             : 'This existing link is not currently eligible for a new association.';
     options.set(rhythmId, {
       id: rhythmId,

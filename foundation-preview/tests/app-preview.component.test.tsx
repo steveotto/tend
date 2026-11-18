@@ -33,6 +33,7 @@ import {
   faithRhythmSuggestions,
   parentingFoundations,
   friendshipFoundations,
+  FINANCE_SAVING_RESERVES_ID,
   createPersonPickerGroups,
   setPersonGroupMembership,
   marriageScoreCoverage,
@@ -55,7 +56,9 @@ import {
   PREVIEW_IMPORT_RECOVERY_KEY,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
   PREVIEW_V3_RECOVERY_KEY,
-  PREVIEW_V5_RECOVERY_KEY
+  PREVIEW_V5_RECOVERY_KEY,
+  PREVIEW_V42_RECOVERY_KEY,
+  PREVIEW_V44_RECOVERY_KEY
 } from '../src/storage/preview-storage.ts';
 import type {
   PreviewAccountBackupApi,
@@ -160,6 +163,35 @@ async function chooseCategoryFoundation(
   if (foundation.getAttribute('aria-pressed') !== 'true') await user.click(foundation);
   await user.click(within(detail).getByRole('button', { name: 'Done' }));
   await user.click(within(associationPicker('Choose categories')).getByRole('button', { name: 'Done' }));
+}
+
+function schema44Raw(data: ReturnType<typeof createSamplePreviewData>): string {
+  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    schemaVersion: number;
+    data: { goals: Array<Record<string, unknown>> };
+  };
+  envelope.schemaVersion = 44;
+  for (const goal of envelope.data.goals) delete goal.foundationId;
+  return JSON.stringify(envelope);
+}
+
+async function openChestTricepsCreateEditor(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+  await user.click(
+    within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Health & Fitness' })
+  );
+  await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+  await user.click(within(screen.getByRole('region', { name: 'Foundations' }))
+    .getByRole('button', { name: /Open Strength foundation details/ }));
+  await user.click(screen.getByRole('tab', { name: 'Workouts' }));
+  await user.click(screen.getByRole('button', { name: 'Add workout' }));
+  const picker = screen.getByRole('dialog', { name: 'Add workout' });
+  const recommendation = within(picker)
+    .getByRole('heading', { name: 'Chest & Triceps' })
+    .closest('article');
+  if (!recommendation) throw new Error('Chest & Triceps starter routine is missing.');
+  await user.click(within(recommendation).getByRole('button', { name: 'Customize' }));
+  return screen.getByRole('dialog', { name: 'Create workout' });
 }
 
 beforeEach(() => {
@@ -1671,8 +1703,13 @@ describe('Tend Today preview', () => {
     expect(screen.queryByRole('tablist', { name: 'Faith content' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Sabbath' })).toBeTruthy();
     expect(screen.getByText(faithPractices.find(practice => practice.id === 'faith-sabbath')!.description)).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Faith' })).toBeNull();
+    const practiceMain = screen.getByRole('main', { name: 'Sabbath' });
+    expect(practiceMain.querySelector('.category-header--hero')).toBeNull();
     const detailHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
     expect(within(detailHeader).queryByRole('img')).toBeNull();
+    expect(detailHeader.querySelectorAll('.foundation-detail-header__circle')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'All Practices' }).className).toContain('tend-back-button--plain');
     const healthCard = screen.getByRole('region', { name: 'Sabbath Health summary' });
     expect(within(healthCard).getByRole('img', {
       name: 'Sabbath Practice Health: Not enough data'
@@ -1733,7 +1770,9 @@ describe('Tend Today preview', () => {
     expect(screen.getByRole('article', { name: 'Weekly Sabbath pause' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add Rhythm' })).toBeTruthy();
     expect(screen.queryByRole('tablist', { name: 'Faith content' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'All Practices' }));
+    const allPracticesButton = screen.getByRole('button', { name: 'All Practices' });
+    expect(allPracticesButton.className).toContain('tend-back-button--plain');
+    await user.click(allPracticesButton);
     expect(screen.getByRole('tablist', { name: 'Faith content' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Practices' }).getAttribute('aria-selected')).toBe('true');
 
@@ -5898,7 +5937,7 @@ describe('Tend Today preview', () => {
     render(<App />);
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Finances' }));
     await user.click(screen.getByRole('tab', { name: 'Goals' }));
-    expect(screen.getByRole('heading', { name: 'My goals' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Progress tracker' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: '+ Add' }));
     const library = screen.getByRole('dialog', { name: 'Add a goal' });
@@ -5946,6 +5985,92 @@ describe('Tend Today preview', () => {
     goal = within(details).getByRole('article', { name: 'Car payoff example' });
     expect(within(goal).getByText('$90.00')).toBeTruthy();
     expect(within(goal).getByText('Manual sample observation')).toBeTruthy();
+  });
+
+  it('carries an assigned Finance Foundation into goal Rhythm creation and returns after save or cancel', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    data.goals[0] = { ...data.goals[0]!, foundationId: FINANCE_SAVING_RESERVES_ID };
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Finances' }));
+    await user.click(screen.getByRole('tab', { name: 'Goals' }));
+    const goal = screen.getByRole('article', { name: 'Starter reserve' });
+    await user.click(within(goal).getByRole('button', { name: 'Add a supporting Rhythm' }));
+    let supporting = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
+    await user.click(within(supporting).getByRole('button', { name: 'Create a Finance Rhythm' }));
+
+    let editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    const categories = within(editor).getByRole('button', { name: /^Choose categories/ });
+    expect([...categories.querySelectorAll<HTMLElement>('[aria-label]')]
+      .map(element => element.getAttribute('aria-label')))
+      .toContain('Finances: Saving & Reserves');
+    await user.type(within(editor).getByLabelText('Title'), 'Weekly reserve review');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      supporting = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
+      expect(within(supporting).getByRole('checkbox', { name: /Weekly reserve review/ })).toBeTruthy();
+    });
+    const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!) as {
+      data: {
+        goals: Array<{ id: string; supportingRhythmIds?: string[] }>;
+        savedRhythms: Array<{ id: string; title: string; primaryFoundationId?: string | null }>;
+      };
+    };
+    const createdRhythm = saved.data.savedRhythms.find(item => item.title === 'Weekly reserve review')!;
+    expect(createdRhythm.primaryFoundationId).toBe(FINANCE_SAVING_RESERVES_ID);
+    expect(saved.data.goals.find(item => item.id === data.goals[0]!.id)?.supportingRhythmIds)
+      .toContain(createdRhythm.id);
+    expect((within(supporting).getByRole('checkbox', { name: /Weekly reserve review/ }) as HTMLInputElement).checked)
+      .toBe(true);
+
+    const beforeCancel = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    await user.click(within(supporting).getByRole('button', { name: 'Create a Finance Rhythm' }));
+    editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.type(within(editor).getByLabelText('Title'), 'Canceled reserve rhythm');
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Supporting Rhythms' })).toBeTruthy());
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(beforeCancel);
+  });
+
+  it('requires an explicit Finance Foundation before a new goal Rhythm can be saved', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const goal = data.goals[0]!;
+    const { foundationId: _foundationId, ...unassignedGoal } = goal;
+    data.goals = [unassignedGoal, ...data.goals.slice(1)];
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Finances' }));
+    await user.click(screen.getByRole('tab', { name: 'Goals' }));
+    const goalCard = screen.getByRole('article', { name: 'Starter reserve' });
+    await user.click(within(goalCard).getByRole('button', { name: 'Add a supporting Rhythm' }));
+    const supporting = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
+    await user.click(within(supporting).getByRole('button', { name: 'Create a Finance Rhythm' }));
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.type(within(editor).getByLabelText('Title'), 'Unassigned reserve rhythm');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+
+    expect(screen.getByText(/Choose a Foundation for Finances/)).toBeTruthy();
+    const unchanged = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!) as {
+      data: { goals: Array<{ supportingRhythmIds?: string[] }>; savedRhythms: Array<{ title: string }> };
+    };
+    expect(unchanged.data.savedRhythms.some(rhythm => rhythm.title === 'Unassigned reserve rhythm')).toBe(false);
+    expect(unchanged.data.goals[0]?.supportingRhythmIds).toBeUndefined();
+
+    await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
+    await chooseCategoryFoundation(user, 'Finances', 'Saving & Reserves');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Supporting Rhythms' })).toBeTruthy());
+    const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!) as {
+      data: { goals: Array<{ supportingRhythmIds?: string[] }>; savedRhythms: Array<{ id: string; title: string }> };
+    };
+    const created = saved.data.savedRhythms.find(rhythm => rhythm.title === 'Unassigned reserve rhythm');
+    expect(created).toBeTruthy();
+    expect(saved.data.goals[0]?.supportingRhythmIds).toContain(created?.id);
   });
 
   it('corrects a check-in date with history, rejects collisions, and restores it after remount', async () => {
@@ -6183,7 +6308,9 @@ describe('Tend Today preview', () => {
     expect(screen.queryByRole('heading', { name: 'Marriage' })).toBeNull();
     expect(screen.queryByRole('tablist', { name: 'Marriage content' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Connection' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'All Foundations' })).toBeTruthy();
+    const allFoundationsButton = screen.getByRole('button', { name: 'All Foundations' });
+    expect(allFoundationsButton.className).toContain('tend-back-button--plain');
+    expect(screen.getByRole('main', { name: 'Connection' }).querySelector('.category-header--hero')).toBeNull();
     const foundationHeader = document.querySelector('.foundation-detail-header') as HTMLElement;
     expect(within(foundationHeader).queryByRole('img')).toBeNull();
     expect(foundationHeader.classList.contains('foundation-detail-header--hero')).toBe(true);
@@ -6269,6 +6396,22 @@ describe('Tend Today preview', () => {
     await user.keyboard('{End}');
     expect(document.activeElement).toBe(rhythms);
     expect(rhythms.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('shows Home above a category hero and navigates directly to Today', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const areas = screen.getByRole('navigation', { name: 'Areas' });
+    await user.click(within(areas).getByRole('button', { name: 'Marriage' }));
+
+    const home = screen.getByRole('button', { name: 'Home' });
+    const hero = document.querySelector('.category-header-stack .category-header--hero');
+    expect(home.nextElementSibling).toBe(hero);
+    await user.click(home);
+
+    const toolsAndNavigation = screen.getByRole('navigation', { name: 'Tools and navigation' });
+    expect(within(toolsAndNavigation).getByRole('button', { name: 'Today' })
+      .getAttribute('aria-current')).toBe('page');
   });
 
   it('keeps Marriage Today empty and moves rhythm entry to the Rhythms tab', async () => {
@@ -6527,7 +6670,7 @@ describe('Tend Today preview', () => {
     const foundationDetail = document.querySelector('.marriage-foundation-detail') as HTMLElement;
     const detailParts = Array.from(foundationDetail.children);
     expect(detailParts.map(element => element.className)).toEqual([
-      'tend-back-button',
+      'tend-back-button tend-back-button--plain',
       'foundation-detail-header foundation-detail-header--hero',
       'health-score-breakdown rhythm-history-view__score-card foundation-health-card',
       'marriage-foundation-support'
@@ -7496,7 +7639,10 @@ describe('Tend Today preview', () => {
     expect(categoryHeader).toBeTruthy();
     expect(categoryHeader?.querySelector('h2')).toBe(screen.getByRole('heading', { name: 'Health & Fitness' }));
     expect(categoryHeader?.querySelector('p')?.textContent).toBe('Structure beats good intentions');
-    expect(categoryHeader?.nextElementSibling?.classList.contains('category-health-summary')).toBe(true);
+    const categoryHeaderStack = categoryHeader?.parentElement;
+    expect(categoryHeaderStack?.classList.contains('category-header-stack')).toBe(true);
+    expect(categoryHeaderStack?.querySelector('.tend-back-button--plain')?.textContent?.trim()).toBe('Home');
+    expect(categoryHeaderStack?.nextElementSibling?.classList.contains('category-health-summary')).toBe(true);
   });
 
   it('starts Category, Foundation, and Practice contribution flows on the item that opened them', async () => {
@@ -7634,9 +7780,9 @@ describe('Tend Today preview', () => {
     expect(screen.queryByRole('tablist', { name: 'Health and Fitness' })).toBeNull();
     const strengthSections = screen.getByRole('tablist', { name: 'Strength sections' });
     expect(within(strengthSections).getByRole('tab', { name: 'Body' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('heading', { name: 'Your body, at a glance' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Body insights' })).toBeTruthy();
     await user.click(within(strengthSections).getByRole('tab', { name: 'Body' }));
-    expect(screen.getByRole('heading', { name: 'Your body, at a glance' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Body insights' })).toBeTruthy();
     await user.click(within(strengthSections).getByRole('tab', { name: 'Workouts' }));
     expect(screen.queryByRole('tablist', { name: 'Strength workouts' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'My workouts' })).toBeTruthy();
@@ -7844,7 +7990,7 @@ describe('Tend Today preview', () => {
       name: /Open Strength foundation details/
     }));
     await user.click(screen.getByRole('tab', { name: /^Body$/ }));
-    expect(screen.getByRole('heading', { name: 'Your body, at a glance' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Body insights' })).toBeTruthy();
     const bodyMapControls = screen.getByRole('group', { name: 'Body map view' });
     const frontView = within(bodyMapControls).getByRole('button', { name: 'Front' });
     const backView = within(bodyMapControls).getByRole('button', { name: 'Back' });
@@ -8027,9 +8173,10 @@ describe('Tend Today preview', () => {
     if (!(strengthHeader instanceof HTMLElement)) throw new Error('Strength detail header is missing.');
     expect(within(strengthHeader)
       .getByText('Your training, workouts, and muscle balance.')).toBeTruthy();
+    expect(strengthHeader.closest('.health-fitness-page')?.querySelector('.category-header--hero')).toBeNull();
     expect(strengthHeader.querySelector('.page-hero-header__icon--foundation .marriage-svg-icon')).toBeTruthy();
     expect(strengthHeader.querySelector('.foundation-card__progress')).toBeNull();
-    expect(screen.getByRole('button', { name: 'All Foundations' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'All Foundations' }).className).toContain('tend-back-button--plain');
     const strengthHealthHeading = screen.getByRole('heading', { name: 'Strength Health' });
     expect(within(strengthHealthHeading.closest('.fitness-score-summary')!)
       .getByRole('img', { name: 'Strength Health: Not enough data' })).toBeTruthy();
@@ -8038,10 +8185,9 @@ describe('Tend Today preview', () => {
     expect(strengthHealthHeading.closest('.fitness-score-summary')?.classList)
       .toContain('foundation-health-card');
     await user.click(screen.getByRole('tab', { name: /^Body$/ }));
-    expect(screen.getByRole('heading', { name: 'Your body, at a glance' })).toBeTruthy();
-    expect(strengthHealthHeading.compareDocumentPosition(
-      screen.getByRole('heading', { name: 'Your body, at a glance' })
-    ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const strengthBodyInsights = screen.getByRole('region', { name: 'Body insights' });
+    expect(strengthHealthHeading.compareDocumentPosition(strengthBodyInsights)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const strengthHealthSummary = strengthHealthHeading.closest('.fitness-score-summary') as HTMLElement;
     await expandHealthMeasureDisclosure(user, strengthHealthSummary);
@@ -8266,7 +8412,7 @@ describe('Tend Today preview', () => {
     await user.click(areas().getByRole('button', { name: 'Finances' }));
     const financeHeader = screen.getByRole('heading', { name: 'Finances' }).closest('.category-header');
     expect(financeHeader).toBeTruthy();
-    expect(financeHeader?.textContent).toContain('Illustrative preview · taxonomy not finalized');
+    expect(financeHeader?.textContent).toContain('Synthetic preview · no account connection');
 
     await user.click(areas().getByRole('button', { name: 'Friendships' }));
     const friendshipHeader = screen.getByRole('heading', { name: 'Friendships' })
@@ -8379,6 +8525,76 @@ describe('Tend Today preview', () => {
         expect(afterDelete.envelope.data.savedRhythms.some(item => item.id === log.rhythmId)).toBe(true);
       }
     });
+  });
+
+  it('creates Chest & Triceps from schema v44, preserves its exact source, and reloads schema 45', async () => {
+    const user = userEvent.setup();
+    const currentDate = localDateString(new Date());
+    const data = createSamplePreviewData();
+    data.goals[0]!.correctionHistory.push({
+      effectiveDate: '2026-10-18',
+      previousBalanceMinor: 120_000,
+      previousNote: 'Earlier synthetic value',
+      replacedAt: '2026-10-20T12:30:00.000Z'
+    });
+    const originalGoal = structuredClone(data.goals[0]!);
+    const originalRaw = schema44Raw(data);
+    const priorArchive = 'synthetic earlier recovery archive';
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    window.localStorage.setItem(PREVIEW_V42_RECOVERY_KEY, priorArchive);
+
+    const firstRender = render(<App />);
+    const editor = await openChestTricepsCreateEditor(user);
+    await user.click(within(editor).getByRole('button', { name: 'Save workout' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create workout' })).toBeNull());
+
+    const savedRaw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    expect(savedRaw).not.toBeNull();
+    const saved = parsePreviewBackup(savedRaw!, currentDate);
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(saved.envelope.data.strength.savedWorkouts).toContainEqual(
+      expect.objectContaining({ name: 'Chest & Triceps' })
+    );
+    expect(saved.envelope.data.goals[0]?.checkIns).toEqual(originalGoal.checkIns);
+    expect(saved.envelope.data.goals[0]?.correctionHistory).toEqual(originalGoal.correctionHistory);
+    expect(window.localStorage.getItem(PREVIEW_V44_RECOVERY_KEY)).toBe(originalRaw);
+    expect(window.localStorage.getItem(PREVIEW_V42_RECOVERY_KEY)).toBe(priorArchive);
+
+    firstRender.unmount();
+    render(<App />);
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Areas' }))
+        .getByRole('button', { name: 'Health & Fitness' })
+    );
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(within(screen.getByRole('region', { name: 'Foundations' }))
+      .getByRole('button', { name: /Open Strength foundation details/ }));
+    await user.click(screen.getByRole('tab', { name: 'Workouts' }));
+    expect(screen.getByRole('heading', { name: 'Chest & Triceps' })).toBeTruthy();
+  });
+
+  it('keeps the workout editor draft and source intact when its v44 recovery key conflicts', async () => {
+    const user = userEvent.setup();
+    const currentDate = localDateString(new Date());
+    const originalRaw = schema44Raw(createSamplePreviewData());
+    const conflictingArchive = 'different synthetic v44 recovery';
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    window.localStorage.setItem(PREVIEW_V44_RECOVERY_KEY, conflictingArchive);
+
+    render(<App />);
+    const editor = await openChestTricepsCreateEditor(user);
+    await user.click(within(editor).getByRole('button', { name: 'Save workout' }));
+
+    expect(screen.getByRole('dialog', { name: 'Create workout' })).toBe(editor);
+    expect(within(editor).getByRole('alert').textContent)
+      .toContain('immutable-recovery-copy-conflict at schemaVersion');
+    expect(within(editor).getByRole('textbox', { name: 'Workout name' }))
+      .toHaveProperty('value', 'Chest & Triceps');
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(window.localStorage.getItem(PREVIEW_V44_RECOVERY_KEY)).toBe(conflictingArchive);
+    expect(parsePreviewBackup(originalRaw, currentDate).valid).toBe(true);
   });
 
   it('saves one guided workout through the authoritative linked-Strength Rhythm path', async () => {

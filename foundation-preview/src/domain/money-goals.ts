@@ -17,6 +17,7 @@ export type GoalCorrection = {
 export type MoneyGoal = {
   id: string;
   title: string;
+  foundationId?: string;
   currency: string;
   direction: MoneyGoalDirection;
   startingBalanceMinor: number;
@@ -35,6 +36,7 @@ export type GoalRhythmAssociationChange = {
 
 export type GoalDraft = {
   title: string;
+  foundationId?: string;
   currency: string;
   direction: MoneyGoalDirection;
   startingBalance: string;
@@ -184,11 +186,13 @@ export function goalFromDraft(
   const currency = draft.currency.toUpperCase();
   const startingBalanceMinor = parseMoneyInput(draft.startingBalance, currency)!;
   const targetBalanceMinor = parseMoneyInput(draft.targetBalance, currency)!;
+  const foundationId = draft.foundationId;
   return {
     errors,
     goal: {
       id,
       title: draft.title.trim(),
+      ...(foundationId ? { foundationId } : {}),
       currency,
       direction: draft.direction,
       startingBalanceMinor,
@@ -332,6 +336,7 @@ export function goalTimeline(goal: MoneyGoal): GoalTimeline {
 export function goalDraftFrom(goal: MoneyGoal): GoalDraft {
   return {
     title: goal.title,
+    ...(goal.foundationId === undefined ? {} : { foundationId: goal.foundationId }),
     currency: goal.currency,
     direction: goal.direction,
     startingBalance: moneyInputValue(goal.startingBalanceMinor, goal.currency),

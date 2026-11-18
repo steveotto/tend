@@ -1,4 +1,8 @@
 import type { GoalDraft } from './money-goals.ts';
+import {
+  FINANCE_DEBT_REDUCTION_ID,
+  FINANCE_SAVING_RESERVES_ID
+} from './preview-data.ts';
 
 export type FinanceGoalTemplate = {
   id: string;
@@ -26,19 +30,34 @@ export const financeGoalTemplateGroups: readonly FinanceGoalTemplateGroup[] = [
         id: 'starter-emergency-fund',
         title: 'Starter emergency fund',
         description: 'Set a $1,000 target for a starter emergency savings balance.',
-        draft: { title: 'Starter emergency fund', currency: 'USD', direction: 'increase', targetBalance: '1000.00' }
+        draft: {
+          title: 'Starter emergency fund',
+          foundationId: FINANCE_SAVING_RESERVES_ID,
+          currency: 'USD',
+          direction: 'increase',
+          targetBalance: '1000.00'
+        }
       },
       {
         id: 'debt-snowball',
         title: 'Debt snowball',
         description: 'Track reducing non-mortgage debt; enter the balance you are tracking.',
-        draft: { title: 'Debt snowball', direction: 'decrease', targetBalance: '0.00' }
+        draft: {
+          title: 'Debt snowball',
+          foundationId: FINANCE_DEBT_REDUCTION_ID,
+          direction: 'decrease',
+          targetBalance: '0.00'
+        }
       },
       {
         id: 'emergency-reserve',
         title: 'Emergency reserve',
         description: 'Choose a savings target based on 3–6 months of your expenses.',
-        draft: { title: 'Emergency reserve', direction: 'increase' }
+        draft: {
+          title: 'Emergency reserve',
+          foundationId: FINANCE_SAVING_RESERVES_ID,
+          direction: 'increase'
+        }
       },
       {
         id: 'education-savings',
@@ -50,7 +69,12 @@ export const financeGoalTemplateGroups: readonly FinanceGoalTemplateGroup[] = [
         id: 'pay-off-home',
         title: 'Pay off the home',
         description: 'Track a mortgage balance toward a payoff target.',
-        draft: { title: 'Pay off the home', direction: 'decrease', targetBalance: '0.00' }
+        draft: {
+          title: 'Pay off the home',
+          foundationId: FINANCE_DEBT_REDUCTION_ID,
+          direction: 'decrease',
+          targetBalance: '0.00'
+        }
       },
       {
         id: 'build-wealth',
@@ -76,7 +100,11 @@ export const financeGoalTemplateGroups: readonly FinanceGoalTemplateGroup[] = [
         id: 'savings-cushion',
         title: 'Build a savings cushion',
         description: 'Choose a target for an additional savings balance.',
-        draft: { title: 'Build a savings cushion', direction: 'increase' }
+        draft: {
+          title: 'Build a savings cushion',
+          foundationId: FINANCE_SAVING_RESERVES_ID,
+          direction: 'increase'
+        }
       }
     ]
   }

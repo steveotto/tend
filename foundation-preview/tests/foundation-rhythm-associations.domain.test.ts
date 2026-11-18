@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FINANCE_SAVING_RESERVES_ID,
+  LEGACY_FINANCE_FOUNDATION_ID,
+  canonicalFoundationId,
+  financeFoundations,
   foundationCatalogue,
   faithPractices,
   marriageRhythms,
@@ -25,6 +29,8 @@ import {
 import { rhythmTimeOptions } from '../src/domain/rhythm-schedule.ts';
 import { PREVIEW_SCHEMA_VERSION } from '../src/domain/preview-state.ts';
 import { createPreviewEnvelope, createSamplePreviewData, parsePreviewBackup } from '../src/domain/preview-state.ts';
+import { createValidatedPreviewAccountDocument } from '../src/storage/preview-account-backup.ts';
+import { loadPreview, PREVIEW_STORAGE_KEY, writePreview } from '../src/storage/preview-storage.ts';
 
 function savedRhythmFor(rhythm: RhythmPreview): SavedRhythm {
   const timeLabel = rhythmTimeOptions.find(option => option.label === rhythm.timeLabel)!.label;
@@ -44,6 +50,70 @@ function savedRhythmFor(rhythm: RhythmPreview): SavedRhythm {
 }
 
 describe('Marriage Foundation Rhythm associations', () => {
+  it('resolves the legacy Finance Foundation without rewriting it until an explicit Rhythm edit', () => {
+    const rhythm = {
+      ...todayRhythms[0]!,
+      id: 'user-rhythm-123e4567-e89b-42d3-a456-426614174087',
+      title: 'Legacy reserve review',
+      categoryIds: ['finances'] as const,
+      primaryFoundationId: LEGACY_FINANCE_FOUNDATION_ID,
+      secondaryFoundationIds: []
+    };
+    const data = {
+      ...createSamplePreviewData(),
+      savedRhythms: [savedRhythmFor(rhythm)]
+    };
+    const raw = JSON.stringify(createPreviewEnvelope(data));
+    const values = new Map([[PREVIEW_STORAGE_KEY, raw]]);
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); }
+    };
+
+    expect(canonicalFoundationId(LEGACY_FINANCE_FOUNDATION_ID)).toBe(FINANCE_SAVING_RESERVES_ID);
+    expect(foundationRhythmIds(rhythm)).toEqual([FINANCE_SAVING_RESERVES_ID]);
+
+    const loaded = loadPreview(storage, '2026-10-21');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.savedRhythms[0]?.primaryFoundationId).toBe(LEGACY_FINANCE_FOUNDATION_ID);
+    const saved = writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-10-21' });
+    expect(saved.kind).toBe('saved');
+    if (saved.kind !== 'saved') return;
+
+    const reloaded = loadPreview(storage, '2026-10-21');
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    expect(reloaded.data.savedRhythms[0]?.primaryFoundationId).toBe(LEGACY_FINANCE_FOUNDATION_ID);
+    const exported = createValidatedPreviewAccountDocument(reloaded.data, '2026-10-21');
+    const imported = parsePreviewBackup(JSON.stringify(exported), '2026-10-21');
+    expect(imported.valid).toBe(true);
+    if (imported.valid) {
+      expect(imported.envelope.data.savedRhythms[0]?.primaryFoundationId)
+        .toBe(LEGACY_FINANCE_FOUNDATION_ID);
+    }
+
+    const draft = rhythmDraftFrom(
+      { ...rhythm, ...reloaded.data.savedRhythms[0]! },
+      ['finances'],
+      undefined,
+      rhythmTimeOptions
+    );
+    expect(draft.primaryFoundationId).toBe(FINANCE_SAVING_RESERVES_ID);
+    const edited = saveRhythmDraft(
+      reloaded.data.savedRhythms,
+      draft,
+      rhythm.id,
+      'edit',
+      undefined,
+      foundationCatalogue,
+      { timeOptions: rhythmTimeOptions },
+      reloaded.data.people.map(person => person.id)
+    );
+    expect(edited.savedRhythms?.[0]?.primaryFoundationId).toBe(FINANCE_SAVING_RESERVES_ID);
+    expect(financeFoundations.some(foundation => foundation.id === FINANCE_SAVING_RESERVES_ID)).toBe(true);
+  });
+
   it('uses stable Faith Practice ownership and preserves a shared Rhythm across Category removal and backup', () => {
     const rhythmId = 'user-rhythm-123e4567-e89b-42d3-a456-426614174099';
     const faithPractice = faithPractices[1]!;
@@ -298,7 +368,7 @@ describe('Marriage Foundation Rhythm associations', () => {
     if ('error' in linkedFinance) return;
     expect(linkedFinance.savedRhythms[0]).toMatchObject({
       categoryIds: ['finances'],
-      primaryFoundationId: 'finance-example-milestone'
+      primaryFoundationId: 'finance-saving-reserves'
     });
 
     const orphanRhythm: RhythmPreview = {

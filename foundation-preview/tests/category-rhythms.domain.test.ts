@@ -398,7 +398,7 @@ describe('Category Rhythm selectors', () => {
       secondaryFoundationIds: ['parenting-connection-belonging']
     })).toEqual({});
 
-    const financeFoundation = foundationCatalogue.find(item => item.id === 'finance-example-milestone')!;
+    const financeFoundation = foundationCatalogue.find(item => item.id === 'finance-saving-reserves')!;
     const fixtureCatalogue = [...foundationCatalogue, {
       ...financeFoundation,
       id: 'synthetic-finance-ownership-fixture',

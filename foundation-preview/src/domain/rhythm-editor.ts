@@ -1,5 +1,6 @@
 import {
   areas,
+  canonicalFoundationId,
   foundationCatalogue,
   foundationTerminologyForCategory,
   marriageRhythms,
@@ -442,8 +443,14 @@ export function rhythmDraftFrom(
       : {}),
     scheduleEditing: originalSchedule === undefined || rhythm.schedule !== undefined,
     ...(rhythm.personal === undefined ? {} : { personal: rhythm.personal }),
-    ...(rhythm.primaryFoundationId === undefined ? {} : { primaryFoundationId: rhythm.primaryFoundationId }),
-    ...(rhythm.secondaryFoundationIds === undefined ? {} : { secondaryFoundationIds: [...rhythm.secondaryFoundationIds] }),
+    ...(rhythm.primaryFoundationId === undefined
+      ? {}
+      : { primaryFoundationId: rhythm.primaryFoundationId === null
+          ? null
+          : canonicalFoundationId(rhythm.primaryFoundationId) }),
+    ...(rhythm.secondaryFoundationIds === undefined
+      ? {}
+      : { secondaryFoundationIds: rhythm.secondaryFoundationIds.map(canonicalFoundationId) }),
     ...(rhythm.healthLogCapability === undefined ? {} : { healthLogCapability: rhythm.healthLogCapability }),
     ...(rhythm.healthRunTarget === undefined ? {} : { healthRunTarget: rhythm.healthRunTarget })
   };

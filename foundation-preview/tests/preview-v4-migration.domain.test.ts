@@ -641,6 +641,35 @@ describe('v4 migration and recovery domain', () => {
     expect(result.envelope.data.completedRhythmIds).toEqual(data.completedRhythmIds);
   });
 
+  it('preserves dated Rhythm history and references while migrating schema v44', () => {
+    const data = createSamplePreviewData();
+    data.datedRhythmCompletions = [{
+      id: 'schema-v44-history',
+      rhythmId: 'sample-pray-together',
+      effectiveDate: currentDate,
+      localTime: '12:00',
+      timeZone: 'UTC',
+      completedAt: `${currentDate}T12:00:00.000Z`,
+      recordedAt: `${currentDate}T12:00:00.000Z`
+    }];
+    data.rhythmHistoryIds = ['sample-pray-together'];
+    const raw = JSON.stringify({
+      ...createPreviewEnvelope(data),
+      schemaVersion: 44
+    });
+
+    const source = parsePreviewBackup(raw, currentDate);
+    const result = migratePreviewToProposedV4(raw, currentDate);
+
+    expect(source.valid).toBe(true);
+    expect(result.valid).toBe(true);
+    if (!source.valid || !result.valid) return;
+    expect(result.envelope.data.datedRhythmCompletions)
+      .toEqual(source.envelope.data.datedRhythmCompletions);
+    expect(result.envelope.data.rhythmHistoryIds)
+      .toEqual(source.envelope.data.rhythmHistoryIds);
+  });
+
   it('rejects unknown fields and unsupported versions without converting or changing active bytes', () => {
     const validRaw = rawAtVersion(dataWithHistory(), 3);
     const value = JSON.parse(validRaw) as { data: Record<string, unknown> };
