@@ -68,6 +68,7 @@ type FriendshipsViewProps = {
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
   foundations: readonly FoundationPreview[];
+  onHome: () => void;
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
@@ -95,6 +96,7 @@ export function FriendshipsView({
   rhythms,
   archivedRhythms,
   foundations,
+  onHome,
   rhythmScores,
   completedRhythms,
   undoableRhythms,
@@ -224,6 +226,7 @@ export function FriendshipsView({
         title="Friendships"
         titleId="friendships-page-title"
         icon={<AreaIcon id="friendships" />}
+        onHome={onHome}
       />
       <div className="faith-view-nav marriage-view-nav" role="tablist" aria-label="Friendships">
         {friendshipTabs.map((item, index) => (

@@ -142,6 +142,7 @@ type MarriageViewProps = {
     headerTrailing?: ReactNode;
   };
   todayDate: string;
+  onHome: () => void;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
   onAddLinkedRhythm: (foundationId: string, event: MouseEvent<HTMLButtonElement>) => void;
   onAddSuggestion?: (
@@ -200,6 +201,7 @@ export function MarriageView({
   peopleGroups = [],
   categoryConfig,
   todayDate,
+  onHome,
   onAddRhythm,
   onAddLinkedRhythm,
   onAddSuggestion,
@@ -500,6 +502,7 @@ export function MarriageView({
             title={categoryLabel}
             titleId={`${categoryToken}-title`}
             icon={<AreaIcon id={categoryId} />}
+            onHome={onHome}
             subtitle={categoryDescription}
             trailing={categoryConfig?.headerTrailing ?? (categoryId === 'marriage' ? (
               marriagePeople.length > 0
@@ -1009,7 +1012,7 @@ function FoundationList({
             aria-labelledby={`${categoryToken}-foundation-detail-title`}
             tabIndex={-1}
           >
-            <BackButton onClick={onBack}>All {foundationTerm.plural}</BackButton>
+            <BackButton onClick={onBack} variant="plain">All {foundationTerm.plural}</BackButton>
             <FoundationDetailHeader
               foundation={selectedFoundation}
               headingId={`${categoryToken}-foundation-detail-title`}

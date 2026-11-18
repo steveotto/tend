@@ -60,6 +60,7 @@ type HealthFitnessViewProps = {
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
   todayDate: string;
+  onHome: () => void;
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
@@ -183,6 +184,7 @@ export function HealthFitnessView({
   rhythms,
   archivedRhythms,
   todayDate,
+  onHome,
   rhythmScores,
   completedRhythms,
   undoableRhythms,
@@ -537,7 +539,7 @@ export function HealthFitnessView({
 
   function renderProgressOverviewLink() {
     return (
-      <BackButton onClick={returnToProgressOverview}>All Foundations</BackButton>
+      <BackButton onClick={returnToProgressOverview} variant="plain">All Foundations</BackButton>
     );
   }
 
@@ -565,6 +567,7 @@ export function HealthFitnessView({
             title="Health & Fitness"
             titleId="health-fitness-title"
             icon={<AreaIcon id="health" />}
+            onHome={onHome}
             subtitle="Structure beats good intentions"
           />
 
