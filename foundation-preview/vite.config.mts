@@ -69,18 +69,22 @@ function legacyShellPlugin(): Plugin {
       for (const [, reference] of legacyHtml.matchAll(/(?:src|href)="([^"]+)"/g)) {
         const [referencePath] = reference!.split(/[?#]/, 1);
         if (!referencePath || referencePath.startsWith('/') || /^[a-z][a-z\d+.-]*:/i.test(referencePath)) continue;
-        if (referencePath === 'tend.css' || referencePath === 'tend-scoring.js' || bundle[`classic/${referencePath}`]) continue;
+        const classicAssetPath = `classic/${referencePath}`;
+        if (referencePath === 'tend.css' || referencePath === 'tend-scoring.js' || bundle[classicAssetPath]) continue;
         const sourcePath = path.resolve(projectRoot, '..', referencePath);
         if (!existsSync(sourcePath)) throw new Error(`Legacy shell asset is missing: ${referencePath}`);
         const source = readFileSync(sourcePath);
+        const publicAssetPath = path.resolve(projectRoot, 'public', referencePath);
+        if (!existsSync(publicAssetPath) && !bundle[referencePath]) {
+          this.emitFile({
+            type: 'asset',
+            fileName: referencePath,
+            source
+          });
+        }
         this.emitFile({
           type: 'asset',
-          fileName: referencePath,
-          source
-        });
-        this.emitFile({
-          type: 'asset',
-          fileName: `classic/${referencePath}`,
+          fileName: classicAssetPath,
           source
         });
       }
