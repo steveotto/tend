@@ -15,6 +15,8 @@ import type { FitnessBodyMapConfigFor } from './FitnessBodyMap.tsx';
 import { FlexibilityGuidedSessionDialog } from './FlexibilityGuidedSessionDialog.tsx';
 import { FlexibilityRoutineEditorDialog } from './FlexibilityRoutineEditorDialog.tsx';
 import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
+import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
+import { ToolZone } from './ToolZone.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
 import type { Destination } from './AppNavigation.tsx';
@@ -625,10 +627,6 @@ export function FlexibilityView({
           aria-labelledby="flexibility-tab-body"
           hidden={flexibilityTab !== 'body'}
         >
-          <FoundationSectionHeading
-            title="Body overview"
-            subtitle="Stretch region status is separate from Flexibility Health."
-          />
           {suggestion.reasonRegionId !== null && recommendedSavedRoutineIds.length === 0 && (
             <article className="strength-recommendation flexibility-next-stretch">
               <div>
@@ -640,17 +638,20 @@ export function FlexibilityView({
               </button>
             </article>
           )}
-          <section className="card strength-card strength-map-card flexibility-map-card" aria-labelledby="flexibility-map-heading">
-            <header className="strength-card-heading">
-              <div>
-                <h3 id="flexibility-map-heading">Your body, at a glance</h3>
-                <p>Choose a region to see its stretch status.</p>
-              </div>
+          <ToolZone
+            className="strength-map-card flexibility-map-card"
+            icon={<RhythmMetadataIcon kind="history" />}
+            purposeLabel="Body insights"
+            subtitle="Explore your stretch coverage and readiness."
+            scoringFootnote="Your linked Rhythms determine Flexibility Health."
+            headerAction={(
               <SettingsGearButton
                 label="Stretch interval settings"
                 onClick={openIntervalSettings}
+                expanded={dialog === 'settings'}
               />
-            </header>
+            )}
+          >
             <div className="strength-map-toolbar" role="group" aria-label="Body map view">
               {(['front', 'back'] as const).map(nextView => (
                 <button key={nextView} type="button" aria-pressed={view === nextView}
@@ -724,7 +725,7 @@ export function FlexibilityView({
             <button type="button" className="btn mini ghost" onClick={() => openLog([selectedRegion])}>
               Log {selectedRegionStatus.name}
             </button>
-          </section>
+          </ToolZone>
         </section>
 
         <section

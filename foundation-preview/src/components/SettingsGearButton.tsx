@@ -3,11 +3,13 @@ import type { MouseEvent, RefObject } from 'react';
 export function SettingsGearButton({
   label,
   onClick,
-  buttonRef
+  buttonRef,
+  expanded
 }: {
   label: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   buttonRef?: RefObject<HTMLButtonElement | null>;
+  expanded?: boolean;
 }) {
   return (
     <button
@@ -16,6 +18,7 @@ export function SettingsGearButton({
       className="settings-icon-button"
       aria-label={label}
       aria-haspopup="dialog"
+      aria-expanded={expanded}
       onClick={onClick}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

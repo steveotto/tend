@@ -8,6 +8,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import type { Page } from 'playwright';
 import { createEmptyPreviewData, createPreviewEnvelope } from '../src/domain/preview-state.ts';
 import { PREVIEW_ACCOUNT_STORAGE_PREFIX } from '../src/storage/preview-storage.ts';
 
@@ -45,6 +46,328 @@ async function waitForPreview(url: string, server: ReturnType<typeof spawn>): Pr
     }
   }
   throw new Error(`Vite preview did not become available at ${url}.`);
+}
+
+type PreviewTextSize = 'small' | 'medium' | 'large';
+
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (color: string) => {
+    const channels = color.match(/\d+(?:\.\d+)?/g);
+    assert.ok(channels && channels.length >= 3, `Expected an RGB color, got ${color}.`);
+    const linearChannel = (index: number) => {
+      const value = channels[index];
+      if (value === undefined) throw new Error(`Missing RGB channel in ${color}.`);
+      const channel = Number(value) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * linearChannel(0) + 0.7152 * linearChannel(1) + 0.0722 * linearChannel(2);
+  };
+  const foregroundLuminance = luminance(foreground);
+  const backgroundLuminance = luminance(background);
+  return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+    / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+}
+
+async function setPreviewTextSize(page: Page, target: PreviewTextSize): Promise<void> {
+  const sizes: readonly PreviewTextSize[] = ['small', 'medium', 'large'];
+  const button = page.locator('.mobile-display-toggle');
+  const current = await button.getAttribute('data-text-size');
+  const currentIndex = sizes.indexOf(current as PreviewTextSize);
+  const targetIndex = sizes.indexOf(target);
+  if (currentIndex < 0) throw new Error('The preview text-size control is unavailable.');
+
+  const clicks = (targetIndex - currentIndex + sizes.length) % sizes.length;
+  for (let index = 0; index < clicks; index += 1) {
+    await button.click();
+    await page.waitForFunction(
+      expected => document.querySelector('.mobile-display-toggle')?.getAttribute('data-text-size') === expected,
+      sizes[(currentIndex + index + 1) % sizes.length]
+    );
+  }
+}
+
+async function verifyToolZoneResponsiveLayout(page: Page, name: string): Promise<void> {
+  const zone = page.getByRole('region', { name });
+  const purposeSizes = new Map<PreviewTextSize, number>();
+
+  for (const size of ['small', 'medium', 'large'] as const) {
+    await setPreviewTextSize(page, size);
+    for (const width of [375, 390, 430] as const) {
+      await page.setViewportSize({ width, height: 812 });
+      const metrics = await zone.evaluate(element => {
+        const header = element.querySelector<HTMLElement>('.tool-zone__header');
+        const icon = element.querySelector<HTMLElement>('.tool-zone__icon');
+        const purpose = element.querySelector<HTMLElement>('.tool-zone__purpose');
+        const intro = element.querySelector<HTMLElement>('.tool-zone__intro');
+        const subtitle = element.querySelector<HTMLElement>('.tool-zone__subtitle');
+        const actions = element.querySelector<HTMLElement>('.tool-zone__actions');
+        const footnote = element.querySelector<HTMLElement>('.tool-zone__footnote');
+        if (!header || !icon || !purpose || !intro || !subtitle || !footnote) {
+          throw new Error('ToolZone is missing its expected accessible content.');
+        }
+        const intersects = (first: DOMRect, second: DOMRect) =>
+          first.left < second.right && first.right > second.left
+          && first.top < second.bottom && first.bottom > second.top;
+        const zoneRect = element.getBoundingClientRect();
+        const actionRect = actions?.getBoundingClientRect();
+        const introRect = intro.getBoundingClientRect();
+        const iconRect = icon.getBoundingClientRect();
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          zoneWidth: zoneRect.width,
+          zoneRight: zoneRect.right,
+          background: getComputedStyle(element).backgroundColor,
+          backgroundToken: getComputedStyle(document.documentElement)
+            .getPropertyValue('--tend-tool-zone-background').trim(),
+          borderColor: getComputedStyle(element).borderTopColor,
+          borderWidth: getComputedStyle(element).borderTopWidth,
+          iconWidth: iconRect.width,
+          iconHeight: iconRect.height,
+          purposeColor: getComputedStyle(purpose).color,
+          purposeFontSize: Number.parseFloat(getComputedStyle(purpose).fontSize),
+          subtitleColor: getComputedStyle(subtitle).color,
+          subtitleWidth: subtitle.clientWidth,
+          subtitleScrollWidth: subtitle.scrollWidth,
+          footnoteColor: getComputedStyle(footnote).color,
+          footnoteWidth: footnote.clientWidth,
+          footnoteScrollWidth: footnote.scrollWidth,
+          actionOverlapsIntro: actionRect ? intersects(actionRect, introRect) : false,
+          actionOverlapsIcon: actionRect ? intersects(actionRect, iconRect) : false,
+          headerHeight: header.getBoundingClientRect().height
+        };
+      });
+
+      assert.equal(metrics.viewportWidth, width);
+      assert.equal(metrics.documentWidth, width,
+        `ToolZone must not cause horizontal overflow at ${width}px / ${size}.`);
+      assert.ok(metrics.zoneWidth > 0 && metrics.zoneRight <= width + 1);
+      assert.equal(metrics.background, 'rgb(238, 242, 247)', `Unexpected ToolZone background at ${width}px / ${size}: ${JSON.stringify(metrics)}`);
+      assert.equal(metrics.backgroundToken, '#EEF2F7');
+      assert.equal(metrics.borderColor, 'rgb(215, 223, 233)');
+      assert.equal(metrics.borderWidth, '1px');
+      assert.equal(metrics.iconWidth, 22);
+      assert.equal(metrics.iconHeight, 22);
+      assert.equal(metrics.purposeColor, 'rgb(74, 107, 148)');
+      assert.equal(metrics.subtitleColor, 'rgb(70, 89, 111)');
+      assert.equal(metrics.footnoteColor, 'rgb(70, 89, 111)');
+      assert.ok(metrics.subtitleWidth > 0 && metrics.subtitleScrollWidth <= metrics.subtitleWidth);
+      assert.ok(metrics.footnoteWidth > 0 && metrics.footnoteScrollWidth <= metrics.footnoteWidth);
+      assert.equal(metrics.actionOverlapsIntro, false,
+        `ToolZone actions must wrap without overlapping copy at ${width}px / ${size}.`);
+      assert.equal(metrics.actionOverlapsIcon, false);
+      assert.ok(metrics.headerHeight > 0);
+      purposeSizes.set(size, metrics.purposeFontSize);
+    }
+  }
+
+  assert.ok(purposeSizes.get('small')! < purposeSizes.get('medium')!);
+  assert.ok(purposeSizes.get('medium')! < purposeSizes.get('large')!);
+}
+
+async function verifyBodyToolPalette(
+  page: Page,
+  {
+    settingsButtonName,
+    settingsDialogName,
+    settingsCloseName,
+    mapName
+  }: {
+    settingsButtonName: string;
+    settingsDialogName: string;
+    settingsCloseName: string;
+    mapName: string;
+  }
+): Promise<void> {
+  const previousViewport = page.viewportSize();
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const zone = page.getByRole('region', { name: 'Body insights' });
+  const toolbar = zone.getByRole('group', { name: 'Body map view' });
+  const front = toolbar.getByRole('button', { name: 'Front' });
+  const back = toolbar.getByRole('button', { name: 'Back' });
+  const controlColors = async (control: typeof front) => control.evaluate(button => {
+    const style = getComputedStyle(button);
+    return {
+      background: style.backgroundColor,
+      border: style.borderColor,
+      color: style.color
+    };
+  });
+
+  const selectedControlColors = await controlColors(front);
+  assert.deepEqual(selectedControlColors, {
+    background: 'rgb(227, 235, 244)',
+    border: 'rgb(74, 107, 148)',
+    color: 'rgb(74, 107, 148)'
+  });
+  assert.ok(contrastRatio(selectedControlColors.color, selectedControlColors.background) >= 4.5,
+    'Selected blue control text must meet WCAG AA contrast against its actual background.');
+  assert.deepEqual(await controlColors(back), {
+    background: 'rgba(0, 0, 0, 0)',
+    border: 'rgb(215, 223, 233)',
+    color: 'rgb(70, 89, 111)'
+  });
+
+  await back.hover();
+  assert.deepEqual(await controlColors(back), {
+    background: 'rgb(227, 235, 244)',
+    border: 'rgb(74, 107, 148)',
+    color: 'rgb(74, 107, 148)'
+  });
+  await front.focus();
+  await page.keyboard.press('Tab');
+  assert.equal(await back.evaluate(button => button === document.activeElement), true);
+  const controlFocus = await back.evaluate(button => {
+    const style = getComputedStyle(button);
+    return { width: style.outlineWidth, color: style.outlineColor };
+  });
+  assert.deepEqual(controlFocus, { width: '2px', color: 'rgb(74, 107, 148)' });
+
+  const map = zone.getByRole('group', { name: mapName });
+  const selectedPath = map.locator('.strength-body-muscle[aria-pressed="true"]').first();
+  const selectedRow = zone.locator('.strength-muscle-row[aria-pressed="true"]').first();
+  assert.equal(await selectedPath.getAttribute('fill'), 'var(--score-neutral)');
+  const selectedPathStyle = await selectedPath.evaluate(path => {
+    const style = getComputedStyle(path);
+    return { fill: style.fill, stroke: style.stroke, strokeWidth: style.strokeWidth };
+  });
+  assert.deepEqual(selectedPathStyle, {
+    fill: 'rgb(115, 128, 120)',
+    stroke: 'rgb(74, 107, 148)',
+    strokeWidth: '3px'
+  });
+
+  const scoredFill = await selectedPath.evaluate(path => {
+    const originalFill = path.getAttribute('fill');
+    path.setAttribute('fill', 'var(--score-green)');
+    const fill = getComputedStyle(path).fill;
+    if (originalFill === null) path.removeAttribute('fill');
+    else path.setAttribute('fill', originalFill);
+    return fill;
+  });
+  assert.equal(scoredFill, 'rgb(18, 183, 106)',
+    'Selection styling must preserve a scored muscle fill.');
+
+  const selectedRowStyle = await selectedRow.evaluate(row => {
+    const style = getComputedStyle(row);
+    return { background: style.backgroundColor, border: style.borderColor };
+  });
+  assert.deepEqual(selectedRowStyle, {
+    background: 'rgb(227, 235, 244)',
+    border: 'rgb(215, 223, 233)'
+  });
+  const unavailableStatus = zone.locator('.strength-muscle-row__status--unavailable').first();
+  assert.equal(await unavailableStatus.evaluate(status => getComputedStyle(status).backgroundColor),
+    'rgb(115, 128, 120)');
+
+  const unselectedPath = map.locator('.strength-body-muscle[aria-pressed="false"]').first();
+  await unselectedPath.scrollIntoViewIfNeeded();
+  const hoverPoint = await unselectedPath.evaluate(element => {
+    const path = element as SVGPathElement;
+    const svg = path.ownerSVGElement;
+    if (!svg) throw new Error('Body map region must belong to an SVG.');
+    const bounds = path.getBBox();
+    for (let row = 1; row < 10; row += 1) {
+      for (let column = 1; column < 10; column += 1) {
+        const point = svg.createSVGPoint();
+        point.x = bounds.x + bounds.width * column / 10;
+        point.y = bounds.y + bounds.height * row / 10;
+        if (path.isPointInFill(point)) {
+          const matrix = path.getScreenCTM();
+          if (!matrix) throw new Error('Body map region has no screen transform.');
+          const screenPoint = point.matrixTransform(matrix);
+          return { x: screenPoint.x, y: screenPoint.y };
+        }
+      }
+    }
+    throw new Error('Could not find a hit point inside the body map region.');
+  });
+  await page.mouse.move(hoverPoint.x, hoverPoint.y);
+  assert.equal(await unselectedPath.evaluate(path => getComputedStyle(path).stroke),
+    'rgb(74, 107, 148)');
+
+  const unselectedRow = zone.locator('.strength-muscle-row[aria-pressed="false"]').first();
+  await unselectedRow.hover();
+  assert.equal(await unselectedRow.evaluate(row => getComputedStyle(row).backgroundColor),
+    'rgb(227, 235, 244)');
+  await back.click();
+  assert.equal(await back.getAttribute('aria-pressed'), 'true');
+  assert.equal(await controlColors(back).then(style => style.color), 'rgb(74, 107, 148)');
+  await front.click();
+  assert.equal(await front.getAttribute('aria-pressed'), 'true');
+
+  await back.focus();
+  let selectedRowFocused = false;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (await selectedRow.evaluate(row => row === document.activeElement)) {
+      selectedRowFocused = true;
+      break;
+    }
+    await page.keyboard.press('Tab');
+  }
+  assert.equal(selectedRowFocused, true, 'Keyboard tab order should reach the selected muscle row.');
+  const rowFocus = await selectedRow.evaluate(row => {
+    const style = getComputedStyle(row);
+    return { width: style.outlineWidth, color: style.outlineColor };
+  });
+  assert.deepEqual(rowFocus, { width: '2px', color: 'rgb(74, 107, 148)' });
+
+  const settings = zone.getByRole('button', { name: settingsButtonName });
+  await settings.hover();
+  const settingsHover = await settings.evaluate(button => {
+    const style = getComputedStyle(button);
+    return { background: style.backgroundColor, border: style.borderColor, color: style.color };
+  });
+  assert.deepEqual(settingsHover, {
+    background: 'rgb(227, 235, 244)',
+    border: 'rgb(74, 107, 148)',
+    color: 'rgb(74, 107, 148)'
+  });
+  await settings.click();
+  await page.getByRole('dialog', { name: settingsDialogName }).waitFor();
+  assert.equal(await settings.getAttribute('aria-expanded'), 'true');
+  const settingsOpen = await settings.evaluate(button => {
+    const style = getComputedStyle(button);
+    return { background: style.backgroundColor, border: style.borderColor, color: style.color };
+  });
+  assert.deepEqual(settingsOpen, {
+    background: 'rgb(227, 235, 244)',
+    border: 'rgb(74, 107, 148)',
+    color: 'rgb(74, 107, 148)'
+  });
+  await page.getByRole('button', { name: settingsCloseName }).click();
+  assert.equal(await settings.getAttribute('aria-expanded'), 'false');
+  if (previousViewport) await page.setViewportSize(previousViewport);
+}
+
+async function verifyFinanceGoalToolPalette(page: Page): Promise<void> {
+  const zone = page.getByRole('region', { name: 'Progress tracker' });
+  const progressTrack = zone.locator('.goal-progress__track').first();
+  const progressFill = progressTrack.locator(':scope > span');
+  await progressFill.waitFor({ state: 'visible' });
+  const progressColors = await progressTrack.evaluate(track => ({
+    background: getComputedStyle(track).backgroundColor,
+    fill: getComputedStyle(track.querySelector(':scope > span')!).backgroundColor
+  }));
+  assert.deepEqual(progressColors, {
+    background: 'rgb(227, 235, 244)',
+    fill: 'rgb(74, 107, 148)'
+  });
+
+  const typeBadge = zone.locator('.goal-card__type').first();
+  const badgeColors = await typeBadge.evaluate(badge => {
+    const style = getComputedStyle(badge);
+    return {
+      background: style.backgroundColor,
+      border: style.borderColor,
+      color: style.color
+    };
+  });
+  assert.deepEqual(badgeColors, {
+    background: 'rgb(227, 235, 244)',
+    border: 'rgb(215, 223, 233)',
+    color: 'rgb(74, 107, 148)'
+  });
 }
 
 async function main() {
@@ -194,6 +517,44 @@ async function main() {
         assert.equal(styles.classicLinkUnderlineOffset, '3px');
       } else {
         await page.locator('.home-dashboard').waitFor();
+        await page.setViewportSize({ width: 375, height: 812 });
+        const initialTextSize = await page.locator('.mobile-display-toggle').getAttribute('data-text-size');
+        if (initialTextSize !== 'small' && initialTextSize !== 'medium' && initialTextSize !== 'large') {
+          throw new Error('The preview has no recognized text-size preference.');
+        }
+
+        await page.getByRole('button', { name: 'Health & Fitness' }).click();
+        await page.getByRole('tab', { name: 'Foundations' }).click();
+        await page.getByRole('button', { name: /Open Strength foundation details/ }).click();
+        await page.getByRole('region', { name: 'Body insights' }).waitFor({ state: 'visible' });
+        await verifyToolZoneResponsiveLayout(page, 'Body insights');
+        await verifyBodyToolPalette(page, {
+          settingsButtonName: 'Strength settings',
+          settingsDialogName: 'Strength settings',
+          settingsCloseName: 'Close Strength settings',
+          mapName: 'Front muscle training status map'
+        });
+
+        await page.getByRole('button', { name: 'All Foundations' }).click();
+        await page.getByRole('button', { name: /Open Flexibility foundation details/ }).click();
+        await page.getByRole('region', { name: 'Body insights' }).waitFor({ state: 'visible' });
+        await verifyToolZoneResponsiveLayout(page, 'Body insights');
+        await verifyBodyToolPalette(page, {
+          settingsButtonName: 'Stretch interval settings',
+          settingsDialogName: 'Stretch intervals',
+          settingsCloseName: 'Close stretch intervals',
+          mapName: 'Front Stretch schedule stretching map'
+        });
+
+        await page.getByRole('button', { name: 'All Foundations' }).click();
+        await page.getByRole('button', { name: 'Home' }).click();
+        await page.getByRole('button', { name: 'Finances' }).click();
+        await page.getByRole('tab', { name: 'Goals' }).click();
+        await page.getByRole('region', { name: 'Progress tracker' }).waitFor({ state: 'visible' });
+        await verifyToolZoneResponsiveLayout(page, 'Progress tracker');
+        await page.getByRole('button', { name: 'Home' }).click();
+        await setPreviewTextSize(page, initialTextSize);
+
         await page.route('https://geocoding-api.open-meteo.com/**', route => route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -3149,7 +3510,7 @@ async function main() {
             return tab?.textContent?.trim() === 'Body' && tab === document.activeElement;
           });
           await bodyTab.click();
-          await page.getByRole('heading', { name: 'Your body, at a glance' }).waitFor();
+          await page.getByRole('region', { name: 'Body insights' }).waitFor();
           for (const viewportWidth of [375, 390, 430]) {
             await page.setViewportSize({ width: viewportWidth, height: 844 });
             const layout = await strengthTabs.evaluate(element => {
@@ -3157,10 +3518,10 @@ async function main() {
               const score = strength?.querySelector<HTMLElement>(':scope > .fitness-score-summary');
               const panel = strength?.querySelector<HTMLElement>('#strength-panel-body');
               const map = panel?.querySelector<HTMLElement>('.strength-map-card');
-              const heading = map?.querySelector<HTMLElement>('.strength-card-heading');
+              const heading = map?.querySelector<HTMLElement>('.tool-zone__purpose');
               const mapLayout = map?.querySelector<HTMLElement>('.strength-map-layout');
               if (!strength || !score || !panel || !map || !heading || !mapLayout) {
-                throw new Error('Strength Body panel is missing its shared score, map card, heading, or map.');
+                throw new Error('Strength Body panel is missing its shared score, insights zone, or map.');
               }
               const pageRect = strength.getBoundingClientRect();
               const scoreRect = score.getBoundingClientRect();
@@ -3188,7 +3549,7 @@ async function main() {
             assert.ok(layout.scoreWidth > 0 && layout.tabsWidth > 0);
             assert.ok(layout.mapLeft >= layout.pageLeft && layout.mapRight <= layout.pageRight);
             assert.equal(layout.headingFits, true,
-              `Strength Body heading must fit at ${viewportWidth}px / ${textSize} text.`);
+              `Strength Body insights title must fit at ${viewportWidth}px / ${textSize} text.`);
             assert.equal(layout.mapFits, true,
               `Strength body map must fit at ${viewportWidth}px / ${textSize} text.`);
           }
@@ -3213,24 +3574,23 @@ async function main() {
           for (const viewportWidth of [375, 390, 430]) {
             await page.setViewportSize({ width: viewportWidth, height: 844 });
             await flexibilityBodyTab.click();
-            await page.getByRole('heading', { name: 'Body overview' }).waitFor();
+            await page.getByRole('region', { name: 'Body insights' }).waitFor();
             const bodyLayout = await page.locator('#flexibility-panel-body').evaluate(panel => {
-              const heading = panel.querySelector<HTMLElement>('.strength-section-heading');
               const map = panel.querySelector<HTMLElement>('.flexibility-map-card');
+              const heading = map?.querySelector<HTMLElement>('.tool-zone__purpose');
               const mapLayout = map?.querySelector<HTMLElement>('.strength-map-layout');
               const tabs = document.querySelector<HTMLElement>('.flexibility-view > [role="tablist"]');
               if (!heading || !map || !mapLayout || !tabs) {
-                throw new Error('Flexibility Body is missing its shared map layout or section tabs.');
+                throw new Error('Flexibility Body is missing its insights zone, shared map layout, or section tabs.');
               }
-              const headingRect = heading.getBoundingClientRect();
-              const tabsRect = tabs.getBoundingClientRect();
               const mapRect = map.getBoundingClientRect();
+              const tabsRect = tabs.getBoundingClientRect();
               const mapLayoutRect = mapLayout.getBoundingClientRect();
               return {
                 documentWidth: document.documentElement.scrollWidth,
                 viewportWidth: document.documentElement.clientWidth,
                 headingFits: heading.scrollWidth <= heading.clientWidth,
-                headingOffset: headingRect.top - tabsRect.bottom,
+                headingOffset: mapRect.top - tabsRect.bottom,
                 mapFits: mapLayoutRect.left >= mapRect.left && mapLayoutRect.right <= mapRect.right
               };
             });
@@ -3239,7 +3599,7 @@ async function main() {
             assert.equal(bodyLayout.viewportWidth, viewportWidth);
             assert.equal(bodyLayout.headingFits, true);
             assert.ok(bodyLayout.headingOffset >= 16,
-              `Flexibility Body needs breathing room below the tabs at ${viewportWidth}px / ${textSize} text.`);
+              `Flexibility Body insights need breathing room below the tabs at ${viewportWidth}px / ${textSize} text.`);
             assert.equal(bodyLayout.mapFits, true);
 
             await flexibilityRoutinesTab.click();
@@ -3789,6 +4149,14 @@ async function main() {
         await areaNavigation.getByRole('button', { name: 'Marriage', exact: true }).click();
         const categoryHero = page.locator('.category-header--hero');
         await categoryHero.waitFor();
+        const categoryHome = page.getByRole('button', { name: 'Home', exact: true });
+        await categoryHome.waitFor();
+        assert.equal(await categoryHome.evaluate(button =>
+          button.parentElement?.classList.contains('category-header-stack')
+        ), true);
+        assert.equal(await categoryHome.evaluate(button =>
+          button.nextElementSibling?.classList.contains('category-header--hero')
+        ), true);
         const categoryHeroStyle = await categoryHero.evaluate(element => {
           const title = element.querySelector<HTMLElement>('h2');
           const icon = element.querySelector<HTMLElement>('.page-hero-header__icon');
@@ -3825,6 +4193,34 @@ async function main() {
         assert.equal(categoryHeroStyle.iconHeight, '44px');
         assert.equal(categoryHeroStyle.iconHiddenFromAccessibility, 'true');
         await page.setViewportSize({ width: 375, height: 844 });
+        for (const textSize of ['small', 'medium', 'large']) {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await categorySizeToggle.getAttribute('data-text-size') === textSize) break;
+            await categorySizeToggle.click();
+          }
+          const homeStyle = await categoryHome.evaluate(button => {
+            const style = getComputedStyle(button);
+            const scale = Number.parseFloat(
+              getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale')
+            ) || 1;
+            const rect = button.getBoundingClientRect();
+            return {
+              minHeight: style.minHeight,
+              height: rect.height,
+              gap: style.gap,
+              fontSize: style.fontSize,
+              scale,
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth
+            };
+          });
+          assert.equal(homeStyle.minHeight, '44px');
+          assert.ok(homeStyle.height >= 44);
+          assert.equal(homeStyle.gap, '10px');
+          assert.ok(Math.abs(Number.parseFloat(homeStyle.fontSize) - 14 * homeStyle.scale) < 0.1);
+          assert.equal(homeStyle.documentWidth, 375);
+          assert.equal(homeStyle.viewportWidth, 375);
+        }
         const categoryIconSpacing = await categoryHero.evaluate(element => {
           const title = element.querySelector<HTMLElement>('h2');
           const icon = element.querySelector<HTMLElement>('.page-hero-header__icon');
@@ -3843,6 +4239,13 @@ async function main() {
         assert.equal(categoryIconSpacing.viewportWidth, 375);
         assert.ok(categoryIconSpacing.titleRight <= categoryIconSpacing.iconLeft);
         assert.equal(categoryIconSpacing.iconDisplay, 'grid');
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await categoryHome.click();
+        const todayNavigation = page.getByRole('navigation', { name: 'Tools and navigation' })
+          .getByRole('button', { name: 'Today' });
+        assert.equal(await todayNavigation.getAttribute('aria-current'), 'page');
+        await areaNavigation.getByRole('button', { name: 'Marriage', exact: true }).click();
+        await categoryHero.waitFor();
         await page.setViewportSize({ width: 359, height: 844 });
         assert.equal(await categoryHero.locator('.page-hero-header__icon').evaluate(
           element => getComputedStyle(element).display
@@ -3850,7 +4253,9 @@ async function main() {
 
         await page.setViewportSize({ width: 1280, height: 900 });
         await areaNavigation.getByRole('button', { name: 'Health & Fitness', exact: true }).click();
+        await page.getByRole('button', { name: 'Home', exact: true }).waitFor();
         await page.getByRole('button', { name: 'Open Strength foundation details' }).click();
+        assert.equal(await page.getByRole('button', { name: 'Home', exact: true }).count(), 0);
         const foundationHero = page.locator('.foundation-detail-header--hero')
           .filter({ hasText: 'Your training, workouts, and muscle balance.' });
         await foundationHero.waitFor();
@@ -3860,41 +4265,168 @@ async function main() {
           if (!title || !icon) throw new Error('Foundation hero is missing its title or icon.');
           const subtitle = element.querySelector<HTMLElement>('p');
           if (!subtitle) throw new Error('Foundation hero is missing its description.');
+          const circles = [...element.querySelectorAll<HTMLElement>('.foundation-detail-header__circle')];
           return {
-            background: getComputedStyle(element).backgroundColor,
+            background: getComputedStyle(element).backgroundImage,
             borderColor: getComputedStyle(element).borderTopColor,
             borderRadius: getComputedStyle(element).borderRadius,
             padding: getComputedStyle(element).padding,
+            textScale: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale')) || 1,
             titleFontSize: getComputedStyle(title).fontSize,
             titleFontWeight: getComputedStyle(title).fontWeight,
             titleColor: getComputedStyle(title).color,
             subtitleFontSize: getComputedStyle(subtitle).fontSize,
+            subtitleLineHeight: getComputedStyle(subtitle).lineHeight,
             subtitleColor: getComputedStyle(subtitle).color,
             iconBackground: getComputedStyle(icon).backgroundColor,
             iconColor: getComputedStyle(icon).color,
             iconWidth: getComputedStyle(icon).width,
             iconHeight: getComputedStyle(icon).height,
-            iconHiddenFromAccessibility: icon.getAttribute('aria-hidden')
+            iconHiddenFromAccessibility: icon.getAttribute('aria-hidden'),
+            circlesHiddenFromAccessibility: element.querySelector('.foundation-detail-header__circles')?.getAttribute('aria-hidden'),
+            circlesLayer: getComputedStyle(element.querySelector<HTMLElement>('.foundation-detail-header__circles')!).zIndex,
+            copyLayer: getComputedStyle(element.querySelector<HTMLElement>('.foundation-detail-header__copy')!).zIndex,
+            circles: circles.map(circle => ({
+              position: getComputedStyle(circle).position,
+              top: getComputedStyle(circle).top,
+              right: getComputedStyle(circle).right,
+              bottom: getComputedStyle(circle).bottom,
+              left: getComputedStyle(circle).left,
+              width: getComputedStyle(circle).width,
+              height: getComputedStyle(circle).height,
+              pointerEvents: getComputedStyle(circle).pointerEvents,
+              zIndex: getComputedStyle(circle).zIndex,
+              background: getComputedStyle(circle).backgroundColor
+            }))
           };
         });
-        assert.equal(foundationHeroStyle.background, 'rgb(244, 241, 232)');
+        assert.ok(foundationHeroStyle.background.includes('rgb(220, 232, 222)'));
+        assert.ok(foundationHeroStyle.background.includes('rgb(207, 224, 212)'));
         assert.equal(foundationHeroStyle.borderColor, 'rgb(220, 228, 222)');
         assert.equal(foundationHeroStyle.borderRadius, '20px');
         assert.equal(foundationHeroStyle.padding, '24px 22px');
-        assert.equal(foundationHeroStyle.titleFontSize, '26px');
+        assert.ok(Math.abs(Number.parseFloat(foundationHeroStyle.titleFontSize) - 26 * foundationHeroStyle.textScale) < 0.1);
         assert.equal(foundationHeroStyle.titleFontWeight, '800');
         assert.equal(foundationHeroStyle.titleColor, 'rgb(36, 107, 82)');
-        assert.equal(foundationHeroStyle.subtitleFontSize, '14px');
-        assert.equal(foundationHeroStyle.subtitleColor, 'rgb(94, 107, 99)');
+        assert.ok(Math.abs(Number.parseFloat(foundationHeroStyle.subtitleFontSize) - 14 * foundationHeroStyle.textScale) < 0.1);
+        assert.ok(Math.abs(Number.parseFloat(foundationHeroStyle.subtitleLineHeight) - 21 * foundationHeroStyle.textScale) < 0.1);
+        assert.equal(foundationHeroStyle.subtitleColor, 'rgb(74, 95, 84)');
         assert.equal(foundationHeroStyle.iconBackground, 'rgb(36, 107, 82)');
         assert.equal(foundationHeroStyle.iconColor, 'rgb(255, 255, 255)');
         assert.equal(foundationHeroStyle.iconWidth, '44px');
         assert.equal(foundationHeroStyle.iconHeight, '44px');
         assert.equal(foundationHeroStyle.iconHiddenFromAccessibility, 'true');
+        assert.equal(foundationHeroStyle.circlesHiddenFromAccessibility, 'true');
+        assert.equal(foundationHeroStyle.circlesLayer, '0');
+        assert.equal(foundationHeroStyle.copyLayer, '1');
+        const [topRightCircle, bottomRightCircle, bottomLeftCircle] = foundationHeroStyle.circles;
+        assert.equal(foundationHeroStyle.circles.length, 3);
+        assert.deepEqual(foundationHeroStyle.circles.map(({ position, width, height, pointerEvents, background }) => ({
+          position,
+          width,
+          height,
+          pointerEvents,
+          background
+        })), [
+          {
+            position: 'absolute',
+            width: '150px',
+            height: '150px',
+            pointerEvents: 'none',
+            background: 'rgba(28, 88, 68, 0.08)'
+          },
+          {
+            position: 'absolute',
+            width: '110px',
+            height: '110px',
+            pointerEvents: 'none',
+            background: 'rgba(28, 88, 68, 0.08)'
+          },
+          {
+            position: 'absolute',
+            width: '90px',
+            height: '90px',
+            pointerEvents: 'none',
+            background: 'rgba(28, 88, 68, 0.08)'
+          }
+        ]);
+        assert.equal(topRightCircle?.top, '-40px');
+        assert.equal(topRightCircle?.right, '-40px');
+        assert.equal(bottomRightCircle?.right, '20px');
+        assert.equal(bottomRightCircle?.bottom, '-55px');
+        assert.equal(bottomLeftCircle?.bottom, '-40px');
+        assert.equal(bottomLeftCircle?.left, '-30px');
+        assert.equal(await page.locator('.health-fitness-page .category-header--hero').count(), 0);
+        const foundationBack = page.getByRole('button', { name: 'All Foundations' });
+        assert.ok((await foundationBack.getAttribute('class'))?.includes('tend-back-button--plain'));
+        const foundationBackStyle = await foundationBack.evaluate(button => {
+          const style = getComputedStyle(button);
+          const icon = button.querySelector('svg');
+          if (!icon) throw new Error('The Foundation back link needs a chevron.');
+          const iconStyle = getComputedStyle(icon);
+          return {
+            borderWidth: style.borderTopWidth,
+            background: style.backgroundColor,
+            fontSize: style.fontSize,
+            textScale: Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale')) || 1,
+            gap: style.gap,
+            minHeight: style.minHeight,
+            marginBottom: style.marginBottom,
+            iconWidth: iconStyle.width,
+            iconHeight: iconStyle.height,
+            iconStroke: iconStyle.stroke
+          };
+        });
+        assert.equal(foundationBackStyle.borderWidth, '0px');
+        assert.equal(foundationBackStyle.background, 'rgba(0, 0, 0, 0)');
+        assert.ok(Math.abs(Number.parseFloat(foundationBackStyle.fontSize) - 14 * foundationBackStyle.textScale) < 0.1);
+        assert.equal(foundationBackStyle.gap, '10px');
+        assert.equal(foundationBackStyle.minHeight, '44px');
+        assert.equal(foundationBackStyle.marginBottom, '10px');
+        assert.equal(foundationBackStyle.iconWidth, '12px');
+        assert.equal(foundationBackStyle.iconHeight, '12px');
+        assert.equal(foundationBackStyle.iconStroke, 'rgb(36, 107, 82)');
         await page.setViewportSize({ width: 359, height: 844 });
         assert.equal(await foundationHero.locator('.page-hero-header__icon').evaluate(
           element => getComputedStyle(element).display
         ), 'none');
+        const foundationSizeToggle = page.locator('.mobile-display-toggle');
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          await page.setViewportSize({ width: 375, height: 844 });
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await foundationSizeToggle.getAttribute('data-text-size') === textSize) break;
+            await foundationSizeToggle.click();
+          }
+          assert.equal(await foundationSizeToggle.getAttribute('data-text-size'), textSize);
+          for (const viewportWidth of [320, 375, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const heroLayout = await foundationHero.evaluate(element => {
+              const copy = element.querySelector<HTMLElement>('.foundation-detail-header__copy');
+              const icon = element.querySelector<HTMLElement>('.page-hero-header__icon');
+              if (!copy || !icon) throw new Error('Foundation hero copy and icon are required.');
+              const copyStyle = getComputedStyle(copy);
+              return {
+                copyContentRight: copy.getBoundingClientRect().right - Number.parseFloat(copyStyle.paddingRight),
+                iconLeft: icon.getBoundingClientRect().left,
+                iconDisplay: getComputedStyle(icon).display,
+                copyPaddingRight: copyStyle.paddingRight,
+                heroRight: element.getBoundingClientRect().right,
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth
+              };
+            });
+            assert.equal(heroLayout.viewportWidth, viewportWidth);
+            assert.equal(heroLayout.documentWidth, viewportWidth);
+            assert.ok(heroLayout.heroRight <= viewportWidth);
+            if (viewportWidth < 360) {
+              assert.equal(heroLayout.iconDisplay, 'none');
+              assert.equal(heroLayout.copyPaddingRight, '0px');
+            } else {
+              assert.ok(heroLayout.copyContentRight < heroLayout.iconLeft,
+                `Foundation hero copy must not overlap its icon at ${viewportWidth}px / ${textSize}.`);
+            }
+          }
+        }
       }
 
       if (identity === 'dashboard') {
@@ -3962,10 +4494,10 @@ async function main() {
               const panel = financePage.getByRole('tabpanel', { name: tabName });
               assert.equal(await panel.isVisible(), true);
               if (tabName === 'Overview') {
-                assert.equal(await panel.getByRole('heading', { name: 'Savings' }).isVisible(), true);
-                assert.equal(await panel.getByRole('heading', { name: 'Debt' }).isVisible(), true);
+                assert.equal(await panel.getByRole('heading', { name: 'Savings', exact: true }).isVisible(), true);
+                assert.equal(await panel.getByRole('heading', { name: 'Debt', exact: true }).isVisible(), true);
               } else if (tabName === 'Goals') {
-                assert.equal(await panel.getByRole('heading', { name: 'My goals' }).isVisible(), true);
+                assert.equal(await panel.getByRole('heading', { name: 'Progress tracker' }).isVisible(), true);
                 assert.equal(await panel.getByRole('button', { name: '+ Add' }).first().isVisible(), true);
                 if (!browserGoalCreated
                   && await panel.getByRole('button', { name: /^View details for / }).count() === 0) {
@@ -4098,12 +4630,34 @@ async function main() {
                   position: document.body.style.position,
                   top: document.body.style.top
                 })), pageBodyStyles);
+                await verifyFinanceGoalToolPalette(page);
               } else {
                 assert.equal(await panel.getByRole('heading', { name: /Linked Rhythms/ }).isVisible(), true);
-                assert.equal(await panel.getByRole('button', { name: 'Manage links' }).isVisible(), true);
-                assert.equal(await panel.getByRole('button', { name: 'Add Rhythm' }).isVisible(), true);
+                assert.equal(await panel.getByRole('button', { name: 'View Foundations' }).isVisible(), true);
               }
             }
+
+            await financeTabs.getByRole('tab', { name: 'Overview', exact: true }).click();
+            await financePage.getByRole('tabpanel', { name: 'Overview' })
+              .getByRole('button', { name: 'Open Saving & Reserves' }).click();
+            const foundationDetail = financePage.locator('.finance-foundation-detail');
+            await foundationDetail.getByRole('heading', { name: 'Saving & Reserves' }).waitFor();
+            assert.equal(await financePage.locator('.category-header--hero').count(), 0);
+            const financeBack = foundationDetail.getByRole('button', { name: 'Back to Finance Overview' });
+            assert.ok((await financeBack.getAttribute('class'))?.includes('tend-back-button--plain'));
+            assert.equal(await foundationDetail.locator('.category-health-summary').isVisible(), true);
+            assert.equal(await foundationDetail.getByRole('heading', { name: /Linked Rhythms/ }).isVisible(), true);
+            const foundationLayout = await foundationDetail.evaluate(element => ({
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth,
+              detailWidth: Math.round(element.getBoundingClientRect().width)
+            }));
+            assert.equal(foundationLayout.viewportWidth, viewportWidth);
+            assert.equal(foundationLayout.documentWidth, viewportWidth,
+              `Finance Foundation detail must not overflow at ${viewportWidth}px / ${textSize}.`);
+            assert.ok(foundationLayout.detailWidth <= viewportWidth);
+            await financeBack.click();
+            assert.equal(await financePage.locator('.category-header--hero').count(), 1);
           }
         }
 

@@ -20,6 +20,8 @@ import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociation
 import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
 import { createStrengthBodyMapConfig, FitnessBodyMapLayout } from './FitnessBodyMap.tsx';
 import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
+import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
+import { ToolZone } from './ToolZone.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
@@ -1327,14 +1329,20 @@ export function StrengthView({
               </span>
             }
           />
-          <section className="card strength-card strength-map-card" aria-labelledby="strength-map-heading">
-            <header className="strength-card-heading">
-              <div><h3 id="strength-map-heading">Your body, at a glance</h3><p>Choose a muscle group to see its training status.</p></div>
+          <ToolZone
+            className="strength-map-card"
+            icon={<RhythmMetadataIcon kind="history" />}
+            purposeLabel="Body insights"
+            subtitle="See which muscles you’ve trained and what’s ready next."
+            scoringFootnote="Your linked Rhythms determine Strength Health."
+            headerAction={(
               <SettingsGearButton
                 label="Strength settings"
                 onClick={event => openDialog({ kind: 'goals' }, event)}
+                expanded={dialog?.kind === 'goals'}
               />
-            </header>
+            )}
+          >
             <div className="strength-map-toolbar" role="group" aria-label="Body map view">
               {(['front', 'back'] as const).map(view => (
                 <button key={view} type="button" aria-pressed={bodyView === view} onClick={() => chooseBodyView(view)}>
@@ -1410,7 +1418,7 @@ export function StrengthView({
                 </div>
               </dl>
             </div>
-          </section>
+          </ToolZone>
         </section>
 
         <section
