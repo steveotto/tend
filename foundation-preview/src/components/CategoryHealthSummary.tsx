@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import type { MouseEvent } from 'react';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
@@ -46,7 +46,6 @@ export function CategoryHealthSummary({
   rollup
 }: CategoryHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
-  const infoButtonRef = useRef<HTMLButtonElement>(null);
   const id = useId();
   const titleId = `${id}-title`;
   const detailsId = `${id}-details`;
@@ -92,7 +91,6 @@ export function CategoryHealthSummary({
 
   const closeDetails = () => {
     setExpanded(false);
-    requestAnimationFrame(() => infoButtonRef.current?.focus());
   };
 
   return (
@@ -112,7 +110,6 @@ export function CategoryHealthSummary({
       onTrackCaption="Whether your Rhythms are up to date"
       headingAction={(
         <HealthScoreInfoButton
-          ref={infoButtonRef}
           label={`Show ${contextTitle} scoring explanation`}
           expanded={expanded}
           controls={detailsId}
