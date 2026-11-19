@@ -335,8 +335,6 @@ type GoalCardProps = {
   onCheckIn?: () => void;
   onCorrectCheckIn?: (checkIn: GoalCheckIn) => void;
   onDetails?: () => void;
-  supportingRhythmCount?: number;
-  onManageSupportingRhythms?: () => void;
 };
 
 export function GoalCard({
@@ -345,9 +343,7 @@ export function GoalCard({
   onEdit,
   onCheckIn,
   onCorrectCheckIn,
-  onDetails,
-  supportingRhythmCount,
-  onManageSupportingRhythms
+  onDetails
 }: GoalCardProps) {
   const latest = latestCheckIn(goal);
   const remaining = latest ? remainingAmount(goal, latest.balanceMinor) : null;
@@ -370,19 +366,6 @@ export function GoalCard({
         <>
           <GoalBalanceValues goal={goal} latest={latest} remaining={remaining} compact />
           <GoalProgress goal={goal} progress={progress} />
-          {onManageSupportingRhythms && (
-            <div className="goal-card__support">
-              <button
-                type="button"
-                className="goal-text-button"
-                onClick={onManageSupportingRhythms}
-              >
-                {supportingRhythmCount
-                  ? `Supporting Rhythms · ${supportingRhythmCount}`
-                  : 'Add a supporting Rhythm'}
-              </button>
-            </div>
-          )}
           {(onDetails || onCheckIn) && (
             <footer className="goal-footer">
               {onCheckIn && <button type="button" className="btn mini" onClick={onCheckIn}>Check in</button>}

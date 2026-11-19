@@ -15,6 +15,7 @@ type Props = {
   people?: readonly PersonPreview[];
   categoryLabel: string;
   categoryToken: string;
+  subtitle?: string;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
   todayDate: string;
@@ -51,6 +52,7 @@ export function CategoryRhythmCollection({
   people = syntheticPeople,
   categoryLabel,
   categoryToken,
+  subtitle,
   rhythms,
   archivedRhythms,
   todayDate,
@@ -93,7 +95,7 @@ export function CategoryRhythmCollection({
       <div className="marriage-section-heading">
         <div>
           <h3 id={`${categoryToken}-rhythm-section-title`}>Your Rhythms</h3>
-          <p>Active Rhythms connected to {categoryLabel}.</p>
+          <p>{subtitle ?? `Active Rhythms connected to ${categoryLabel}.`}</p>
         </div>
       </div>
       <div className="category-rhythm-entry-actions">

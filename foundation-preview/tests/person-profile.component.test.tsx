@@ -393,6 +393,8 @@ describe('shared person profile', () => {
     expect(rhythmScoreButton.getAttribute('aria-haspopup')).toBe('dialog');
     await user.click(rhythmScoreButton);
     const rhythmDialog = screen.getByRole('dialog', { name: 'Avery’s Rhythm Health details' });
+    expect(within(rhythmDialog).getByText('Follow-through over time')).toBeTruthy();
+    expect(within(rhythmDialog).getByText('How up to date you are')).toBeTruthy();
     expect(within(rhythmDialog).getByRole('button', { name: 'How Rhythm Health was scored' })).toBeTruthy();
     await user.click(within(rhythmDialog).getByRole('button', { name: 'Close Health details' }));
     await waitFor(() => expect(document.activeElement).toBe(rhythmScoreButton));

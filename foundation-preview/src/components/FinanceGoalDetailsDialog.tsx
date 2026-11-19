@@ -1,43 +1,24 @@
 import type { MoneyGoal } from '../domain/money-goals.ts';
-import type { FoundationPreview, RhythmPreview } from '../domain/preview-data.ts';
-import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
+import type { FoundationPreview } from '../domain/preview-data.ts';
 import { GoalCard } from './Cards.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { ToolZone, ToolZoneTrendingUpIcon } from './ToolZone.tsx';
 
 export function FinanceGoalDetailsDialog({
   goal,
   foundations,
-  financeFoundationIds,
-  financeCategoryEnabled,
-  financeRhythms,
-  rhythms,
-  archivedRhythms,
   onEdit,
   onCheckIn,
   onCorrectCheckIn,
-  onManageSupportingRhythms,
   onClose
 }: {
   goal: MoneyGoal;
   foundations: readonly FoundationPreview[];
-  financeFoundationIds: ReadonlySet<string>;
-  financeCategoryEnabled: boolean;
-  financeRhythms: readonly RhythmPreview[];
-  rhythms: readonly RhythmPreview[];
-  archivedRhythms: readonly RhythmPreview[];
   onEdit: () => void;
   onCheckIn: () => void;
   onCorrectCheckIn: (checkIn: MoneyGoal['checkIns'][number]) => void;
-  onManageSupportingRhythms: () => void;
   onClose: () => void;
 }) {
-  const activeFinanceIds = new Set(financeRhythms.map(rhythm => rhythm.id));
-  const rhythmById = new Map([
-    ...rhythms.map(rhythm => [rhythm.id, rhythm] as const),
-    ...archivedRhythms.map(rhythm => [rhythm.id, rhythm] as const)
-  ]);
-  const supportingIds = goal.supportingRhythmIds ?? [];
-
   return (
     <MoneyGoalDialog
       eyebrow={goal.direction === 'increase' ? 'Savings increase' : 'Debt reduction'}
@@ -58,50 +39,22 @@ export function FinanceGoalDetailsDialog({
               ?? `Unavailable saved reference (${goal.foundationId})`
             : 'Unassigned'}
         </p>
-        <GoalCard
-          goal={goal}
-          presentation="details"
-          onEdit={onEdit}
-          onCheckIn={onCheckIn}
-          onCorrectCheckIn={onCorrectCheckIn}
-        />
-        <section className="finance-goal-details__support" aria-labelledby="finance-goal-details-support-title">
-          <header>
-            <h3 id="finance-goal-details-support-title">Supporting Rhythms · {supportingIds.length}</h3>
-            <p>Goal links do not qualify Rhythms for scoring or change their completion history.</p>
-          </header>
-          {supportingIds.length > 0 ? (
-            <ul>
-              {supportingIds.map(rhythmId => {
-                const rhythm = rhythmById.get(rhythmId);
-                const isArchived = archivedRhythms.some(item => item.id === rhythmId);
-                const foundationLinked = activeFinanceIds.has(rhythmId)
-                  && rhythm !== undefined
-                  && foundationRhythmIds(rhythm).some(id => financeFoundationIds.has(id));
-                const status = !rhythm
-                  ? `Unavailable saved reference: ${rhythmId}`
-                  : isArchived
-                    ? 'Archived; saved link retained.'
-                    : !foundationLinked
-                      ? 'Finance Foundation link unavailable; saved goal link retained.'
-                      : !financeCategoryEnabled
-                        ? 'Finances is disabled; saved link retained.'
-                        : 'Linked to a Finance Foundation.';
-                return (
-                  <li key={rhythmId}>
-                    <strong>{rhythm?.title ?? 'Unavailable Rhythm'}</strong>
-                    <small>{status}</small>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="finance-goal-details__empty">No Rhythms are linked to this goal yet.</p>
-          )}
-          <button type="button" className="btn mini ghost" onClick={onManageSupportingRhythms}>
-            {supportingIds.length ? 'Manage supporting Rhythms' : 'Add a supporting Rhythm'}
-          </button>
-        </section>
+        <ToolZone
+          className="finance-goal-details__tool-zone"
+          headingId="finance-goal-details-progress"
+          icon={<ToolZoneTrendingUpIcon />}
+          purposeLabel="Balance progress"
+          subtitle="Track balance, target progress, and dated check-ins."
+          scoringFootnote="Goal balances don’t change your Health score."
+        >
+          <GoalCard
+            goal={goal}
+            presentation="details"
+            onEdit={onEdit}
+            onCheckIn={onCheckIn}
+            onCorrectCheckIn={onCorrectCheckIn}
+          />
+        </ToolZone>
       </div>
     </MoneyGoalDialog>
   );

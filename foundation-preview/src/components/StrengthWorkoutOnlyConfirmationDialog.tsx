@@ -1,4 +1,4 @@
-import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { FitnessActivityOnlyConfirmationDialog } from './FitnessActivityOnlyConfirmationDialog.tsx';
 
 type Props = {
   error?: string;
@@ -14,33 +14,18 @@ export function StrengthWorkoutOnlyConfirmationDialog({
   onClose
 }: Props) {
   return (
-    <MoneyGoalDialog
-      title="Save without a Rhythm?"
-      labelledBy="strength-workout-only-confirmation-title"
+    <FitnessActivityOnlyConfirmationDialog
+      description="This workout will appear in History and update your muscle training status, but it won’t count toward Strength Health unless it’s linked to a Rhythm."
       titleId="strength-workout-only-confirmation-title"
       initialFocusId="strength-workout-only-choose"
       closeLabel="Return to workout details"
-      dialogClassName="strength-workout-only-confirmation"
-      portalToBody
+      dialogClassName="fitness-activity-only-confirmation strength-workout-only-confirmation"
+      chooseButtonLabel="Choose a Rhythm"
+      saveButtonLabel="Save workout only"
+      {...(error ? { error } : {})}
+      onChooseRhythm={onChooseRhythm}
+      onSaveActivityOnly={onSaveWorkoutOnly}
       onClose={onClose}
-    >
-      <p>
-        This workout will appear in History and update your muscle training status, but it won’t count toward Strength Health unless it’s linked to a Rhythm.
-      </p>
-      {error && <p className="strength-form-error" role="alert">{error}</p>}
-      <div className="money-goal-dialog__actions">
-        <button
-          id="strength-workout-only-choose"
-          type="button"
-          className="btn mini ghost"
-          onClick={onChooseRhythm}
-        >
-          Choose a Rhythm
-        </button>
-        <button type="button" className="btn mini" onClick={onSaveWorkoutOnly}>
-          Save workout only
-        </button>
-      </div>
-    </MoneyGoalDialog>
+    />
   );
 }

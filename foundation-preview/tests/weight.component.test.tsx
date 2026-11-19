@@ -90,11 +90,18 @@ describe('Weight preview presentation', () => {
     };
     const { onChange } = renderWeight(data, '2026-10-22', undefined, true);
     const tabs = screen.getByRole('tablist', { name: 'Weight Foundation sections' });
+    const insights = screen.getByRole('region', { name: 'Weight insights' });
     const progress = within(tabs).getByRole('tab', { name: 'Progress' });
     const measurements = within(tabs).getByRole('tab', { name: 'Measurements' });
     const rhythms = within(tabs).getByRole('tab', { name: 'Rhythms' });
     expect(progress.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tabpanel', { name: 'Progress' })).toBeTruthy();
+    expect(within(insights).getByText('Explore your weight and progress toward your goal.')).toBeTruthy();
+    expect(within(insights).getByText(
+      'Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it.'
+    )).toBeTruthy();
+    expect(insights.contains(tabs)).toBe(false);
+    expect(insights.contains(document.querySelector('.foundation-health-card'))).toBe(false);
     expect(screen.getByRole('button', { name: 'Weight tracking settings' })).toBeTruthy();
 
     progress.focus();
@@ -138,8 +145,8 @@ describe('Weight preview presentation', () => {
     expect(measureToggle.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('80');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('40');
-    expect(screen.getByText('Scheduled Weight-linked weigh-in Rhythms.')).toBeTruthy();
-    expect(screen.getByText('Whether weigh-ins due on those Rhythms are caught up.')).toBeTruthy();
+    expect(screen.getByText('Follow-through over time')).toBeTruthy();
+    expect(screen.getByText('How up to date you are')).toBeTruthy();
 
     const info = screen.getByRole('button', { name: 'Show Weight Health scoring details' });
     await user.click(info);

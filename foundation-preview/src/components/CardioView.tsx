@@ -39,6 +39,7 @@ import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
+import { ToolZone, ToolZoneTrendingUpIcon } from './ToolZone.tsx';
 import { FoundationSectionHeading } from './FoundationSectionHeading.tsx';
 import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
@@ -148,8 +149,6 @@ export function CardioView({
       consistency={progress.consistency}
       onTrack={progress.score}
       health={progress.health}
-      consistencyCaption="Four completed weeks of run and distance goals."
-      onTrackCaption="This week’s goal progress."
       showMeasures={!foundationNavigation}
       overallHealthScore={overallHealthScore}
       categoryHealthScore={categoryHealthScore}
@@ -250,7 +249,7 @@ export function CardioView({
           </div>
         </header>
       )}
-      {foundationNavigation && healthSummary}
+      {healthSummary}
       {foundationNavigation && (
         <SegmentedTabs
           tabs={cardioTabs}
@@ -274,60 +273,55 @@ export function CardioView({
           })}
           hidden={foundationNavigation && selectedTab !== 'progress'}
         >
-          {foundationNavigation && (
-            <FoundationSectionHeading
-              title="Progress"
-              headingId="cardio-progress-section-title"
-              subtitle="Your weekly run and mileage goals."
-              actions={
-                <SettingsGearButton
-                  label="Cardio tracking settings"
-                  onClick={event => openDialog({ kind: 'goals' }, event)}
-                />
-              }
-            />
-          )}
-          <section className="card cardio-progress-card" aria-labelledby="cardio-progress-title">
-            <header className="cardio-card-heading">
-              <div>
-                <h2 id="cardio-progress-title">Weekly cardio</h2>
-                <p>{formatDate(progress.weekStart)} – {formatDate(progress.weekEnd)} · Monday–Sunday</p>
-              </div>
-              {!foundationNavigation && (
-                <div className="cardio-goal-controls" role="group" aria-label="Cardio tracking controls">
+          <ToolZone
+            className="cardio-progress-tools"
+            headingId="cardio-progress-tools-title"
+            icon={<ToolZoneTrendingUpIcon />}
+            purposeLabel="Activity insights"
+            subtitle="Explore your activity and weekly progress."
+            scoringFootnote="Cardio Health uses run logs and saved weekly goals. Completing a Rhythm without a saved run adds no Cardio credit."
+            headerAction={
+              <div className="cardio-goal-controls" role="group" aria-label="Cardio tracking controls">
                   <SettingsGearButton
                     label="Cardio tracking settings"
                     onClick={event => openDialog({ kind: 'goals' }, event)}
                   />
+              </div>
+            }
+          >
+            <section className="card cardio-progress-card" aria-labelledby="cardio-progress-title">
+              <header className="cardio-card-heading">
+                <div>
+                  <h2 id="cardio-progress-title">Weekly cardio</h2>
+                  <p>{formatDate(progress.weekStart)} – {formatDate(progress.weekEnd)} · Monday–Sunday</p>
+                </div>
+              </header>
+              {trackingSetupRequired || progress.targetRuns === null || progress.targetMiles === null ? (
+                <p className="cardio-empty" role="status">
+                  Use Cardio tracking settings (gear) to choose a start date and weekly run and mileage goals.
+                </p>
+              ) : (
+                <div className="cardio-measures">
+                  <CardioMeasure label="Runs this week" value={progress.runs} target={progress.targetRuns}
+                    percent={progress.runProgress ?? 0} remaining={`${progress.remainingRuns} remaining`} />
+                  <CardioMeasure label="Miles this week" value={progress.miles} target={progress.targetMiles}
+                    percent={progress.mileageProgress ?? 0}
+                    remaining={`${formatNumber(progress.remainingMiles ?? 0)} mi remaining`} />
                 </div>
               )}
-            </header>
-            {trackingSetupRequired || progress.targetRuns === null || progress.targetMiles === null ? (
-              <p className="cardio-empty" role="status">
-                Use Cardio tracking settings (gear) to choose a start date and weekly run and mileage goals.
-              </p>
-            ) : (
-              <div className="cardio-measures">
-                <CardioMeasure label="Runs this week" value={progress.runs} target={progress.targetRuns}
-                  percent={progress.runProgress ?? 0} remaining={`${progress.remainingRuns} remaining`} />
-                <CardioMeasure label="Miles this week" value={progress.miles} target={progress.targetMiles}
-                  percent={progress.mileageProgress ?? 0}
-                  remaining={`${formatNumber(progress.remainingMiles ?? 0)} mi remaining`} />
+              <div className="cardio-week-strip" role="group" aria-label="Run activity Monday through Sunday">
+                {progress.days.map(day => (
+                  <div key={day.date} className={`cardio-week-day${day.count ? ' has-run' : ''}${day.date === today ? ' is-today' : ''}`}
+                    aria-label={`${formatLongDate(day.date)}: ${day.count} ${day.count === 1 ? 'run' : 'runs'}, ${formatNumber(day.miles)} miles`}>
+                    <span>{formatWeekday(day.date).slice(0, 1)}</span>
+                    <i aria-hidden="true">{day.count ? '●' : ''}</i>
+                    <small>{Number(day.date.slice(8, 10))}</small>
+                    {day.date === today && <span className="cardio-week-day__today">Today</span>}
+                  </div>
+                ))}
               </div>
-            )}
-            {!foundationNavigation && healthSummary}
-            <div className="cardio-week-strip" role="group" aria-label="Run activity Monday through Sunday">
-              {progress.days.map(day => (
-                <div key={day.date} className={`cardio-week-day${day.count ? ' has-run' : ''}${day.date === today ? ' is-today' : ''}`}
-                  aria-label={`${formatLongDate(day.date)}: ${day.count} ${day.count === 1 ? 'run' : 'runs'}, ${formatNumber(day.miles)} miles`}>
-                  <span>{formatWeekday(day.date).slice(0, 1)}</span>
-                  <i aria-hidden="true">{day.count ? '●' : ''}</i>
-                  <small>{Number(day.date.slice(8, 10))}</small>
-                  {day.date === today && <span className="cardio-week-day__today">Today</span>}
-                </div>
-              ))}
-            </div>
-          </section>
+            </section>
+          </ToolZone>
         </section>
 
         <section

@@ -70,6 +70,7 @@ describe('Cardio preview presentation', () => {
     );
 
     const tabs = screen.getByRole('tablist', { name: 'Cardio Foundation sections' });
+    const insights = screen.getByRole('region', { name: 'Activity insights' });
     const progress = within(tabs).getByRole('tab', { name: 'Progress' });
     const activities = within(tabs).getByRole('tab', { name: 'Activities' });
     const rhythms = within(tabs).getByRole('tab', { name: 'Rhythms' });
@@ -77,6 +78,12 @@ describe('Cardio preview presentation', () => {
     expect(progress.getAttribute('tabindex')).toBe('0');
     expect(activities.getAttribute('tabindex')).toBe('-1');
     expect(screen.getByRole('tabpanel', { name: 'Progress' })).toBeTruthy();
+    expect(within(insights).getByText('Explore your activity and weekly progress.')).toBeTruthy();
+    expect(within(insights).getByText(
+      'Cardio Health uses run logs and saved weekly goals. Completing a Rhythm without a saved run adds no Cardio credit.'
+    )).toBeTruthy();
+    expect(insights.contains(tabs)).toBe(false);
+    expect(insights.contains(document.querySelector('.foundation-health-card'))).toBe(false);
     expect(screen.getByRole('button', { name: 'Cardio tracking settings' })).toBeTruthy();
 
     progress.focus();
@@ -231,7 +238,7 @@ describe('Cardio preview presentation', () => {
     expect(within(breakdown).getByRole('heading', { name: 'Consistency' })).toBeTruthy();
     expect(within(breakdown).getByRole('heading', { name: 'On Track' })).toBeTruthy();
     expect(within(details).getByText('Follow-through over time')).toBeTruthy();
-    expect(within(details).getByText('How caught up you are')).toBeTruthy();
+    expect(within(details).getByText('How up to date you are')).toBeTruthy();
     expect(within(details).queryByText(/four most recently completed weeks/)).toBeNull();
     expect(within(details).queryByText(/This week’s run and distance goal progress/)).toBeNull();
     expect(within(details).getByText('75%')).toBeTruthy();

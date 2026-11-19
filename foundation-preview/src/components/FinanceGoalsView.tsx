@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import {
-  formatMoney,
-  latestCheckIn,
   type CheckInDraft,
   type CheckInDraftErrors,
   type GoalCheckIn,
   type GoalDraft,
-  type GoalRhythmAssociationChange,
   type MoneyGoal
 } from '../domain/money-goals.ts';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
@@ -18,6 +15,10 @@ import {
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { FoundationScoreSelection } from '../domain/foundation-scoring.ts';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
+import { rhythmsForSuggestionSource } from '../domain/category-rhythms.ts';
+import { effectiveRhythmSchedule, rhythmScheduleSummary } from '../domain/rhythm-schedule.ts';
+import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
+import { peopleForRhythm } from '../domain/preview-data.ts';
 import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
 import {
   type FoundationPreview,
@@ -31,7 +32,6 @@ import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
 import { FoundationSectionHeading } from './FoundationSectionHeading.tsx';
-import { GoalRhythmAssociationDialog } from './GoalRhythmAssociationDialog.tsx';
 import { FinanceGoalLibraryDialog } from './FinanceGoalLibraryDialog.tsx';
 import { FinanceGoalDetailsDialog } from './FinanceGoalDetailsDialog.tsx';
 import { GoalEditor } from './GoalEditor.tsx';
@@ -40,11 +40,16 @@ import { ProgressCheckIn } from './ProgressCheckIn.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
 import { FoundationDetailHeader } from './FoundationDetailHeader.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
+import { CategoryRhythmCollection } from './CategoryRhythmCollection.tsx';
+import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 import { BackButton } from './BackButton.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import { ToolZone, ToolZoneTrendingUpIcon } from './ToolZone.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
+import { RhythmSuggestionPicker } from './RhythmSuggestionPicker.tsx';
+import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
+import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from './MarriageView.tsx';
 import type { FinanceGoalTemplate } from '../domain/finance-goal-templates.ts';
 import { financeGoalTemplateGroups } from '../domain/finance-goal-templates.ts';
 import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
@@ -54,13 +59,12 @@ type GoalDialogState =
   | { kind: 'details'; goalId: string }
   | { kind: 'edit'; goal: MoneyGoal | null; newGoalId: string; initialDraft?: Partial<GoalDraft>; intro?: string; returnToDetails?: boolean }
   | { kind: 'check-in'; goalId: string; checkIn: GoalCheckIn | null; returnToDetails?: boolean }
-  | { kind: 'goal-rhythms'; goalId: string; returnToDetails?: boolean }
   | { kind: 'foundation-rhythms'; foundationId: string };
 
-type FinanceTab = 'overview' | 'goals' | 'rhythms';
+type FinanceTab = 'foundations' | 'goals' | 'rhythms';
 
 const financeTabs: readonly SegmentedTab<FinanceTab>[] = [
-  { id: 'overview', label: 'Overview', tabId: 'finance-tab-overview', panelId: 'finance-panel-overview' },
+  { id: 'foundations', label: 'Foundations', tabId: 'finance-tab-foundations', panelId: 'finance-panel-foundations' },
   { id: 'goals', label: 'Goals', tabId: 'finance-tab-goals', panelId: 'finance-panel-goals' },
   { id: 'rhythms', label: 'Rhythms', tabId: 'finance-tab-rhythms', panelId: 'finance-panel-rhythms' }
 ];
@@ -69,11 +73,11 @@ type FinanceGoalsViewProps = {
   goals: readonly MoneyGoal[];
   currentDate: string;
   financeFoundations: readonly FoundationPreview[];
-  financeCategoryEnabled: boolean;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
   categoryRhythms: readonly RhythmPreview[];
   archivedCategoryRhythms: readonly RhythmPreview[];
+  suggestionCatalogue: CategoryRhythmSuggestionCatalogue;
   people: readonly PersonPreview[];
   foundations: readonly FoundationPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
@@ -82,25 +86,27 @@ type FinanceGoalsViewProps = {
   undoableRhythms: ReadonlySet<string>;
   onSaveGoal: (goal: MoneyGoal) => void;
   onSaveCheckIn: (goalId: string, draft: CheckInDraft, correctingCheckIn?: GoalCheckIn) => CheckInDraftErrors;
-  onSaveGoalRhythms: (goalId: string, changes: readonly GoalRhythmAssociationChange[]) => string | null;
   onSaveFoundationAssociations: (
     foundationId: string,
     changes: readonly FoundationRhythmAssociationChange[]
   ) => string | null;
   onAddLinkedRhythm: (foundationId: string, event: MouseEvent<HTMLButtonElement>) => void;
-  onCreateRhythmFromGoal: (
+  onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
+  onAddSuggestion?: (
+    suggestion: CategoryRhythmSuggestion,
     event: MouseEvent<HTMLButtonElement>,
-    context: {
-      goalId: string;
-      foundationId?: string;
-      onFinished: (saved: boolean) => void;
-    }
+    returnToSuggestions: (saved: boolean) => void
   ) => void;
   foundationNavigationRequest?: { foundationId: string; requestId: number } | null;
   onFoundationNavigationHandled?: () => void;
   onTendRhythm: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndoRhythm: (id: string) => void;
-  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
+  onRestoreRhythm: (id: string) => void;
+  onEditRhythm: (
+    rhythm: RhythmPreview,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToSuggestions?: (saved: boolean) => void
+  ) => void;
   onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onPersonSelect: (id: PersonId) => void;
   onOpenFoundation: (id: string, openerId: string) => void;
@@ -112,11 +118,11 @@ export function FinanceGoalsView({
   goals,
   currentDate,
   financeFoundations: financeFoundationList,
-  financeCategoryEnabled,
   rhythms,
   archivedRhythms,
   categoryRhythms,
   archivedCategoryRhythms,
+  suggestionCatalogue,
   people,
   foundations,
   rhythmScores,
@@ -125,12 +131,13 @@ export function FinanceGoalsView({
   undoableRhythms,
   onSaveGoal,
   onSaveCheckIn,
-  onSaveGoalRhythms,
   onSaveFoundationAssociations,
   onAddLinkedRhythm,
-  onCreateRhythmFromGoal,
+  onAddRhythm,
+  onAddSuggestion,
   onTendRhythm,
   onUndoRhythm,
+  onRestoreRhythm,
   onEditRhythm,
   onRhythmHistory,
   onPersonSelect,
@@ -141,17 +148,21 @@ export function FinanceGoalsView({
   onFoundationNavigationHandled
 }: FinanceGoalsViewProps) {
   const [dialog, setDialog] = useState<GoalDialogState | null>(null);
-  const [selectedTab, setSelectedTab] = useState<FinanceTab>('overview');
+  const [selectedTab, setSelectedTab] = useState<FinanceTab>('foundations');
   const [selectedFoundationId, setSelectedFoundationId] = useState<string | null>(null);
   const goalSequence = useRef(1);
   const dialogOpener = useRef<HTMLElement | null>(null);
+  const archivedRhythmsOpenerRef = useRef<HTMLElement | null>(null);
+  const wasArchiveDialogOpen = useRef(false);
+  const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsOpener = useRef<HTMLElement | null>(null);
+  const wasSuggestionsOpen = useRef(false);
+  const skipSuggestionsFocusRestore = useRef(false);
   const detailsGoal = dialog?.kind === 'details'
     ? goals.find(goal => goal.id === dialog.goalId)
     : undefined;
   const checkInGoal = dialog?.kind === 'check-in'
-    ? goals.find(goal => goal.id === dialog.goalId)
-    : undefined;
-  const goalRhythmGoal = dialog?.kind === 'goal-rhythms'
     ? goals.find(goal => goal.id === dialog.goalId)
     : undefined;
   const financeFoundationIds = useMemo(
@@ -161,10 +172,6 @@ export function FinanceGoalsView({
   const linkedToFinanceFoundation = (rhythm: RhythmPreview) =>
     foundationRhythmIds(rhythm).some(id => financeFoundationIds.has(id));
   const financeRhythms = rhythms.filter(linkedToFinanceFoundation);
-  const archivedFinanceRhythms = archivedRhythms.filter(linkedToFinanceFoundation);
-  const eligibleGoalRhythms = financeCategoryEnabled
-    ? financeRhythms.filter(rhythm => rhythm.categoryIds?.includes('finances'))
-    : [];
   const financeRhythmPool = [...categoryRhythms, ...archivedCategoryRhythms];
   const foundationScores = new Map(financeFoundationList.map(foundation => [
     foundation.id,
@@ -213,6 +220,109 @@ export function FinanceGoalsView({
         archivedRhythmIds
       )
     : null;
+  useEffect(() => {
+    if (showArchivedRhythms) {
+      wasArchiveDialogOpen.current = true;
+      return;
+    }
+    if (!wasArchiveDialogOpen.current) return;
+    wasArchiveDialogOpen.current = false;
+    archivedRhythmsOpenerRef.current?.focus({ preventScroll: true });
+  }, [showArchivedRhythms]);
+  useEffect(() => {
+    if (showSuggestions) {
+      wasSuggestionsOpen.current = true;
+      return;
+    }
+    if (!wasSuggestionsOpen.current) return;
+    wasSuggestionsOpen.current = false;
+    if (skipSuggestionsFocusRestore.current) {
+      skipSuggestionsFocusRestore.current = false;
+      return;
+    }
+    suggestionsOpener.current?.focus({ preventScroll: true });
+  }, [showSuggestions]);
+
+  function browseSuggestions(event: MouseEvent<HTMLButtonElement>) {
+    suggestionsOpener.current = event.currentTarget;
+    setShowSuggestions(true);
+  }
+
+  function returnToSuggestions(saved: boolean) {
+    if (saved) setSelectedTab('rhythms');
+    setShowSuggestions(true);
+  }
+
+  function beginSuggestionAdd(
+    suggestion: CategoryRhythmSuggestion,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToPicker: (saved: boolean) => void
+  ) {
+    if (!onAddSuggestion) return;
+    skipSuggestionsFocusRestore.current = true;
+    onAddSuggestion(suggestion, event, returnToPicker);
+  }
+
+  function beginSuggestionEdit(
+    rhythm: RhythmPreview,
+    event: MouseEvent<HTMLButtonElement>,
+    returnToPicker: (saved: boolean) => void
+  ) {
+    skipSuggestionsFocusRestore.current = true;
+    onEditRhythm(rhythm, event, returnToPicker);
+  }
+
+  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = suggestionCatalogue.groups.map(group => ({
+    id: group.id,
+    title: group.title,
+    subtitle: group.subtitle,
+    items: group.suggestions.map(suggestion => ({
+      id: suggestion.sourceId,
+      title: suggestion.rhythm.title,
+      ...(suggestion.rhythm.description ? { description: suggestion.rhythm.description } : {}),
+      scheduleHint: suggestion.scheduleHint,
+      icon: suggestion.icon,
+      instances: rhythmsForSuggestionSource([...rhythms, ...archivedRhythms], suggestion.sourceId)
+        .map(instance => {
+          const archived = archivedRhythms.some(item => item.id === instance.id);
+          const schedule = effectiveRhythmSchedule(instance.schedule, instance.cadence);
+          const scheduleSummary = schedule
+            ? rhythmScheduleSummary(schedule).replace(/\.$/, '')
+            : instance.cadence ?? 'Schedule unavailable';
+          const timeLabel = instance.timeLabel && instance.timeLabel !== 'Anytime'
+            ? ` · ${instance.timeLabel}`
+            : '';
+          const instancePeople = peopleForRhythm(instance, people);
+          return {
+            id: instance.id,
+            title: instance.title,
+            ...(instancePeople.length
+              ? { peopleLabel: instancePeople.map(person => person.displayName).join(', ') }
+              : {}),
+            scheduleSummary: `${scheduleSummary}${timeLabel}`,
+            archived,
+            ...(!archived && isEditableRhythmId(instance.id)
+              ? {
+                  onEdit: (
+                    event: MouseEvent<HTMLButtonElement>,
+                    returnToPicker: (saved: boolean) => void
+                  ) => beginSuggestionEdit(instance, event, returnToPicker)
+                }
+              : archived
+                ? { onRestore: () => onRestoreRhythm(instance.id) }
+                : {})
+          };
+        }),
+      ...(onAddSuggestion
+        ? {
+            onAdd: (
+              event: MouseEvent<HTMLButtonElement>,
+              returnToPicker: (saved: boolean) => void
+            ) => beginSuggestionAdd(suggestion, event, returnToPicker)
+          }
+        : {})
+    }))
+  }));
   const financeRollup: HealthRollupConfig = {
     groups: [
       {
@@ -361,14 +471,14 @@ export function FinanceGoalsView({
           titleId="finances-heading"
           icon={<AreaIcon id="finances" />}
           onHome={onToday}
-          subtitle="Track balance goals and the Rhythms that support them."
+          subtitle="Build Finance Health with Rhythms; track goal balances with manual check-ins."
           trailing={<span className="hint">Synthetic preview · no account connection</span>}
         />
       )}
       {selectedFoundation ? (
         <section className="marriage-foundation-detail finance-foundation-detail" aria-labelledby={`finance-foundation-${selectedFoundation.id}-heading`}>
           <BackButton onClick={() => setSelectedFoundationId(null)} variant="plain">
-            Back to Finance Overview
+            Back to Finance Foundations
           </BackButton>
           <FoundationDetailHeader
             foundation={selectedFoundation}
@@ -438,7 +548,7 @@ export function FinanceGoalsView({
                 onEditRhythm={onEditRhythm}
                 onRhythmHistory={onRhythmHistory}
                 onPersonSelect={onPersonSelect}
-                onOpenFoundation={openFoundationOrCategory}
+                onOpenFoundation={id => openFoundationOrCategory(id)}
                 onOpenCategory={onOpenCategory}
               />
             ) : (
@@ -475,62 +585,31 @@ export function FinanceGoalsView({
       />
       <div className="finance-page__panels">
         <section
-          id="finance-panel-overview"
+          id="finance-panel-foundations"
           className="strength-section-panel"
           role="tabpanel"
-          aria-labelledby="finance-tab-overview"
-          hidden={selectedTab !== 'overview'}
+          aria-labelledby="finance-tab-foundations"
+          hidden={selectedTab !== 'foundations'}
         >
-          <div className="finance-overview">
-            <FoundationSectionHeading
-              title="Overview"
-              headingId="finance-overview-heading"
-              subtitle="Build financial habits across five areas."
-            />
-            <section aria-labelledby="finance-foundations-heading">
-              <FoundationSectionHeading
-                title="Foundations"
-                headingId="finance-foundations-heading"
-                subtitle="Open a Foundation to review its Health and linked Rhythms."
-              />
-              <div className="marriage-foundation-list">
-                {financeFoundationList.map(foundation => {
-                  const score = foundationScores.get(foundation.id);
-                  return (
-                    <FoundationCard
-                      key={foundation.id}
-                      foundation={foundation}
-                      variant="compact"
-                      icon={<MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />}
-                      score={score?.health ?? null}
-                      scoreLabel={`${foundation.name} Health`}
-                      scoreEvidence={foundationScoreDetails.has(foundation.id)
-                        ? foundationScoreEvidence(foundationScoreDetails.get(foundation.id)!)
-                        : 'Health unavailable'}
-                      headingId={`finance-foundation-list-${foundation.id}`}
-                      onSelect={() => setSelectedFoundationId(foundation.id)}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-            <p className="finance-preview-note">
-              Balances are manually tracked values, not bank balances or a complete financial picture. This synthetic preview has no bank connection or money movement.
-            </p>
-            <div className="finance-overview__grid">
-              <FinanceBalanceSummary
-                title="Savings"
-                direction="increase"
-                goals={goals}
-                onViewGoals={() => setSelectedTab('goals')}
-              />
-              <FinanceBalanceSummary
-                title="Debt"
-                direction="decrease"
-                goals={goals}
-                onViewGoals={() => setSelectedTab('goals')}
-              />
-            </div>
+          <div className="marriage-foundation-list">
+            {financeFoundationList.map(foundation => {
+              const score = foundationScores.get(foundation.id);
+              return (
+                <FoundationCard
+                  key={foundation.id}
+                  foundation={foundation}
+                  variant="compact"
+                  icon={<MarriageIcon group="foundations" id={foundation.iconId ?? foundation.id} />}
+                  score={score?.health ?? null}
+                  scoreLabel={`${foundation.name} Health`}
+                  scoreEvidence={foundationScoreDetails.has(foundation.id)
+                    ? foundationScoreEvidence(foundationScoreDetails.get(foundation.id)!)
+                    : 'Health unavailable'}
+                  headingId={`finance-foundation-list-${foundation.id}`}
+                  onSelect={() => setSelectedFoundationId(foundation.id)}
+                />
+              );
+            })}
           </div>
         </section>
 
@@ -546,10 +625,13 @@ export function FinanceGoalsView({
             headingId="finance-goals-heading"
             icon={<ToolZoneTrendingUpIcon />}
             purposeLabel="Progress tracker"
-            subtitle="Track the outcomes your Rhythms support."
+            subtitle="Dated check-ins update progress; completing a Rhythm never changes a goal balance."
             scoringFootnote="Goal balances don’t change your Health score."
             headerAction={<button type="button" className="btn mini ghost" onClick={addGoal}>+ Add</button>}
           >
+            <p className="finance-preview-note">
+              Balances are manually tracked values, not bank balances or a complete financial picture. This synthetic preview has no bank connection or money movement.
+            </p>
             {goals.length
               ? (
                 <div className="money-goals-list">
@@ -558,11 +640,6 @@ export function FinanceGoalsView({
                       key={goal.id}
                       goal={goal}
                       presentation="summary"
-                      supportingRhythmCount={goal.supportingRhythmIds?.length ?? 0}
-                      onManageSupportingRhythms={() => {
-                        rememberDialogOpener();
-                        setDialog({ kind: 'goal-rhythms', goalId: goal.id });
-                      }}
                       onDetails={() => {
                         rememberDialogOpener();
                         setDialog({ kind: 'details', goalId: goal.id });
@@ -591,48 +668,31 @@ export function FinanceGoalsView({
           aria-labelledby="finance-tab-rhythms"
           hidden={selectedTab !== 'rhythms'}
         >
-          <section className="marriage-foundation-support strength-rhythms-panel" aria-labelledby="finance-linked-rhythms-title">
-            <FoundationSectionHeading
-              title="Linked Rhythms"
-              headingId="finance-linked-rhythms-title"
-              accessibleName={`Linked Rhythms · ${financeRhythms.length}`}
-              secondary={<span className="strength-linked-rhythms-count" aria-hidden="true">{financeRhythms.length}</span>}
-              subtitle="Repeatable actions can support goals; only eligible linked Rhythms affect Finance Health."
-              actions={
-                <button
-                  type="button"
-                  className="btn mini ghost"
-                  onClick={() => setSelectedTab('overview')}
-                >
-                  View Foundations
-                </button>
-              }
-            />
-            {financeRhythms.length > 0 ? (
-              <FoundationRhythmGroup
-                people={people}
-                rhythms={financeRhythms}
-                archivedRhythmIds={archivedFinanceRhythms.map(rhythm => rhythm.id)}
-                headingId="finance-linked-rhythms-title"
-                rhythmScores={rhythmScores}
-                completedRhythms={completedRhythms}
-                undoableRhythms={undoableRhythms}
-                foundations={foundations}
-                categoryToken="finance"
-                onTend={onTendRhythm}
-                onUndo={onUndoRhythm}
-                onEditRhythm={onEditRhythm}
-                onRhythmHistory={onRhythmHistory}
-                onPersonSelect={onPersonSelect}
-                onOpenFoundation={openFoundationOrCategory}
-                onOpenCategory={onOpenCategory}
-              />
-            ) : (
-              <div className="strength-rhythms-empty">
-                <p>No Rhythms are linked to Finances yet.</p>
-              </div>
-            )}
-          </section>
+          <CategoryRhythmCollection
+            people={people}
+            categoryLabel="Finances"
+            categoryToken="finance"
+            subtitle="Finance-category Rhythms are listed here; only eligible linked Rhythms affect Finance Health."
+            rhythms={categoryRhythms}
+            archivedRhythms={archivedCategoryRhythms}
+            todayDate={currentDate}
+            rhythmScores={rhythmScores}
+            completedRhythms={completedRhythms}
+            undoableRhythms={undoableRhythms}
+            foundations={foundations}
+            archivedRhythmsOpenerRef={archivedRhythmsOpenerRef}
+            showArchivedRhythms={showArchivedRhythms}
+            onAddRhythm={onAddRhythm}
+            onBrowseSuggestions={browseSuggestions}
+            onShowArchivedRhythms={() => setShowArchivedRhythms(true)}
+            onPersonSelect={onPersonSelect}
+            onOpenFoundation={openFoundationOrCategory}
+            onOpenCategory={onOpenCategory}
+            onRhythmHistory={onRhythmHistory}
+            onEditRhythm={onEditRhythm}
+            onTend={onTendRhythm}
+            onUndo={onUndoRhythm}
+          />
         </section>
       </div>
         </>
@@ -642,11 +702,6 @@ export function FinanceGoalsView({
         <FinanceGoalDetailsDialog
           goal={detailsGoal}
           foundations={foundations}
-          financeFoundationIds={financeFoundationIds}
-          financeCategoryEnabled={financeCategoryEnabled}
-          financeRhythms={financeRhythms}
-          rhythms={rhythms}
-          archivedRhythms={archivedRhythms}
           onEdit={() => setDialog({
             kind: 'edit',
             goal: detailsGoal,
@@ -660,11 +715,6 @@ export function FinanceGoalsView({
             returnToDetails: true
           })}
           onCorrectCheckIn={checkIn => correctCheckIn(detailsGoal, checkIn, true)}
-          onManageSupportingRhythms={() => setDialog({
-            kind: 'goal-rhythms',
-            goalId: detailsGoal.id,
-            returnToDetails: true
-          })}
           onClose={closeDialog}
         />
       )}
@@ -700,34 +750,6 @@ export function FinanceGoalsView({
           onClose={() => finishGoalDialog(dialog.goalId, dialog.returnToDetails)}
         />
       )}
-      {dialog?.kind === 'goal-rhythms' && goalRhythmGoal && (
-        <GoalRhythmAssociationDialog
-          key={goalRhythmGoal.id}
-          goal={goalRhythmGoal}
-          financeFoundationIds={financeFoundationIds}
-          financeCategoryEnabled={financeCategoryEnabled}
-          eligibleRhythms={eligibleGoalRhythms}
-          rhythms={rhythms}
-          archivedRhythms={archivedRhythms}
-          onSave={changes => onSaveGoalRhythms(goalRhythmGoal.id, changes)}
-          onCreateRhythm={event => {
-            const goalId = goalRhythmGoal.id;
-            setDialog(null);
-            onCreateRhythmFromGoal(event, {
-              goalId,
-              ...(goalRhythmGoal.foundationId && financeFoundationIds.has(goalRhythmGoal.foundationId)
-                ? { foundationId: goalRhythmGoal.foundationId }
-                : {}),
-              onFinished: () => setDialog({
-                  kind: 'goal-rhythms',
-                  goalId,
-                  ...(dialog.returnToDetails ? { returnToDetails: true } : {})
-              })
-            });
-          }}
-          onClose={() => finishGoalDialog(goalRhythmGoal.id, dialog.returnToDetails)}
-        />
-      )}
       {dialog?.kind === 'foundation-rhythms' && (
         <FoundationRhythmAssociationDialog
           key={dialog.foundationId}
@@ -740,57 +762,33 @@ export function FinanceGoalsView({
           onClose={closeDialog}
         />
       )}
-      <button type="button" className="money-goals-back" onClick={onToday}>Back to Today</button>
-    </main>
-  );
-}
-
-function FinanceBalanceSummary({
-  title,
-  direction,
-  goals,
-  onViewGoals
-}: {
-  title: string;
-  direction: MoneyGoal['direction'];
-  goals: readonly MoneyGoal[];
-  onViewGoals: () => void;
-}) {
-  const matchingGoals = goals.filter(goal => goal.direction === direction);
-  return (
-    <section className="finance-overview-card" aria-labelledby={`finance-overview-${direction}`}>
-      <header>
-        <h3 id={`finance-overview-${direction}`}>{title}</h3>
-        <button type="button" className="btn mini ghost" onClick={onViewGoals}>View goals</button>
-      </header>
-      {matchingGoals.length === 0 ? (
-        <p className="finance-overview-card__empty">No {title.toLowerCase()} goal is being tracked.</p>
-      ) : (
-        <>
-          {matchingGoals.length > 1 && (
-            <p className="finance-overview-card__note">
-              Balances are listed separately to avoid adding overlapping goals or currencies.
-            </p>
-          )}
-          <ul>
-            {matchingGoals.map(goal => {
-              const latest = latestCheckIn(goal);
-              const recentChange = recentBalanceChange(goal);
-              return (
-                <li className="finance-overview-entry" key={goal.id}>
-                  <div className="finance-overview-entry__heading">
-                    <button type="button" onClick={onViewGoals}>{goal.title}</button>
-                    <strong>{latest ? formatMoney(latest.balanceMinor, goal.currency) : 'Unavailable'}</strong>
-                  </div>
-                  <small>{latest ? `Recorded ${formatDate(latest.effectiveDate)}` : 'No check-in recorded'}</small>
-                  {recentChange && <p>{recentChange}</p>}
-                </li>
-              );
-            })}
-          </ul>
-        </>
+      {showArchivedRhythms && (
+        <ArchivedRhythmsDialog
+          rhythms={archivedCategoryRhythms}
+          people={people}
+          foundations={foundations}
+          completedRhythms={completedRhythms}
+          onPersonSelect={onPersonSelect}
+          onOpenFoundation={id => {
+            setShowArchivedRhythms(false);
+            openFoundationOrCategory(id);
+          }}
+          onOpenCategory={(id, openerId) => {
+            setShowArchivedRhythms(false);
+            onOpenCategory(id, openerId);
+          }}
+          onRestore={onRestoreRhythm}
+          onClose={() => setShowArchivedRhythms(false)}
+        />
       )}
-    </section>
+      <RhythmSuggestionPicker
+        title={suggestionCatalogue.title}
+        open={showSuggestions}
+        groups={suggestionPickerGroups}
+        onClose={() => setShowSuggestions(false)}
+        onReopen={returnToSuggestions}
+      />
+    </main>
   );
 }
 
@@ -808,25 +806,4 @@ function foundationScoreEvidence(score: FoundationScoreSelection): string {
     ...(excluded ? [`${excluded} not scoreable`] : []),
     ...(archived ? [`${archived} archived`] : [])
   ].join(' · ');
-}
-
-function recentBalanceChange(goal: MoneyGoal): string | null {
-  const checkIns = [...goal.checkIns].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
-  if (checkIns.length < 2) return null;
-  const previous = checkIns.at(-2)!;
-  const latest = checkIns.at(-1)!;
-  const delta = latest.balanceMinor - previous.balanceMinor;
-  if (delta === 0) return `No balance change since ${formatDate(previous.effectiveDate)}.`;
-  const verb = goal.direction === 'increase'
-    ? delta > 0 ? 'increased' : 'decreased'
-    : delta < 0 ? 'reduced' : 'increased';
-  return `${goal.direction === 'increase' ? 'Savings' : 'Debt'} ${verb} by ${formatMoney(Math.abs(delta), goal.currency)} since ${formatDate(previous.effectiveDate)}.`;
-}
-
-function formatDate(value: string): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
 }

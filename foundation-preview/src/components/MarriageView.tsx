@@ -992,8 +992,6 @@ function FoundationList({
                   ? 'unavailable'
                   : 'scored'
               }}
-              consistencyCaption="How often you show up."
-              onTrackCaption="How caught up you are."
               consistencyDescription="The average Consistency score of eligible linked Rhythms."
               onTrackDescription="The average On Track score of eligible linked Rhythms."
               {...(foundationRollup ? { rollup: foundationRollup } : {})}
@@ -1026,8 +1024,6 @@ function FoundationList({
               ariaLabel={`${selectedFoundation.name} Health summary`}
               consistency={foundationConsistency}
               onTrack={foundationOnTrack}
-              consistencyCaption="How often you show up."
-              onTrackCaption="How caught up you are."
               measureDisclosure
               headingAction={(
                 <HealthScoreInfoButton

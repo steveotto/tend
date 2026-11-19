@@ -63,17 +63,6 @@ import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { isValidDate } from '../domain/money-goals.ts';
 import type { StrengthMode } from '../domain/strength.ts';
 
-const metricCopy = {
-  consistency: {
-    title: 'Consistency',
-    shortDescription: 'Follow-through over time'
-  },
-  onTrack: {
-    title: 'On Track',
-    shortDescription: 'How caught up you are'
-  }
-} as const;
-
 export function RhythmHistoryView({
   rhythm,
   healthWorkoutSetting,
@@ -654,8 +643,6 @@ export function RhythmHistoryView({
               state: score.onTrack.kind,
               ...(score.onTrack.kind === 'unscored' ? { explanation: score.onTrack.explanation } : {})
             }}
-            consistencyCaption={metricCopy.consistency.shortDescription}
-            onTrackCaption={metricCopy.onTrack.shortDescription}
             measureDisclosure
             ariaLabel="Health score summary"
             headingAction={(
@@ -703,8 +690,6 @@ export function RhythmHistoryView({
                   state: score.onTrack.kind,
                   ...(score.onTrack.kind === 'unscored' ? { explanation: score.onTrack.explanation } : {})
                 }}
-                consistencyCaption={metricCopy.consistency.shortDescription}
-                onTrackCaption={metricCopy.onTrack.shortDescription}
                 rollup={rhythmRollup}
                 rhythmIdentity={{
                   name: rhythm.title,

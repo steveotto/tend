@@ -1,51 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { saveCheckIn, updateGoalSupportingRhythms } from '../src/domain/money-goals.ts';
-import { createPreviewEnvelope, createSamplePreviewData, parsePreviewBackup } from '../src/domain/preview-state.ts';
+import { goalDraftFrom, goalFromDraft, saveCheckIn } from '../src/domain/money-goals.ts';
+import {
+  createPreviewEnvelope,
+  createSamplePreviewData,
+  parsePreviewBackup,
+  PREVIEW_SCHEMA_VERSION
+} from '../src/domain/preview-state.ts';
 import { createValidatedPreviewAccountDocument } from '../src/storage/preview-account-backup.ts';
 
 const currentDate = '2026-10-21';
 
 function dataWithGoalLinks() {
   const data = createSamplePreviewData();
-  const savings = data.goals[0]!;
+  const savings = {
+    ...data.goals[0]!,
+    supportingRhythmIds: ['archived-rhythm-id', 'missing-rhythm-id']
+  };
   const corrected = saveCheckIn(savings, {
     effectiveDate: '2026-10-18',
     balance: '1300.00',
     note: 'Corrected snapshot'
   }, '2026-10-21T12:00:00.000Z', currentDate, savings.checkIns[1]).goal!;
+  const edited = goalFromDraft({
+    ...goalDraftFrom(corrected),
+    title: 'Edited savings goal'
+  }, corrected.id, corrected).goal!;
   data.goals = [
-    { ...corrected, supportingRhythmIds: ['archived-rhythm-id', 'missing-rhythm-id'] },
+    edited,
     { ...data.goals[1]!, supportingRhythmIds: ['disabled-finances-rhythm-id'] }
   ];
   return data;
 }
 
-describe('goal Rhythm-link serialization', () => {
-  it('lets one eligible Rhythm support multiple goals without duplicate links within a goal', () => {
-    const data = createSamplePreviewData();
-    const rhythmId = 'shared-finance-rhythm';
-    const eligibleRhythmIds = new Set([rhythmId]);
-    const first = updateGoalSupportingRhythms(
-      data.goals[0]!,
-      [{ rhythmId, linked: true }],
-      eligibleRhythmIds
-    ).goal!;
-    const second = updateGoalSupportingRhythms(
-      data.goals[1]!,
-      [{ rhythmId, linked: true }],
-      eligibleRhythmIds
-    ).goal!;
-    const repeatedLink = updateGoalSupportingRhythms(
-      first,
-      [{ rhythmId, linked: true }],
-      eligibleRhythmIds
-    ).goal!;
-
-    expect(first.supportingRhythmIds).toEqual([rhythmId]);
-    expect(second.supportingRhythmIds).toEqual([rhythmId]);
-    expect(repeatedLink.supportingRhythmIds).toEqual([rhythmId]);
-  });
-
+describe('legacy goal Rhythm association compatibility', () => {
   it('migrates schema v43 goals without links to the current schema without disturbing balances or history', () => {
     const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))) as {
       schemaVersion: number;
@@ -61,7 +48,7 @@ describe('goal Rhythm-link serialization', () => {
     expect(migrated).toMatchObject({
       valid: true,
       sourceSchemaVersion: 43,
-      envelope: { schemaVersion: 45 }
+      envelope: { schemaVersion: PREVIEW_SCHEMA_VERSION }
     });
     if (!migrated.valid) return;
     expect(migrated.envelope.data.goals.map(goal => goal.supportingRhythmIds ?? [])).toEqual([[], []]);
@@ -85,7 +72,7 @@ describe('goal Rhythm-link serialization', () => {
     expect(migrated).toMatchObject({
       valid: true,
       sourceSchemaVersion: 44,
-      envelope: { schemaVersion: 45 }
+      envelope: { schemaVersion: PREVIEW_SCHEMA_VERSION }
     });
     if (!migrated.valid) return;
     expect(migrated.envelope.data.goals[0]?.foundationId).toBeUndefined();
@@ -116,12 +103,13 @@ describe('goal Rhythm-link serialization', () => {
     }
   });
 
-  it('preserves archived, unavailable, and disabled-category IDs through backup and account-transfer serialization', () => {
+  it('preserves hidden IDs after a goal edit through backup and account-transfer serialization', () => {
     const data = dataWithGoalLinks();
     const envelope = createPreviewEnvelope(data);
     const imported = parsePreviewBackup(JSON.stringify(envelope), currentDate);
     expect(imported.valid).toBe(true);
     if (!imported.valid) return;
+    expect(imported.envelope.data.goals[0]?.title).toBe('Edited savings goal');
     expect(imported.envelope.data.goals.map(goal => goal.supportingRhythmIds)).toEqual([
       ['archived-rhythm-id', 'missing-rhythm-id'],
       ['disabled-finances-rhythm-id']

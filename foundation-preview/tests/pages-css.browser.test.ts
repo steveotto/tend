@@ -68,9 +68,31 @@ function contrastRatio(foreground: string, background: string): number {
     / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
 }
 
+async function colorsRenderIdentically(page: Page, first: string, second: string): Promise<boolean> {
+  return page.evaluate(({ first, second }) => {
+    if (!CSS.supports('color', first) || !CSS.supports('color', second)) return false;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Canvas 2D is unavailable for color comparison.');
+    const pixel = (color: string) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      return [...context.getImageData(0, 0, 1, 1).data];
+    };
+    const firstPixel = pixel(first);
+    const secondPixel = pixel(second);
+    return firstPixel.every((channel, index) => channel === secondPixel[index]);
+  }, { first, second });
+}
+
 async function setPreviewTextSize(page: Page, target: PreviewTextSize): Promise<void> {
+  await page.setViewportSize({ width: 375, height: 812 });
   const sizes: readonly PreviewTextSize[] = ['small', 'medium', 'large'];
   const button = page.locator('.mobile-display-toggle');
+  await button.waitFor({ state: 'visible' });
   const current = await button.getAttribute('data-text-size');
   const currentIndex = sizes.indexOf(current as PreviewTextSize);
   const targetIndex = sizes.indexOf(target);
@@ -390,12 +412,23 @@ async function verifyFinanceGoalToolPalette(page: Page): Promise<void> {
   const goalCard = zone.locator('.goal-card').first();
   assert.equal(await goalCard.evaluate(card => getComputedStyle(card).borderColor),
     'rgb(215, 223, 233)');
-  const supportingRhythmsButton = zone.locator('.goal-card__support .goal-text-button').first();
-  assert.equal(await supportingRhythmsButton.evaluate(button => getComputedStyle(button).color),
+  assert.equal(await zone.locator(
+    '.goal-card__support, .finance-goal-details__support, .finance-goal-rhythm-links'
+  ).count(), 0);
+  const goalTitle = (await goalCard.getByRole('heading').innerText()).trim();
+  assert.ok(goalTitle, 'The progress tracker should show a titled goal.');
+  const checkInButton = goalCard.getByRole('button', { name: 'Check in' });
+  const detailsButton = goalCard.getByRole('button', { name: `View details for ${goalTitle}` });
+  assert.equal(await checkInButton.isVisible(), true);
+  assert.equal(await detailsButton.isVisible(), true);
+  await checkInButton.focus();
+  await page.keyboard.press('Tab');
+  assert.equal(await detailsButton.evaluate(button => button === document.activeElement), true);
+  assert.equal(await detailsButton.evaluate(button => getComputedStyle(button).color),
     'rgb(74, 107, 148)');
-  await supportingRhythmsButton.focus();
-  assert.equal(await supportingRhythmsButton.evaluate(button => getComputedStyle(button).outlineColor),
+  assert.equal(await detailsButton.evaluate(button => getComputedStyle(button).outlineColor),
     'rgb(74, 107, 148)');
+  assert.equal(await detailsButton.evaluate(button => getComputedStyle(button).outlineWidth), '2px');
 
   const typeBadge = zone.locator('.goal-card__type').first();
   const badgeColors = await typeBadge.evaluate(badge => {
@@ -411,6 +444,310 @@ async function verifyFinanceGoalToolPalette(page: Page): Promise<void> {
     border: 'rgb(215, 223, 233)',
     color: 'rgb(74, 107, 148)'
   });
+}
+
+async function verifyFinanceGoalDetailsPalette(page: Page, goalTitle: string): Promise<void> {
+  const details = page.getByRole('dialog', { name: goalTitle });
+  const palette = await details.evaluate(dialog => {
+    const zone = dialog.querySelector<HTMLElement>('.finance-goal-details__tool-zone');
+    const progressTrack = zone?.querySelector<HTMLElement>('.goal-progress__track');
+    const progressFill = progressTrack?.querySelector<HTMLElement>(':scope > span');
+    const timeline = zone?.querySelector<HTMLElement>('.goal-timeline');
+    const plannedLine = timeline?.querySelector<SVGLineElement>('.goal-timeline__planned');
+    const actualPoint = timeline?.querySelector<SVGCircleElement>('.goal-timeline__actual');
+    const checkIns = zone?.querySelector<HTMLElement>('.goal-check-ins');
+    const correctionHistory = zone?.querySelector<HTMLElement>('.goal-correction-history');
+    const primaryAction = zone?.querySelector<HTMLElement>('.goal-footer .btn:not(.ghost)');
+    const card = zone?.querySelector<HTMLElement>('.goal-card');
+    if (!zone || !timeline || !plannedLine || !checkIns || !primaryAction || !card) {
+      throw new Error('Finance goal insights is missing its expected progress, chart, history, or actions.');
+    }
+    return {
+      zoneBackground: getComputedStyle(zone).backgroundColor,
+      zoneBorder: getComputedStyle(zone).borderTopColor,
+      goalCardBorderStyle: getComputedStyle(card).borderTopStyle,
+      progressTrack: progressTrack ? getComputedStyle(progressTrack).backgroundColor : null,
+      progressFill: progressFill ? getComputedStyle(progressFill).backgroundColor : null,
+      timelineBackground: getComputedStyle(timeline).backgroundColor,
+      timelineBorder: getComputedStyle(timeline).borderTopColor,
+      plannedLine: getComputedStyle(plannedLine).stroke,
+      actualPointFill: actualPoint ? getComputedStyle(actualPoint).fill : null,
+      actualPointStroke: actualPoint ? getComputedStyle(actualPoint).stroke : null,
+      observedLegendBorder: getComputedStyle(timeline.querySelector('.goal-timeline__legend i.is-observed')!).borderTopColor,
+      checkInsBackground: getComputedStyle(checkIns).backgroundColor,
+      checkInsBorder: getComputedStyle(checkIns).borderTopColor,
+      correctionHistory: correctionHistory
+        ? {
+            background: getComputedStyle(correctionHistory).backgroundColor,
+            border: getComputedStyle(correctionHistory).borderTopColor
+          }
+        : null,
+      primaryActionBackground: getComputedStyle(primaryAction).backgroundColor,
+      primaryActionColor: getComputedStyle(primaryAction).color,
+      isWholeModalWrapped: dialog.querySelector('.money-goal-dialog__surface > .tool-zone') !== null,
+      legacyRhythmUiCount: dialog.querySelectorAll(
+        '.goal-card__support, .finance-goal-details__support, .finance-goal-rhythm-links'
+      ).length
+    };
+  });
+  assert.deepEqual(palette, {
+    zoneBackground: 'rgb(238, 242, 247)',
+    zoneBorder: 'rgb(215, 223, 233)',
+    goalCardBorderStyle: 'none',
+    progressTrack: palette.progressTrack === null ? null : 'rgb(227, 235, 244)',
+    progressFill: palette.progressFill === null ? null : 'rgb(74, 107, 148)',
+    timelineBackground: 'rgb(227, 235, 244)',
+    timelineBorder: 'rgb(215, 223, 233)',
+    plannedLine: 'rgb(74, 107, 148)',
+    actualPointFill: palette.actualPointFill === null ? null : 'rgb(227, 235, 244)',
+    actualPointStroke: palette.actualPointStroke === null ? null : 'rgb(74, 107, 148)',
+    observedLegendBorder: 'rgb(74, 107, 148)',
+    checkInsBackground: 'rgb(227, 235, 244)',
+    checkInsBorder: 'rgb(215, 223, 233)',
+    correctionHistory: palette.correctionHistory
+      ? { background: 'rgb(227, 235, 244)', border: 'rgb(215, 223, 233)' }
+      : null,
+    primaryActionBackground: 'rgb(74, 107, 148)',
+    primaryActionColor: 'rgb(255, 255, 255)',
+    isWholeModalWrapped: false,
+    legacyRhythmUiCount: 0
+  });
+  assert.equal(await details.getByRole('button', { name: /supporting Rhythm/i }).count(), 0);
+  assert.equal(await details.getByText(/Supporting Rhythms/i).count(), 0);
+  const correctionLink = details.locator('.goal-check-ins .goal-text-button').first();
+  const focusTarget = await correctionLink.count()
+    ? correctionLink
+    : details.locator('.goal-footer .btn:not(.ghost)');
+  await details.getByRole('button', { name: 'Close goal details' }).focus();
+  let focusTargetReached = false;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await page.keyboard.press('Tab');
+    if (await focusTarget.evaluate(button => button === document.activeElement)) {
+      focusTargetReached = true;
+      break;
+    }
+  }
+  assert.equal(focusTargetReached, true, 'Keyboard focus should reach the goal action inside the modal.');
+  if (await correctionLink.count()) {
+    assert.equal(await correctionLink.evaluate(button => getComputedStyle(button).color), 'rgb(74, 107, 148)');
+    assert.equal(await correctionLink.evaluate(button => getComputedStyle(button).outlineColor), 'rgb(74, 107, 148)');
+  } else {
+    assert.equal(await focusTarget.evaluate(button => getComputedStyle(button).outlineColor), 'rgb(74, 107, 148)');
+  }
+  assert.equal(await details.getByRole('button', { name: 'Close goal details' }).isVisible(), true);
+}
+
+async function verifyFitnessLogDialogLayout(
+  page: Page,
+  {
+    dialogName,
+    closeButtonName,
+    dateLabel,
+    saveLabel,
+    hasMinutes,
+    optionLabels
+  }: {
+    dialogName: string;
+    closeButtonName: string;
+    dateLabel: string;
+    saveLabel: string;
+    hasMinutes: boolean;
+    optionLabels?: readonly string[];
+  }
+): Promise<void> {
+  const previousViewport = page.viewportSize();
+  let browserRhythmCreated = false;
+  for (const size of ['small', 'medium', 'large'] as const) {
+    await setPreviewTextSize(page, size);
+    for (const width of [375, 390, 430] as const) {
+      await page.setViewportSize({ width, height: 812 });
+      await page.getByRole('button', { name: saveLabel === 'Save stretch' ? 'Log stretch' : 'Log workout' }).click();
+      const dialog = page.getByRole('dialog', { name: dialogName });
+      await dialog.waitFor({ state: 'visible' });
+      const date = dialog.getByLabel(dateLabel);
+      if (saveLabel === 'Save workout' && !browserRhythmCreated) {
+        await dialog.getByRole('button', { name: 'Create a Rhythm' }).click();
+        const rhythmEditor = page.getByRole('dialog', { name: 'Add Rhythm' });
+        await rhythmEditor.getByLabel('Title').fill('Browser CSS Strength Rhythm');
+        await rhythmEditor.getByRole('button', { name: 'Save' }).click();
+        await rhythmEditor.waitFor({ state: 'hidden' });
+
+        const rhythmSelect = dialog.getByLabel('Link to a Rhythm (optional)');
+        assert.equal(await rhythmSelect.inputValue(), '');
+        await rhythmSelect.focus();
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('Shift+Tab');
+        assert.deepEqual(await rhythmSelect.evaluate(select => ({
+          active: document.activeElement === select,
+          focusVisible: select.matches(':focus-visible')
+        })), { active: true, focusVisible: true });
+        await rhythmSelect.selectOption({ label: 'Browser CSS Strength Rhythm' });
+        await dialog.getByText('Also records a completion for Browser CSS Strength Rhythm.').waitFor();
+        await rhythmSelect.selectOption({ label: 'Don’t link to a Rhythm' });
+        assert.equal(await rhythmSelect.inputValue(), '');
+        await dialog.getByText('Saved to workout history. Won’t contribute to Strength Health.').waitFor();
+        browserRhythmCreated = true;
+      }
+      const metrics = await dialog.evaluate(element => {
+        const scroll = element.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+        const header = element.querySelector<HTMLElement>('.money-goal-dialog__persistent-header');
+        const dateInput = element.querySelector<HTMLInputElement>('input[type="date"]');
+        const tiles = element.querySelector<HTMLElement>('.checkbox-tile-options');
+        const optional = element.querySelector<HTMLElement>('.fitness-log-form__optional');
+        const minuteInput = element.querySelector<HTMLInputElement>('input[type="number"]');
+        if (!scroll || !header || !dateInput || !tiles) {
+          throw new Error('Fitness log dialog is missing its shared scroll form structure.');
+        }
+        const rect = element.getBoundingClientRect();
+        const dateRect = dateInput.getBoundingClientRect();
+        const scrollRect = scroll.getBoundingClientRect();
+        const close = element.querySelector<HTMLButtonElement>('.money-goal-dialog__close');
+        const closeRect = close?.getBoundingClientRect();
+        const gridColumns = getComputedStyle(tiles).gridTemplateColumns.trim().split(/\s+/).length;
+        const dateStyle = getComputedStyle(dateInput);
+        const optionalStyle = optional ? getComputedStyle(optional) : null;
+        const minuteStyle = minuteInput ? getComputedStyle(minuteInput) : null;
+        return {
+          className: element.className,
+          viewportWidth: innerWidth,
+          viewportHeight: innerHeight,
+          documentWidth: document.documentElement.scrollWidth,
+          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          scrollHeight: scroll.scrollHeight,
+          scrollClientHeight: scroll.clientHeight,
+          scrollPaddingLeft: getComputedStyle(scroll).paddingLeft,
+          headerTop: header.getBoundingClientRect().top,
+          closeRect: closeRect && { top: closeRect.top, bottom: closeRect.bottom },
+          dateStyle: {
+            height: dateRect.height,
+            borderRadius: dateStyle.borderTopLeftRadius,
+            fontSize: dateStyle.fontSize,
+            outlineWidth: dateStyle.outlineWidth,
+            outlineOffset: dateStyle.outlineOffset,
+            leftClearance: dateRect.left - scrollRect.left,
+            rightClearance: scrollRect.right - dateRect.right
+          },
+          gridColumns,
+          optionCount: tiles.querySelectorAll('input[type="checkbox"]').length,
+          optionLabels: [...tiles.querySelectorAll('label')].map(label => label.textContent?.trim()),
+          optional: optionalStyle && {
+            whiteSpace: optionalStyle.whiteSpace,
+            fontWeight: optionalStyle.fontWeight
+          },
+          minutes: minuteInput && {
+            value: minuteInput.value,
+            min: minuteInput.min,
+            max: minuteInput.max,
+            step: minuteInput.step,
+            height: minuteInput.getBoundingClientRect().height,
+            borderRadius: minuteStyle?.borderTopLeftRadius,
+            fontSize: minuteStyle?.fontSize
+          },
+        };
+      });
+
+      assert.ok(metrics.className.includes('dialog--phone-fullscreen'));
+      assert.ok(metrics.className.includes('money-goal-dialog--scrollable-body'));
+      assert.ok(metrics.className.includes('money-goal-dialog--fitness-log'));
+      assert.equal(metrics.viewportWidth, width);
+      assert.equal(metrics.documentWidth, width, `Fitness log must not cause horizontal overflow at ${width}px / ${size}.`);
+      assert.deepEqual(metrics.rect, { x: 0, y: 0, width, height: 812 });
+      assert.equal(metrics.scrollPaddingLeft, '5px');
+      assert.equal(metrics.headerTop >= 0, true);
+      assert.ok(metrics.closeRect && metrics.closeRect.top >= 0 && metrics.closeRect.bottom <= 812);
+      assert.ok(metrics.optionCount > 0);
+      await dialog.getByRole('button', { name: closeButtonName }).waitFor({ state: 'visible' });
+      if (saveLabel === 'Save workout') {
+        const rhythmSelect = dialog.getByLabel('Link to a Rhythm (optional)');
+        const rhythmBounds = await rhythmSelect.boundingBox();
+        assert.ok(rhythmBounds && rhythmBounds.x >= 0 && rhythmBounds.x + rhythmBounds.width <= width,
+          `Rhythm dropdown must fit at ${width}px / ${size}.`);
+      }
+      if (optionLabels) {
+        assert.equal(metrics.optionCount, optionLabels.length);
+        assert.deepEqual(metrics.optionLabels, optionLabels);
+      }
+      const expectedGridColumns = width === 430 && size === 'small' ? 2 : 1;
+      assert.equal(metrics.gridColumns, expectedGridColumns,
+        `Checkbox tiles should adapt at ${width}px / ${size}.`);
+
+      await date.focus();
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Shift+Tab');
+      const focusMetrics = await date.evaluate(input => {
+        const region = input.closest('.money-goal-dialog__scroll-region');
+        if (!region) throw new Error('Fitness log date input is outside the scroll region.');
+        const style = getComputedStyle(input);
+        const inputRect = input.getBoundingClientRect();
+        const regionRect = region.getBoundingClientRect();
+        const outlineClearance = Number.parseFloat(style.outlineWidth) + Number.parseFloat(style.outlineOffset);
+        return {
+          active: document.activeElement === input,
+          visibleFocus: input.matches(':focus-visible'),
+          outlineWidth: style.outlineWidth,
+          outlineOffset: style.outlineOffset,
+          leftClearance: inputRect.left - regionRect.left,
+          rightClearance: regionRect.right - inputRect.right,
+          outlineClearance
+        };
+      });
+      assert.equal(focusMetrics.active, true);
+      assert.equal(focusMetrics.visibleFocus, true);
+      assert.equal(focusMetrics.outlineWidth, '2px');
+      assert.equal(focusMetrics.outlineOffset, '2px');
+      assert.ok(focusMetrics.leftClearance >= focusMetrics.outlineClearance,
+        `Date focus outline is clipped at the left edge: ${JSON.stringify(focusMetrics)}`);
+      assert.ok(focusMetrics.rightClearance >= focusMetrics.outlineClearance,
+        `Date focus outline is clipped at the right edge: ${JSON.stringify(focusMetrics)}`);
+
+      if (hasMinutes) {
+        assert.deepEqual(metrics.optional, { whiteSpace: 'nowrap', fontWeight: '400' });
+        assert.deepEqual(metrics.minutes, {
+          value: '',
+          min: '1',
+          max: '1440',
+          step: '1',
+          height: metrics.dateStyle.height,
+          borderRadius: '10px',
+          fontSize: metrics.dateStyle.fontSize
+        });
+      }
+
+      await page.setViewportSize({ width, height: 420 });
+      const reducedViewport = await dialog.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        const region = element.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')!;
+        return {
+          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          scrollHeight: region.scrollHeight,
+          scrollClientHeight: region.clientHeight,
+          close: element.querySelector<HTMLButtonElement>('.money-goal-dialog__close')!.getBoundingClientRect()
+        };
+      });
+      assert.deepEqual(reducedViewport.rect, { x: 0, y: 0, width, height: 420 });
+      assert.ok(reducedViewport.scrollHeight > reducedViewport.scrollClientHeight);
+      assert.ok(reducedViewport.close.top >= 0 && reducedViewport.close.bottom <= 420);
+      const scrollRegion = dialog.locator('.money-goal-dialog__scroll-region');
+      await scrollRegion.focus();
+      await page.keyboard.press('End');
+      const keyboardScroll = await scrollRegion.evaluate(element => ({
+        top: element.scrollTop,
+        maximum: element.scrollHeight - element.clientHeight
+      }));
+      assert.ok(keyboardScroll.maximum > 0);
+      assert.ok(keyboardScroll.top >= keyboardScroll.maximum - 1);
+      await scrollRegion.evaluate(element => { element.scrollTop = element.scrollHeight; });
+      for (const label of [saveLabel, 'Cancel']) {
+        const action = dialog.getByRole('button', { name: label });
+        const actionRect = await action.boundingBox();
+        assert.ok(actionRect && actionRect.y >= 0 && actionRect.y + actionRect.height <= 420,
+          `${label} must be reachable in the reduced viewport at ${width}px / ${size}.`);
+      }
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    }
+  }
+  if (previousViewport) await page.setViewportSize(previousViewport);
 }
 
 async function main() {
@@ -589,6 +926,15 @@ async function main() {
           settingsCloseName: 'Close Strength settings',
           mapName: 'Front muscle training status map'
         });
+        await page.getByRole('tab', { name: 'Workouts' }).click();
+        await verifyFitnessLogDialogLayout(page, {
+          dialogName: 'Log workout',
+          closeButtonName: 'Close workout log',
+          dateLabel: 'Workout date',
+          saveLabel: 'Save workout',
+          hasMinutes: false
+        });
+        await page.getByRole('tab', { name: 'Body' }).click();
 
         await page.getByRole('button', { name: 'All Foundations' }).click();
         await page.getByRole('button', { name: /Open Flexibility foundation details/ }).click();
@@ -600,6 +946,19 @@ async function main() {
           settingsCloseName: 'Close stretch intervals',
           mapName: 'Front Stretch schedule stretching map'
         });
+        await page.getByRole('tab', { name: 'Routines' }).click();
+        await verifyFitnessLogDialogLayout(page, {
+          dialogName: 'Log a stretch',
+          closeButtonName: 'Close stretch session',
+          dateLabel: 'Date',
+          saveLabel: 'Save stretch',
+          hasMinutes: true,
+          optionLabels: [
+            'Hamstrings', 'Calves', 'Glutes', 'Abs', 'Hip flexors',
+            'Quads', 'Chest', 'Shoulders', 'Back', 'Neck'
+          ]
+        });
+        await page.getByRole('tab', { name: 'Body' }).click();
 
         await page.getByRole('button', { name: 'All Foundations' }).click();
         await page.getByRole('button', { name: 'Home' }).click();
@@ -2994,10 +3353,29 @@ async function main() {
                   if (!button || !panel || !icon) throw new Error('Category Health disclosure target disappeared.');
                   const buttonStyle = getComputedStyle(button);
                   const iconStyle = getComputedStyle(icon);
+                  const captions = [...panel.querySelectorAll<HTMLElement>('.health-score-measures__caption')]
+                    .map(caption => {
+                      const range = document.createRange();
+                      range.selectNodeContents(caption);
+                      const textRects = [...range.getClientRects()];
+                      const rect = caption.getBoundingClientRect();
+                      return {
+                        text: caption.textContent?.trim(),
+                        left: rect.left,
+                        right: rect.right,
+                        width: caption.clientWidth,
+                        scrollWidth: caption.scrollWidth,
+                        textRects: textRects.map(textRect => ({
+                          left: textRect.left,
+                          right: textRect.right
+                        }))
+                      };
+                    });
                   return {
                     expanded: button.getAttribute('aria-expanded'),
                     hidden: panel.hidden,
                     captions: panel.querySelectorAll('.health-score-measures__caption').length,
+                    captionLayout: captions,
                     backgroundColor: buttonStyle.backgroundColor,
                     borderColor: buttonStyle.borderTopColor,
                     iconStroke: iconStyle.stroke,
@@ -3009,6 +3387,17 @@ async function main() {
                 assert.equal(expandedLayout.expanded, 'true');
                 assert.equal(expandedLayout.hidden, false);
                 assert.equal(expandedLayout.captions, 2);
+                assert.deepEqual(expandedLayout.captionLayout.map(caption => caption.text), [
+                  'Follow-through over time',
+                  'How up to date you are'
+                ]);
+                assert.ok(expandedLayout.captionLayout.every(caption =>
+                  caption.left >= 0
+                  && caption.right <= viewportWidth
+                  && caption.scrollWidth <= caption.width
+                  && caption.textRects.length >= 1
+                  && caption.textRects.every(rect => rect.left >= 0 && rect.right <= viewportWidth)
+                ), `Health measure captions should wrap naturally without clipping at ${viewportWidth}px / ${textSize}: ${JSON.stringify(expandedLayout.captionLayout)}.`);
                 assert.equal(expandedLayout.backgroundColor, 'rgb(36, 107, 82)');
                 assert.equal(expandedLayout.borderColor, 'rgb(36, 107, 82)');
                 assert.equal(expandedLayout.iconStroke, 'rgb(255, 255, 255)');
@@ -3088,6 +3477,49 @@ async function main() {
         assert.deepEqual(sectionTabOrder.map(label => label.trim()), ['Body', 'Workouts', 'Rhythms']);
         assert.equal(await bodyTab.getAttribute('aria-selected'), 'true',
           'Strength should default to Body.');
+        await page.evaluate(() => {
+          const section = document.querySelector<HTMLElement>(
+            '#strength-panel-workouts [aria-labelledby="saved-workouts-heading"]'
+          );
+          if (!section) throw new Error('Saved workout section is missing.');
+          let list = section.querySelector<HTMLElement>('.strength-template-list');
+          if (!list) {
+            list = document.createElement('div');
+            list.className = 'strength-template-list';
+            const history = section.parentElement?.querySelector('.strength-history-page');
+            section.parentElement?.insertBefore(list, history ?? null);
+          }
+          const card = document.createElement('article');
+          card.className = 'strength-template';
+          card.dataset.layoutTest = 'true';
+          const content = document.createElement('div');
+          content.className = 'strength-template__content';
+          const title = document.createElement('h3');
+          title.textContent = 'A saved workout title that wraps naturally on narrow phones';
+          const groups = document.createElement('p');
+          groups.textContent = 'Chest · Back · Biceps · Triceps · Shoulders · Abs · Quads · Hamstrings · Calves';
+          const summary = document.createElement('p');
+          summary.className = 'strength-template__exercise-summary';
+          summary.textContent = '5 exercises · 18 planned sets';
+          content.append(title, groups, summary);
+
+          const menu = document.createElement('details');
+          menu.className = 'strength-template__menu';
+          const menuButton = document.createElement('summary');
+          menuButton.setAttribute('aria-label', 'Actions for responsive workout sample');
+          menuButton.textContent = '⋯';
+          menu.append(menuButton);
+
+          const actions = document.createElement('div');
+          actions.className = 'strength-template__actions';
+          const workout = document.createElement('button');
+          workout.type = 'button';
+          workout.className = 'btn mini';
+          workout.textContent = 'Workout';
+          actions.append(workout);
+          card.append(content, menu, actions);
+          list.append(card);
+        });
         for (const textSize of ['small', 'medium', 'large'] as const) {
           await page.setViewportSize({ width: 375, height: 844 });
           for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -3306,6 +3738,60 @@ async function main() {
             assert.ok(rhythmHeaderLayout.addRight !== null && rhythmHeaderLayout.addRight <= rhythmHeaderLayout.panelRight! + 1);
             assert.ok(rhythmHeaderLayout.badgeWidth > 0 && rhythmHeaderLayout.badgeHeight > 0);
             await workoutsTab.click();
+            const savedWorkoutLayout = await page.locator(
+              '#strength-panel-workouts .strength-template[data-layout-test="true"]'
+            ).evaluate(card => {
+              const content = card.querySelector<HTMLElement>('.strength-template__content');
+              const title = content?.querySelector<HTMLElement>('h3');
+              const description = content?.querySelector<HTMLElement>('p');
+              const menu = card.querySelector<HTMLElement>('.strength-template__menu > summary');
+              const action = card.querySelector<HTMLButtonElement>('.strength-template__actions .btn');
+              if (!content || !title || !description || !menu || !action) {
+                throw new Error('Saved workout layout fixture is missing its title, summary, menu, or action.');
+              }
+              const cardRect = card.getBoundingClientRect();
+              const contentRect = content.getBoundingClientRect();
+              const titleRect = title.getBoundingClientRect();
+              const descriptionRect = description.getBoundingClientRect();
+              const menuRect = menu.getBoundingClientRect();
+              const actionRect = action.getBoundingClientRect();
+              const overlaps = (a: DOMRect, b: DOMRect) =>
+                a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+              return {
+                cardRight: cardRect.right,
+                cardLeft: cardRect.left,
+                contentRight: contentRect.right,
+                contentLeft: contentRect.left,
+                titleLeft: titleRect.left,
+                titleWidth: title.clientWidth,
+                titleScrollWidth: title.scrollWidth,
+                descriptionLeft: descriptionRect.left,
+                menuRight: menuRect.right,
+                menuBottom: menuRect.bottom,
+                actionRight: actionRect.right,
+                actionTop: actionRect.top,
+                actionHeight: actionRect.height,
+                contentOverlapsAction: overlaps(contentRect, actionRect),
+                viewportWidth: document.documentElement.clientWidth,
+                documentWidth: document.documentElement.scrollWidth
+              };
+            });
+            assert.equal(savedWorkoutLayout.viewportWidth, viewportWidth);
+            assert.equal(savedWorkoutLayout.documentWidth, viewportWidth,
+              `Saved workout card must not overflow at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(savedWorkoutLayout.cardLeft >= 0 && savedWorkoutLayout.cardRight <= viewportWidth);
+            assert.ok(savedWorkoutLayout.titleWidth > 0
+              && savedWorkoutLayout.titleScrollWidth <= savedWorkoutLayout.titleWidth,
+            `Saved workout title must wrap inside its column at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(savedWorkoutLayout.descriptionLeft, savedWorkoutLayout.titleLeft,
+              `Saved workout title and muscle groups must remain left-aligned at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(Math.abs(savedWorkoutLayout.menuRight - savedWorkoutLayout.actionRight) <= 1,
+              `Workout must align beneath the menu at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(savedWorkoutLayout.actionTop >= savedWorkoutLayout.menuBottom,
+              `Workout must stay below the menu at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(savedWorkoutLayout.actionHeight >= 40);
+            assert.equal(savedWorkoutLayout.contentOverlapsAction, false,
+              `Workout action must not overlap long card content at ${viewportWidth}px / ${textSize} text.`);
             const historyHeading = page.locator('#strength-panel-workouts .strength-history-page > .strength-section-heading');
             const historyAction = await historyHeading.evaluate(element => {
               const title = element.querySelector<HTMLElement>('.strength-section-heading__title-row');
@@ -3396,8 +3882,16 @@ async function main() {
           assert.ok(createCardLayout.buttonRight <= createCardLayout.cardRight - createCardLayout.cardPaddingRight + 0.5,
             `Create action should stay inside its card at ${textSize} text.`);
           assert.equal(createCardLayout.createBackground, createCardLayout.cardBackground);
-          assert.equal(createCardLayout.createBorder, createCardLayout.starterBorder);
-          assert.equal(createCardLayout.createColor, createCardLayout.starterBorder);
+          assert.equal(
+            await colorsRenderIdentically(page, createCardLayout.createBorder, createCardLayout.starterBorder),
+            true,
+            'Create border and starter border should render the same color.'
+          );
+          assert.equal(
+            await colorsRenderIdentically(page, createCardLayout.createColor, createCardLayout.starterBorder),
+            true,
+            'Create text and starter border should render the same color.'
+          );
           const p90xCard = routines.locator('.strength-workout-suggestion').filter({ hasText: 'P90X Ab Ripper' });
           await p90xCard.locator('.strength-workout-suggestion__preview summary').click();
           const routineLayout = await routines.evaluate(dialog => {
@@ -3630,6 +4124,11 @@ async function main() {
             await page.setViewportSize({ width: viewportWidth, height: 844 });
             await flexibilityBodyTab.click();
             await page.getByRole('region', { name: 'Body insights' }).waitFor();
+            assert.equal(
+              await page.locator('#flexibility-panel-body').getByRole('button', { name: 'Log Shoulders' }).count(),
+              0,
+              'The selected-region log action must stay out of Flexibility Body.'
+            );
             const bodyLayout = await page.locator('#flexibility-panel-body').evaluate(panel => {
               const map = panel.querySelector<HTMLElement>('.flexibility-map-card');
               const heading = map?.querySelector<HTMLElement>('.tool-zone__purpose');
@@ -3710,6 +4209,117 @@ async function main() {
               `Flexibility History must be separated from My routines at ${viewportWidth}px / ${textSize} text.`);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), viewportWidth,
               `Flexibility Routines must not overflow at ${viewportWidth}px / ${textSize} text.`);
+
+            const logButton = routinesPanel.getByRole('button', { name: 'Log stretch' });
+            await logButton.click();
+            const stretchLogDialog = page.getByRole('dialog', { name: 'Log a stretch' });
+            const shouldersCheckbox = stretchLogDialog.getByRole('checkbox', { name: 'Shoulders' });
+            if (!await shouldersCheckbox.isChecked()) await shouldersCheckbox.check();
+            const modalLayout = await stretchLogDialog.evaluate(dialog => {
+              const scrollRegion = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+              const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+              const date = dialog.querySelector<HTMLInputElement>('#flexibility-log-date');
+              const minutes = dialog.querySelector<HTMLInputElement>('#flexibility-log-minutes');
+              const notes = dialog.querySelector<HTMLTextAreaElement>('#flexibility-log-notes');
+              const actions = dialog.querySelector<HTMLElement>('.money-goal-dialog__actions');
+              const save = dialog.querySelector<HTMLButtonElement>('button[type="submit"]');
+              const tiles = [...dialog.querySelectorAll<HTMLElement>('.checkbox-tile-options__tile')];
+              const checkbox = dialog.querySelector<HTMLInputElement>('.checkbox-tile-options__tile input');
+              if (!scrollRegion || !close || !date || !minutes || !notes || !actions || !save || !checkbox
+                || tiles.length === 0) {
+                throw new Error('Stretch logging is missing its shared dialog, fields, or selection tiles.');
+              }
+              const dialogRect = dialog.getBoundingClientRect();
+              const closeRect = close.getBoundingClientRect();
+              const scrollRect = scrollRegion.getBoundingClientRect();
+              return {
+                dialogBounds: {
+                  left: dialogRect.left,
+                  top: dialogRect.top,
+                  width: dialogRect.width,
+                  height: dialogRect.height
+                },
+                viewportWidth: document.documentElement.clientWidth,
+                viewportHeight: document.documentElement.clientHeight,
+                documentWidth: document.documentElement.scrollWidth,
+                scrollOverflowY: getComputedStyle(scrollRegion).overflowY,
+                scrollHeight: scrollRegion.scrollHeight,
+                scrollClientHeight: scrollRegion.clientHeight,
+                closeHeight: closeRect.height,
+                closeInsideViewport: closeRect.top >= 0 && closeRect.bottom <= document.documentElement.clientHeight,
+                dateHeight: date.getBoundingClientRect().height,
+                minutesHeight: minutes.getBoundingClientRect().height,
+                notesHeight: notes.getBoundingClientRect().height,
+                actionBounds: (() => {
+                  const rect = actions.getBoundingClientRect();
+                  return { top: rect.top, bottom: rect.bottom };
+                })(),
+                scrollBounds: { top: scrollRect.top, bottom: scrollRect.bottom },
+                saveEnabled: !save.disabled,
+                tileHeights: tiles.map(tile => tile.getBoundingClientRect().height),
+                checkboxSize: (() => {
+                  const rect = checkbox.getBoundingClientRect();
+                  return { width: rect.width, height: rect.height };
+                })()
+              };
+            });
+            assert.equal((await stretchLogDialog.getAttribute('class'))?.includes('dialog--phone-fullscreen'), true);
+            assert.equal((await stretchLogDialog.getAttribute('class'))?.includes('money-goal-dialog--scrollable-body'), true);
+            assert.deepEqual(modalLayout.dialogBounds, {
+              left: 0,
+              top: 0,
+              width: viewportWidth,
+              height: 844
+            });
+            assert.equal(modalLayout.viewportWidth, viewportWidth);
+            assert.equal(modalLayout.viewportHeight, 844);
+            assert.equal(modalLayout.documentWidth, viewportWidth,
+              `Stretch logging must not overflow at ${viewportWidth}px / ${textSize} text.`);
+            assert.equal(modalLayout.scrollOverflowY, 'auto');
+            assert.ok(modalLayout.closeHeight >= 44 && modalLayout.closeInsideViewport);
+            assert.ok(modalLayout.dateHeight >= 44 && modalLayout.minutesHeight >= 44);
+            assert.ok(modalLayout.notesHeight >= 72);
+            assert.ok(modalLayout.saveEnabled);
+            assert.ok(modalLayout.tileHeights.every(height => height >= 44));
+            assert.deepEqual(modalLayout.checkboxSize, { width: 18, height: 18 });
+
+            const scrollRegion = stretchLogDialog.getByRole('region', { name: 'Log a stretch content' });
+            if (modalLayout.scrollHeight > modalLayout.scrollClientHeight) {
+              await scrollRegion.focus();
+              await page.keyboard.press('End');
+              await page.waitForFunction(() =>
+                (document.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')?.scrollTop ?? 0) > 0
+              );
+              const endScroll = await stretchLogDialog.evaluate(dialog => {
+                const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+                const actions = dialog.querySelector<HTMLElement>('.money-goal-dialog__actions');
+                if (!region || !actions) throw new Error('Stretch logging lost its independent scroll region or actions.');
+                const regionRect = region.getBoundingClientRect();
+                const actionsRect = actions.getBoundingClientRect();
+                return {
+                  scrollTop: region.scrollTop,
+                  regionBounds: { top: regionRect.top, bottom: regionRect.bottom },
+                  actionBounds: { top: actionsRect.top, bottom: actionsRect.bottom },
+                  actionsVisible: actionsRect.top >= regionRect.top - 1 && actionsRect.bottom <= regionRect.bottom + 1
+                };
+              });
+              assert.ok(endScroll.scrollTop > 0);
+              assert.equal(endScroll.actionsVisible, true,
+                `Keyboard End should reveal Save and Cancel inside the independently scrolling content: ${JSON.stringify(endScroll)}.`);
+              await page.keyboard.press('Home');
+              await page.waitForFunction(() =>
+                (document.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')?.scrollTop ?? -1) === 0
+              );
+            } else {
+              assert.ok(
+                modalLayout.actionBounds.top >= modalLayout.scrollBounds.top - 1
+                  && modalLayout.actionBounds.bottom <= modalLayout.scrollBounds.bottom + 1,
+                `Stretch dialog actions should remain visible when the content fits without scrolling: ${JSON.stringify(modalLayout)}.`
+              );
+            }
+            await stretchLogDialog.getByRole('button', { name: 'Close stretch session' }).click();
+            assert.equal(await logButton.evaluate(button => document.activeElement === button), true,
+              'Closing stretch logging should return focus to the Routines Log stretch action.');
 
             await flexibilityRhythmsTab.click();
             const rhythmPanel = page.locator('#flexibility-panel-rhythms');
@@ -3845,6 +4455,76 @@ async function main() {
           });
         assert.equal(populatedRoutineSpacing.rowGap, '18px');
         assert.ok(populatedRoutineSpacing.sectionGap >= 17);
+
+        await page.locator('#flexibility-panel-routines')
+          .getByRole('button', { name: 'Log stretch' }).click();
+        const historyLog = page.getByRole('dialog', { name: 'Log a stretch' });
+        const neckCheckbox = historyLog.getByRole('checkbox', { name: 'Neck' });
+        if (!await neckCheckbox.isChecked()) await neckCheckbox.check();
+        await historyLog.locator('#flexibility-log-minutes').fill('5');
+        await historyLog.getByRole('textbox', { name: 'Notes (optional)' }).fill('Synthetic history note');
+        await historyLog.getByRole('button', { name: 'Save stretch' }).click();
+        const unlinkedSaveDialog = page.getByRole('dialog', { name: 'Save without a Rhythm?' });
+        if (await unlinkedSaveDialog.count()) {
+          await unlinkedSaveDialog.getByRole('button', { name: 'Save stretch only' }).click();
+        }
+        const manualHistoryCard = page.locator('.flexibility-history__item').first();
+        await manualHistoryCard.waitFor();
+        assert.equal(await manualHistoryCard.getByRole('heading', { name: 'Manual Stretch', level: 3 }).isVisible(), true);
+        assert.equal(await manualHistoryCard.getByText('Synthetic history note', { exact: true }).isVisible(), true);
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          await setPreviewTextSize(page, textSize);
+          for (const viewportWidth of [375, 390, 430] as const) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const layout = await manualHistoryCard.evaluate(card => {
+              const title = card.querySelector<HTMLElement>('.flexibility-history__title');
+              const details = card.querySelector<HTMLElement>('.flexibility-history__details');
+              const note = card.querySelector<HTMLElement>('.flexibility-history__note');
+              const actions = card.querySelector<HTMLElement>('.flexibility-history__actions');
+              const buttons = [...(actions?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+              if (!title || !details || !note || !actions || buttons.length !== 2) {
+                throw new Error('Manual Stretch history is missing its title, details, note, or paired actions.');
+              }
+              const rect = (element: HTMLElement) => {
+                const bounds = element.getBoundingClientRect();
+                return { top: bounds.top, bottom: bounds.bottom, left: bounds.left, right: bounds.right };
+              };
+              return {
+                titleText: title.textContent?.trim(),
+                details: details.textContent?.trim(),
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+                cardRight: card.getBoundingClientRect().right,
+                titleBounds: rect(title),
+                detailsBounds: rect(details),
+                note: rect(note),
+                actions: rect(actions),
+                actionDirection: getComputedStyle(actions).flexDirection,
+                actionGap: getComputedStyle(actions).columnGap,
+                buttonBounds: buttons.map(rect),
+                detailsFits: details.scrollWidth <= details.clientWidth,
+                noteFits: note.scrollWidth <= note.clientWidth
+              };
+            });
+            assert.equal(layout.viewportWidth, viewportWidth);
+            assert.equal(layout.documentWidth, viewportWidth,
+              `Manual Stretch history must not overflow at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(layout.cardRight <= viewportWidth + 1);
+            assert.equal(layout.titleText, 'Manual Stretch');
+            assert.match(layout.details ?? '', /5 min/);
+            assert.doesNotMatch(layout.details ?? '', /T\d{2}:\d{2}/,
+              'Manual Stretch history must not invent a time.');
+            assert.equal(layout.actionDirection, 'row');
+            assert.equal(layout.actionGap, '8px');
+            assert.equal(Math.abs(layout.buttonBounds[0]!.top - layout.buttonBounds[1]!.top) < 1, true,
+              `Edit and Delete should remain side by side at ${viewportWidth}px / ${textSize} text.`);
+            assert.ok(layout.detailsBounds.top >= layout.titleBounds.bottom);
+            assert.ok(layout.note.top >= layout.detailsBounds.bottom);
+            assert.ok(layout.actions.top >= layout.note.bottom);
+            assert.equal(layout.detailsFits, true);
+            assert.equal(layout.noteFits, true);
+          }
+        }
 
         await page.setViewportSize({ width: 812, height: 375 });
         await flexibilityBodyTab.click();
@@ -4032,7 +4712,8 @@ async function main() {
             dialog: 'Cardio goals',
             emptyActivity: 'No valid runs logged yet.',
             emptyRhythms: 'No Rhythms are linked to Cardio yet.',
-            card: '.cardio-progress-card'
+            card: '.cardio-progress-card',
+            toolZone: 'Activity insights'
           },
           {
             name: 'Weight',
@@ -4043,7 +4724,8 @@ async function main() {
             dialog: 'Weight goals',
             emptyActivity: 'No valid weigh-ins to show.',
             emptyRhythms: 'No Rhythms are linked to Weight yet.',
-            card: '.weight-progress-card'
+            card: '.weight-progress-card',
+            toolZone: 'Weight insights'
           }
         ] as const;
 
@@ -4055,6 +4737,27 @@ async function main() {
             name: `Open ${foundation.name} foundation details`
           }).click();
           const tabs = page.getByRole('tablist', { name: foundation.tablist });
+          await tabs.getByRole('tab', { name: 'Progress', exact: true }).click();
+          await verifyToolZoneResponsiveLayout(page, foundation.toolZone);
+          const toolZonePlacement = await page.evaluate(({ tablistName, zoneName }) => {
+            const tablist = document.querySelector<HTMLElement>(
+              `[role="tablist"][aria-label="${tablistName}"]`
+            );
+            const zone = [...document.querySelectorAll<HTMLElement>('.tool-zone')]
+              .find(element => element.querySelector('.tool-zone__purpose')?.textContent?.trim() === zoneName);
+            const summary = document.querySelector<HTMLElement>('.foundation-health-card');
+            if (!tablist || !zone || !summary) {
+              throw new Error('Cardio or Weight progress must keep Health and tabs outside ToolZone.');
+            }
+            return {
+              tabsOutsideZone: !zone.contains(tablist),
+              healthOutsideZone: !zone.contains(summary)
+            };
+          }, { tablistName: foundation.tablist, zoneName: foundation.toolZone });
+          assert.deepEqual(toolZonePlacement, {
+            tabsOutsideZone: true,
+            healthOutsideZone: true
+          });
 
           for (const textSize of ['small', 'medium', 'large'] as const) {
             await page.setViewportSize({ width: 375, height: 844 });
@@ -4071,23 +4774,30 @@ async function main() {
                 const tab = tabs.getByRole('tab', { name: tabName, exact: true });
                 await tab.click();
                 const panel = page.locator(`#${foundation.panels[tabIndex]}`);
-                const panelLayout = await panel.evaluate((element, tablistName) => {
+                const panelLayout = await panel.evaluate((element, { tablistName, tabName }) => {
                   const panelElement = element as HTMLElement;
                   const tablist = document.querySelector<HTMLElement>(
                     `[role="tablist"][aria-label="${tablistName}"]`
                   );
+                  const zone = panelElement.querySelector<HTMLElement>('.tool-zone');
                   const heading = panelElement.querySelector<HTMLElement>('.strength-section-heading');
-                  const title = heading?.querySelector<HTMLElement>('.strength-section-heading__title-row');
-                  const actions = heading?.querySelector<HTMLElement>('.strength-section-heading__actions');
+                  const isProgress = tabName === 'Progress';
+                  const root = isProgress ? zone : heading;
+                  const title = isProgress
+                    ? zone?.querySelector<HTMLElement>('.tool-zone__intro')
+                    : heading?.querySelector<HTMLElement>('.strength-section-heading__title-row');
+                  const actions = isProgress
+                    ? zone?.querySelector<HTMLElement>('.tool-zone__actions')
+                    : heading?.querySelector<HTMLElement>('.strength-section-heading__actions');
                   const card = panelElement.querySelector<HTMLElement>(
                     '.cardio-progress-card, .weight-progress-card, .cardio-history-card, .weight-history-card'
                   );
-                  if (!tablist || !heading || !title || !actions) {
-                    throw new Error('Cardio or Weight Foundation panel is missing its shared section heading.');
+                  if (!tablist || !root || !title || !actions) {
+                    throw new Error('Cardio or Weight Foundation panel is missing its shared heading or ToolZone.');
                   }
                   const panelRect = panelElement.getBoundingClientRect();
                   const tablistRect = tablist.getBoundingClientRect();
-                  const headingRect = heading.getBoundingClientRect();
+                  const headingRect = root.getBoundingClientRect();
                   const titleRect = title.getBoundingClientRect();
                   const actionsRect = actions.getBoundingClientRect();
                   return {
@@ -4107,7 +4817,7 @@ async function main() {
                     actionHeights: [...actions.querySelectorAll<HTMLElement>('button')]
                       .map(button => button.getBoundingClientRect().height)
                   };
-                }, foundation.tablist);
+                }, { tablistName: foundation.tablist, tabName });
                 assert.equal(panelLayout.viewportWidth, viewportWidth);
                 assert.equal(panelLayout.documentWidth, viewportWidth,
                   `${foundation.name} ${tabName} must not overflow at ${viewportWidth}px / ${textSize} text.`);
@@ -4122,7 +4832,7 @@ async function main() {
                 assert.ok(panelLayout.actionHeights.length > 0);
                 assert.ok(panelLayout.actionHeights.every(height => height >= 44),
                   `${foundation.name} ${tabName} actions must retain touch targets.`);
-                if ((foundation.name === 'Cardio' && (tabName === 'Progress' || tabName === 'Activities'))
+                if ((foundation.name === 'Cardio' && tabName === 'Activities')
                   || (foundation.name === 'Weight' && tabName === 'Measurements')) {
                   const sectionSpacing = await panel.evaluate(element => {
                     const heading = element.querySelector<HTMLElement>('.strength-section-heading');
@@ -4147,6 +4857,90 @@ async function main() {
                   assert.ok(Number.parseFloat(panelLayout.cardPadding ?? '0') >= 16,
                     `${foundation.name} chart card must keep comfortable padding.`);
                   assert.equal(await page.getByRole('button', { name: foundation.gear }).isVisible(), true);
+                  if (foundation.name === 'Cardio') {
+                    const todayHighlight = await panel.evaluate(element => {
+                      const day = element.querySelector<HTMLElement>('.cardio-week-day.is-today');
+                      const zone = element.querySelector<HTMLElement>('.tool-zone');
+                      const purpose = zone?.querySelector<HTMLElement>('.tool-zone__purpose');
+                      const weekday = day?.querySelector<HTMLElement>(':scope > span:first-child');
+                      const date = day?.querySelector<HTMLElement>('small');
+                      const today = day?.querySelector<HTMLElement>('.cardio-week-day__today');
+                      const activity = day?.querySelector<HTMLElement>('i');
+                      if (!day || !zone || !purpose || !weekday || !date || !today || !activity) {
+                        throw new Error('Cardio Activity insights needs a complete current-day highlight.');
+                      }
+                      return {
+                        dayBackground: getComputedStyle(day).backgroundColor,
+                        zoneBackground: getComputedStyle(zone).backgroundColor,
+                        dayBorder: getComputedStyle(day).borderTopColor,
+                        zoneBorder: getComputedStyle(zone).borderTopColor,
+                        weekdayColor: getComputedStyle(weekday).color,
+                        dateColor: getComputedStyle(date).color,
+                        todayColor: getComputedStyle(today).color,
+                        accentColor: getComputedStyle(purpose).color,
+                        activityColor: getComputedStyle(activity).color
+                      };
+                    });
+                    assert.equal(todayHighlight.dayBackground, todayHighlight.zoneBackground);
+                    assert.equal(todayHighlight.dayBorder, todayHighlight.zoneBorder);
+                    assert.equal(todayHighlight.weekdayColor, todayHighlight.accentColor);
+                    assert.equal(todayHighlight.dateColor, todayHighlight.accentColor);
+                    assert.equal(todayHighlight.todayColor, todayHighlight.accentColor);
+                    assert.notEqual(todayHighlight.activityColor, todayHighlight.accentColor,
+                      'The activity marker must retain its semantic status color.');
+                  } else {
+                    const calculationLink = panel.locator('.weight-calculation-info summary');
+                    const baseStyle = await panel.evaluate(element => {
+                      const summary = element.querySelector<HTMLElement>('.weight-calculation-info summary');
+                      const zone = element.querySelector<HTMLElement>('.tool-zone');
+                      const purpose = zone?.querySelector<HTMLElement>('.tool-zone__purpose');
+                      const icon = zone?.querySelector<HTMLElement>('.tool-zone__icon');
+                      if (!summary || !zone || !purpose || !icon) {
+                        throw new Error('Weight insights needs its calculation disclosure and shared ToolZone.');
+                      }
+                      return {
+                        color: getComputedStyle(summary).color,
+                        accentColor: getComputedStyle(purpose).color,
+                        secondaryColor: getComputedStyle(icon).borderTopColor
+                      };
+                    });
+                    assert.equal(baseStyle.color, baseStyle.accentColor);
+                    await calculationLink.hover();
+                    assert.equal(await calculationLink.evaluate(summary => getComputedStyle(summary).color),
+                      baseStyle.secondaryColor);
+                    await calculationLink.evaluate(() => {
+                      const summary = document.querySelector<HTMLElement>(
+                        '.weight-calculation-info summary'
+                      );
+                      if (!summary) throw new Error('Weight estimate disclosure is unavailable.');
+                      const focusable = [...document.querySelectorAll<HTMLElement>(
+                        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
+                      )].filter((element): element is HTMLElement => element instanceof HTMLElement
+                        && element.getClientRects().length > 0
+                        && !element.closest('[hidden]'));
+                      const targetIndex = focusable.indexOf(summary);
+                      const previous = focusable[targetIndex - 1];
+                      if (targetIndex < 1 || !previous) {
+                        throw new Error('Weight estimate disclosure needs a preceding keyboard focus target.');
+                      }
+                      previous.focus();
+                    });
+                    await page.keyboard.press('Tab');
+                    const keyboardFocus = await calculationLink.evaluate(summary => ({
+                      active: document.activeElement === summary,
+                      visible: summary.matches(':focus-visible'),
+                      outlineWidth: getComputedStyle(summary).outlineWidth,
+                      outlineStyle: getComputedStyle(summary).outlineStyle,
+                      outlineColor: getComputedStyle(summary).outlineColor,
+                      expectedColor: getComputedStyle(summary.closest('.tool-zone')!
+                        .querySelector('.tool-zone__icon')!).borderTopColor
+                    }));
+                    assert.equal(keyboardFocus.active, true);
+                    assert.equal(keyboardFocus.visible, true);
+                    assert.equal(keyboardFocus.outlineWidth, '2px');
+                    assert.equal(keyboardFocus.outlineStyle, 'solid');
+                    assert.equal(keyboardFocus.outlineColor, keyboardFocus.expectedColor);
+                  }
                   if (viewportWidth === 375) {
                     await page.getByRole('button', { name: foundation.gear }).click();
                     const settings = page.getByRole('dialog', { name: foundation.dialog });
@@ -4176,12 +4970,80 @@ async function main() {
                       documentWidth: 375
                     });
                     assert.equal(await settings.getByRole('button', { name: 'Save goals' }).isVisible(), true);
+                    const dateInput = settings.locator('input[type="date"]').first();
+                    await dateInput.focus();
+                    await page.keyboard.press('Tab');
+                    await page.keyboard.press('Shift+Tab');
+                    const dateFocus = await dateInput.evaluate(input => {
+                      const region = input.closest<HTMLElement>('.fitness-goals-scroll');
+                      if (!region) throw new Error('Foundation tracking date needs a scroll region.');
+                      const style = getComputedStyle(input);
+                      const rect = input.getBoundingClientRect();
+                      const regionRect = region.getBoundingClientRect();
+                      const clearance = Number.parseFloat(style.outlineWidth) + Number.parseFloat(style.outlineOffset);
+                      return {
+                        active: document.activeElement === input,
+                        visible: input.matches(':focus-visible'),
+                        outlineWidth: style.outlineWidth,
+                        outlineOffset: style.outlineOffset,
+                        leftClearance: rect.left - regionRect.left,
+                        rightClearance: regionRect.right - rect.right,
+                        requiredClearance: clearance
+                      };
+                    });
+                    assert.equal(dateFocus.active, true);
+                    assert.equal(dateFocus.visible, true);
+                    assert.ok(dateFocus.leftClearance >= dateFocus.requiredClearance);
+                    assert.ok(dateFocus.rightClearance >= dateFocus.requiredClearance);
+
+                    const numericInput = settings.locator('.numeric-control__input').first();
+                    await numericInput.focus();
+                    const numericFocus = await numericInput.evaluate(input => {
+                      const control = input.closest<HTMLElement>('.numeric-control');
+                      const region = input.closest<HTMLElement>('.fitness-goals-scroll');
+                      if (!control || !region) throw new Error('Foundation numeric input needs its shared control and scroll region.');
+                      const style = getComputedStyle(control);
+                      const rect = control.getBoundingClientRect();
+                      const regionRect = region.getBoundingClientRect();
+                      const clearance = Number.parseFloat(style.outlineWidth) + Number.parseFloat(style.outlineOffset);
+                      return {
+                        active: document.activeElement === input,
+                        overflow: style.overflow,
+                        outlineWidth: style.outlineWidth,
+                        outlineOffset: style.outlineOffset,
+                        leftClearance: rect.left - regionRect.left,
+                        rightClearance: regionRect.right - rect.right,
+                        requiredClearance: clearance
+                      };
+                    });
+                    assert.equal(numericFocus.active, true);
+                    assert.equal(numericFocus.overflow, 'visible');
+                    assert.equal(numericFocus.outlineWidth, '2px');
+                    assert.equal(numericFocus.outlineOffset, '2px');
+                    assert.ok(numericFocus.leftClearance >= numericFocus.requiredClearance);
+                    assert.ok(numericFocus.rightClearance >= numericFocus.requiredClearance);
                     await settings.getByRole('button', { name: 'Cancel' }).click();
                     await page.waitForFunction(label =>
                       document.activeElement?.getAttribute('aria-label') === label, foundation.gear);
                   }
                 } else if (tabName === 'Activities' || tabName === 'Measurements') {
                   assert.equal(await panel.getByText(foundation.emptyActivity, { exact: true }).isVisible(), true);
+                  if (foundation.name === 'Cardio') {
+                    const runDivider = await panel.evaluate(element => {
+                      const card = element.querySelector<HTMLElement>('.cardio-history-card');
+                      if (!card) throw new Error('Cardio Activities needs its run-history card.');
+                      const list = document.createElement('ol');
+                      list.className = 'cardio-history-list';
+                      const row = document.createElement('li');
+                      list.append(row);
+                      card.append(list);
+                      const borderWidth = getComputedStyle(row).borderTopWidth;
+                      list.remove();
+                      return borderWidth;
+                    });
+                    assert.equal(runDivider, '0px',
+                      'Run-history rows should not use an internal top divider.');
+                  }
                 } else {
                   assert.equal(await panel.getByText(foundation.emptyRhythms, { exact: true }).isVisible(), true);
                 }
@@ -4544,16 +5406,24 @@ async function main() {
               `Finance tabs and content should use the shared 12px gap at ${viewportWidth}px / ${textSize}.`);
             assert.equal(layout.panelVisible, true);
 
-            for (const tabName of ['Overview', 'Goals', 'Rhythms'] as const) {
+            for (const tabName of ['Foundations', 'Goals', 'Rhythms'] as const) {
               await financeTabs.getByRole('tab', { name: tabName, exact: true }).click();
               const panel = financePage.getByRole('tabpanel', { name: tabName });
               assert.equal(await panel.isVisible(), true);
-              if (tabName === 'Overview') {
-                assert.equal(await panel.getByRole('heading', { name: 'Savings', exact: true }).isVisible(), true);
-                assert.equal(await panel.getByRole('heading', { name: 'Debt', exact: true }).isVisible(), true);
+              assert.equal(await financePage.getByRole('button', { name: 'Home' }).isVisible(), true);
+              assert.equal(await financePage.getByRole('button', { name: 'Back to Today' }).count(), 0);
+              if (tabName === 'Foundations') {
+                assert.equal(await panel.getByRole('heading', { name: 'Overview', exact: true }).count(), 0);
+                assert.equal(await panel.getByRole('heading', { name: 'Foundations', exact: true }).count(), 0);
+                assert.equal(await panel.locator('.marriage-foundation-list').count(), 1);
+                assert.equal(await panel.locator('.finance-preview-note').count(), 0);
+                assert.equal(await panel.locator('.finance-overview__grid').count(), 0);
+                assert.equal(await panel.locator('.finance-overview').count(), 0);
+                assert.equal(await panel.locator('.marriage-foundation-list > *').count(), 5);
               } else if (tabName === 'Goals') {
                 assert.equal(await panel.getByRole('heading', { name: 'Progress tracker' }).isVisible(), true);
                 assert.equal(await panel.getByRole('button', { name: '+ Add' }).first().isVisible(), true);
+                assert.equal(await panel.getByText(/Balances are manually tracked values, not bank balances or a complete financial picture/).isVisible(), true);
                 if (!browserGoalCreated
                   && await panel.getByRole('button', { name: /^View details for / }).count() === 0) {
                   await panel.getByRole('button', { name: '+ Add' }).first().click();
@@ -4580,6 +5450,7 @@ async function main() {
                 }));
                 await detailsTrigger.click();
                 const details = page.getByRole('dialog', { name: detailTitle });
+                await verifyFinanceGoalDetailsPalette(page, detailTitle);
                 const detailCard = details.getByRole('article', { name: detailTitle });
                 if (await detailCard.getByRole('button', { name: 'Correct' }).count() === 0) {
                   await detailCard.getByRole('button', { name: 'Record check-in' }).click();
@@ -4588,6 +5459,7 @@ async function main() {
                   await recordCheckIn.getByLabel('Current balance').fill('1250');
                   await recordCheckIn.getByRole('button', { name: 'Save check-in' }).click();
                   await detailCard.getByRole('button', { name: 'Correct' }).first().waitFor();
+                  await verifyFinanceGoalDetailsPalette(page, detailTitle);
                 }
                 const detailsGeometry = await details.evaluate(dialog => {
                   const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
@@ -4687,18 +5559,19 @@ async function main() {
                 })), pageBodyStyles);
                 await verifyFinanceGoalToolPalette(page);
               } else {
-                assert.equal(await panel.getByRole('heading', { name: /Linked Rhythms/ }).isVisible(), true);
-                assert.equal(await panel.getByRole('button', { name: 'View Foundations' }).isVisible(), true);
+                assert.equal(await panel.getByRole('heading', { name: 'Your Rhythms' }).isVisible(), true);
+                assert.equal(await panel.getByRole('button', { name: 'Add Rhythm' }).isVisible(), true);
+                assert.equal(await panel.getByRole('button', { name: 'Suggestions' }).isDisabled(), false);
               }
             }
 
-            await financeTabs.getByRole('tab', { name: 'Overview', exact: true }).click();
-            await financePage.getByRole('tabpanel', { name: 'Overview' })
+            await financeTabs.getByRole('tab', { name: 'Foundations', exact: true }).click();
+            await financePage.getByRole('tabpanel', { name: 'Foundations' })
               .getByRole('button', { name: 'Open Saving & Reserves' }).click();
             const foundationDetail = financePage.locator('.finance-foundation-detail');
             await foundationDetail.getByRole('heading', { name: 'Saving & Reserves' }).waitFor();
             assert.equal(await financePage.locator('.category-header--hero').count(), 0);
-            const financeBack = foundationDetail.getByRole('button', { name: 'Back to Finance Overview' });
+            const financeBack = foundationDetail.getByRole('button', { name: 'Back to Finance Foundations' });
             assert.ok((await financeBack.getAttribute('class'))?.includes('tend-back-button--plain'));
             assert.equal(await foundationDetail.locator('.category-health-summary').isVisible(), true);
             assert.equal(await foundationDetail.getByRole('heading', { name: /Linked Rhythms/ }).isVisible(), true);
@@ -4717,19 +5590,19 @@ async function main() {
         }
 
         await page.setViewportSize({ width: 375, height: 844 });
-        const overviewTab = financeTabs.getByRole('tab', { name: 'Overview', exact: true });
+        const foundationsTab = financeTabs.getByRole('tab', { name: 'Foundations', exact: true });
         const goalsTab = financeTabs.getByRole('tab', { name: 'Goals', exact: true });
         const rhythmsTab = financeTabs.getByRole('tab', { name: 'Rhythms', exact: true });
-        await overviewTab.focus();
+        await foundationsTab.focus();
         await page.keyboard.press('ArrowRight');
         assert.equal(await goalsTab.getAttribute('aria-selected'), 'true');
         assert.equal(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.id), await goalsTab.getAttribute('id'));
         await page.keyboard.press('End');
         assert.equal(await rhythmsTab.getAttribute('aria-selected'), 'true');
         await page.keyboard.press('ArrowRight');
-        assert.equal(await overviewTab.getAttribute('aria-selected'), 'true');
+        assert.equal(await foundationsTab.getAttribute('aria-selected'), 'true');
         await page.keyboard.press('Home');
-        assert.equal(await overviewTab.getAttribute('aria-selected'), 'true');
+        assert.equal(await foundationsTab.getAttribute('aria-selected'), 'true');
 
         await goalsTab.click();
         const addGoal = page.getByRole('button', { name: '+ Add', exact: true }).first();

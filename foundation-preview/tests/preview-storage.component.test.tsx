@@ -59,6 +59,7 @@ import {
   loadV42RecoveryCopy,
   loadV43RecoveryCopy,
   loadV44RecoveryCopy,
+  loadV45RecoveryCopy,
   createPreviewStorageScope,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
   loadV39RecoveryCopy,
@@ -101,6 +102,7 @@ import {
   PREVIEW_V42_RECOVERY_KEY,
   PREVIEW_V43_RECOVERY_KEY,
   PREVIEW_V44_RECOVERY_KEY,
+  PREVIEW_V45_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -156,6 +158,7 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V34_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V43_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V44_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V45_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -171,14 +174,14 @@ function sampleWithHistory(): PreviewData {
   return data;
 }
 
-function olderSchemaRaw(version: 43 | 44, data = sampleWithHistory()): string {
+function olderSchemaRaw(version: 43 | 44 | 45, data = sampleWithHistory()): string {
   const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
     schemaVersion: number;
     data: { goals: Array<Record<string, unknown>> };
   };
   envelope.schemaVersion = version;
   for (const goal of envelope.data.goals) {
-    delete goal.foundationId;
+    if (version < 45) delete goal.foundationId;
     if (version === 43) delete goal.supportingRhythmIds;
   }
   return JSON.stringify(envelope);
@@ -790,7 +793,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   });
 
   it.each([43, 44] as const)(
-    'preserves schema v%s exactly while creating a workout, saving schema 45, and reloading repeatedly',
+    'preserves schema v%s exactly while creating a workout, saving the current schema, and reloading repeatedly',
     schemaVersion => {
       const currentDate = '2026-10-31';
       const raw = `\n${olderSchemaRaw(schemaVersion)}\n`;
@@ -890,6 +893,53 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(values.get(PREVIEW_V44_RECOVERY_KEY)).toBe(conflictingArchive);
     expect(parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY)!, currentDate).valid).toBe(true);
     expect(values.get(PREVIEW_STORAGE_KEY)).not.toContain('Chest & Triceps');
+  });
+
+  it('preserves schema v45 with the browser storage adapter and blocks a conflicting immutable copy', () => {
+    const raw = `\n${olderSchemaRaw(45)}\n`;
+    const storage = browserPreviewStorage();
+    storage.setItem(PREVIEW_STORAGE_KEY, raw);
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+
+    const attempted = structuredClone(loaded.data);
+    attempted.flexibility.draftSession = {
+      date: '2026-10-31',
+      regionIds: ['shoulders'],
+      minutes: '',
+      notes: 'Synthetic v45 draft'
+    };
+    const saved = writePreview(storage, attempted, loaded.raw, { currentDate: '2026-10-31' });
+    expect(saved.kind).toBe('saved');
+    expect(storage.getItem(PREVIEW_V45_RECOVERY_KEY)).toBe(raw);
+    expect(loadV45RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).not.toBe(raw);
+
+    const conflictingArchive = 'different synthetic v45 recovery';
+    const conflicted = storageFixture({
+      [PREVIEW_STORAGE_KEY]: raw,
+      [PREVIEW_V45_RECOVERY_KEY]: conflictingArchive
+    });
+    const conflictSource = loadPreview(conflicted.storage, '2026-10-31');
+    expect(conflictSource.kind).toBe('loaded');
+    if (conflictSource.kind !== 'loaded') return;
+    const conflictAttempt = structuredClone(conflictSource.data);
+    conflictAttempt.flexibility.draftSession = {
+      date: '2026-10-31',
+      regionIds: ['shoulders'],
+      minutes: '',
+      notes: 'Must not replace source'
+    };
+    expect(writePreview(conflicted.storage, conflictAttempt, conflictSource.raw, {
+      currentDate: '2026-10-31'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-conflict' }
+    });
+    expect(conflicted.values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(conflicted.values.get(PREVIEW_V45_RECOVERY_KEY)).toBe(conflictingArchive);
   });
 
   it('retains the Appearance preference from the alternate schema v40 document', () => {
@@ -3286,9 +3336,9 @@ async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Pr
 }
 
 describe('preview backup controls', () => {
-  it('shows privacy-safe save failure code and path and offers the v44 recovery archive', async () => {
+  it('shows the v45 migration recovery failure and offers the original v45 archive', async () => {
     const user = userEvent.setup();
-    const raw = olderSchemaRaw(44);
+    const raw = olderSchemaRaw(45);
     const { createObjectURL } = setDownloadMocks();
     render(
       <PreviewDataControls
@@ -3298,8 +3348,8 @@ describe('preview backup controls', () => {
           message: 'Save blocked.',
           diagnostic: {
             operation: 'save',
-            sourceSchemaVersion: 44,
-            applicationSchemaVersion: 45,
+            sourceSchemaVersion: 45,
+            applicationSchemaVersion: 46,
             rejectedRule: 'immutable-recovery-key-unavailable',
             recoveryKeyLookup: 'no-supported-key',
             migrationValidation: 'valid',
@@ -3314,7 +3364,7 @@ describe('preview backup controls', () => {
         onRetrySave={() => {}}
         onReloadExternal={() => null}
         onReplaceExternal={() => null}
-        v44RecoveryCopy={raw}
+        v45RecoveryCopy={raw}
       />
     );
 
@@ -3323,7 +3373,7 @@ describe('preview backup controls', () => {
     expect(within(diagnostic).getByText('immutable-recovery-key-unavailable')).toBeTruthy();
     expect(within(diagnostic).getByText('schemaVersion')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Download original v44 recovery backup' }));
+    await user.click(screen.getByRole('button', { name: 'Download original v45 recovery backup' }));
     expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
   });
 

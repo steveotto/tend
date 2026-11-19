@@ -1108,8 +1108,13 @@ describe('shared Rhythm history', () => {
     expect([...futureCard.querySelectorAll<HTMLElement>(
       '.rhythm-metadata-schedule-group > span:not(.visually-hidden)'
     )].map(item => item.textContent)).toEqual(['Monthly · 15th', 'Bedtime']);
+    const futureEnd = addCalendarDays(futureStart, 29);
+    // Cross-year ranges include both years; this fixture must remain valid as today's date advances.
+    const futureStartLabel = futureStart.slice(0, 4) === futureEnd.slice(0, 4)
+      ? shortTestDate(futureStart)
+      : seasonDateLabel(futureStart);
     expect(futureCard.querySelector('.rhythm-history-view__season-card-timeframe')?.textContent)
-      .toBe(`${shortTestDate(futureStart)} – ${seasonDateLabel(addCalendarDays(futureStart, 29))}`);
+      .toBe(`${futureStartLabel} – ${seasonDateLabel(futureEnd)}`);
     const unknownFuture = within(upcoming)
       .getByRole('heading', { name: 'Upcoming schedule needs details' }).closest('article')!;
     const unavailableHealth = within(unknownFuture).getByRole('img', { name: 'Season Health unavailable' });
@@ -1878,7 +1883,7 @@ describe('shared Rhythm history', () => {
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('79');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('70');
     expect(screen.getByText('Follow-through over time')).toBeTruthy();
-    expect(screen.getByText('How caught up you are')).toBeTruthy();
+    expect(screen.getByText('How up to date you are')).toBeTruthy();
     const consistency = screen.getByRole('region', { name: 'Consistency' });
     const onTrack = screen.getByRole('region', { name: 'On Track' });
     const info = screen.getByRole('button', { name: 'Show Consistency and On Track score details' });

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CategoryId } from '../domain/preview-data.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { HealthWeightPanels } from './HealthWeightPanels.tsx';
+import { HEALTH_MEASURE_CAPTIONS } from './health-measure-captions.ts';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import type {
   HealthContributionDiagram,
@@ -392,8 +393,8 @@ export function HealthRollupDiagram({ config }: { config: HealthRollupConfig }) 
                     ? <p>{selectedItem.explanation}</p>
                     : (
                       <HealthWeightPanels
-                        consistencyDescription="How regularly you follow through"
-                        onTrackDescription="How caught up you are."
+                        consistencyCaption={HEALTH_MEASURE_CAPTIONS.consistency}
+                        onTrackCaption={HEALTH_MEASURE_CAPTIONS.onTrack}
                       />
                     )}
                   {selectedItem.details?.map((detail, detailIndex) => (

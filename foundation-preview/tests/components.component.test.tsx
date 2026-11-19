@@ -45,7 +45,7 @@ describe('shared preview components', () => {
       <ToolZone
         icon={<ToolZoneTrendingUpIcon />}
         purposeLabel="Progress tracker"
-        subtitle="Track the outcomes your Rhythms support."
+        subtitle="Track balances, targets, and dated check-ins."
         scoringFootnote="Goal balances don’t change your Health score."
         headerAction={<button type="button">Add goal</button>}
         explanationAction={<button type="button" aria-label="About goal scoring" onClick={onExplain}>i</button>}
@@ -55,7 +55,7 @@ describe('shared preview components', () => {
     );
 
     const zone = screen.getByRole('region', { name: 'Progress tracker' });
-    expect(within(zone).getByText('Track the outcomes your Rhythms support.')).toBeTruthy();
+    expect(within(zone).getByText('Track balances, targets, and dated check-ins.')).toBeTruthy();
     expect(within(zone).getByText('Goal balances don’t change your Health score.')).toBeTruthy();
     expect(within(zone).getByRole('button', { name: 'Add goal' })).toBeTruthy();
     expect(within(zone).getByRole('button', { name: 'About goal scoring' })).toBeTruthy();
@@ -70,7 +70,7 @@ describe('shared preview components', () => {
       <ToolZone
         icon={<ToolZoneTrendingUpIcon />}
         purposeLabel="Progress tracker"
-        subtitle="Track the outcomes your Rhythms support."
+        subtitle="Track balances, targets, and dated check-ins."
         scoringFootnote="Goal balances don’t change your Health score."
       >
         <div role="group" aria-label="Synthetic goal cards">Goal cards</div>
