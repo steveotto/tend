@@ -14,7 +14,6 @@ import { MarriageIcon } from './components/MarriageIcon.tsx';
 import { selectActiveUserRhythms, selectArchivedUserRhythms } from './domain/active-user-rhythms.ts';
 import {
   foundationCategoryId,
-  foundationRhythmIds,
   saveFoundationRhythmAssociations
 } from './domain/foundation-rhythm-associations.ts';
 import type { FoundationRhythmAssociationChange } from './domain/foundation-rhythm-associations.ts';
@@ -64,6 +63,8 @@ import {
   foundationCatalogue,
   faithRhythmSuggestionGroups,
   faithRhythmSuggestions,
+  financeRhythmSuggestionGroups,
+  financeRhythmSuggestions,
   healthFitnessRhythmSuggestionGroups,
   healthFitnessRhythmSuggestions,
   parentingRhythmSuggestionGroups,
@@ -72,7 +73,6 @@ import {
   peopleForRhythm,
   syntheticPrayerRequests,
   todayRhythms,
-  canonicalFoundationId,
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
   type CategoryId,
@@ -89,8 +89,7 @@ import {
   type CheckInDraftErrors,
   type GoalCheckIn,
   localDateString,
-  type MoneyGoal,
-  updateGoalSupportingRhythms
+  type MoneyGoal
 } from './domain/money-goals.ts';
 import {
   createEmptyPreviewData,
@@ -154,9 +153,7 @@ import {
   saveWeightDataCommand
 } from './domain/weight.ts';
 import { saveCardioDataCommand, selectCardioProgress } from './domain/cardio.ts';
-import {
-  validateFlexibilityData
-} from './domain/flexibility.ts';
+import { saveFlexibilityDataCommand } from './domain/flexibility-rhythm-linking.ts';
 import {
   activeTodayRhythms,
   applySavedRhythmOverrides,
@@ -239,6 +236,7 @@ import {
   loadV42RecoveryCopy,
   loadV43RecoveryCopy,
   loadV44RecoveryCopy,
+  loadV45RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
   loadStrengthRepairRecoveryCopy,
   loadPreviewImportRecovery,
@@ -323,6 +321,12 @@ const faithSuggestionCatalogue = categorySuggestionCatalogue(
   faithRhythmSuggestionGroups,
   faithRhythmSuggestions
 );
+const financeSuggestionCatalogue = categorySuggestionCatalogue(
+  'finances',
+  'Finance rhythm suggestions',
+  financeRhythmSuggestionGroups,
+  financeRhythmSuggestions
+);
 const healthFitnessSuggestionCatalogue: CategoryRhythmSuggestionCatalogue = {
   title: 'Health & Fitness rhythms',
   groups: healthFitnessRhythmSuggestionGroups.map(group => ({
@@ -371,6 +375,7 @@ function isFitnessLinkedCompletion(data: PreviewData, completionId: string | und
     ...data.strength.workouts,
     ...data.weight.weighIns,
     ...data.cardio.runs,
+    ...data.flexibility.sessions,
     ...(data.flexibility.guidedSessions ?? [])
   ];
   return records.some(record => typeof record === 'object'
@@ -635,6 +640,7 @@ function PreviewWorkspace({
   const [v42RecoveryCopy, setV42RecoveryCopy] = useState<string | null>(null);
   const [v43RecoveryCopy, setV43RecoveryCopy] = useState<string | null>(null);
   const [v44RecoveryCopy, setV44RecoveryCopy] = useState<string | null>(null);
+  const [v45RecoveryCopy, setV45RecoveryCopy] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -701,7 +707,6 @@ function PreviewWorkspace({
     id: string;
     rhythm?: (typeof todayRhythms)[number];
     initialDraft?: RhythmDraft;
-    goalAssociation?: { goalId: string };
     suggestionSourceId?: string;
     recommendedFrequency?: RhythmFrequencyRecommendation;
     frequencyGuidance?: string;
@@ -736,6 +741,8 @@ function PreviewWorkspace({
     setV43RecoveryCopy(v43Recovery.kind === 'loaded' ? v43Recovery.raw : null);
     const v44Recovery = loadV44RecoveryCopy(previewStorage);
     setV44RecoveryCopy(v44Recovery.kind === 'loaded' ? v44Recovery.raw : null);
+    const v45Recovery = loadV45RecoveryCopy(previewStorage);
+    setV45RecoveryCopy(v45Recovery.kind === 'loaded' ? v45Recovery.raw : null);
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -1278,6 +1285,8 @@ function PreviewWorkspace({
     setV43RecoveryCopy(v43.kind === 'loaded' ? v43.raw : null);
     const v44 = loadV44RecoveryCopy(previewStorage);
     setV44RecoveryCopy(v44.kind === 'loaded' ? v44.raw : null);
+    const v45 = loadV45RecoveryCopy(previewStorage);
+    setV45RecoveryCopy(v45.kind === 'loaded' ? v45.raw : null);
   }
 
   function refreshV10RecoveryCopy() {
@@ -2052,7 +2061,6 @@ function PreviewWorkspace({
     options?: {
       id?: string;
       initialDraft?: RhythmDraft;
-      goalAssociation?: { goalId: string };
       suggestionSourceId?: string;
       recommendedFrequency?: RhythmFrequencyRecommendation;
       frequencyGuidance?: string;
@@ -2064,7 +2072,6 @@ function PreviewWorkspace({
     setRhythmEditor({
       id: options?.id ?? rhythm?.id ?? `user-rhythm-${globalThis.crypto.randomUUID()}`,
       ...(options?.initialDraft ? { initialDraft: options.initialDraft } : {}),
-      ...(options?.goalAssociation ? { goalAssociation: options.goalAssociation } : {}),
       ...(options?.suggestionSourceId ? { suggestionSourceId: options.suggestionSourceId } : {}),
       ...(options?.recommendedFrequency ? { recommendedFrequency: options.recommendedFrequency } : {}),
       ...(options?.frequencyGuidance ? { frequencyGuidance: options.frequencyGuidance } : {}),
@@ -2172,42 +2179,9 @@ function PreviewWorkspace({
     );
     const savedRhythms = result.savedRhythms;
     if (!savedRhythms) return result.errors;
-    let updatedGoals = previewData.goals;
-    if (rhythmEditor.goalAssociation) {
-      const goal = previewData.goals.find(item =>
-        item.id === rhythmEditor.goalAssociation!.goalId
-      );
-      if (!goal) return { form: 'This goal is no longer available; no Rhythm or goal link was saved.' };
-      const hasFinanceFoundation = [
-        draft.primaryFoundationId,
-        ...(draft.secondaryFoundationIds ?? [])
-      ].some((id): id is string => typeof id === 'string'
-        && financeFoundations.some(foundation =>
-          foundation.lifecycle === 'active' && foundation.id === canonicalFoundationId(id)
-        ));
-      if (!isCategoryEnabled(previewData.categoryPreferences, 'finances')
-        || !draft.categoryIds.includes('finances')
-        || !hasFinanceFoundation) {
-        return {
-          form: 'Choose an active Finance Foundation and keep this Rhythm in the Finance category to link it to the goal.'
-        };
-      }
-      const association = updateGoalSupportingRhythms(
-        goal,
-        [{ rhythmId: rhythmEditor.id, linked: true }],
-        new Set([rhythmEditor.id])
-      );
-      if (!association.goal) {
-        return { form: association.error ?? 'The Rhythm could not be linked to this goal.' };
-      }
-      updatedGoals = previewData.goals.map(item =>
-        item.id === goal.id ? association.goal! : item
-      );
-    }
     const nextData: PreviewData = {
       ...previewData,
       savedRhythms,
-      goals: updatedGoals,
       ...(isCategoryEnabled(previewData.categoryPreferences, 'health')
         && draft.categoryIds.includes('health')
         && (draft.healthLogCapability === 'workout'
@@ -2503,13 +2477,30 @@ function PreviewWorkspace({
   }
 
   function saveFlexibilityData(flexibility: PreviewData['flexibility']): string | null {
-    if (!validateFlexibilityData(flexibility, currentDate)) {
-      return 'Flexibility settings or stretch records are invalid. No changes were saved.';
-    }
-    let datedRhythmCompletions = [...previewData.datedRhythmCompletions];
-    let activeRhythmCompletions = [...previewData.activeRhythmCompletions];
-    let completedRhythmIds = [...previewData.completedRhythmIds];
-    let rhythmHistoryIds = [...previewData.rhythmHistoryIds];
+    const saved = saveFlexibilityDataCommand({
+      previous: previewData.flexibility,
+      next: flexibility,
+      today: currentDate,
+      now: new Date(),
+      rhythms: allTodayRhythms,
+      archivedRhythmIds: new Set(previewData.archivedRhythmIds),
+      editableRhythmIds: new Set(allTodayRhythms
+        .filter(rhythm => isEditableRhythmId(rhythm.id))
+        .map(rhythm => rhythm.id)),
+      completionState: {
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
+        activeRhythmCompletions: previewData.activeRhythmCompletions,
+        completedRhythmIds: previewData.completedRhythmIds,
+        rhythmHistoryIds: previewData.rhythmHistoryIds
+      }
+    });
+    if (!saved.valid) return saved.error;
+    let {
+      datedRhythmCompletions,
+      activeRhythmCompletions,
+      completedRhythmIds,
+      rhythmHistoryIds
+    } = saved.completionState;
     const previousGuidedIds = new Set((previewData.flexibility.guidedSessions ?? []).map(session => session.id));
     for (const session of flexibility.guidedSessions ?? []) {
       if (previousGuidedIds.has(session.id) || !session.linkedRhythmId) continue;
@@ -2567,7 +2558,7 @@ function PreviewWorkspace({
     }
     return persistSeasonHistory({
       ...previewData,
-      flexibility,
+      flexibility: saved.flexibility,
       datedRhythmCompletions,
       activeRhythmCompletions,
       completedRhythmIds,
@@ -3032,6 +3023,9 @@ function PreviewWorkspace({
     if (previewData.strength.workouts.some(log => log.completionId === completionId)) {
       return 'Delete this completion through its linked Strength workout log.';
     }
+    if (previewData.flexibility.sessions.some(log => log.completionId === completionId)) {
+      return 'Delete this completion through its linked stretch log.';
+    }
     const record = previewData.datedRhythmCompletions.find(item => item.id === completionId);
     const seedRhythmId = todayRhythms.find(rhythm =>
       rhythm.completionHistory?.some(item => item.id === completionId)
@@ -3140,33 +3134,6 @@ function PreviewWorkspace({
         ? previous.goals.map(item => item.id === goal.id ? goal : item)
         : [...previous.goals, goal]
     }));
-  }
-
-  function saveGoalSupportingRhythms(
-    goalId: string,
-    changes: readonly { rhythmId: string; linked: boolean }[]
-  ): string | null {
-    const goal = previewData.goals.find(item => item.id === goalId);
-    if (!goal) return 'This goal is no longer available.';
-    const eligibleRhythmIds = new Set(
-      userRhythms
-        .filter(rhythm =>
-          rhythm.categoryIds?.includes('finances')
-          && foundationRhythmIds(rhythm).some(id =>
-            financeFoundations.some(foundation => foundation.id === id)
-          )
-          && isCategoryEnabled(previewData.categoryPreferences, 'finances')
-        )
-        .map(rhythm => rhythm.id)
-    );
-    const result = updateGoalSupportingRhythms(goal, changes, eligibleRhythmIds);
-    const updatedGoal = result.goal;
-    if (result.error || !updatedGoal) return result.error ?? 'The goal association could not be saved.';
-    setPreviewData(previous => ({
-      ...previous,
-      goals: previous.goals.map(item => item.id === goalId ? updatedGoal : item)
-    }));
-    return null;
   }
 
   function saveGoalCheckIn(
@@ -3500,6 +3467,7 @@ function PreviewWorkspace({
       flexibility={{
         data: previewData.flexibility,
         today: currentDate,
+        datedRhythmCompletions: previewData.datedRhythmCompletions,
         onChange: saveFlexibilityData,
         pendingQuickLog: flexibilityLogRequest ? {
           requestId: flexibilityLogRequest.requestId,
@@ -3542,7 +3510,8 @@ function PreviewWorkspace({
         initialDraft: {
           ...createRhythmDraft(['health']),
           primaryFoundationId: foundationId,
-          secondaryFoundationIds: []
+          secondaryFoundationIds: [],
+          ...(foundationId === 'health-flexibility' ? { healthLogCapability: 'flexibility' } : {})
         }
       })}
       onSaveFoundationAssociations={saveFoundationAssociations}
@@ -4163,20 +4132,19 @@ function PreviewWorkspace({
                 goals={moneyGoals}
                 currentDate={currentDate}
                 financeFoundations={financeFoundations}
-                financeCategoryEnabled={isCategoryEnabled(previewData.categoryPreferences, 'finances')}
                 rhythms={userRhythms}
                 archivedRhythms={archivedUserRhythms}
                 categoryRhythms={financeCategoryRhythms}
                 archivedCategoryRhythms={archivedFinanceCategoryRhythms}
                 people={peopleWithPhotos}
                 foundations={foundationCatalogue}
+                suggestionCatalogue={financeSuggestionCatalogue}
                 rhythmScores={rhythmScoreResults}
                 archivedRhythmIds={previewData.archivedRhythmIds}
                 completedRhythms={completedRhythms}
                 undoableRhythms={undoableRhythms}
                 onSaveGoal={saveGoal}
                 onSaveCheckIn={saveGoalCheckIn}
-                onSaveGoalRhythms={saveGoalSupportingRhythms}
                 onSaveFoundationAssociations={saveFoundationAssociations}
                 onAddLinkedRhythm={(foundationId, event) => openRhythmEditor(event, undefined, {
                   initialDraft: {
@@ -4184,17 +4152,16 @@ function PreviewWorkspace({
                     primaryFoundationId: foundationId
                   }
                 })}
-                onCreateRhythmFromGoal={(event, context) => openRhythmEditor(event, undefined, {
-                  initialDraft: {
-                    ...createRhythmDraft(['finances']),
-                    ...(context.foundationId ? { primaryFoundationId: context.foundationId } : {})
-                  },
-                  goalAssociation: { goalId: context.goalId },
-                  returnToSuggestions: context.onFinished
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['finances'])
                 })}
+                onAddSuggestion={openRhythmSuggestion}
                 onTendRhythm={openCompletion}
                 onUndoRhythm={undoTend}
-                onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                onRestoreRhythm={restoreRhythm}
+                onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
+                  ...(returnToSuggestions ? { returnToSuggestions } : {})
+                })}
                 onRhythmHistory={openRhythmHistory}
                 onPersonSelect={openPersonProfile}
                 onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
@@ -4279,6 +4246,7 @@ function PreviewWorkspace({
           v42RecoveryCopy={v42RecoveryCopy}
           v43RecoveryCopy={v43RecoveryCopy}
           v44RecoveryCopy={v44RecoveryCopy}
+          v45RecoveryCopy={v45RecoveryCopy}
         />
       )}
       {healthFitnessView}

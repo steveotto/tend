@@ -3171,10 +3171,6 @@ a:focus-visible {
     background: transparent;
   }
 
-    .money-goals-page {
-      padding-bottom: 30px;
-    }
-
     .money-goals-intro {
       display: grid;
       gap: 7px;
@@ -3391,18 +3387,6 @@ a:focus-visible {
       font-size: calc(0.8125rem * var(--app-text-scale, 1));
     }
 
-    .money-goals-back {
-      min-height: 44px;
-      margin-top: 20px;
-      padding: 8px 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--card);
-      color: var(--forest);
-      font-weight: 600;
-      cursor: pointer;
-    }
-
     .money-goal-dialog {
       position: fixed;
       inset: 0;
@@ -3503,6 +3487,10 @@ a:focus-visible {
 
     .money-goal-dialog--scrollable-body .money-goal-dialog__close:hover {
       background: var(--tend-mist, var(--canvas));
+    }
+
+    .money-goal-dialog--fitness-log .money-goal-dialog__scroll-region {
+      padding-inline: 5px;
     }
 
     .money-goal-dialog--scrollable-body .money-goal-dialog__close:focus-visible,
@@ -4868,8 +4856,7 @@ a:focus-visible {
     .money-goal-dialog input:focus-visible,
     .money-goal-dialog select:focus-visible,
     .money-goal-dialog textarea:focus-visible,
-    .goal-text-button:focus-visible,
-    .money-goals-back:focus-visible {
+    .goal-text-button:focus-visible {
       outline: 2px solid var(--forest);
       outline-offset: 2px;
     }
@@ -12686,7 +12673,8 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 }
 
 .rhythm-completion-form__date-label,
-.rhythm-completion-form__memory-label {
+.rhythm-completion-form__memory-label,
+.rhythm-completion-form__field-label {
     display: flex;
     align-items: baseline;
     gap: 8px;
@@ -12700,6 +12688,7 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   }
 
 .rhythm-completion-form__date,
+.rhythm-completion-form__field,
 .rhythm-completion-form textarea {
     width: 100%;
     min-height: 44px;
@@ -13247,26 +13236,49 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 
 .strength-guided-banner {
   display: flex;
+  flex-wrap: wrap;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 14px 0;
-  padding: 13px 15px;
+  align-items: flex-start;
+  gap: 8px 12px;
+  margin: 8px 0;
+  padding: 8px 10px;
   border: 1px solid var(--tend-line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--tend-mist);
 }
 
-.strength-guided-banner > div {
+.fitness-session-resume-banner__copy {
   display: grid;
+  flex: 1 1 220px;
   min-width: 0;
-  gap: 3px;
+  gap: 4px;
 }
 
-.strength-guided-banner span {
-  color: var(--tend-secondary);
+.fitness-session-resume-banner__title {
+  min-width: 0;
+  color: var(--tend-forest);
   font-size: calc(.9rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.fitness-session-resume-banner__status,
+.fitness-session-resume-banner__support {
+  color: var(--tend-secondary);
+  font-size: calc(.75rem * var(--app-text-scale, 1));
+  line-height: 1.3;
+}
+
+.fitness-session-resume-banner__status {
+  font-weight: 650;
+}
+
+.strength-guided-banner .fitness-session-resume-banner__action {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .strength-guided-dialog .money-goal-dialog__surface > h2 {
@@ -14309,10 +14321,17 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   align-content: start;
   gap: 5px;
   padding: 8px 10px 0;
-  overflow: hidden;
   border: 1px solid var(--tend-line);
   border-radius: 16px;
   background: var(--tend-surface);
+}
+
+.numeric-control {
+  overflow: visible;
+}
+
+.strength-guided__input-module {
+  overflow: hidden;
 }
 
 .numeric-control > label,
@@ -15731,7 +15750,8 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   display: flex;
   flex-wrap: wrap;
   grid-area: actions;
-  justify-content: flex-start;
+  justify-content: flex-end;
+  align-self: end;
   gap: 8px;
 }
 
@@ -15750,8 +15770,8 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   min-width: 0;
   grid-template-areas:
     "content menu"
-    "actions actions";
-  grid-template-columns: minmax(0, 1fr) 40px;
+    "content actions";
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: start;
   gap: 10px 8px;
   padding: 14px;
@@ -15964,7 +15984,7 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   gap: 12px;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 2px 2px 8px;
+  padding: 2px 6px 8px;
 }
 
 .fitness-goals-actions {
@@ -16176,6 +16196,29 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   font-weight: 600;
 }
 
+.fitness-log-form {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.fitness-log-form .strength-form-field :is(input, select) {
+  box-sizing: border-box;
+  height: 44px;
+}
+
+.fitness-log-form__label-text {
+  display: block;
+  min-width: 0;
+}
+
+.fitness-log-form__optional {
+  color: var(--tend-secondary);
+  font-size: .85em;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
 .strength-form-field textarea {
   min-height: 82px;
   resize: vertical;
@@ -16206,9 +16249,7 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 }
 
 .strength-muscle-selection {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
+  display: block;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -16221,7 +16262,14 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   font-weight: 650;
 }
 
-.strength-muscle-selection__tile {
+.checkbox-tile-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(180px * var(--app-text-scale, 1))), 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.checkbox-tile-options__tile {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -16238,12 +16286,12 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   overflow-wrap: anywhere;
 }
 
-.strength-muscle-selection__tile.is-selected {
+.checkbox-tile-options__tile.is-selected {
   border-color: var(--tend-forest);
   background: var(--tend-mist);
 }
 
-.strength-muscle-selection__tile input {
+.checkbox-tile-options__tile input {
   flex: none;
   width: 18px;
   height: 18px;
@@ -16251,7 +16299,7 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   accent-color: var(--tend-forest);
 }
 
-.strength-muscle-selection__tile:focus-within {
+.checkbox-tile-options__tile:focus-within {
   outline: 3px solid var(--tend-focus, #287f63);
   outline-offset: 2px;
 }
@@ -16261,75 +16309,55 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   gap: 8px;
   min-width: 0;
   margin: 4px 0 0;
-  padding: 10px;
-  border: 1px solid var(--tend-line);
-  border-radius: 12px;
+  padding: 0;
+  border: 0;
 }
 
-.strength-rhythm-completion legend {
-  padding: 0 5px;
-  color: var(--tend-secondary);
+.strength-rhythm-completion__label {
+  color: var(--tend-ink);
   font-weight: 650;
 }
 
-.strength-rhythm-completion__options {
-  display: grid;
+.strength-rhythm-completion__field {
   gap: 6px;
 }
 
-.strength-rhythm-completion__option {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  min-width: 0;
-  padding: 7px 8px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  color: var(--tend-ink);
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-
-.strength-rhythm-completion__option:has(input:checked) {
-  border-color: var(--tend-forest);
-  background: var(--tend-mist);
-}
-
-.strength-rhythm-completion__option input {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin: 1px 0 0;
-  accent-color: var(--tend-forest);
-}
-
-.strength-rhythm-completion__option input:focus-visible {
-  outline: 3px solid var(--tend-focus, #287f63);
-  outline-offset: 2px;
-}
-
-.strength-rhythm-completion__option input:disabled {
-  cursor: not-allowed;
-}
-
-.strength-rhythm-completion__copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.strength-rhythm-completion__copy small,
-.strength-rhythm-completion__empty {
+.strength-rhythm-completion__optional {
   color: var(--tend-secondary);
   font-size: .88em;
+  font-weight: 400;
 }
 
-.strength-rhythm-completion__empty {
+.strength-rhythm-completion__empty,
+.strength-rhythm-completion__context {
   margin: 0;
+  color: var(--tend-secondary);
+  font-size: .88em;
+  line-height: 1.45;
 }
 
 .strength-rhythm-completion__create {
   justify-self: start;
+  min-height: 44px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--tend-forest);
+  font: inherit;
+  font-size: .9em;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.strength-rhythm-completion__create--guided {
+  justify-self: start;
+}
+
+.strength-rhythm-completion__create:focus-visible {
+  outline: 3px solid var(--tend-focus, #287f63);
+  outline-offset: 2px;
 }
 
 .strength-workout-only-confirmation > .money-goal-dialog__surface > p {
@@ -17280,11 +17308,11 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   border-top: 1px solid var(--tend-line);
 }
 
-.strength-muscle-disclosure .strength-muscle-selection__tile:focus-within {
+.strength-muscle-disclosure .checkbox-tile-options__tile:focus-within {
   outline: none;
 }
 
-.strength-muscle-disclosure .strength-muscle-selection__tile input:focus-visible {
+.strength-muscle-disclosure .checkbox-tile-options__tile input:focus-visible {
   outline: 2px solid var(--tend-forest);
   outline-offset: 3px;
 }
@@ -18411,9 +18439,19 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   width: fit-content;
   min-height: 40px;
   padding: 10px 0;
-  color: var(--tend-forest);
+  color: var(--tend-tool-zone-accent);
   cursor: pointer;
   font-weight: 600;
+}
+
+.weight-calculation-info summary:hover {
+  color: var(--tend-tool-zone-accent-secondary);
+}
+
+.weight-calculation-info summary:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--tend-tool-zone-accent-secondary);
+  outline-offset: 3px;
 }
 
 .weight-calculation-info p {
@@ -18831,13 +18869,13 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 }
 
 .cardio-week-day.is-today {
-  border-color: var(--tend-line);
-  background: var(--tend-mist);
-  color: var(--tend-forest);
+  border-color: var(--tend-tool-zone-border);
+  background: var(--tend-tool-zone-background);
+  color: var(--tend-tool-zone-accent);
 }
 
 .cardio-week-day__today {
-  color: var(--tend-forest);
+  color: var(--tend-tool-zone-accent);
   font-size: calc(0.5625rem * var(--app-text-scale, 1));
   font-weight: 700;
 }
@@ -18858,7 +18896,6 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   gap: 12px;
   min-width: 0;
   padding: 12px 0;
-  border-top: 1px solid var(--tend-line);
 }
 
 .cardio-history-list li > div:first-child {
@@ -22916,13 +22953,6 @@ button.person-health-component-score:focus-visible {
   line-height: 1.4;
 }
 
-.flexibility-form__region-group h3 {
-  margin: 0 0 7px;
-  color: var(--tend-text-muted, #68736b);
-  font-size: .85em;
-  font-weight: 700;
-}
-
 .flexibility-history__list {
   display: grid;
   gap: 6px;
@@ -22957,6 +22987,40 @@ button.person-health-component-score:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.flexibility-history__list > li.flexibility-history__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  gap: 8px;
+}
+
+.flexibility-history__content {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.flexibility-history__item .flexibility-history__title {
+  margin: 0;
+  color: var(--tend-ink);
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  line-height: 1.3;
+}
+
+.flexibility-history__details,
+.flexibility-history__note,
+.flexibility-history__rhythm {
+  margin: 0;
+  color: var(--tend-secondary);
+  font-size: calc(.875rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.flexibility-history__note {
+  white-space: pre-wrap;
+}
+
 .flexibility-history__actions,
 .flexibility-form__actions {
   display: flex;
@@ -22969,27 +23033,22 @@ button.person-health-component-score:focus-visible {
   color: var(--tend-text-muted, #68736b);
 }
 
-.flexibility-form,
 .flexibility-settings {
   display: grid;
   gap: 16px;
   min-width: 0;
 }
 
-.flexibility-form > label,
 .flexibility-settings fieldset > label {
   display: grid;
   gap: 6px;
 }
 
-.flexibility-form input:not([type="checkbox"]),
-.flexibility-form textarea,
 .flexibility-settings input {
   width: 100%;
   min-width: 0;
 }
 
-.flexibility-form fieldset,
 .flexibility-settings fieldset {
   display: grid;
   gap: 10px;
@@ -22998,18 +23057,6 @@ button.person-health-component-score:focus-visible {
   padding: 12px;
   border: 1px solid var(--tend-border, #e6e9e6);
   border-radius: 12px;
-}
-
-.flexibility-form__region-group > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-}
-
-.flexibility-checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
 }
 
 .money-goal-dialog.flexibility-settings-dialog {
@@ -23146,7 +23193,7 @@ button.person-health-component-score:focus-visible {
 @media (max-width: 420px) {
 
   .flexibility-history__actions {
-    flex-direction: column;
+    justify-content: flex-start;
   }
 }
 
@@ -26033,10 +26080,6 @@ button.person-health-component-score:focus-visible {
   }
 }
 
-.tend-app-preview .finance-page {
-  padding-bottom: 30px;
-}
-
 .tend-app-preview .finance-preview-note {
   margin: 0;
   color: var(--ink-soft);
@@ -26058,104 +26101,12 @@ button.person-health-component-score:focus-visible {
   min-width: 0;
 }
 
-.tend-app-preview .finance-overview {
-  display: grid;
-  gap: 14px;
-}
-
-.tend-app-preview .finance-overview__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.tend-app-preview .finance-overview-card {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--tend-line);
-  border-radius: 16px;
-  background: var(--card);
-}
-
-.tend-app-preview .finance-overview-card > header,
-.tend-app-preview .finance-overview-entry__heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-}
-
-.tend-app-preview .finance-overview-card > header h3 {
-  margin: 0;
-  font-size: calc(1rem * var(--app-text-scale, 1));
-}
-
-.tend-app-preview .finance-overview-card__empty,
-.tend-app-preview .finance-overview-card__note {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  line-height: 1.5;
-}
-
-.tend-app-preview .finance-overview-card > ul {
-  display: grid;
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.tend-app-preview .finance-overview-entry {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--tend-line);
-}
-
-.tend-app-preview .finance-overview-entry__heading > button {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--forest);
-  font: inherit;
-  font-weight: 650;
-  text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-
-.tend-app-preview .finance-overview-entry__heading > strong {
-  flex: 0 0 auto;
-  color: var(--ink);
-  font-size: calc(0.875rem * var(--app-text-scale, 1));
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.tend-app-preview .finance-overview-entry > small,
-.tend-app-preview .finance-overview-entry > p {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  line-height: 1.45;
-}
-
 .tend-app-preview .finance-goals-section {
   gap: 14px;
   margin: 0;
 }
 
-.tend-app-preview .finance-goals-empty,
-.tend-app-preview .finance-goal-rhythm-links__empty {
+.tend-app-preview .finance-goals-empty {
   display: grid;
   justify-items: start;
   gap: 12px;
@@ -26165,8 +26116,7 @@ button.person-health-component-score:focus-visible {
   background: var(--card);
 }
 
-.tend-app-preview .finance-goals-empty > p,
-.tend-app-preview .finance-goal-rhythm-links__empty > p {
+.tend-app-preview .finance-goals-empty > p {
   margin: 0;
   color: var(--ink-soft);
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
@@ -26298,68 +26248,6 @@ button.person-health-component-score:focus-visible {
   background: var(--mist);
 }
 
-.tend-app-preview .finance-goal-rhythm-links {
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-.tend-app-preview .finance-goal-rhythm-links fieldset {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--tend-line);
-  border-radius: 12px;
-}
-
-.tend-app-preview .finance-goal-rhythm-links legend {
-  padding: 0 5px;
-  color: var(--ink);
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  font-weight: 700;
-}
-
-.tend-app-preview .finance-goal-rhythm-links__option {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 10px 0;
-  border-top: 1px solid var(--tend-line);
-}
-
-.tend-app-preview .finance-goal-rhythm-links__option label {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  cursor: pointer;
-}
-
-.tend-app-preview .finance-goal-rhythm-links__option strong {
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  overflow-wrap: anywhere;
-}
-
-.tend-app-preview .finance-goal-rhythm-links__option small,
-.tend-app-preview .finance-goal-rhythm-links__notice {
-  color: var(--ink-soft);
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  line-height: 1.45;
-}
-
-.tend-app-preview .finance-goal-rhythm-links__option input {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--forest);
-}
-
-.tend-app-preview .finance-goal-rhythm-links__notice {
-  margin: 0;
-}
-
 .tend-app-preview .finance-goal-fullscreen-dialog .goal-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -26425,16 +26313,6 @@ button.person-health-component-score:focus-visible {
   margin-top: 12px;
 }
 
-.tend-app-preview .goal-card__support {
-  margin-top: 10px;
-  border-top: 1px solid var(--tend-line);
-}
-
-.tend-app-preview .goal-card__support .goal-text-button {
-  min-height: 44px;
-  padding: 0 2px;
-}
-
 .tend-app-preview .goal-card--summary .goal-footer {
   justify-content: flex-start;
   margin-top: 10px;
@@ -26459,85 +26337,68 @@ button.person-health-component-score:focus-visible {
   color: var(--tend-tool-zone-accent);
 }
 
-.tend-app-preview .tool-zone .goal-card__support .goal-text-button {
-  color: var(--tend-tool-zone-accent);
-}
-
-.tend-app-preview .tool-zone .goal-card__support .goal-text-button:focus-visible {
-  outline: 2px solid var(--tend-tool-zone-accent);
-  outline-offset: 2px;
-}
-
-.tend-app-preview .tool-zone .goal-card__support {
-  border-top-color: var(--tend-tool-zone-line);
-}
-
 .tend-app-preview .finance-goal-details {
   display: grid;
   gap: 14px;
   min-width: 0;
 }
 
-.tend-app-preview .finance-goal-details > .goal-card {
-  background: var(--card);
-}
-
-.tend-app-preview .finance-goal-details__support {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--tend-line);
-  border-radius: 14px;
-  background: var(--card);
-}
-
-.tend-app-preview .finance-goal-details__support header {
-  display: grid;
-  gap: 4px;
-}
-
-.tend-app-preview .finance-goal-details__support h3 {
-  margin: 0;
-  font-size: calc(0.875rem * var(--app-text-scale, 1));
-}
-
-.tend-app-preview .finance-goal-details__support p,
-.tend-app-preview .finance-goal-details__support small {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.tend-app-preview .finance-goal-details__support ul {
-  display: grid;
-  gap: 10px;
-  margin: 0;
+.tend-app-preview .finance-goal-details__tool-zone .goal-card {
   padding: 0;
-  list-style: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
-.tend-app-preview .finance-goal-details__support li {
-  display: grid;
-  gap: 2px;
+.tend-app-preview .finance-goal-details__tool-zone .goal-timeline {
+  border-color: var(--tend-tool-zone-line);
+  background: var(--tend-tool-zone-selection);
 }
 
-.tend-app-preview .finance-goal-details__support li strong {
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  overflow-wrap: anywhere;
+.tend-app-preview .finance-goal-details__tool-zone .goal-timeline__planned {
+  stroke: var(--tend-tool-zone-accent);
 }
 
-.tend-app-preview .finance-goal-details__empty {
-  margin: 0;
+.tend-app-preview .finance-goal-details__tool-zone .goal-timeline__actual {
+  fill: var(--tend-tool-zone-selection);
+  stroke: var(--tend-tool-zone-accent);
+}
+
+.tend-app-preview .finance-goal-details__tool-zone .goal-timeline__legend i {
+  background: var(--tend-tool-zone-accent);
+}
+
+.tend-app-preview .finance-goal-details__tool-zone .goal-timeline__legend i.is-planned {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--tend-tool-zone-accent) 0 5px,
+    transparent 5px 8px
+  );
+}
+
+.tend-app-preview .finance-goal-details__tool-zone .goal-timeline__legend i.is-observed {
+  border-color: var(--tend-tool-zone-accent);
+  background: var(--tend-tool-zone-selection);
+}
+
+.tend-app-preview .finance-goal-details__tool-zone .goal-check-ins,
+.tend-app-preview .finance-goal-details__tool-zone .goal-correction-history {
+  padding: 14px;
+  border: 1px solid var(--tend-tool-zone-line);
+  border-radius: 12px;
+  background: var(--tend-tool-zone-selection);
+}
+
+.tend-app-preview .finance-goal-details__tool-zone .goal-text-button {
+  color: var(--tend-tool-zone-accent);
+}
+
+.tend-app-preview .finance-goal-details__tool-zone .goal-text-button:focus-visible {
+  outline: 2px solid var(--tend-tool-zone-accent);
+  outline-offset: 2px;
 }
 
 @media (max-width: 700px) {
-  .tend-app-preview .finance-overview__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .tend-app-preview .finance-goal-fullscreen-dialog > .money-goal-dialog__surface {
     width: 100%;
     padding-right: max(16px, env(safe-area-inset-right, 0px));

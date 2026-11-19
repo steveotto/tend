@@ -13,8 +13,6 @@ type FitnessScoreSummaryProps = {
   consistency: number | null;
   onTrack: number | null;
   health: number | null;
-  consistencyCaption: string;
-  onTrackCaption: string;
   setupRequired?: boolean;
   statusMessage?: string | null;
   summaryExplanation?: string;
@@ -58,8 +56,6 @@ export function FitnessScoreSummary({
   consistency,
   onTrack,
   health,
-  consistencyCaption,
-  onTrackCaption,
   setupRequired = false,
   statusMessage = null,
   summaryExplanation,
@@ -180,8 +176,6 @@ export function FitnessScoreSummary({
         ariaLabel={`${category} Health scores`}
         consistency={{ score: consistency }}
         onTrack={{ score: onTrack }}
-        consistencyCaption={consistencyCaption}
-        onTrackCaption={onTrackCaption}
         measureDisclosure
         headingAction={infoButton}
         showMeasures={showMeasures}
@@ -214,8 +208,6 @@ export function FitnessScoreSummary({
               healthLabel={`${category} Health`}
               consistency={{ score: consistency }}
               onTrack={{ score: onTrack }}
-              consistencyCaption={consistencyCaption}
-              onTrackCaption={onTrackCaption}
               consistencyDescription={scoreExplanations[category].consistency}
               onTrackDescription={scoreExplanations[category].onTrack}
               rollup={contributionRollup}

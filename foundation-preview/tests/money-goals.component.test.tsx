@@ -13,7 +13,6 @@ import {
   parseMoneyInput,
   remainingAmount,
   saveCheckIn,
-  updateGoalSupportingRhythms,
   validateCheckInDraft,
   type GoalDraft,
   type MoneyGoal
@@ -84,32 +83,8 @@ describe('money goal domain', () => {
     expect(goalFromDraft(
       goalDraftFrom(savings),
       savings.id,
-      { ...savings, supportingRhythmIds: ['rhythm-stable-id'] }
-    ).goal?.supportingRhythmIds).toEqual(['rhythm-stable-id']);
-  });
-
-  it('updates goal associations by stable ID without changing or deleting Rhythm records', () => {
-    const goal: MoneyGoal = {
-      ...savings,
-      supportingRhythmIds: ['archived-rhythm-id', 'unavailable-rhythm-id']
-    };
-    const result = updateGoalSupportingRhythms(goal, [
-      { rhythmId: 'archived-rhythm-id', linked: true },
-      { rhythmId: 'new-rhythm-id', linked: true }
-    ], new Set(['new-rhythm-id']));
-
-    expect(result.error).toBeUndefined();
-    expect(result.goal?.supportingRhythmIds).toEqual([
-      'archived-rhythm-id',
-      'unavailable-rhythm-id',
-      'new-rhythm-id'
-    ]);
-    expect(goal.supportingRhythmIds).toEqual(['archived-rhythm-id', 'unavailable-rhythm-id']);
-
-    const removed = updateGoalSupportingRhythms(result.goal!, [
-      { rhythmId: 'unavailable-rhythm-id', linked: false }
-    ], new Set());
-    expect(removed.goal?.supportingRhythmIds).toEqual(['archived-rhythm-id', 'new-rhythm-id']);
+      { ...savings, supportingRhythmIds: ['archived-rhythm-id', 'missing-rhythm-id'] }
+    ).goal?.supportingRhythmIds).toEqual(['archived-rhythm-id', 'missing-rhythm-id']);
   });
 
   it('calculates increasing and decreasing goal progress without exceeding the goal bounds', () => {
@@ -120,20 +95,6 @@ describe('money goal domain', () => {
     expect(goalProgressPercentage(debt, 662_500)).toBe(25);
     expect(goalProgressPercentage(debt, 100_000)).toBe(100);
     expect(goalProgressPercentage(debt, 1_000_000)).toBe(0);
-  });
-
-  it('rejects new links to ineligible Rhythms and duplicate association commands', () => {
-    expect(updateGoalSupportingRhythms(savings, [
-      { rhythmId: 'not-finance-eligible', linked: true }
-    ], new Set())).toMatchObject({
-      error: 'Only an eligible Finance Rhythm can be newly linked to this goal.'
-    });
-    expect(updateGoalSupportingRhythms(savings, [
-      { rhythmId: 'eligible-rhythm', linked: true },
-      { rhythmId: 'eligible-rhythm', linked: false }
-    ], new Set(['eligible-rhythm']))).toMatchObject({
-      error: 'Rhythm associations must use unique, non-empty IDs.'
-    });
   });
 
   it('sorts snapshots by effective date and replaces same-date check-ins while retaining the prior value', () => {

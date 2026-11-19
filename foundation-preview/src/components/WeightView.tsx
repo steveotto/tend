@@ -49,6 +49,7 @@ import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociation
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
+import { ToolZone, ToolZoneTrendingUpIcon } from './ToolZone.tsx';
 
 export type WeightViewProps = {
   data: WeightData;
@@ -214,8 +215,6 @@ export function WeightView({
           consistency={healthScore?.consistency ?? null}
           onTrack={healthScore?.onTrack ?? null}
           health={healthScore?.health ?? null}
-          consistencyCaption="Scheduled Weight-linked weigh-in Rhythms."
-          onTrackCaption="Whether weigh-ins due on those Rhythms are caught up."
           showMeasures={false}
           overallHealthScore={overallHealthScore}
           categoryHealthScore={categoryHealthScore}
@@ -245,82 +244,78 @@ export function WeightView({
           })}
           hidden={foundationNavigation && selectedTab !== 'progress'}
         >
-          {foundationNavigation && (
-            <FoundationSectionHeading
-              title="Progress"
-              headingId="weight-progress-section-title"
-              subtitle="Your recorded weight and goal-path progress."
-              actions={
-                <SettingsGearButton
-                  label="Weight tracking settings"
-                  onClick={event => openDialog({ kind: 'goals' }, event)}
-                />
-              }
-            />
-          )}
-          <section className="card weight-progress-card" aria-labelledby="weight-progress-heading">
-            <header className="weight-card-heading">
-              <div><h2 id="weight-progress-heading">Body weight progress</h2>
-                <p>{progress.latest
-                  ? `Latest recorded measurement · ${formatDate(progress.latest.date)}`
-                  : 'No valid weigh-in recorded yet.'}</p>
+          <ToolZone
+            className="weight-progress-tools"
+            headingId="weight-progress-tools-title"
+            icon={<ToolZoneTrendingUpIcon />}
+            purposeLabel="Weight insights"
+            subtitle="Explore your weight and progress toward your goal."
+            scoringFootnote="Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it."
+            headerAction={
+              <SettingsGearButton
+                label="Weight tracking settings"
+                onClick={event => openDialog({ kind: 'goals' }, event)}
+              />
+            }
+          >
+            <section className="card weight-progress-card" aria-labelledby="weight-progress-heading">
+              <header className="weight-card-heading">
+                <div><h2 id="weight-progress-heading">Body weight progress</h2>
+                  <p>{progress.latest
+                    ? `Latest recorded measurement · ${formatDate(progress.latest.date)}`
+                    : 'No valid weigh-in recorded yet.'}</p>
+                </div>
+              </header>
+              {progress.latest && (
+                <div className="weight-latest-record" aria-label="Latest recorded measurement">
+                  <span>Latest recorded</span>
+                  <strong>{formatWeight(progress.latest.weightKg, weightUnit(data.displayUnit))} {weightUnit(data.displayUnit)}</strong>
+                  <time dateTime={progress.latest.date}>{formatDate(progress.latest.date)}</time>
+                </div>
+              )}
+              {progress.latest && (progress.latestAge ?? 0) > 0 && (
+                <p className="weight-stale-notice">
+                  The estimate below uses the {formatDate(progress.latest.date)} measurement; it is not a measurement of today’s weight.
+                </p>
+              )}
+              <div className="weight-metrics">
+                <div><span>Expected today</span>
+                  <strong>{progress.expectedWeightKg === null ? '—' : `${formatWeight(progress.expectedWeightKg, weightUnit(data.displayUnit))} ${weightUnit(data.displayUnit)}`}</strong>
+                  <small>{progress.latest ? 'Goal-path estimate' : progress.status}</small>
+                </div>
+                <div><span>Progress score</span>
+                  <strong>{progress.score === null ? '—' : `${formatScore(progress.score)} / 100`}</strong>
+                  <small>{progress.goalStatus ?? progress.status}</small>
+                </div>
+                <div><span>Goal weight</span>
+                  <strong>{weightGoalSettings(data.goals)
+                    ? `${formatWeight(weightGoalSettings(data.goals)!.targetWeightKg, weightUnit(data.displayUnit))} ${weightUnit(data.displayUnit)}`
+                    : '—'}</strong>
+                  <small>{weightGoalSettings(data.goals)?.goalDate
+                    ? `By ${formatDate(weightGoalSettings(data.goals)!.goalDate)}`
+                    : 'Set a complete goal'}</small>
+                </div>
               </div>
-              {!foundationNavigation && (
-                <SettingsGearButton
-                  label="Weight tracking settings"
-                  onClick={event => openDialog({ kind: 'goals' }, event)}
+              <ScoreMeter label="Weight progress score, separate from category and Foundation scores"
+                score={progress.score} />
+              {trackingSetupRequired ? (
+                <p className="weight-chart-empty" role="status">
+                  Use Weight tracking settings (gear) to set a goal, or add a weigh-in to begin tracking progress.
+                </p>
+              ) : (
+                <WeightChart
+                  data={data}
+                  today={today}
+                  measurements={measurements.records}
+                  expectedWeightKg={progress.expectedWeightKg}
                 />
               )}
-            </header>
-            {progress.latest && (
-              <div className="weight-latest-record" aria-label="Latest recorded measurement">
-                <span>Latest recorded</span>
-                <strong>{formatWeight(progress.latest.weightKg, weightUnit(data.displayUnit))} {weightUnit(data.displayUnit)}</strong>
-                <time dateTime={progress.latest.date}>{formatDate(progress.latest.date)}</time>
-              </div>
-            )}
-            {progress.latest && (progress.latestAge ?? 0) > 0 && (
-              <p className="weight-stale-notice">
-                The estimate below uses the {formatDate(progress.latest.date)} measurement; it is not a measurement of today’s weight.
-              </p>
-            )}
-            <div className="weight-metrics">
-              <div><span>Expected today</span>
-                <strong>{progress.expectedWeightKg === null ? '—' : `${formatWeight(progress.expectedWeightKg, weightUnit(data.displayUnit))} ${weightUnit(data.displayUnit)}`}</strong>
-                <small>{progress.latest ? 'Goal-path estimate' : progress.status}</small>
-              </div>
-              <div><span>Progress score</span>
-                <strong>{progress.score === null ? '—' : `${formatScore(progress.score)} / 100`}</strong>
-                <small>{progress.goalStatus ?? progress.status}</small>
-              </div>
-              <div><span>Goal weight</span>
-                <strong>{weightGoalSettings(data.goals)
-                  ? `${formatWeight(weightGoalSettings(data.goals)!.targetWeightKg, weightUnit(data.displayUnit))} ${weightUnit(data.displayUnit)}`
-                  : '—'}</strong>
-                <small>{weightGoalSettings(data.goals)?.goalDate
-                  ? `By ${formatDate(weightGoalSettings(data.goals)!.goalDate)}`
-                  : 'Set a complete goal'}</small>
-              </div>
-            </div>
-            <ScoreMeter label="Weight progress score, separate from category and Foundation scores"
-              score={progress.score} />
-            {trackingSetupRequired ? (
-              <p className="weight-chart-empty" role="status">
-                Use Weight tracking settings (gear) to set a goal, or add a weigh-in to begin tracking progress.
-              </p>
-            ) : (
-              <WeightChart
-                data={data}
-                today={today}
-                measurements={measurements.records}
-                expectedWeightKg={progress.expectedWeightKg}
-              />
-            )}
-            <details className="weight-calculation-info">
-              <summary>How the estimate is calculated</summary>
-              <p>The estimate follows a straight goal path between the dates you set. Progress compares that estimate with your latest valid recorded measurement. The score is unavailable without a complete goal and a valid measurement, and is reduced by five points per day behind, down to zero.</p>
-            </details>
-          </section>
+              <details className="weight-calculation-info">
+                <summary>How the estimate is calculated</summary>
+                <p>The estimate follows a straight goal path between the dates you set. Progress compares that estimate with your latest valid recorded measurement. The score is unavailable without a complete goal and a valid measurement, and is reduced by five points per day behind, down to zero.</p>
+              </details>
+            </section>
+          </ToolZone>
         </section>
 
         <section

@@ -26,8 +26,6 @@ import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
 import { selectUnlinkedFlexibilityRhythms } from '../domain/category-scoring.ts';
-import { isFlexibilityRegionId } from '../domain/flexibility.ts';
-import type { FlexibilityRegionId } from '../domain/flexibility.ts';
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { CategoryTabNavigationRequest, Destination } from './AppNavigation.tsx';
 import { healthFoundationDefinitions, syntheticPeople } from '../domain/preview-data.ts';
@@ -222,11 +220,6 @@ export function HealthFitnessView({
   const [progressSelected, setProgressSelected] = useState<ProgressTab | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
-  const [pendingFlexibilityLog, setPendingFlexibilityLog] = useState<{
-    requestId: number;
-    regionIds: FlexibilityRegionId[];
-  } | null>(null);
-  const flexibilityLogRequestSequence = useRef(0);
   const archivedRhythmIds = new Set(archivedRhythms.map(rhythm => rhythm.id));
   const fitnessMeasureRows = [
     {
@@ -517,21 +510,6 @@ export function HealthFitnessView({
     onTendRhythm(id, event);
   }
 
-  function openStretchAfter(
-    muscleIds: readonly string[],
-    event: MouseEvent<HTMLButtonElement>
-  ) {
-    const regionIds = muscleIds.filter(isFlexibilityRegionId);
-    flexibilityLogRequestSequence.current += 1;
-    rememberLogContext(event.currentTarget);
-    setPendingFlexibilityLog({
-      requestId: flexibilityLogRequestSequence.current,
-      regionIds
-    });
-    setSelected('progress');
-    setProgressSelected('flexibility');
-  }
-
   function returnToProgressOverview() {
     restoreProgressOverviewRef.current = true;
     setProgressSelected(null);
@@ -785,7 +763,6 @@ export function HealthFitnessView({
               onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
               onOpenCategory={onOpenCategory}
               onRhythmLogClosed={restoreLogContext}
-              onStretchAfter={openStretchAfter}
             />
           </section>
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Cardio Foundation" hidden={progressSelected !== 'cardio'}>
@@ -872,13 +849,8 @@ export function HealthFitnessView({
               onPersonSelect={onPersonSelect}
               onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'today')}
               onOpenCategory={onOpenCategory}
-              pendingQuickLog={pendingFlexibilityLog ?? flexibility.pendingQuickLog ?? null}
-              onQuickLogOpened={requestId => {
-                setPendingFlexibilityLog(current =>
-                  current?.requestId === requestId ? null : current
-                );
-                flexibility.onQuickLogOpened?.(requestId);
-              }}
+              pendingQuickLog={flexibility.pendingQuickLog ?? null}
+              onQuickLogOpened={requestId => flexibility.onQuickLogOpened?.(requestId)}
               onLogRequestClosed={restoreLogContext}
             />
           </section>

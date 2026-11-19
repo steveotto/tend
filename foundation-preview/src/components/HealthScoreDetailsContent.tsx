@@ -38,8 +38,6 @@ export function HealthScoreDetailsContent({
   healthLabel?: string;
   consistency: HealthScoreMetric;
   onTrack: HealthScoreMetric;
-  consistencyCaption: string;
-  onTrackCaption: string;
   consistencyDescription?: string;
   onTrackDescription?: string;
   unavailableExplanation?: string;
@@ -84,8 +82,6 @@ export function HealthScoreDetailsContent({
           ariaLabel={`${ariaLabel} score summary`}
           consistency={consistency}
           onTrack={onTrack}
-          consistencyCaption="Follow-through over time"
-          onTrackCaption="How caught up you are"
           showMeasures={showMeasures}
           showMeasureCaptions={showMeasures}
         />

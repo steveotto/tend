@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { formatScore } from '../domain/score-display.ts';
 import { strengthMuscles } from '../domain/strength.ts';
 import type { StrengthMuscleId, StrengthMuscleScore } from '../domain/strength.ts';
+import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
 
 export type FitnessBodyMapRegion = {
   id: string;
@@ -26,6 +27,8 @@ export type FitnessBodyMapConfigFor<RegionId extends string> =
   Omit<FitnessBodyMapConfig, 'regions'> & {
     regions: readonly (FitnessBodyMapRegion & { id: RegionId })[];
   };
+
+export type FitnessBodyMapStatusTone = 'current' | 'due' | 'overdue' | 'unavailable';
 
 const strengthPaintOrder = [
   'shoulders', 'chest', 'back', 'biceps', 'triceps', 'abs', 'quads', 'hamstrings', 'calves'
@@ -167,6 +170,57 @@ export function FitnessBodyMapLayout<RegionId extends string>({
         {children}
       </div>
     </div>
+  );
+}
+
+export function FitnessBodyMapRegionRow({
+  name,
+  selected,
+  statusTone,
+  statusLabel,
+  lastActivity,
+  nextDueLabel,
+  ariaLabel,
+  className,
+  onSelect
+}: {
+  name: string;
+  selected: boolean;
+  statusTone: FitnessBodyMapStatusTone;
+  statusLabel: string;
+  lastActivity: string;
+  nextDueLabel?: string | null;
+  ariaLabel: string;
+  className?: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`strength-muscle-row${className ? ` ${className}` : ''}`}
+      aria-pressed={selected}
+      aria-label={ariaLabel}
+      onClick={onSelect}
+    >
+      <span className="strength-muscle-row__heading">
+        <strong>{name}</strong>
+        <span
+          className={`strength-muscle-row__status strength-muscle-row__status--${statusTone}`}
+          role="img"
+          aria-label={statusLabel}
+          title={statusLabel}
+        />
+      </span>
+      <span className="strength-muscle-row__timing">
+        <span className="strength-muscle-row__last-workout">
+          <RhythmCalendarIcon className="strength-muscle-row__calendar-icon" />
+          <span>{lastActivity}</span>
+        </span>
+        {nextDueLabel !== undefined && nextDueLabel !== null && (
+          <span className="strength-muscle-row__next-due">{nextDueLabel}</span>
+        )}
+      </span>
+    </button>
   );
 }
 

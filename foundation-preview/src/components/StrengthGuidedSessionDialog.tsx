@@ -924,6 +924,7 @@ export function StrengthGuidedSessionDialog({
             })}
           </div>
           <StrengthRhythmCompletionPicker
+            presentation="guided"
             fieldsetRef={workoutRhythmSelectionRef}
             options={rhythmOptions}
             {...(session.rhythmId ? { selectedRhythmId: session.rhythmId } : {})}

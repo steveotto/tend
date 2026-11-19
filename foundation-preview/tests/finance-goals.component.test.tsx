@@ -2,11 +2,48 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FinanceGoalsView } from '../src/components/FinanceGoalsView.tsx';
-import { FINANCE_SAVING_RESERVES_ID, financeFoundations, foundationCatalogue, goals, syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
+import {
+  FINANCE_PLANNING_SPENDING_ID,
+  FINANCE_SAVING_RESERVES_ID,
+  financeFoundations,
+  foundationCatalogue,
+  goals,
+  syntheticPeople,
+  todayRhythms
+} from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
-import type { GoalRhythmAssociationChange, MoneyGoal } from '../src/domain/money-goals.ts';
+import type { MoneyGoal } from '../src/domain/money-goals.ts';
+import type { CategoryRhythmSuggestionCatalogue } from '../src/components/MarriageView.tsx';
 
 afterEach(cleanup);
+
+const financeSuggestionCatalogue: CategoryRhythmSuggestionCatalogue = {
+  title: 'Finance rhythm suggestions',
+  groups: [{
+    id: 'weekly',
+    title: 'Weekly',
+    subtitle: 'Give regular attention to everyday money decisions.',
+    suggestions: [{
+      sourceId: 'finances.review-budget',
+      categoryId: 'finances',
+      rhythm: {
+        id: 'finances.review-budget',
+        title: 'Review your budget',
+        description: 'Review planned spending and adjust upcoming choices as needed.',
+        cadence: 'Weekly',
+        timeLabel: 'Anytime',
+        automation: 'manual',
+        status: 'Not confirmed',
+        primaryFoundationId: FINANCE_PLANNING_SPENDING_ID,
+        secondaryFoundationIds: [],
+        categoryIds: ['finances']
+      },
+      scheduleHint: 'Weekly · Flexible',
+      icon: null,
+      recommendedFrequency: 'weekly'
+    }]
+  }]
+};
 
 const financeRhythm: RhythmPreview = {
   ...todayRhythms[0]!,
@@ -21,24 +58,29 @@ const financeRhythm: RhythmPreview = {
 
 function renderFinance({
   goalData = goals,
-  financeCategoryEnabled = true,
   rhythms = [financeRhythm],
-  archivedRhythms = []
+  archivedRhythms = [],
+  categoryRhythms = rhythms,
+  archivedCategoryRhythms = archivedRhythms,
+  suggestionCatalogue = financeSuggestionCatalogue
 }: {
   goalData?: readonly MoneyGoal[];
-  financeCategoryEnabled?: boolean;
   rhythms?: readonly RhythmPreview[];
   archivedRhythms?: readonly RhythmPreview[];
+  categoryRhythms?: readonly RhythmPreview[];
+  archivedCategoryRhythms?: readonly RhythmPreview[];
+  suggestionCatalogue?: CategoryRhythmSuggestionCatalogue;
 } = {}) {
   const callbacks = {
     onSaveGoal: vi.fn(),
     onSaveCheckIn: vi.fn(() => ({})),
-    onSaveGoalRhythms: vi.fn((_goalId: string, _changes: readonly GoalRhythmAssociationChange[]) => null),
     onSaveFoundationAssociations: vi.fn(() => null),
     onAddLinkedRhythm: vi.fn(),
-    onCreateRhythmFromGoal: vi.fn(),
+    onAddRhythm: vi.fn(),
+    onAddSuggestion: vi.fn(),
     onTendRhythm: vi.fn(),
     onUndoRhythm: vi.fn(),
+    onRestoreRhythm: vi.fn(),
     onEditRhythm: vi.fn(),
     onRhythmHistory: vi.fn(),
     onPersonSelect: vi.fn(),
@@ -51,11 +93,11 @@ function renderFinance({
       goals={goalData}
       currentDate="2026-10-21"
       financeFoundations={financeFoundations}
-      financeCategoryEnabled={financeCategoryEnabled}
       rhythms={rhythms}
       archivedRhythms={archivedRhythms}
-      categoryRhythms={rhythms}
-      archivedCategoryRhythms={archivedRhythms}
+      categoryRhythms={categoryRhythms}
+      archivedCategoryRhythms={archivedCategoryRhythms}
+      suggestionCatalogue={suggestionCatalogue}
       people={syntheticPeople}
       foundations={foundationCatalogue}
       rhythmScores={new Map()}
@@ -64,12 +106,13 @@ function renderFinance({
       undoableRhythms={new Set()}
       onSaveGoal={callbacks.onSaveGoal}
       onSaveCheckIn={callbacks.onSaveCheckIn}
-      onSaveGoalRhythms={callbacks.onSaveGoalRhythms}
       onSaveFoundationAssociations={callbacks.onSaveFoundationAssociations}
       onAddLinkedRhythm={callbacks.onAddLinkedRhythm}
-      onCreateRhythmFromGoal={callbacks.onCreateRhythmFromGoal}
+      onAddRhythm={callbacks.onAddRhythm}
+      onAddSuggestion={callbacks.onAddSuggestion}
       onTendRhythm={callbacks.onTendRhythm}
       onUndoRhythm={callbacks.onUndoRhythm}
+      onRestoreRhythm={callbacks.onRestoreRhythm}
       onEditRhythm={callbacks.onEditRhythm}
       onRhythmHistory={callbacks.onRhythmHistory}
       onPersonSelect={callbacks.onPersonSelect}
@@ -85,7 +128,7 @@ describe('Finance goals view', () => {
   it('shows five shared Foundation cards and opens a Foundation detail with Health and linked Rhythms', async () => {
     const user = userEvent.setup();
     const { callbacks } = renderFinance();
-    const overview = screen.getByRole('tabpanel', { name: 'Overview' });
+    const foundations = screen.getByRole('tabpanel', { name: 'Foundations' });
     const home = screen.getByRole('button', { name: 'Home' });
     expect(home.className).toContain('tend-back-button--plain');
     await user.click(home);
@@ -97,68 +140,161 @@ describe('Finance goals view', () => {
       'Investing & Future',
       'Generosity'
     ]) {
-      expect(within(overview).getByRole('button', { name: new RegExp(`Open ${name}`) })).toBeTruthy();
+      expect(within(foundations).getByRole('button', { name: new RegExp(`Open ${name}`) })).toBeTruthy();
     }
 
-    await user.click(within(overview).getByRole('button', { name: /Open Saving & Reserves/ }));
+    await user.click(within(foundations).getByRole('button', { name: /Open Saving & Reserves/ }));
     expect(screen.getByRole('heading', { name: 'Saving & Reserves' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Finances' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
     expect(screen.getByRole('main').querySelector('.category-header--hero')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Back to Finance Overview' }).className)
+    expect(screen.getByRole('button', { name: 'Back to Finance Foundations' }).className)
       .toContain('tend-back-button--plain');
     expect(screen.getByRole('img', { name: 'Saving & Reserves Health: Not enough data' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Linked Rhythms · 1' })).toBeTruthy();
     expect(screen.getByText('Review savings transfer')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Back to Finance Overview' }));
+    await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
+    expect(callbacks.onAddLinkedRhythm).toHaveBeenCalledWith(
+      FINANCE_SAVING_RESERVES_ID,
+      expect.any(Object)
+    );
+    await user.click(screen.getByRole('button', { name: 'Back to Finance Foundations' }));
     expect(screen.getByRole('heading', { name: 'Finances' })).toBeTruthy();
-    expect(screen.getByRole('tabpanel', { name: 'Overview' })).toBeTruthy();
+    expect(screen.getByRole('tabpanel', { name: 'Foundations' })).toBeTruthy();
   });
 
-  it('defaults to Overview, keeps balances separate, and navigates to Goals', async () => {
+  it('defaults to Foundations and keeps the Foundation panel focused while Goals retain balances', async () => {
     const user = userEvent.setup();
     renderFinance();
 
-    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('heading', { name: 'Savings' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Debt' })).toBeTruthy();
-    const overview = screen.getByRole('tabpanel', { name: 'Overview' });
-    expect(within(overview).getByText('$1,250.00')).toBeTruthy();
-    expect(within(overview).getByText('$6,800.00')).toBeTruthy();
-    expect(within(overview).getByText(/Savings increased by \$125\.00/)).toBeTruthy();
-    expect(within(overview).getByText(/Debt reduced by \$200\.00/)).toBeTruthy();
-    expect(screen.queryByText(/combined total/i)).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Foundations' }).getAttribute('aria-selected')).toBe('true');
+    const foundations = screen.getByRole('tabpanel', { name: 'Foundations' });
+    const foundationList = foundations.querySelector('.marriage-foundation-list');
+    expect(within(foundations).queryByRole('heading', { name: 'Overview' })).toBeNull();
+    expect(foundations.children).toHaveLength(1);
+    expect(foundations.firstElementChild).toBe(foundationList);
+    expect(foundationList?.querySelectorAll('.foundation-card')).toHaveLength(5);
+    expect(within(foundations).queryByText(/Balances are manually tracked values/)).toBeNull();
+    expect(foundations.querySelector('.strength-section-heading')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Home' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back to Today' })).toBeNull();
 
     await user.click(screen.getByRole('tab', { name: 'Goals' }));
     expect(screen.getByRole('tab', { name: 'Goals' }).getAttribute('aria-selected')).toBe('true');
     const progressTracker = screen.getByRole('region', { name: 'Progress tracker' });
-    expect(within(progressTracker).getByText('Track the outcomes your Rhythms support.')).toBeTruthy();
+    expect(within(progressTracker).getByText(
+      'Dated check-ins update progress; completing a Rhythm never changes a goal balance.'
+    )).toBeTruthy();
     expect(within(progressTracker).getByText('Goal balances don’t change your Health score.')).toBeTruthy();
+    expect(within(progressTracker).getByText(/Balances are manually tracked values, not bank balances or a complete financial picture/)).toBeTruthy();
+    const savingsGoal = within(progressTracker).getByRole('article', { name: 'Starter reserve' });
+    const debtGoal = within(progressTracker).getByRole('article', { name: 'Debt payoff' });
+    expect(within(savingsGoal).getByText('$1,250.00')).toBeTruthy();
+    expect(within(debtGoal).getByText('$6,800.00')).toBeTruthy();
     expect(within(progressTracker).getByRole('button', { name: '+ Add' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back to Today' })).toBeNull();
+
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    expect(screen.getByRole('heading', { name: 'Your Rhythms' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Home' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back to Today' })).toBeNull();
   });
 
   it('uses the shared arrow, Home, and End keyboard pattern for panel tabs', async () => {
     const user = userEvent.setup();
     renderFinance();
-    const overview = screen.getByRole('tab', { name: 'Overview' });
+    const foundations = screen.getByRole('tab', { name: 'Foundations' });
     const goalsTab = screen.getByRole('tab', { name: 'Goals' });
     const rhythmsTab = screen.getByRole('tab', { name: 'Rhythms' });
 
-    overview.focus();
+    foundations.focus();
     await user.keyboard('{ArrowRight}');
     expect(goalsTab.getAttribute('aria-selected')).toBe('true');
     expect(document.activeElement).toBe(goalsTab);
     await user.keyboard('{End}');
     expect(rhythmsTab.getAttribute('aria-selected')).toBe('true');
     await user.keyboard('{ArrowRight}');
-    expect(overview.getAttribute('aria-selected')).toBe('true');
+    expect(foundations.getAttribute('aria-selected')).toBe('true');
     await user.keyboard('{Home}');
-    expect(overview.getAttribute('aria-selected')).toBe('true');
+    expect(foundations.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('keeps Finance-category Rhythm membership separate from scoring eligibility and supports shared add/archive controls', async () => {
+    const user = userEvent.setup();
+    const categoryOnlyRhythm = {
+      ...financeRhythm,
+      id: 'finance-category-only',
+      title: 'Unlinked Finance routine',
+      primaryFoundationId: null,
+      secondaryFoundationIds: []
+    };
+    const linkedOutsideFinanceCategory = {
+      ...financeRhythm,
+      id: 'finance-linked-outside-category',
+      title: 'Linked but not Finance-category',
+      categoryIds: ['health'] as const
+    };
+    const archivedFinanceRhythm = {
+      ...categoryOnlyRhythm,
+      id: 'archived-finance-routine',
+      title: 'Archived Finance routine'
+    };
+    const { callbacks } = renderFinance({
+      rhythms: [financeRhythm, categoryOnlyRhythm, linkedOutsideFinanceCategory],
+      archivedRhythms: [archivedFinanceRhythm],
+      categoryRhythms: [financeRhythm, categoryOnlyRhythm],
+      archivedCategoryRhythms: [archivedFinanceRhythm]
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    const panel = screen.getByRole('tabpanel', { name: 'Rhythms' });
+    expect(within(panel).getByText('Review savings transfer')).toBeTruthy();
+    expect(within(panel).getByText('Unlinked Finance routine')).toBeTruthy();
+    expect(within(panel).queryByText('Linked but not Finance-category')).toBeNull();
+    expect(within(panel).getByText(
+      'Finance-category Rhythms are listed here; only eligible linked Rhythms affect Finance Health.'
+    )).toBeTruthy();
+
+    await user.click(within(panel).getByRole('button', { name: 'Add Rhythm' }));
+    expect(callbacks.onAddRhythm).toHaveBeenCalledOnce();
+    const suggestions = within(panel).getByRole('button', { name: 'Suggestions' });
+    expect((suggestions as HTMLButtonElement).disabled).toBe(false);
+    expect(suggestions.getAttribute('title')).toBeNull();
+    await user.click(suggestions);
+    const picker = screen.getByRole('dialog', { name: 'Finance rhythm suggestions' });
+    expect(within(picker).getByText('Review your budget')).toBeTruthy();
+    await user.click(within(picker).getByRole('button', { name: 'Add' }));
+    expect(callbacks.onAddSuggestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: 'finances.review-budget',
+        categoryId: 'finances',
+        rhythm: expect.objectContaining({
+          primaryFoundationId: FINANCE_PLANNING_SPENDING_ID
+        })
+      }),
+      expect.anything(),
+      expect.any(Function)
+    );
+
+    const archiveOpener = within(panel).getByRole('button', { name: 'Archived rhythms (1)' });
+    await user.click(archiveOpener);
+    const archive = document.querySelector<HTMLDialogElement>('.archived-rhythms-dialog');
+    expect(archive).toBeTruthy();
+    expect(within(archive!).getByRole('heading', { name: 'Archived rhythms' })).toBeTruthy();
+    expect(within(archive!).getByText('Archived Finance routine')).toBeTruthy();
+    await user.click(within(archive!).getByRole('button', { name: 'Restore rhythm Archived Finance routine' }));
+    expect(callbacks.onRestoreRhythm).toHaveBeenCalledWith('archived-finance-routine');
+    await user.click(within(archive!).getByRole('button', { name: 'Close archived rhythms' }));
+    await waitFor(() => expect(document.activeElement).toBe(archiveOpener));
+
+    await user.click(screen.getByRole('tab', { name: 'Goals' }));
+    const goal = screen.getByRole('article', { name: 'Starter reserve' });
+    expect(within(goal).queryByRole('button', { name: /supporting Rhythm/i })).toBeNull();
   });
 
   it('shows missing balances as unavailable rather than zero', () => {
     renderFinance({ goalData: goals.map(goal => ({ ...goal, checkIns: [] })) });
-    expect(screen.getAllByText('Unavailable')).toHaveLength(4);
+    expect(screen.getAllByText('Unavailable')).toHaveLength(2);
     expect(screen.getAllByText('Remaining amount unavailable until a check-in.')).toHaveLength(2);
     expect(screen.queryByText('$0.00')).toBeNull();
   });
@@ -171,7 +307,7 @@ describe('Finance goals view', () => {
     const card = screen.getByRole('article', { name: 'Starter reserve' });
     expect(within(card).getByText('Savings increase')).toBeTruthy();
     expect(within(card).getByText('$1,250.00')).toBeTruthy();
-    expect(within(card).getByRole('button', { name: 'Add a supporting Rhythm' })).toBeTruthy();
+    expect(within(card).queryByRole('button', { name: /supporting Rhythm/i })).toBeNull();
     expect(within(card).getByRole('progressbar', { name: 'Progress toward Starter reserve' })).toBeTruthy();
     expect(card.querySelector('button button')).toBeNull();
 
@@ -185,13 +321,45 @@ describe('Finance goals view', () => {
     await user.click(detailsTrigger);
     const details = screen.getByRole('dialog', { name: 'Starter reserve' });
     expect(details.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    const insights = within(details).getByRole('region', { name: 'Balance progress' });
+    expect(within(insights).getByText('Goal balances don’t change your Health score.')).toBeTruthy();
+    expect(within(insights).getByRole('article', { name: 'Starter reserve' })).toBeTruthy();
+    expect(details.querySelector('h2')?.closest('.tool-zone')).toBeNull();
     expect(within(details).getByRole('img', { name: /Planned linear trajectory/ })).toBeTruthy();
     expect(within(details).getByRole('region', { name: 'Balance check-ins for Starter reserve' })).toBeTruthy();
     await user.click(within(details).getByRole('button', { name: 'Close goal details' }));
     await waitFor(() => expect(document.activeElement).toBe(detailsTrigger));
   });
 
-  it('keeps check-in corrections, correction history, edit, and Rhythm links available in details', async () => {
+  it('uses the goal insights zone for savings and debt details with empty and recorded check-ins', async () => {
+    const user = userEvent.setup();
+    const examples = [
+      { ...goals[0]!, checkIns: [] },
+      goals[1]!
+    ];
+
+    for (const goal of examples) {
+      const view = renderFinance({ goalData: [goal] });
+      await user.click(screen.getByRole('tab', { name: 'Goals' }));
+      await user.click(screen.getByRole('button', { name: `View details for ${goal.title}` }));
+      const details = screen.getByRole('dialog', { name: goal.title });
+      const insights = within(details).getByRole('region', { name: 'Balance progress' });
+      const trajectory = within(insights).getByRole('img', { name: /Planned linear trajectory/ });
+      expect(trajectory.getAttribute('aria-label')).toContain(
+        `${goal.checkIns.length} dated observed balance check-in`
+      );
+      if (goal.checkIns.length === 0) {
+        expect(within(insights).getByText('No sample check-ins yet. Record an observed balance to begin.')).toBeTruthy();
+      } else {
+        expect(within(insights).getByText('Recorded check-ins')).toBeTruthy();
+        expect(within(insights).getByText('$6,800.00')).toBeTruthy();
+      }
+      await user.click(within(details).getByRole('button', { name: 'Close goal details' }));
+      view.unmount();
+    }
+  });
+
+  it('keeps check-ins, correction history, and editing available without exposing legacy Rhythm links', async () => {
     const user = userEvent.setup();
     const goal = {
       ...goals[0]!,
@@ -209,8 +377,10 @@ describe('Finance goals view', () => {
 
     let details = screen.getByRole('dialog', { name: 'Starter reserve' });
     expect(within(details).getByRole('region', { name: 'Correction history for Starter reserve' })).toBeTruthy();
-    expect(within(details).getByText('Unavailable saved reference: missing-rhythm')).toBeTruthy();
-    expect(within(details).getByText('Linked to a Finance Foundation.')).toBeTruthy();
+    expect(within(details).queryByText(/Unavailable saved reference/)).toBeNull();
+    expect(within(details).queryByText(/Supporting Rhythms/)).toBeNull();
+    expect(within(details).queryByRole('button', { name: /supporting Rhythm/i })).toBeNull();
+    expect(within(details).getByText('Goal balances don’t change your Health score.')).toBeTruthy();
 
     await user.click(within(details).getAllByRole('button', { name: 'Correct' })[0]!);
     expect(screen.getByRole('dialog', { name: 'Correct balance check-in' })).toBeTruthy();
@@ -220,8 +390,6 @@ describe('Finance goals view', () => {
     expect(screen.getByRole('dialog', { name: 'Edit goal' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     details = screen.getByRole('dialog', { name: 'Starter reserve' });
-    await user.click(within(details).getByRole('button', { name: 'Manage supporting Rhythms' }));
-    expect(screen.getByRole('dialog', { name: 'Supporting Rhythms' })).toBeTruthy();
   });
 
   it('opens a supported template as an editable draft without adding unsupported balance types', async () => {
@@ -245,53 +413,7 @@ describe('Finance goals view', () => {
     expect(screen.getByRole('button', { name: 'Close goal editor' })).toBeTruthy();
   });
 
-  it('saves an explicit goal-to-Rhythm link without tending or scoring the Rhythm', async () => {
-    const user = userEvent.setup();
-    const { callbacks } = renderFinance();
-    await user.click(screen.getByRole('tab', { name: 'Goals' }));
-    await user.click(screen.getAllByRole('button', { name: 'Add a supporting Rhythm' })[0]!);
-
-    const dialog = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
-    expect(within(dialog).getByText(/Goal links do not qualify Rhythms for scoring/)).toBeTruthy();
-    const checkbox = within(dialog).getByRole('checkbox', { name: /Review savings transfer/ });
-    await user.click(checkbox);
-    await user.click(within(dialog).getByRole('button', { name: 'Save links' }));
-
-    expect(callbacks.onSaveGoalRhythms).toHaveBeenCalledWith(
-      goals[0]!.id,
-      [{ rhythmId: financeRhythm.id, linked: true }]
-    );
-    expect(callbacks.onTendRhythm).not.toHaveBeenCalled();
-    expect(callbacks.onSaveGoal).not.toHaveBeenCalled();
-    expect(screen.queryByRole('dialog', { name: 'Supporting Rhythms' })).toBeNull();
-  });
-
-  it('closes goal-link management before starting the shared Rhythm editor', async () => {
-    const user = userEvent.setup();
-    const { callbacks } = renderFinance({
-      goalData: [
-        { ...goals[0]!, foundationId: FINANCE_SAVING_RESERVES_ID },
-        ...goals.slice(1)
-      ]
-    });
-    await user.click(screen.getByRole('tab', { name: 'Goals' }));
-    await user.click(screen.getAllByRole('button', { name: 'Add a supporting Rhythm' })[0]!);
-    const dialog = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
-    await user.click(within(dialog).getByRole('button', { name: 'Create a Finance Rhythm' }));
-
-    expect(callbacks.onCreateRhythmFromGoal).toHaveBeenCalledOnce();
-    expect(callbacks.onCreateRhythmFromGoal).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.objectContaining({
-        goalId: goals[0]!.id,
-        foundationId: FINANCE_SAVING_RESERVES_ID,
-        onFinished: expect.any(Function)
-      })
-    );
-    expect(screen.queryByRole('dialog', { name: 'Supporting Rhythms' })).toBeNull();
-  });
-
-  it('does not treat a goal link as a Foundation link or a Finance Health contributor', async () => {
+  it('does not treat hidden legacy goal Rhythm IDs as Foundation links or Finance Health contributors', async () => {
     const user = userEvent.setup();
     const goalWithLink = { ...goals[0]!, supportingRhythmIds: [financeRhythm.id] };
     const rhythmWithoutFoundation = {
@@ -306,27 +428,9 @@ describe('Finance goals view', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
     const panel = screen.getByRole('tabpanel', { name: 'Rhythms' });
-    expect(within(panel).getByText('No Rhythms are linked to Finances yet.')).toBeTruthy();
-    expect(within(panel).queryByText('Review savings transfer')).toBeNull();
+    expect(within(panel).getByText('Review savings transfer')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Health' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Finance Health: Not enough data' })).toBeTruthy();
   });
 
-  it('retains existing goal links while Finances is disabled and offers no new eligible link', async () => {
-    const user = userEvent.setup();
-    const linkedGoal = { ...goals[0]!, supportingRhythmIds: [financeRhythm.id] };
-    renderFinance({
-      financeCategoryEnabled: false,
-      goalData: [linkedGoal],
-      rhythms: [financeRhythm]
-    });
-    await user.click(screen.getByRole('tab', { name: 'Goals' }));
-    await user.click(screen.getByRole('button', { name: 'View details for Starter reserve' }));
-    await user.click(screen.getByRole('button', { name: 'Manage supporting Rhythms' }));
-
-    const dialog = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
-    expect(within(dialog).getByRole('status').textContent).toMatch(/Finances is disabled/);
-    expect((within(dialog).getByRole('checkbox', { name: /Review savings transfer/ }) as HTMLInputElement).checked).toBe(true);
-    expect(within(dialog).queryByRole('button', { name: 'Create a Finance Rhythm' })).toBeNull();
-  });
 });

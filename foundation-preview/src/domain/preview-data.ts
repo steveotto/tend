@@ -1529,6 +1529,87 @@ export const financeFoundations = [
   }
 ] satisfies readonly FoundationPreview[];
 
+export const financeRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
+  { id: 'weekly', title: 'Weekly', subtitle: 'Give regular attention to everyday money decisions.' },
+  { id: 'monthly', title: 'Monthly', subtitle: 'Review balances and make intentional progress.' },
+  { id: 'seasonal', title: 'Quarterly', subtitle: 'Check in on longer-term plans.' }
+];
+
+export const financeRhythmSuggestions: readonly CategoryRhythmSuggestionTemplate[] = [
+  {
+    sourceId: 'finances.review-budget',
+    groupId: 'weekly',
+    title: 'Review your budget',
+    description: 'Review planned spending and adjust upcoming choices as needed.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Flexible',
+    recommendedFrequency: 'weekly',
+    iconId: FINANCE_PLANNING_SPENDING_ID,
+    primaryFoundationId: FINANCE_PLANNING_SPENDING_ID,
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'finances.transfer-savings',
+    groupId: 'monthly',
+    title: 'Transfer savings',
+    description: 'Review your savings plan and record any transfer you choose to make.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Flexible',
+    recommendedFrequency: 'monthly',
+    iconId: FINANCE_SAVING_RESERVES_ID,
+    primaryFoundationId: FINANCE_SAVING_RESERVES_ID,
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'finances.extra-debt-payment',
+    groupId: 'monthly',
+    title: 'Make an extra debt payment',
+    description: 'Review your debt plan and record any extra payment you choose to make.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Flexible',
+    recommendedFrequency: 'monthly',
+    iconId: FINANCE_DEBT_REDUCTION_ID,
+    primaryFoundationId: FINANCE_DEBT_REDUCTION_ID,
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'finances.review-finances',
+    groupId: 'monthly',
+    title: 'Review your finances',
+    description: 'Check in on your spending, savings, and upcoming priorities.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Flexible',
+    recommendedFrequency: 'monthly',
+    iconId: FINANCE_PLANNING_SPENDING_ID,
+    primaryFoundationId: FINANCE_PLANNING_SPENDING_ID,
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'finances.intentional-giving',
+    groupId: 'monthly',
+    title: 'Plan intentional giving',
+    description: 'Make space to consider the giving that matters to you.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Flexible',
+    recommendedFrequency: 'monthly',
+    iconId: FINANCE_GENEROSITY_ID,
+    primaryFoundationId: FINANCE_GENEROSITY_ID,
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'finances.long-term-review',
+    groupId: 'seasonal',
+    title: 'Review your long-term plan',
+    description: 'Revisit your longer-term priorities and adjust your plan if needed.',
+    cadence: 'Quarterly',
+    scheduleHint: 'Quarterly · Flexible',
+    recommendedFrequency: 'quarterly',
+    iconId: FINANCE_INVESTING_FUTURE_ID,
+    primaryFoundationId: FINANCE_INVESTING_FUTURE_ID,
+    secondaryFoundationIds: []
+  }
+];
+
 export const foundationCatalogue: readonly FoundationPreview[] = [
   ...marriageFoundations,
   ...parentingFoundations,

@@ -21,6 +21,9 @@ export type FlexibilitySession = {
   regionIds: FlexibilityRegionId[];
   minutes?: number;
   notes?: string;
+  linkedRhythmId?: string;
+  rhythmOccurrence?: string;
+  completionId?: string;
 };
 
 export type FlexibilityRoutineSide = 'left' | 'right' | 'both';
@@ -94,6 +97,7 @@ export type FlexibilitySessionDraft = {
   regionIds: FlexibilityRegionId[];
   minutes: string;
   notes: string;
+  linkedRhythmId?: string;
   editingSessionId?: string;
 };
 
@@ -237,8 +241,12 @@ export function validateFlexibilityData(value: unknown, asOfDate: string): value
       || (interval as number) < 1 || (interval as number) > 365) return false;
   }
   const sessionIds = new Set<string>();
+  const completionIds = new Set<string>();
   for (const session of value.sessions) {
-    if (!isRecord(session) || !hasOnlyKeys(session, ['id', 'date', 'regionIds', 'minutes', 'notes'])
+    if (!isRecord(session) || !hasOnlyKeys(session, [
+      'id', 'date', 'regionIds', 'minutes', 'notes',
+      'linkedRhythmId', 'rhythmOccurrence', 'completionId'
+    ])
       || !isNonEmptyText(session.id, 160) || sessionIds.has(session.id)
       || typeof session.date !== 'string' || !isValidDate(session.date) || session.date > asOfDate
       || !Array.isArray(session.regionIds) || session.regionIds.length === 0
@@ -246,8 +254,21 @@ export function validateFlexibilityData(value: unknown, asOfDate: string): value
       || new Set(session.regionIds).size !== session.regionIds.length
       || session.minutes !== undefined && (!Number.isInteger(session.minutes)
         || (session.minutes as number) < 1 || (session.minutes as number) > 1440)
-      || session.notes !== undefined && !isOptionalText(session.notes, 1000)) return false;
+      || session.notes !== undefined && !isOptionalText(session.notes, 1000)
+      || session.linkedRhythmId !== undefined && !isNonEmptyText(session.linkedRhythmId, 160)
+      || session.linkedRhythmId !== undefined && session.rhythmOccurrence === undefined
+      || session.rhythmOccurrence !== undefined
+        && (!isNonEmptyText(session.rhythmOccurrence, 10)
+          || !isValidDate(session.rhythmOccurrence)
+          || session.linkedRhythmId === undefined
+          || session.rhythmOccurrence !== session.date)
+      || session.completionId !== undefined
+        && (!isNonEmptyText(session.completionId, 160)
+          || session.linkedRhythmId === undefined
+          || completionIds.has(session.completionId))
+      || (session.linkedRhythmId === undefined) !== (session.completionId === undefined)) return false;
     sessionIds.add(session.id);
+    if (session.completionId !== undefined) completionIds.add(session.completionId);
   }
   if (value.draftSession !== undefined
     && (!validateDraft(value.draftSession, asOfDate)
@@ -255,8 +276,13 @@ export function validateFlexibilityData(value: unknown, asOfDate: string): value
         && !sessionIds.has(value.draftSession.editingSessionId))) return false;
   if (value.savedRoutines !== undefined
     && (!Array.isArray(value.savedRoutines) || !value.savedRoutines.every(validateSavedRoutine))) return false;
-  if (value.guidedSessions !== undefined
-    && (!Array.isArray(value.guidedSessions) || !value.guidedSessions.every(validateGuidedSession))) return false;
+  if (value.guidedSessions !== undefined) {
+    if (!Array.isArray(value.guidedSessions) || !value.guidedSessions.every(validateGuidedSession)) return false;
+    for (const session of value.guidedSessions) {
+      if (session.completionId !== undefined && completionIds.has(session.completionId)) return false;
+      if (session.completionId !== undefined) completionIds.add(session.completionId);
+    }
+  }
   if (value.guidedSessionDraft !== undefined
     && !validateGuidedSessionDraft(value.guidedSessionDraft, asOfDate)) return false;
   if (value.timerPreferences !== undefined && (!isRecord(value.timerPreferences)
@@ -302,7 +328,17 @@ export function saveFlexibilitySession(
     || new Set(session.regionIds).size !== session.regionIds.length
     || session.minutes !== undefined && (!Number.isInteger(session.minutes)
       || session.minutes < 1 || session.minutes > 1440)
-    || session.notes !== undefined && !isOptionalText(session.notes, 1000)) {
+    || session.notes !== undefined && !isOptionalText(session.notes, 1000)
+    || session.linkedRhythmId !== undefined && !isNonEmptyText(session.linkedRhythmId, 160)
+    || session.linkedRhythmId !== undefined && session.rhythmOccurrence !== session.date
+    || session.rhythmOccurrence !== undefined
+      && (session.rhythmOccurrence !== session.date || session.linkedRhythmId === undefined)
+    || session.completionId !== undefined
+      && (!isNonEmptyText(session.completionId, 160) || session.linkedRhythmId === undefined)
+    || (session.linkedRhythmId === undefined) !== (session.completionId === undefined)
+    || session.completionId !== undefined && sessions.some(item =>
+      item.id !== session.id && item.completionId === session.completionId
+    )) {
     return { valid: false, error: 'Choose a date and at least one stretch region.' };
   }
   return {
@@ -922,7 +958,7 @@ export function suggestNextFlexibilityStretch(
 
 function validateDraft(value: unknown, asOfDate: string): value is FlexibilitySessionDraft {
   return isRecord(value)
-    && hasOnlyKeys(value, ['date', 'regionIds', 'minutes', 'notes', 'editingSessionId'])
+    && hasOnlyKeys(value, ['date', 'regionIds', 'minutes', 'notes', 'linkedRhythmId', 'editingSessionId'])
     && typeof value.date === 'string'
     && isValidDate(value.date)
     && value.date <= asOfDate
@@ -934,6 +970,7 @@ function validateDraft(value: unknown, asOfDate: string): value is FlexibilitySe
     && /^\d*$/.test(value.minutes)
     && typeof value.notes === 'string'
     && value.notes.length <= 1000
+    && (value.linkedRhythmId === undefined || isNonEmptyText(value.linkedRhythmId, 160))
     && (value.editingSessionId === undefined || isNonEmptyText(value.editingSessionId, 160));
 }
 

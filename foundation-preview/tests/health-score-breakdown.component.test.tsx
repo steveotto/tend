@@ -12,8 +12,7 @@ describe('shared Health score breakdown', () => {
         score={0}
         consistency={{ score: 0 }}
         onTrack={{ score: 0 }}
-        consistencyCaption="How often you show up."
-        onTrackCaption="How caught up you are."
+        showMeasureCaptions
         ariaLabel="Strength Health scores"
       />
     );
@@ -24,8 +23,8 @@ describe('shared Health score breakdown', () => {
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('0');
     expect(container.querySelectorAll('.rhythm-score-circle__value')).toHaveLength(2);
     expect([...container.querySelectorAll('.rhythm-score-circle__value')].map(node => node.textContent)).toEqual(['0', '0']);
-    expect(screen.queryByText('How often you show up.')).toBeNull();
-    expect(screen.queryByText('How caught up you are.')).toBeNull();
+    expect(screen.getByText('Follow-through over time')).toBeTruthy();
+    expect(screen.getByText('How up to date you are')).toBeTruthy();
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuetext')).toBe('0 out of 100');
     expect(container.querySelector('.health-score-measures__grid')?.children).toHaveLength(2);
   });
@@ -37,8 +36,6 @@ describe('shared Health score breakdown', () => {
         healthLabel="Cardio Health"
         consistency={{ score: 67 }}
         onTrack={{ score: null }}
-        consistencyCaption="Four completed weeks."
-        onTrackCaption="This week’s goal progress."
       />
     );
 
@@ -50,8 +47,6 @@ describe('shared Health score breakdown', () => {
     expect(within(unavailableOnTrack).getByText('—')).toBeTruthy();
     expect(unavailableOnTrack.classList.contains('is-unavailable')).toBe(true);
     expect(within(unavailableOnTrack).queryByText('unavailable')).toBeNull();
-    expect(screen.queryByText('Four completed weeks.')).toBeNull();
-    expect(screen.queryByText('This week’s goal progress.')).toBeNull();
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuetext')).toBe('67 out of 100');
     expect(unavailableOnTrack.querySelector('.rhythm-score-circle__track')).toBeTruthy();
   });
@@ -62,8 +57,6 @@ describe('shared Health score breakdown', () => {
         score={100}
         consistency={{ score: 100 }}
         onTrack={{ score: 100 }}
-        consistencyCaption="Every eligible opportunity was completed."
-        onTrackCaption="The current week is complete."
       />
     );
     const grid = container.querySelector('.health-score-measures__grid');
@@ -72,8 +65,6 @@ describe('shared Health score breakdown', () => {
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('100');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
     expect([...grid!.querySelectorAll('.rhythm-score-circle__value')].map(node => node.textContent)).toEqual(['100', '100']);
-    expect(screen.queryByText('Every eligible opportunity was completed.')).toBeNull();
-    expect(screen.queryByText('The current week is complete.')).toBeNull();
   });
 
   it('supports a compact shared Health card without reserving gauge space', () => {
@@ -84,8 +75,6 @@ describe('shared Health score breakdown', () => {
         healthLabel="Connection Foundation Health"
         consistency={{ score: 60 }}
         onTrack={{ score: 90 }}
-        consistencyCaption="How often you show up."
-        onTrackCaption="How caught up you are."
         headingAction={<button type="button">Info</button>}
         showMeasures={false}
       />
@@ -109,8 +98,6 @@ describe('shared Health score breakdown', () => {
           healthLabel="Weight Health"
           consistency={{ score: 0 }}
           onTrack={{ score: null }}
-          consistencyCaption="Scheduled weigh-ins."
-          onTrackCaption="Whether weigh-ins are caught up."
           ariaLabel="Weight Health summary"
           measureDisclosure
           showMeasures={false}
@@ -121,8 +108,6 @@ describe('shared Health score breakdown', () => {
           healthLabel="Flexibility Health"
           consistency={{ score: 67 }}
           onTrack={{ score: null }}
-          consistencyCaption="Stretching follow-through."
-          onTrackCaption="Not scored for Flexibility."
           ariaLabel="Flexibility Health summary"
           measureDisclosure
           showMeasures={false}
@@ -156,8 +141,8 @@ describe('shared Health score breakdown', () => {
     const weight = screen.getByRole('region', { name: 'Weight Health summary' });
     expect(within(weight).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
     expect(within(weight).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
-    expect(within(weight).getByText('Scheduled weigh-ins.')).toBeTruthy();
-    expect(within(weight).getByText('Whether weigh-ins are caught up.')).toBeTruthy();
+    expect(within(weight).getByText('Follow-through over time')).toBeTruthy();
+    expect(within(weight).getByText('How up to date you are')).toBeTruthy();
 
     await user.click(flexibilityToggle);
     expect(weightToggle.getAttribute('aria-expanded')).toBe('true');
@@ -166,7 +151,7 @@ describe('shared Health score breakdown', () => {
     expect(within(flexibility).getByRole('img', { name: 'Flexibility Health: Not enough data' })).toBeTruthy();
     expect(within(flexibility).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('67');
     expect(within(flexibility).getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
-    expect(within(flexibility).getByText('Stretching follow-through.')).toBeTruthy();
-    expect(within(flexibility).getByText('Not scored for Flexibility.')).toBeTruthy();
+    expect(within(flexibility).getByText('Follow-through over time')).toBeTruthy();
+    expect(within(flexibility).getByText('How up to date you are')).toBeTruthy();
   });
 });

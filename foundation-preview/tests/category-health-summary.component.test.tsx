@@ -137,8 +137,8 @@ describe('shared Category Health summary', () => {
     expect(measures.querySelectorAll('.rhythm-score-circle')).toHaveLength(2);
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('83');
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('100');
-    expect(screen.getByText('How regularly you show up')).toBeTruthy();
-    expect(screen.getByText('Whether your Rhythms are up to date')).toBeTruthy();
+    expect(screen.getByText('Follow-through over time')).toBeTruthy();
+    expect(screen.getByText('How up to date you are')).toBeTruthy();
 
     const info = within(root).getByRole('button', { name: 'Show Marriage Health scoring explanation' });
     await user.click(info);

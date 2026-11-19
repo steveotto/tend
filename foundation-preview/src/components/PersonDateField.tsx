@@ -10,7 +10,8 @@ export function PersonDateField({
   min,
   max,
   required = false,
-  showClearButton = true
+  showClearButton = true,
+  inputClassName
 }: {
   id: string;
   label: string;
@@ -22,6 +23,7 @@ export function PersonDateField({
   max?: string;
   required?: boolean;
   showClearButton?: boolean;
+  inputClassName?: string;
 }) {
   const [editingPartialDate, setEditingPartialDate] = useState(false);
   const partialDate = /^\d{2}-\d{2}$/.test(value);
@@ -30,6 +32,7 @@ export function PersonDateField({
     <div className={`person-date-field${value ? '' : ' person-date-field--empty'}`}>
       <input
         id={id}
+        className={inputClassName}
         type={partialDate ? 'text' : 'date'}
         inputMode={partialDate ? 'numeric' : undefined}
         placeholder={partialDate ? 'MM-DD' : undefined}

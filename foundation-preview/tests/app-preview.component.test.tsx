@@ -31,8 +31,11 @@ import {
   faithPractices,
   faithRhythmSuggestionGroups,
   faithRhythmSuggestions,
+  financeRhythmSuggestionGroups,
+  financeRhythmSuggestions,
   parentingFoundations,
   friendshipFoundations,
+  FINANCE_PLANNING_SPENDING_ID,
   FINANCE_SAVING_RESERVES_ID,
   createPersonPickerGroups,
   setPersonGroupMembership,
@@ -51,6 +54,7 @@ import {
 } from '../src/domain/preview-state.ts';
 import {
   browserPreviewStorage,
+  loadPreview,
   PREVIEW_STORAGE_KEY,
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
   PREVIEW_IMPORT_RECOVERY_KEY,
@@ -58,7 +62,8 @@ import {
   PREVIEW_V3_RECOVERY_KEY,
   PREVIEW_V5_RECOVERY_KEY,
   PREVIEW_V42_RECOVERY_KEY,
-  PREVIEW_V44_RECOVERY_KEY
+  PREVIEW_V44_RECOVERY_KEY,
+  PREVIEW_V45_RECOVERY_KEY
 } from '../src/storage/preview-storage.ts';
 import type {
   PreviewAccountBackupApi,
@@ -172,6 +177,12 @@ function schema44Raw(data: ReturnType<typeof createSamplePreviewData>): string {
   };
   envelope.schemaVersion = 44;
   for (const goal of envelope.data.goals) delete goal.foundationId;
+  return JSON.stringify(envelope);
+}
+
+function schema45Raw(data: ReturnType<typeof createSamplePreviewData>): string {
+  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as { schemaVersion: number };
+  envelope.schemaVersion = 45;
   return JSON.stringify(envelope);
 }
 
@@ -5987,90 +5998,198 @@ describe('Tend Today preview', () => {
     expect(within(goal).getByText('Manual sample observation')).toBeTruthy();
   });
 
-  it('carries an assigned Finance Foundation into goal Rhythm creation and returns after save or cancel', async () => {
+  it('retains hidden goal Rhythm references across edit, reload, and preview backup import', async () => {
     const user = userEvent.setup();
     const data = createSamplePreviewData();
-    data.goals[0] = { ...data.goals[0]!, foundationId: FINANCE_SAVING_RESERVES_ID };
+    const hiddenIds = ['archived-rhythm-id', 'unavailable-rhythm-id'];
+    const originalGoal = {
+      ...data.goals[0]!,
+      foundationId: FINANCE_SAVING_RESERVES_ID,
+      supportingRhythmIds: hiddenIds
+    };
+    data.goals[0] = originalGoal;
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
-    render(<App />);
-    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
-      .getByRole('button', { name: 'Finances' }));
-    await user.click(screen.getByRole('tab', { name: 'Goals' }));
-    const goal = screen.getByRole('article', { name: 'Starter reserve' });
-    await user.click(within(goal).getByRole('button', { name: 'Add a supporting Rhythm' }));
-    let supporting = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
-    await user.click(within(supporting).getByRole('button', { name: 'Create a Finance Rhythm' }));
+    let view = render(<App />);
+    const openGoals = async () => {
+      await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+        .getByRole('button', { name: 'Finances' }));
+      await user.click(screen.getByRole('tab', { name: 'Goals' }));
+    };
+    const readSavedData = () => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+        localDateString(new Date())
+      );
+      if (!saved.valid) throw new Error('The saved Finance preview is invalid.');
+      return saved.envelope.data;
+    };
 
-    let editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
-    const categories = within(editor).getByRole('button', { name: /^Choose categories/ });
-    expect([...categories.querySelectorAll<HTMLElement>('[aria-label]')]
-      .map(element => element.getAttribute('aria-label')))
-      .toContain('Finances: Saving & Reserves');
-    await user.type(within(editor).getByLabelText('Title'), 'Weekly reserve review');
-    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await openGoals();
+    let goalCard = screen.getByRole('article', { name: 'Starter reserve' });
+    expect(within(goalCard).queryByRole('button', { name: /supporting Rhythm/i })).toBeNull();
+    await user.click(within(goalCard).getByRole('button', { name: 'View details for Starter reserve' }));
+    let details = screen.getByRole('dialog', { name: 'Starter reserve' });
+    expect(within(details).queryByText(/Supporting Rhythms/)).toBeNull();
+    expect(within(details).queryByRole('button', { name: /supporting Rhythm/i })).toBeNull();
+    await user.click(within(details).getByRole('button', { name: 'Edit goal' }));
+    let editor = screen.getByRole('dialog', { name: 'Edit goal' });
+    expect((within(editor).getByLabelText('Related Finance Foundation') as HTMLSelectElement).value)
+      .toBe(FINANCE_SAVING_RESERVES_ID);
+    expect(within(editor).queryByText(/supporting Rhythm/i)).toBeNull();
+    const title = within(editor).getByLabelText('Title');
+    await user.clear(title);
+    await user.type(title, 'Starter reserve edited');
+    await user.click(within(editor).getByRole('button', { name: 'Save goal' }));
 
     await waitFor(() => {
-      supporting = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
-      expect(within(supporting).getByRole('checkbox', { name: /Weekly reserve review/ })).toBeTruthy();
+      expect(screen.getByRole('dialog', { name: 'Starter reserve edited' })).toBeTruthy();
+      const savedGoal = readSavedData().goals.find(item => item.id === originalGoal.id)!;
+      expect(savedGoal.title).toBe('Starter reserve edited');
+      expect(savedGoal.supportingRhythmIds).toEqual(hiddenIds);
     });
-    const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!) as {
-      data: {
-        goals: Array<{ id: string; supportingRhythmIds?: string[] }>;
-        savedRhythms: Array<{ id: string; title: string; primaryFoundationId?: string | null }>;
-      };
-    };
-    const createdRhythm = saved.data.savedRhythms.find(item => item.title === 'Weekly reserve review')!;
-    expect(createdRhythm.primaryFoundationId).toBe(FINANCE_SAVING_RESERVES_ID);
-    expect(saved.data.goals.find(item => item.id === data.goals[0]!.id)?.supportingRhythmIds)
-      .toContain(createdRhythm.id);
-    expect((within(supporting).getByRole('checkbox', { name: /Weekly reserve review/ }) as HTMLInputElement).checked)
-      .toBe(true);
+    let savedGoal = readSavedData().goals.find(item => item.id === originalGoal.id)!;
+    expect(savedGoal.foundationId).toBe(FINANCE_SAVING_RESERVES_ID);
+    expect(savedGoal.checkIns).toEqual(originalGoal.checkIns);
+    expect(savedGoal.correctionHistory).toEqual(originalGoal.correctionHistory);
 
-    const beforeCancel = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
-    await user.click(within(supporting).getByRole('button', { name: 'Create a Finance Rhythm' }));
-    editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
-    await user.type(within(editor).getByLabelText('Title'), 'Canceled reserve rhythm');
-    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Supporting Rhythms' })).toBeTruthy());
-    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(beforeCancel);
+    view.unmount();
+    view = render(<App />);
+    await openGoals();
+    goalCard = screen.getByRole('article', { name: 'Starter reserve edited' });
+    expect(within(goalCard).queryByRole('button', { name: /supporting Rhythm/i })).toBeNull();
+    await user.click(within(goalCard).getByRole('button', { name: 'View details for Starter reserve edited' }));
+    details = screen.getByRole('dialog', { name: 'Starter reserve edited' });
+    expect(within(details).queryByText(/Supporting Rhythms/)).toBeNull();
+    expect(within(details).queryByRole('button', { name: /supporting Rhythm/i })).toBeNull();
+
+    const imported = parsePreviewBackup(
+      JSON.stringify(createPreviewEnvelope(readSavedData())),
+      localDateString(new Date())
+    );
+    expect(imported.valid).toBe(true);
+    if (imported.valid) {
+      expect(imported.envelope.data.goals.find(item => item.id === originalGoal.id)?.supportingRhythmIds)
+        .toEqual(hiddenIds);
+    }
+    view.unmount();
   });
 
-  it('requires an explicit Finance Foundation before a new goal Rhythm can be saved', async () => {
+  it('keeps ordinary Finance Rhythm creation and Foundation-linked creation separate from goal data', async () => {
     const user = userEvent.setup();
     const data = createSamplePreviewData();
-    const goal = data.goals[0]!;
-    const { foundationId: _foundationId, ...unassignedGoal } = goal;
-    data.goals = [unassignedGoal, ...data.goals.slice(1)];
+    const hiddenIds = ['archived-rhythm-id', 'missing-rhythm-id'];
+    data.goals[0] = {
+      ...data.goals[0]!,
+      supportingRhythmIds: hiddenIds
+    };
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
     render(<App />);
-    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+    const openFinance = async () => user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Finances' }));
-    await user.click(screen.getByRole('tab', { name: 'Goals' }));
-    const goalCard = screen.getByRole('article', { name: 'Starter reserve' });
-    await user.click(within(goalCard).getByRole('button', { name: 'Add a supporting Rhythm' }));
-    const supporting = screen.getByRole('dialog', { name: 'Supporting Rhythms' });
-    await user.click(within(supporting).getByRole('button', { name: 'Create a Finance Rhythm' }));
-    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
-    await user.type(within(editor).getByLabelText('Title'), 'Unassigned reserve rhythm');
-    await user.click(within(editor).getByRole('button', { name: 'Save' }));
-
-    expect(screen.getByText(/Choose a Foundation for Finances/)).toBeTruthy();
-    const unchanged = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!) as {
-      data: { goals: Array<{ supportingRhythmIds?: string[] }>; savedRhythms: Array<{ title: string }> };
+    const readSavedData = () => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+        localDateString(new Date())
+      );
+      if (!saved.valid) throw new Error('The saved Finance preview is invalid.');
+      return saved.envelope.data;
     };
-    expect(unchanged.data.savedRhythms.some(rhythm => rhythm.title === 'Unassigned reserve rhythm')).toBe(false);
-    expect(unchanged.data.goals[0]?.supportingRhythmIds).toBeUndefined();
 
+    await openFinance();
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
+    let editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.type(within(editor).getByLabelText('Title'), 'Independent Finance rhythm');
     await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
     await chooseCategoryFoundation(user, 'Finances', 'Saving & Reserves');
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Supporting Rhythms' })).toBeTruthy());
-    const saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!) as {
-      data: { goals: Array<{ supportingRhythmIds?: string[] }>; savedRhythms: Array<{ id: string; title: string }> };
-    };
-    const created = saved.data.savedRhythms.find(rhythm => rhythm.title === 'Unassigned reserve rhythm');
-    expect(created).toBeTruthy();
-    expect(saved.data.goals[0]?.supportingRhythmIds).toContain(created?.id);
+    await waitFor(() => {
+      const rhythm = readSavedData().savedRhythms.find(item => item.title === 'Independent Finance rhythm');
+      expect(rhythm?.categoryIds).toContain('finances');
+    });
+    const independent = readSavedData().savedRhythms.find(item =>
+      item.title === 'Independent Finance rhythm'
+    )!;
+    expect(independent.primaryFoundationId).toBe(FINANCE_SAVING_RESERVES_ID);
+    expect(readSavedData().goals[0]?.supportingRhythmIds).toEqual(hiddenIds);
+
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Saving & Reserves/ }));
+    await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
+    editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.type(within(editor).getByLabelText('Title'), 'Foundation-linked Finance rhythm');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      const rhythm = readSavedData().savedRhythms.find(item =>
+        item.title === 'Foundation-linked Finance rhythm'
+      );
+      expect(rhythm?.primaryFoundationId).toBe(FINANCE_SAVING_RESERVES_ID);
+    });
+    const linked = readSavedData().savedRhythms.find(item =>
+      item.title === 'Foundation-linked Finance rhythm'
+    )!;
+    expect(linked.categoryIds).toContain('finances');
+    expect(readSavedData().goals[0]?.supportingRhythmIds).toEqual(hiddenIds);
+  });
+
+  it('restores Finance Rhythm suggestions through the shared review-before-save flow', async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      PREVIEW_STORAGE_KEY,
+      JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))
+    );
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Finances' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    await user.click(screen.getByRole('button', { name: 'Suggestions' }));
+
+    const picker = screen.getByRole('dialog', { name: 'Finance rhythm suggestions' });
+    for (const group of financeRhythmSuggestionGroups) {
+      const section = within(picker).getByRole('heading', { name: group.title, level: 3 }).closest('section')!;
+      expect([...section.querySelectorAll('.rhythm-suggestion-picker__details h4')].map(heading => heading.textContent))
+        .toEqual(financeRhythmSuggestions.filter(suggestion => suggestion.groupId === group.id)
+          .map(suggestion => suggestion.title));
+    }
+
+    const suggestion = financeRhythmSuggestions.find(item => item.sourceId === 'finances.review-budget')!;
+    const row = suggestionRow(picker, suggestion.title);
+    expect(within(row).getByText(suggestion.description)).toBeTruthy();
+    await user.click(within(row).getByRole('button', { name: 'Add' }));
+
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    expect((within(editor).getByLabelText('Title') as HTMLInputElement).value).toBe(suggestion.title);
+    expect((within(editor).getByLabelText('Description (optional)') as HTMLTextAreaElement).value)
+      .toBe(suggestion.description);
+    const beforeSave = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+      localDateString(new Date())
+    );
+    expect(beforeSave.valid).toBe(true);
+    if (beforeSave.valid) {
+      expect(beforeSave.envelope.data.savedRhythms.some(item =>
+        item.suggestionSourceId === suggestion.sourceId
+      )).toBe(false);
+    }
+
+    await user.click(within(editor).getByRole('radio', { name: 'Friday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+        localDateString(new Date())
+      );
+      expect(saved.valid).toBe(true);
+      if (saved.valid) {
+        const rhythm = saved.envelope.data.savedRhythms.find(item =>
+          item.suggestionSourceId === suggestion.sourceId
+        );
+        expect(rhythm?.title).toBe(suggestion.title);
+        expect(rhythm?.categoryIds).toContain('finances');
+        expect(rhythm?.primaryFoundationId).toBe(FINANCE_PLANNING_SPENDING_ID);
+      }
+    });
+    expect(screen.getByRole('dialog', { name: 'Finance rhythm suggestions' })).toBeTruthy();
   });
 
   it('corrects a check-in date with history, rejects collisions, and restores it after remount', async () => {
@@ -6955,7 +7074,7 @@ describe('Tend Today preview', () => {
     expect(within(foundationScoreSummary).getByRole('meter', { name: 'On Track score' })
       .getAttribute('aria-valuenow')).toBe('100');
     expect(within(foundationInfo).getByText('Follow-through over time')).toBeTruthy();
-    expect(within(foundationInfo).getByText('How caught up you are')).toBeTruthy();
+    expect(within(foundationInfo).getByText('How up to date you are')).toBeTruthy();
     expect(within(foundationInfo).queryByText(/The average/)).toBeNull();
     expect(foundationInfo.querySelector('.rhythm-history-view__health-weight-score')).toBeNull();
     expect(within(foundationInfo).getByText('75%')).toBeTruthy();
@@ -8084,7 +8203,7 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('tab', { name: 'Foundations' }));
     expect(screen.getByRole('region', { name: 'Flexibility Foundation' })).toBeTruthy();
     await user.click(screen.getByRole('tab', { name: 'Routines' }));
-    await user.click(screen.getByRole('button', { name: 'Resume session' }));
+    await user.click(screen.getByRole('button', { name: 'Resume' }));
     session = screen.getByRole('dialog', { name: 'Linked shoulder routine' });
     await user.click(within(session).getByRole('button', { name: 'Start stretch' }));
     await waitFor(() => expect(within(session).getByRole('button', { name: 'Save final hold' })).toBeTruthy(), {
@@ -8103,6 +8222,328 @@ describe('Tend Today preview', () => {
         .toHaveLength(1);
       expect(saved.envelope.data.activeRhythmCompletions.filter(item => item.rhythmId === rhythm.id))
         .toHaveLength(1);
+    }
+  });
+
+  it('persists a manually linked stretch and its completion together through reload', async () => {
+    const user = userEvent.setup();
+    const todayDate = localDateString(new Date());
+    const rhythm = {
+      ...savedHealthRhythm(
+      'user-rhythm-11111111-1111-4111-8111-111111111112',
+      'Manual stretch Rhythm',
+      { healthLogCapability: 'flexibility' }
+      ),
+      primaryFoundationId: 'health-flexibility',
+      secondaryFoundationIds: []
+    };
+    const data = createSamplePreviewData();
+    data.savedRhythms = [rhythm];
+    data.flexibility = createFlexibilityData();
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    const firstRender = render(<App />);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Health & Fitness' }));
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Flexibility foundation details/ }));
+    expect(screen.getByRole('region', { name: 'Flexibility Foundation' })).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
+    const dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Shoulders' }));
+    await user.selectOptions(
+      within(dialog).getByRole('combobox', { name: /Link to a Rhythm/ }),
+      rhythm.id
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log a stretch' })).toBeNull());
+
+    const saved = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, todayDate);
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.flexibility.sessions).toHaveLength(1);
+    expect(saved.envelope.data.flexibility.sessions[0]).toMatchObject({
+      linkedRhythmId: rhythm.id,
+      rhythmOccurrence: todayDate,
+      regionIds: ['shoulders']
+    });
+    const savedSession = saved.envelope.data.flexibility.sessions[0]!;
+    expect(savedSession.completionId).toBeTruthy();
+    expect(saved.envelope.data.datedRhythmCompletions.filter(item => item.id === savedSession.completionId))
+      .toMatchObject([{ rhythmId: rhythm.id, effectiveDate: todayDate }]);
+
+    firstRender.unmount();
+    render(<App />);
+    const reloaded = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, todayDate);
+    expect(reloaded.valid).toBe(true);
+    if (reloaded.valid) {
+      expect(reloaded.envelope.data.flexibility.sessions[0]?.completionId).toBe(savedSession.completionId);
+      expect(reloaded.envelope.data.datedRhythmCompletions.filter(item => item.id === savedSession.completionId))
+        .toHaveLength(1);
+    }
+  });
+
+  it('saves linked and unlinked stretches from schema v45 through the browser adapter without losing history', async () => {
+    const user = userEvent.setup();
+    const todayDate = localDateString(new Date());
+    const rhythm = {
+      ...savedHealthRhythm(
+        'user-rhythm-11111111-1111-4111-8111-111111111113',
+        'Schema 45 stretch Rhythm',
+        { healthLogCapability: 'flexibility' }
+      ),
+      primaryFoundationId: 'health-flexibility',
+      secondaryFoundationIds: []
+    };
+    const data = createSamplePreviewData();
+    data.savedRhythms = [rhythm];
+    data.flexibility = createFlexibilityData();
+    data.flexibility.savedRoutines = [{
+      ...structuredClone(flexibilityRoutineSuggestions[0]!),
+      id: 'schema45-existing-routine'
+    }];
+    data.flexibility.sessions = [{
+      id: 'schema45-existing-stretch',
+      date: '2024-01-15',
+      regionIds: ['hamstrings'],
+      notes: 'Existing stretch history'
+    }];
+    data.strength.savedWorkouts = [{
+      id: 'schema45-existing-workout-template',
+      name: 'Existing workout template',
+      muscleIds: ['chest'],
+      sharedWith: []
+    }];
+    data.strength.workouts = [{
+      id: 'schema45-existing-workout-log',
+      date: '2024-01-15',
+      muscleIds: ['chest'],
+      workoutName: 'Existing workout history'
+    }];
+    const existingCompletionAt = localDateTimeInZone('2024-01-15', '12:00', 'UTC').toISOString();
+    const existingCompletion = {
+      id: 'schema45-existing-completion',
+      rhythmId: 'sample-pray-together',
+      effectiveDate: '2024-01-15',
+      localTime: '12:00',
+      timeZone: 'UTC',
+      completedAt: existingCompletionAt,
+      recordedAt: existingCompletionAt
+    };
+    data.datedRhythmCompletions = [existingCompletion];
+    data.activeRhythmCompletions = [{
+      rhythmId: existingCompletion.rhythmId,
+      completionId: existingCompletion.id
+    }];
+    data.completedRhythmIds = [existingCompletion.rhythmId];
+    data.rhythmHistoryIds = [existingCompletion.rhythmId];
+    const originalRaw = schema45Raw(data);
+    const storage = browserPreviewStorage();
+    storage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    const source = loadPreview(storage, todayDate);
+    expect(source.kind).toBe('loaded');
+    if (source.kind !== 'loaded') return;
+    const originalStretchHistory = structuredClone(source.data.flexibility.sessions);
+    const originalRoutines = structuredClone(source.data.flexibility.savedRoutines);
+    const originalStrength = structuredClone(source.data.strength);
+    const originalCompletion = structuredClone(source.data.datedRhythmCompletions[0]!);
+    const originalRhythmHistory = structuredClone(source.data.rhythmHistoryIds);
+
+    const firstRender = render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Health & Fitness' }));
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Flexibility foundation details/ }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
+
+    let dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    expect(within(dialog).queryByRole('alert')).toBeNull();
+    await waitFor(() => {
+      expect(storage.getItem(PREVIEW_V45_RECOVERY_KEY)).toBe(originalRaw);
+      expect(storage.getItem(PREVIEW_STORAGE_KEY)).not.toBe(originalRaw);
+    });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Shoulders' }));
+    await user.selectOptions(
+      within(dialog).getByRole('combobox', { name: /Link to a Rhythm/ }),
+      rhythm.id
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log a stretch' })).toBeNull());
+
+    const linkedRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    expect(linkedRaw).not.toBeNull();
+    const linked = parsePreviewBackup(linkedRaw!, todayDate);
+    expect(linked.valid).toBe(true);
+    if (!linked.valid) return;
+    expect(linked.envelope.data.flexibility.sessions).toContainEqual(expect.objectContaining({
+      linkedRhythmId: rhythm.id,
+      rhythmOccurrence: todayDate,
+      regionIds: ['shoulders']
+    }));
+    expect(linked.envelope.data.datedRhythmCompletions).toContainEqual(
+      expect.objectContaining({ rhythmId: rhythm.id, effectiveDate: todayDate })
+    );
+    expect(linked.envelope.data.flexibility.sessions).toContainEqual(originalStretchHistory[0]);
+    expect(linked.envelope.data.flexibility.savedRoutines).toEqual(originalRoutines);
+    expect(linked.envelope.data.strength).toEqual(originalStrength);
+    expect(linked.envelope.data.datedRhythmCompletions).toContainEqual(originalCompletion);
+
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
+    dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Abs' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Save without a Rhythm?' }))
+      .getByRole('button', { name: 'Save stretch only' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log a stretch' })).toBeNull());
+
+    const savedRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    expect(savedRaw).not.toBeNull();
+    const saved = parsePreviewBackup(savedRaw!, todayDate);
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.flexibility.sessions).toHaveLength(3);
+    expect(saved.envelope.data.flexibility.sessions).toContainEqual(originalStretchHistory[0]);
+    const unlinkedStretch = saved.envelope.data.flexibility.sessions.find(session =>
+      session.date === todayDate && session.regionIds.includes('abs')
+    );
+    expect(unlinkedStretch).toBeDefined();
+    expect(unlinkedStretch).not.toHaveProperty('linkedRhythmId');
+    expect(saved.envelope.data.flexibility.savedRoutines).toEqual(originalRoutines);
+    expect(saved.envelope.data.strength).toEqual(originalStrength);
+    expect(saved.envelope.data.datedRhythmCompletions.filter(item => item.id === originalCompletion.id))
+      .toEqual([originalCompletion]);
+    expect(saved.envelope.data.datedRhythmCompletions.filter(item => item.rhythmId === rhythm.id))
+      .toHaveLength(1);
+    expect(saved.envelope.data.rhythmHistoryIds).toContain(originalRhythmHistory[0]);
+    expect(storage.getItem(PREVIEW_V45_RECOVERY_KEY)).toBe(originalRaw);
+
+    firstRender.unmount();
+    render(<App />);
+    const reloaded = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, todayDate);
+    expect(reloaded.valid).toBe(true);
+    if (reloaded.valid) {
+      expect(reloaded.envelope.data.flexibility.sessions).toEqual(saved.envelope.data.flexibility.sessions);
+      expect(reloaded.envelope.data.strength).toEqual(originalStrength);
+      expect(reloaded.envelope.data.datedRhythmCompletions.filter(item => item.id === originalCompletion.id))
+        .toEqual([originalCompletion]);
+    }
+  });
+
+  it('keeps the Log stretch draft editable when schema v45 recovery conflicts block persistence', async () => {
+    const user = userEvent.setup();
+    const originalRaw = schema45Raw(createSamplePreviewData());
+    const conflictingRecovery = 'different synthetic v45 recovery copy';
+    const storage = browserPreviewStorage();
+    storage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    storage.setItem(PREVIEW_V45_RECOVERY_KEY, conflictingRecovery);
+
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Health & Fitness' }));
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Flexibility foundation details/ }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
+
+    let dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Hamstrings' }));
+    await user.type(
+      within(dialog).getByRole('textbox', { name: 'Notes (optional)' }),
+      'Keep this draft after the save conflict'
+    );
+    expect((within(dialog).getByRole('checkbox', { name: 'Hamstrings' }) as HTMLInputElement).checked)
+      .toBe(true);
+    expect((within(dialog).getByRole('textbox', { name: 'Notes (optional)' }) as HTMLTextAreaElement).value)
+      .toBe('Keep this draft after the save conflict');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
+    let confirmation = screen.getByRole('dialog', { name: 'Save without a Rhythm?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Save stretch only' }));
+    confirmation = screen.getByRole('dialog', { name: 'Save without a Rhythm?' });
+    expect(within(confirmation).getByRole('alert')).toBeTruthy();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(storage.getItem(PREVIEW_V45_RECOVERY_KEY)).toBe(conflictingRecovery);
+
+    await user.click(within(confirmation).getByRole('button', { name: 'Return to stretch details' }));
+    dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    expect((within(dialog).getByRole('checkbox', { name: 'Hamstrings' }) as HTMLInputElement).checked)
+      .toBe(true);
+    expect((within(dialog).getByRole('textbox', { name: 'Notes (optional)' }) as HTMLTextAreaElement).value)
+      .toBe('Keep this draft after the save conflict');
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(storage.getItem(PREVIEW_V45_RECOVERY_KEY)).toBe(conflictingRecovery);
+  });
+
+  it('preserves a manual stretch draft when Rhythm creation is cancelled or saved', async () => {
+    const user = userEvent.setup();
+    const todayDate = localDateString(new Date());
+    const data = createSamplePreviewData();
+    data.flexibility = createFlexibilityData();
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Health & Fitness' }));
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Flexibility foundation details/ }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
+    let stretchDialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    await user.click(within(stretchDialog).getByRole('checkbox', { name: 'Hamstrings' }));
+    await user.type(
+      within(stretchDialog).getByRole('textbox', { name: 'Notes (optional)' }),
+      'Preserve this draft'
+    );
+    const createRhythmButton = within(stretchDialog).getByRole('button', { name: 'Create a Rhythm' });
+    await user.click(createRhythmButton);
+    const rhythmDialog = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.click(within(rhythmDialog).getByRole('button', { name: 'Cancel' }));
+
+    stretchDialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    expect(document.activeElement).toBe(createRhythmButton);
+    expect((within(stretchDialog).getByRole('textbox', { name: 'Notes (optional)' }) as HTMLTextAreaElement).value)
+      .toBe('Preserve this draft');
+    expect((within(stretchDialog).getByRole('checkbox', { name: 'Hamstrings' }) as HTMLInputElement).checked)
+      .toBe(true);
+    const savedDraft = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, todayDate);
+    expect(savedDraft.valid).toBe(true);
+    if (savedDraft.valid) {
+      expect(savedDraft.envelope.data.flexibility.draftSession).toMatchObject({
+        date: todayDate,
+        regionIds: ['hamstrings'],
+        notes: 'Preserve this draft'
+      });
+    }
+
+    await user.click(within(stretchDialog).getByRole('button', { name: 'Create a Rhythm' }));
+    const createdRhythmDialog = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.type(within(createdRhythmDialog).getByLabelText('Title'), 'Stretch with care');
+    await user.click(within(createdRhythmDialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Rhythm' })).toBeNull());
+
+    stretchDialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    expect((within(stretchDialog).getByRole('textbox', { name: 'Notes (optional)' }) as HTMLTextAreaElement).value)
+      .toBe('Preserve this draft');
+    const rhythmPicker = within(stretchDialog).getByRole('combobox', { name: /Link to a Rhythm/ });
+    const createdRhythmOption = within(rhythmPicker).getByRole('option', { name: 'Stretch with care' }) as HTMLOptionElement;
+    await user.selectOptions(rhythmPicker, createdRhythmOption.value);
+    await user.click(within(stretchDialog).getByRole('button', { name: 'Save stretch' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log a stretch' })).toBeNull());
+
+    const completed = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, todayDate);
+    expect(completed.valid).toBe(true);
+    if (completed.valid) {
+      expect(completed.envelope.data.flexibility.sessions[0]).toMatchObject({
+        date: todayDate,
+        regionIds: ['hamstrings'],
+        notes: 'Preserve this draft',
+        linkedRhythmId: createdRhythmOption.value
+      });
+      expect(completed.envelope.data.datedRhythmCompletions.filter(item =>
+        item.rhythmId === createdRhythmOption.value
+      )).toHaveLength(1);
     }
   });
 
@@ -8256,7 +8697,7 @@ describe('Tend Today preview', () => {
     expect(within(cardioBreakdown).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('50');
     expect(within(cardioBreakdown).getByRole('img', { name: 'Consistency: Score unavailable' })).toBeTruthy();
     expect(within(cardioDialog).getByText('Follow-through over time')).toBeTruthy();
-    expect(within(cardioDialog).getByText('How caught up you are')).toBeTruthy();
+    expect(within(cardioDialog).getByText('How up to date you are')).toBeTruthy();
     expect(within(cardioDialog).queryByText(/This week’s run and distance goal progress/)).toBeNull();
     await user.click(within(cardioDialog).getByRole('button', { name: 'Close Health details' }));
     await waitFor(() => expect(document.activeElement).toBe(cardioInfo));
@@ -8352,7 +8793,9 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('tab', { name: 'Foundations' }));
     await user.click(within(screen.getByRole('region', { name: 'Foundations' }))
       .getByRole('button', { name: /Open Strength foundation details/ }));
-    await user.click(screen.getByRole('button', { name: 'Resume workout' }));
+    expect(screen.getByRole('tab', { name: 'Body' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('complementary', { name: 'Workout in progress' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Resume' }));
     const session = screen.getByRole('dialog', { name: 'Continuity workout' });
     const timerName = { name: 'Rest countdown' };
     expect(within(session).getByRole('timer', timerName).textContent).toBe('03:00');
@@ -8422,6 +8865,68 @@ describe('Tend Today preview', () => {
     expect(within(friendshipHeader!).getByRole('button', {
       name: 'Open People filtered to Friends · 0'
     })).toBeTruthy();
+  });
+
+  it('returns to the intact workout draft after cancelling or creating its Rhythm', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Areas' }))
+        .getByRole('button', { name: 'Health & Fitness' })
+    );
+    await user.click(screen.getByRole('tab', { name: 'Foundations' }));
+    await user.click(screen.getByRole('button', { name: /Open Strength foundation details/ }));
+    await user.click(screen.getByRole('tab', { name: 'Workouts' }));
+    await user.click(screen.getByRole('button', { name: 'Log workout' }));
+
+    let workoutDialog = screen.getByRole('dialog', { name: 'Log workout' });
+    expect(within(workoutDialog).getByText('No workout Rhythms are set up yet.')).toBeTruthy();
+    await user.click(within(workoutDialog).getByRole('checkbox', { name: 'Chest' }));
+    await user.type(within(workoutDialog).getByLabelText('Notes'), 'Keep the workout draft');
+    const initialData = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(initialData.valid).toBe(true);
+    if (!initialData.valid) return;
+    const initialRaw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+
+    await user.click(within(workoutDialog).getByRole('button', { name: 'Create a Rhythm' }));
+    let rhythmEditor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.click(within(rhythmEditor).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Rhythm' })).toBeNull());
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(initialRaw);
+    workoutDialog = screen.getByRole('dialog', { name: 'Log workout' });
+    expect(within(workoutDialog).getByRole('checkbox', { name: 'Chest' })).toHaveProperty('checked', true);
+    expect(within(workoutDialog).getByLabelText('Notes')).toHaveProperty('value', 'Keep the workout draft');
+
+    await user.click(within(workoutDialog).getByRole('button', { name: 'Create a Rhythm' }));
+    rhythmEditor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    await user.type(within(rhythmEditor).getByLabelText('Title'), 'Created from workout');
+    await user.click(within(rhythmEditor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Rhythm' })).toBeNull());
+
+    workoutDialog = screen.getByRole('dialog', { name: 'Log workout' });
+    expect(within(workoutDialog).getByRole('checkbox', { name: 'Chest' })).toHaveProperty('checked', true);
+    expect(within(workoutDialog).getByLabelText('Notes')).toHaveProperty('value', 'Keep the workout draft');
+    const rhythmSelect = within(workoutDialog)
+      .getByRole('combobox', { name: 'Link to a Rhythm (optional)' });
+    expect(rhythmSelect).toHaveProperty('value', '');
+    expect(within(rhythmSelect).getByRole('option', { name: 'Created from workout' })).toBeTruthy();
+    expect(within(workoutDialog).getByText('Saved to workout history. Won’t contribute to Strength Health.'))
+      .toBeTruthy();
+
+    const saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.savedRhythms.some(rhythm => rhythm.title === 'Created from workout')).toBe(true);
+    expect(saved.envelope.data.strength.workouts).toHaveLength(0);
+    await user.click(within(workoutDialog).getByRole('button', { name: 'Cancel' }));
+    expect(saved.envelope.data.strength.workouts).toHaveLength(0);
   });
 
   it('links one Strength workout log to exactly one shared Rhythm completion and deletes only that completion', async () => {

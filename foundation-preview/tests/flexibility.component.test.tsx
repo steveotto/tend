@@ -8,10 +8,12 @@ import type { CategoryScoreSelection } from '../src/domain/category-scoring.ts';
 import {
   createFlexibilityData,
   createFlexibilityGuidedSession,
+  flexibilityRegions,
   flexibilityRoutineSuggestions
 } from '../src/domain/flexibility.ts';
 import type { FlexibilityData, SavedFlexibilityRoutine } from '../src/domain/flexibility.ts';
 import type { HealthAggregateEvidence } from '../src/components/HealthScoringDetailsCard.tsx';
+import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import { todayRhythms } from '../src/domain/preview-data.ts';
 
 afterEach(() => {
@@ -49,8 +51,11 @@ function StatefulFlexibility({
   scoringEvidence = unscoredEvidence,
   unlinkedStretchRhythmTitles = [],
   rhythms,
+  archivedRhythms,
+  datedRhythmCompletions,
   onAddLinkedRhythm,
   onSaveFoundationAssociations,
+  foundationNavigation = false,
   onDataChange
 }: {
   initialData?: FlexibilityData;
@@ -58,8 +63,11 @@ function StatefulFlexibility({
   scoringEvidence?: HealthAggregateEvidence;
   unlinkedStretchRhythmTitles?: readonly string[];
   rhythms?: FlexibilityViewProps['rhythms'];
+  archivedRhythms?: FlexibilityViewProps['archivedRhythms'];
+  datedRhythmCompletions?: FlexibilityViewProps['datedRhythmCompletions'];
   onAddLinkedRhythm?: FlexibilityViewProps['onAddLinkedRhythm'];
   onSaveFoundationAssociations?: FlexibilityViewProps['onSaveFoundationAssociations'];
+  foundationNavigation?: boolean;
   onDataChange?: (data: FlexibilityData) => void;
 }) {
   const [data, setData] = useState<FlexibilityData>(initialData);
@@ -70,7 +78,10 @@ function StatefulFlexibility({
       healthScore={healthScore}
       scoringEvidence={scoringEvidence}
       unlinkedStretchRhythmTitles={unlinkedStretchRhythmTitles}
+      foundationNavigation={foundationNavigation}
       {...(rhythms ? { rhythms } : {})}
+      {...(archivedRhythms ? { archivedRhythms } : {})}
+      {...(datedRhythmCompletions ? { datedRhythmCompletions } : {})}
       {...(onAddLinkedRhythm ? { onAddLinkedRhythm } : {})}
       {...(onSaveFoundationAssociations ? { onSaveFoundationAssociations } : {})}
       onChange={next => {
@@ -80,6 +91,19 @@ function StatefulFlexibility({
       }}
     />
   );
+}
+
+function flexibilityRhythm(schedule: NonNullable<RhythmPreview['schedule']> = { frequency: 'daily' }): RhythmPreview {
+  return {
+    ...todayRhythms[0]!,
+    id: 'flexibility-stretch-rhythm',
+    title: 'Stretch Rhythm',
+    categoryIds: ['health'],
+    healthLogCapability: 'flexibility',
+    primaryFoundationId: 'health-flexibility',
+    secondaryFoundationIds: [],
+    schedule
+  };
 }
 
 describe('Flexibility foundation presentation', () => {
@@ -140,9 +164,18 @@ describe('Flexibility foundation presentation', () => {
     expect(chestRow.getAttribute('aria-label')).toContain('Not logged yet. Last stretched: No log yet.');
     expect(within(chestRow).getByRole('img', { name: 'Stretch status: Not logged yet.' })).toBeTruthy();
     expect(within(chestRow).getByText('No log yet')).toBeTruthy();
-    expect(within(chestRow).getByText('— · Every 3 days')).toBeTruthy();
+    expect(within(chestRow).getByText('—')).toBeTruthy();
+    expect(within(chestRow).queryByText('Every 3 days')).toBeNull();
+    expect(chestRow.querySelector('.strength-muscle-row__next-due')?.textContent).toBe('—');
+    expect(chestRow.getAttribute('aria-label')).not.toContain('Every 3 days');
+    expect(chestRow.getAttribute('aria-label')).toContain('Next due: —.');
     expect(frontMap.querySelector('[data-region="chest"]')?.getAttribute('aria-label'))
-      .toContain('Every 3 days. Last stretched: No log yet.');
+      .toContain('Not logged yet. Last stretched: No log yet.');
+    expect(frontMap.querySelector('[data-region="chest"]')?.getAttribute('aria-label'))
+      .not.toContain('Every 3 days');
+    const selectedDetails = screen.getByRole('heading', { name: 'Shoulders details' }).parentElement!;
+    expect(within(selectedDetails).getByText('Every 3 days')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Log Shoulders' })).toBeNull();
     expect(chestRow.querySelector('.flexibility-region__score')).toBeNull();
     const layout = container.querySelector('.strength-map-layout');
     expect(layout?.firstElementChild?.classList.contains('strength-map-wrap')).toBe(true);
@@ -246,8 +279,8 @@ describe('Flexibility foundation presentation', () => {
     expect(container.querySelectorAll('.flexibility-summary .health-score-measures__item')).toHaveLength(2);
     expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuetext'))
       .toBe('60 out of 100');
-    expect(screen.getByText('Average Consistency across active linked stretch Rhythms.')).toBeTruthy();
-    expect(screen.getByText('Average On Track across active linked stretch Rhythms.')).toBeTruthy();
+    expect(screen.getByText('Follow-through over time')).toBeTruthy();
+    expect(screen.getByText('How up to date you are')).toBeTruthy();
     expect(screen.getByText('These stretch Rhythms are not included in Flexibility Health because they are not linked to the Flexibility Foundation: Evening stretch. Link them in their Foundation associations to include their scores.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Show Flexibility Health scoring details' })).toBeTruthy();
     expect(container.querySelector('.flexibility-map-card')?.compareDocumentPosition(
@@ -273,11 +306,11 @@ describe('Flexibility foundation presentation', () => {
     expect(screen.getByRole('tablist', { name: 'Flexibility sections' })).toBeTruthy();
     expect(screen.queryByText('Suggested next stretch')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Daily Stretch' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Log Shoulders' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
     expect(screen.getByRole('dialog', { name: 'Log a stretch' })).toBeTruthy();
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('tab', { name: 'Routines' }));
     expect(screen.getByText('No stretches logged yet.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'History' })).toBeTruthy();
 
@@ -289,6 +322,46 @@ describe('Flexibility foundation presentation', () => {
     expect(settingsButton.getAttribute('aria-expanded')).toBe('true');
     expect(intervalDialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(intervalDialog.querySelector('.flexibility-settings-dialog__body')).toBeTruthy();
+  });
+
+  it('opens the shared stretch editor from Routines and restores focus without saving on Cancel or Close', async () => {
+    const user = userEvent.setup();
+    const changes: FlexibilityData[] = [];
+    render(<StatefulFlexibility onDataChange={next => changes.push(next)} />);
+
+    expect(screen.queryByRole('button', { name: 'Log Shoulders' })).toBeNull();
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    const logButton = screen.getByRole('button', { name: 'Log stretch' });
+    await user.click(logButton);
+
+    let dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(dialog.classList.contains('money-goal-dialog--scrollable-body')).toBe(true);
+    expect(dialog.classList.contains('money-goal-dialog--fitness-log')).toBe(true);
+    expect(within(dialog).getByRole('region', { name: 'Log a stretch content' })).toBeTruthy();
+    expect((within(dialog).getByLabelText('Date') as HTMLInputElement).max).toBe('2026-10-23');
+    expect(within(dialog).getByRole('checkbox', { name: 'Shoulders' })).toBeTruthy();
+    expect(within(dialog).getByRole('spinbutton', { name: 'Minutes (optional)' })).toBeTruthy();
+    expect(within(dialog).getByRole('textbox', { name: 'Notes (optional)' })).toBeTruthy();
+    const regionFieldset = within(dialog).getByRole('group', { name: 'Stretch regions' });
+    expect(regionFieldset.querySelectorAll('.checkbox-tile-options')).toHaveLength(1);
+    expect(regionFieldset.querySelectorAll('.flexibility-form__region-group')).toHaveLength(0);
+    expect([...regionFieldset.querySelectorAll<HTMLLabelElement>('.checkbox-tile-options__tile')]
+      .map(tile => tile.textContent?.trim()))
+      .toEqual(flexibilityRegions.map(region => region.name));
+    expect(within(dialog).queryByRole('heading', {
+      name: /Posterior chain|Core|Front of hip and legs|Upper body/
+    })).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(logButton);
+    expect(changes.every(change => change.sessions.length === 0)).toBe(true);
+
+    await user.click(logButton);
+    dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Shoulders' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Close stretch session' }));
+    expect(document.activeElement).toBe(logButton);
+    expect(changes.every(change => change.sessions.length === 0)).toBe(true);
   });
 
   it('shows a not-yet-scored state and the first-due explanation for linked stretch Rhythms', async () => {
@@ -356,30 +429,36 @@ describe('Flexibility foundation presentation', () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = render(<StatefulFlexibility />);
-    await user.click(screen.getByRole('button', { name: 'Log Shoulders' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
     const dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
     await user.click(within(dialog).getByRole('checkbox', { name: 'Hamstrings' }));
     await user.type(within(dialog).getByRole('textbox', { name: 'Notes (optional)' }), 'Easy session');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-    await user.click(screen.getByRole('tab', { name: 'Routines' }));
     await user.click(screen.getByRole('button', { name: 'Resume manual stretch log' }));
     const resumedDialog = screen.getByRole('dialog', { name: 'Log a stretch' });
     expect((within(resumedDialog).getByRole('textbox', { name: 'Notes (optional)' }) as HTMLTextAreaElement).value)
       .toBe('Easy session');
     await user.click(within(resumedDialog).getByRole('button', { name: 'Save stretch' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Save without a Rhythm?' }))
+      .getByRole('button', { name: 'Save stretch only' }));
     await user.click(screen.getByRole('tab', { name: 'Body' }));
     await user.click(screen.getByRole('button', { name: 'Back' }));
     const hamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
       .find(row => row.textContent?.includes('Hamstrings'))!;
     expect(hamstrings.getAttribute('aria-label')).toContain('Due in 2 days.');
     expect(within(hamstrings).getByRole('img', { name: 'Stretch status: Due in 2 days.' })).toBeTruthy();
+    expect(within(hamstrings).getByText('Next stretch in 2d')).toBeTruthy();
+    expect(within(hamstrings).queryByText(/Every \d+ days/)).toBeNull();
 
     await user.click(screen.getByRole('tab', { name: 'Routines' }));
-    await user.click(screen.getByRole('button', { name: /^Edit$/ }));
+    await user.click(screen.getByRole('button', { name: /Edit manual stretch on/ }));
     const editDialog = screen.getByRole('dialog', { name: 'Edit stretch session' });
     fireEvent.change(within(editDialog).getByLabelText('Date'), { target: { value: '2026-10-19' } });
     await user.click(within(editDialog).getByRole('button', { name: 'Save stretch' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Save without a Rhythm?' }))
+      .getByRole('button', { name: 'Save stretch only' }));
     await user.click(screen.getByRole('tab', { name: 'Body' }));
     const updatedHamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
       .find(row => row.textContent?.includes('Hamstrings'))!;
@@ -387,7 +466,7 @@ describe('Flexibility foundation presentation', () => {
     expect(within(updatedHamstrings).getByRole('img', { name: 'Stretch status: 2 days overdue.' })).toBeTruthy();
 
     await user.click(screen.getByRole('tab', { name: 'Routines' }));
-    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+    await user.click(screen.getByRole('button', { name: /Delete manual stretch on/ }));
     expect(confirm).toHaveBeenCalledOnce();
     await user.click(screen.getByRole('tab', { name: 'Body' }));
     const deletedHamstrings = [...container.querySelectorAll<HTMLElement>('.flexibility-region')]
@@ -451,28 +530,116 @@ describe('Flexibility foundation presentation', () => {
     const user = userEvent.setup();
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = render(<StatefulFlexibility />);
-    await user.click(screen.getByRole('button', { name: 'Log Shoulders' }));
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
     let dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
     await user.click(within(dialog).getByRole('checkbox', { name: 'Abs' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Save without a Rhythm?' }))
+      .getByRole('button', { name: 'Save stretch only' }));
 
     expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
     const absRow = container.querySelector<HTMLButtonElement>('.flexibility-region[aria-label^="Abs"]');
     expect(absRow?.getAttribute('aria-label')).toContain('Due in 3 days.');
+    expect(absRow?.querySelector('.strength-muscle-row__next-due')?.textContent).toBe('Next stretch in 3d');
 
     await user.click(screen.getByRole('tab', { name: 'Routines' }));
-    await user.click(screen.getByRole('button', { name: /^Edit$/ }));
+    await user.click(screen.getByRole('button', { name: /Edit manual stretch on/ }));
     dialog = screen.getByRole('dialog', { name: 'Edit stretch session' });
     fireEvent.change(within(dialog).getByLabelText('Date'), { target: { value: '2026-10-19' } });
     await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Save without a Rhythm?' }))
+      .getByRole('button', { name: 'Save stretch only' }));
     expect(container.querySelector('.flexibility-region[aria-label^="Abs"]')?.getAttribute('aria-label'))
       .toContain('1 day overdue.');
 
-    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+    await user.click(screen.getByRole('button', { name: /Delete manual stretch on/ }));
     expect(confirm).toHaveBeenCalledOnce();
     expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
     expect(container.querySelector('.flexibility-region[aria-label^="Abs"]')?.getAttribute('aria-label'))
       .toContain('Not logged yet.');
+  });
+
+  it('links a manual stretch to an eligible Rhythm without opening the unlinked acknowledgment', async () => {
+    const user = userEvent.setup();
+    const rhythm = flexibilityRhythm();
+    const changes: FlexibilityData[] = [];
+    render(
+      <StatefulFlexibility
+        rhythms={[rhythm]}
+        onDataChange={next => changes.push(next)}
+      />
+    );
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
+    const dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Shoulders' }));
+    await user.selectOptions(
+      within(dialog).getByRole('combobox', { name: /Link to a Rhythm/ }),
+      rhythm.id
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Save without a Rhythm?' })).toBeNull();
+    const saved = changes.at(-1)!;
+    expect(saved.sessions[0]).toMatchObject({
+      linkedRhythmId: rhythm.id,
+      rhythmOccurrence: '2026-10-23',
+      regionIds: ['shoulders']
+    });
+    expect(saved.sessions[0]?.completionId).toMatch(/^flexibility-completion-/);
+    expect(screen.getByText('Linked to Stretch Rhythm')).toBeTruthy();
+  });
+
+  it('preserves the draft for Rhythm creation and clears a link made ineligible by a date change', async () => {
+    const user = userEvent.setup();
+    const rhythm = flexibilityRhythm({
+      frequency: 'custom',
+      unit: 'days',
+      interval: 2,
+      startDate: '2026-10-19'
+    });
+    const onAddLinkedRhythm = vi.fn();
+    const changes: FlexibilityData[] = [];
+    render(
+      <StatefulFlexibility
+        rhythms={[rhythm]}
+        onAddLinkedRhythm={onAddLinkedRhythm}
+        onDataChange={next => changes.push(next)}
+      />
+    );
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+    await user.click(screen.getByRole('button', { name: 'Log stretch' }));
+    let dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Hamstrings' }));
+    await user.type(within(dialog).getByRole('textbox', { name: 'Notes (optional)' }), 'Keep this draft');
+    await user.selectOptions(
+      within(dialog).getByRole('combobox', { name: /Link to a Rhythm/ }),
+      rhythm.id
+    );
+    fireEvent.change(within(dialog).getByLabelText('Date'), { target: { value: '2026-10-22' } });
+    expect(within(dialog).getByRole('status').textContent)
+      .toContain('Stretch Rhythm is no longer eligible for this date.');
+    await user.click(within(dialog).getByRole('button', { name: 'Create a Rhythm' }));
+    expect(onAddLinkedRhythm.mock.calls[0]?.[0]).toBe('health-flexibility');
+    expect(screen.getByRole('dialog', { name: 'Log a stretch' })).toBeTruthy();
+    expect((within(dialog).getByRole('textbox', { name: 'Notes (optional)' }) as HTMLTextAreaElement).value)
+      .toBe('Keep this draft');
+    expect((within(dialog).getByLabelText('Date') as HTMLInputElement).value).toBe('2026-10-22');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save stretch' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Save without a Rhythm?' });
+    expect(confirmation.textContent).toContain('stretch-region insights');
+    expect(confirmation.textContent).toContain('Flexibility Health');
+    await user.click(within(confirmation).getByRole('button', { name: 'Save stretch only' }));
+    expect(screen.queryByRole('dialog', { name: 'Log a stretch' })).toBeNull();
+    const saved = changes.at(-1)!;
+    expect(saved.sessions[0]).toMatchObject({
+      date: '2026-10-22',
+      regionIds: ['hamstrings'],
+      notes: 'Keep this draft'
+    });
+    expect(saved.sessions[0]?.linkedRhythmId).toBeUndefined();
   });
 
   it('previews and edits a suggested routine before saving without creating activity', async () => {
@@ -590,10 +757,12 @@ describe('Flexibility foundation presentation', () => {
     expect(logDialog.querySelectorAll('input[type="checkbox"]:checked').length)
       .toBeGreaterThan(0);
     await user.click(within(logDialog).getByRole('button', { name: 'Save stretch' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Save without a Rhythm?' }))
+      .getByRole('button', { name: 'Save stretch only' }));
 
     expect(screen.getByRole('heading', { name: 'History' })).toBeTruthy();
     const historyEntry = container.querySelector('.flexibility-history__list li');
-    expect(historyEntry?.textContent).toContain('Manual stretch');
+    expect(historyEntry?.querySelector('h3')?.textContent).toBe('Manual Stretch');
     expect(historyEntry?.textContent).toMatch(/Hamstrings|Shoulders|Back|Glutes|Calves|Neck/);
   });
 
@@ -617,11 +786,16 @@ describe('Flexibility foundation presentation', () => {
       ...createFlexibilityData(),
       savedRoutines: [savedRoutine],
       guidedSessionDraft: draftResult.session
-    }} />);
+    }} foundationNavigation />);
 
-    expect(screen.getByRole('tab', { name: 'Routines' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Resume session' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Resume session' }));
+    expect(screen.getByRole('tab', { name: 'Body' }).getAttribute('aria-selected')).toBe('true');
+    const banner = screen.getByRole('complementary', { name: 'Stretch session in progress' });
+    expect(within(banner).getByText('Resume stretch routine')).toBeTruthy();
+    expect(within(banner).getByText('Stretch session in progress')
+      .classList.contains('fitness-session-resume-banner__status')).toBe(true);
+    expect(within(banner).getByText('Pick up where you left off.')).toBeTruthy();
+    expect(within(banner).queryByText(/holds are saved/)).toBeNull();
+    await user.click(within(banner).getByRole('button', { name: 'Resume' }));
     const session = screen.getByRole('dialog', { name: 'Resume stretch routine' });
     expect(within(session).getByRole('heading', { name: 'Downward Dog' })).toBeTruthy();
     expect(screen.getByText('No stretches logged yet.')).toBeTruthy();
@@ -682,16 +856,66 @@ describe('Flexibility foundation presentation', () => {
     const { container } = render(<StatefulFlexibility initialData={data} />);
     await user.click(screen.getByRole('tab', { name: 'Routines' }));
     const historyList = container.querySelector('.flexibility-history__list')!;
-    const firstThree = [...historyList.querySelectorAll('li strong')].map(item => item.textContent);
-    expect(firstThree).toEqual([
-      '2026-10-22 · Manual stretch',
-      '2026-10-21 · Manual stretch',
-      '2026-10-20 · Manual stretch'
+    const firstThreeTitles = [...historyList.querySelectorAll('li h3')].map(item => item.textContent);
+    expect(firstThreeTitles).toEqual(['Manual Stretch', 'Manual Stretch', 'Manual Stretch']);
+    const firstThreeDetails = [...historyList.querySelectorAll('.flexibility-history__details')]
+      .map(item => item.textContent);
+    expect(firstThreeDetails).toEqual([
+      'Hamstrings · Oct 22, 2026',
+      'Back · Oct 21, 2026',
+      'Shoulders · Oct 20, 2026'
     ]);
     await user.click(screen.getByRole('button', { name: 'View all' }));
     expect(historyList.querySelectorAll('li')).toHaveLength(4);
-    expect(historyList.querySelector('li:last-child strong')?.textContent)
-      .toBe('2026-10-18 · Manual stretch');
+    expect(historyList.querySelector('li:last-child .flexibility-history__details')?.textContent)
+      .toBe('Neck · Oct 18, 2026');
+  });
+
+  it('keeps manual stretch notes and Rhythm details with accessible card actions', async () => {
+    const user = userEvent.setup();
+    const rhythm = flexibilityRhythm();
+    const completionId = 'flexibility-completion-history';
+    const { container } = render(<StatefulFlexibility
+      initialData={{
+        ...createFlexibilityData(),
+        sessions: [{
+          id: 'stretch-detail',
+          date: '2026-10-23',
+          regionIds: ['neck'],
+          minutes: 5,
+          notes: 'Gentle neck stretch',
+          linkedRhythmId: rhythm.id,
+          rhythmOccurrence: '2026-10-23',
+          completionId
+        }]
+      }}
+      rhythms={[rhythm]}
+      datedRhythmCompletions={[{
+        id: completionId,
+        rhythmId: rhythm.id,
+        effectiveDate: '2026-10-23',
+        localTime: '12:00',
+        timeZone: 'UTC',
+        completedAt: '2026-10-23T12:00:00.000Z',
+        recordedAt: '2026-10-23T12:00:00.000Z'
+      }]}
+    />);
+    await user.click(screen.getByRole('tab', { name: 'Routines' }));
+
+    const card = container.querySelector<HTMLElement>('.flexibility-history__item')!;
+    expect(within(card).getByRole('heading', { name: 'Manual Stretch', level: 3 })).toBeTruthy();
+    expect(card.querySelector('.flexibility-history__details')?.textContent)
+      .toBe('Neck · 5 min · Oct 23, 2026');
+    expect(within(card).getByText('Gentle neck stretch')).toBeTruthy();
+    expect(within(card).getByText('Linked to Stretch Rhythm')).toBeTruthy();
+
+    await user.click(within(card).getByRole('button', { name: 'Edit manual stretch on Oct 23, 2026' }));
+    const editDialog = screen.getByRole('dialog', { name: 'Edit stretch session' });
+    expect((within(editDialog).getByRole('textbox', { name: 'Notes (optional)' }) as HTMLTextAreaElement).value)
+      .toBe('Gentle neck stretch');
+    expect((within(editDialog).getByLabelText('Date') as HTMLInputElement).value).toBe('2026-10-23');
+    await user.click(within(editDialog).getByRole('button', { name: 'Cancel' }));
+    expect(within(card).getByRole('button', { name: 'Delete manual stretch on Oct 23, 2026' })).toBeTruthy();
   });
 
   it('keeps the existing region recommendation actionable when no saved routine matches', async () => {

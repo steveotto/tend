@@ -18,8 +18,12 @@ import { FoundationRoutineSummary } from './FoundationRoutineSummary.tsx';
 import { FoundationSectionHeading } from './FoundationSectionHeading.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
-import { createStrengthBodyMapConfig, FitnessBodyMapLayout } from './FitnessBodyMap.tsx';
-import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
+import {
+  createStrengthBodyMapConfig,
+  FitnessBodyMapLayout,
+  FitnessBodyMapRegionRow
+} from './FitnessBodyMap.tsx';
+import { FitnessSessionResumeBanner } from './FitnessSessionResumeBanner.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { ToolZone } from './ToolZone.tsx';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
@@ -135,10 +139,6 @@ export type StrengthViewProps = {
   foundationNavigation?: boolean;
   foundationActive?: boolean;
   healthScoringEvidence?: HealthAggregateEvidence;
-  onStretchAfter?: (
-    muscleIds: readonly StrengthMuscleId[],
-    event: MouseEvent<HTMLButtonElement>
-  ) => void;
 };
 
 type StrengthTab = 'workouts' | 'body' | 'rhythms';
@@ -170,7 +170,7 @@ type ExerciseEditorState = {
 };
 
 type QuickLogEditor =
-  | { kind: 'date'; date: string; initialDate: string }
+  | { kind: 'date'; date: string; initialDate: string; initialRhythmId?: string }
   | { kind: 'muscles'; muscleIds: StrengthMuscleId[] };
 
 type PendingGuidedStart = {
@@ -219,11 +219,10 @@ export function StrengthView({
   onRhythmModeRequestClosed,
   foundationNavigation = false,
   foundationActive = true,
-  healthScoringEvidence,
-  onStretchAfter
+  healthScoringEvidence
 }: StrengthViewProps) {
   const [strengthTab, setStrengthTab] = useState<StrengthTab>(() =>
-    data.guidedSessionDraft || pendingRhythmLog || quickStartRequest
+    pendingRhythmLog || quickStartRequest
       ? 'workouts'
       : pendingRhythmModeRequest
         ? 'rhythms'
@@ -248,6 +247,7 @@ export function StrengthView({
   const [logMuscleIds, setLogMuscleIds] = useState<StrengthMuscleId[]>([]);
   const [logDate, setLogDate] = useState(evaluationDate);
   const [selectedWorkoutRhythmId, setSelectedWorkoutRhythmId] = useState<string | undefined>();
+  const [rhythmSelectionNotice, setRhythmSelectionNotice] = useState('');
   const [pendingUnlinkedLog, setPendingUnlinkedLog] = useState<StrengthWorkoutLog | null>(null);
   const [workoutOnlySaveError, setWorkoutOnlySaveError] = useState('');
   const [quickLogEditor, setQuickLogEditor] = useState<QuickLogEditor | null>(null);
@@ -281,7 +281,7 @@ export function StrengthView({
   const peoplePickerOpenerRef = useRef<HTMLButtonElement | null>(null);
   const exerciseEditorOpenerRef = useRef<HTMLButtonElement | null>(null);
   const guidedSessionOpenerRef = useRef<HTMLElement | null>(null);
-  const workoutRhythmSelectionRef = useRef<HTMLFieldSetElement | null>(null);
+  const workoutRhythmSelectionRef = useRef<HTMLDivElement | null>(null);
   const workoutLogSubmissionRef = useRef(false);
   const acknowledgedUnlinkedLogIdRef = useRef<string | null>(null);
   const workoutCompletionIdsRef = useRef(new Map<string, string>());
@@ -352,11 +352,10 @@ export function StrengthView({
     }
     if (wasFoundationActiveRef.current) return;
     wasFoundationActiveRef.current = true;
-    if (!data.guidedSessionDraft && !pendingRhythmLog && !quickStartRequest && !pendingRhythmModeRequest) {
+    if (!pendingRhythmLog && !quickStartRequest && !pendingRhythmModeRequest) {
       setStrengthTab('body');
     }
   }, [
-    data.guidedSessionDraft,
     foundationActive,
     foundationNavigation,
     pendingRhythmLog?.requestId,
@@ -463,7 +462,19 @@ export function StrengthView({
     setLogMuscleIds(configuredWorkout?.muscleIds ?? []);
     setLogDate(evaluationDate);
     draftLogIdRef.current = `strength-log-${globalThis.crypto.randomUUID()}`;
-    setSelectedWorkoutRhythmId(selectedRhythm.rhythm.id);
+    const rhythmOptions = selectStrengthWorkoutRhythmOptions(
+      rhythms,
+      archivedRhythms,
+      datedRhythmCompletions,
+      evaluationDate,
+      workoutId,
+      selectedRhythm.rhythm.id
+    );
+    const selectedOption = rhythmOptions.find(option => option.rhythm.id === selectedRhythm.rhythm.id);
+    setSelectedWorkoutRhythmId(selectedOption?.eligible ? selectedRhythm.rhythm.id : undefined);
+    setRhythmSelectionNotice(selectedOption?.eligible
+      ? ''
+      : `${selectedRhythm.rhythm.title} is not available for the selected date, so it was not linked.`);
     setPendingUnlinkedLog(null);
     setWorkoutOnlySaveError('');
     acknowledgedUnlinkedLogIdRef.current = null;
@@ -624,8 +635,38 @@ export function StrengthView({
   }
 
   function closeQuickLogEditor() {
-    if (quickLogEditor?.kind === 'date') setLogDate(quickLogEditor.initialDate);
+    if (quickLogEditor?.kind === 'date') {
+      setLogDate(quickLogEditor.initialDate);
+      setSelectedWorkoutRhythmId(quickLogEditor.initialRhythmId);
+      setRhythmSelectionNotice('');
+    }
     setQuickLogEditor(null);
+  }
+
+  function changeWorkoutLogDate(nextDate: string) {
+    acknowledgedUnlinkedLogIdRef.current = null;
+    setLogDate(nextDate);
+    setRhythmSelectionNotice('');
+    if (!selectedWorkoutRhythmId || dialog?.kind !== 'log' || dialog.log) return;
+
+    const options = selectStrengthWorkoutRhythmOptions(
+      rhythms,
+      archivedRhythms,
+      datedRhythmCompletions,
+      nextDate,
+      (dialog.templateId ?? logTemplateSelection) || undefined,
+      dialog.rhythm?.rhythm.id
+    );
+    const selectedOption = options.find(option => option.rhythm.id === selectedWorkoutRhythmId);
+    if (selectedOption?.eligible) return;
+
+    const selectedRhythm = selectedOption?.rhythm
+      ?? rhythms.find(item => item.rhythm.id === selectedWorkoutRhythmId)?.rhythm
+      ?? archivedRhythms.find(item => item.id === selectedWorkoutRhythmId);
+    setSelectedWorkoutRhythmId(undefined);
+    setRhythmSelectionNotice(
+      `${selectedRhythm?.title ?? 'The selected Rhythm'} is no longer available for the selected date, so the link was cleared.`
+    );
   }
 
   function cancelGuidedStart() {
@@ -711,6 +752,7 @@ export function StrengthView({
       ? historyRowOpenerRef.current ?? event?.currentTarget ?? null
       : focusOpener ?? event?.currentTarget ?? openerRef.current;
     setError('');
+    setRhythmSelectionNotice('');
     setLogTemplateSelection(next.kind === 'log'
       ? next.templateId ?? next.log?.savedWorkoutId ?? ''
       : '');
@@ -735,10 +777,22 @@ export function StrengthView({
       setSelectedWorkoutRhythmId(
         next.log
           ? next.log.rhythmId
-          : explicitRhythmId && options.some(option => option.rhythm.id === explicitRhythmId)
+          : explicitRhythmId && options.some(option => option.rhythm.id === explicitRhythmId && option.eligible)
             ? explicitRhythmId
             : undefined
       );
+      if (!next.log && explicitRhythmId) {
+        const selectedOption = options.find(option => option.rhythm.id === explicitRhythmId);
+        if (!selectedOption?.eligible) {
+          const selectedRhythm = selectedOption?.rhythm
+            ?? next.rhythm?.rhythm
+            ?? rhythms.find(item => item.rhythm.id === explicitRhythmId)?.rhythm
+            ?? archivedRhythms.find(item => item.id === explicitRhythmId);
+          setRhythmSelectionNotice(
+            `${selectedRhythm?.title ?? 'The selected Rhythm'} is not available for the selected date, so it was not linked.`
+          );
+        }
+      }
     } else {
       setSelectedWorkoutRhythmId(undefined);
     }
@@ -821,6 +875,7 @@ export function StrengthView({
       || dialog?.kind === 'log' && Boolean(dialog.rhythm);
     const closesRhythmMode = dialog?.kind === 'mode';
     setError('');
+    setRhythmSelectionNotice('');
     setPendingUnlinkedLog(null);
     setWorkoutOnlySaveError('');
     acknowledgedUnlinkedLogIdRef.current = null;
@@ -1158,7 +1213,7 @@ export function StrengthView({
     if (selectedRhythmId && !existing) {
       const option = workoutRhythmOptions.find(item => item.rhythm.id === selectedRhythmId);
       if (!option?.eligible) {
-        setError(option?.reason ?? 'Choose an eligible workout Rhythm or select Workout only.');
+        setError(option?.reason ?? 'Choose a Rhythm that is eligible for this date, or choose not to link this workout.');
         return;
       }
       log.rhythmId = selectedRhythmId;
@@ -1273,8 +1328,6 @@ export function StrengthView({
         consistency={healthScore?.consistency ?? null}
         onTrack={healthScore?.onTrack ?? null}
         health={healthScore?.health ?? null}
-        consistencyCaption="Consistency across eligible Strength-linked Rhythms."
-        onTrackCaption="Whether eligible Strength-linked Rhythms are caught up."
         showMeasures={!foundationNavigation}
         overallHealthScore={overallHealthScore}
         categoryHealthScore={categoryHealthScore}
@@ -1284,17 +1337,16 @@ export function StrengthView({
         summaryExplanation="Strength Health reflects eligible Strength-linked Rhythm scores. Your body, at a glance and its muscle scores and readiness remain training feedback and do not contribute."
       />
       {data.guidedSessionDraft && !guidedSessionOpen && (
-        <aside className="strength-guided-banner" aria-label="Workout in progress">
-          <div>
-            <strong>{data.guidedSessionDraft.workoutName} is in progress</strong>
-            <span>Your confirmed sets are saved in this preview draft.</span>
-          </div>
-          <button type="button" className="btn mini" onClick={event => {
-            guidedSessionOpenerRef.current = event.currentTarget;
+        <FitnessSessionResumeBanner
+          ariaLabel="Workout in progress"
+          sessionName={data.guidedSessionDraft.workoutName}
+          status="Workout in progress"
+          onResume={button => {
+            guidedSessionOpenerRef.current = button;
             setGuidedSessionError('');
             setGuidedSessionOpen(true);
-          }}>Resume workout</button>
-        </aside>
+          }}
+        />
       )}
       {guidedSessionError && !guidedSessionOpen && !pendingGuidedStart
         && <p className="strength-form-error" role="alert">{guidedSessionError}</p>}
@@ -1363,33 +1415,19 @@ export function StrengthView({
                   const lastWorkoutLabel = strengthLastWorkoutLabel(result);
                   const nextDueLabel = strengthNextDueLabel(result);
                   return (
-                    <button
+                    <FitnessBodyMapRegionRow
                       key={muscle.id}
-                      type="button"
-                      className="strength-muscle-row"
-                      aria-pressed={selectedMuscleId === muscle.id}
-                      aria-label={`${muscle.name}. Training status: ${trainingStatus.label}. Last workout: ${lastWorkoutLabel}. ${
+                      name={muscle.name}
+                      selected={selectedMuscleId === muscle.id}
+                      statusTone={trainingStatus.tone}
+                      statusLabel={`Training status: ${trainingStatus.label}`}
+                      lastActivity={lastWorkoutLabel}
+                      nextDueLabel={nextDueLabel}
+                      ariaLabel={`${muscle.name}. Training status: ${trainingStatus.label}. Last workout: ${lastWorkoutLabel}. ${
                         nextDueLabel === '—' ? 'Next lift unavailable.' : `${nextDueLabel}.`
                       }`}
-                      onClick={() => chooseMuscle(muscle.id)}
-                    >
-                      <span className="strength-muscle-row__heading">
-                        <strong>{muscle.name}</strong>
-                        <span
-                          className={`strength-muscle-row__status strength-muscle-row__status--${trainingStatus.tone}`}
-                          role="img"
-                          aria-label={`Training status: ${trainingStatus.label}`}
-                          title={`Training status: ${trainingStatus.label}`}
-                        />
-                      </span>
-                      <span className="strength-muscle-row__timing">
-                        <span className="strength-muscle-row__last-workout">
-                          <RhythmCalendarIcon className="strength-muscle-row__calendar-icon" />
-                          <span>{lastWorkoutLabel}</span>
-                        </span>
-                        <span className="strength-muscle-row__next-due">{nextDueLabel}</span>
-                      </span>
-                    </button>
+                      onSelect={() => chooseMuscle(muscle.id)}
+                    />
                   );
                 })}
             </FitnessBodyMapLayout>
@@ -2222,11 +2260,14 @@ export function StrengthView({
           titleId="strength-log-title"
           closeLabel="Close workout log"
           bodyClassName="strength-dialog-body"
-          {...(dialog.quick ? { dialogClassName: 'money-goal-dialog--strength-quick-log' } : {})}
-          phoneFullScreen={Boolean(dialog.rhythm)}
+          dialogClassName={dialog.quick
+            ? 'money-goal-dialog--strength-quick-log'
+            : 'money-goal-dialog--fitness-log'}
+          phoneFullScreen={!dialog.quick || Boolean(dialog.rhythm)}
+          scrollableBody={!dialog.quick}
           onClose={closeDialog}
         >
-          <form onSubmit={saveLog}>
+          <form className="fitness-log-form" onSubmit={saveLog}>
             {!isContextualLog && !dialog.quick && (
               <label className="strength-form-field">Saved workout (optional)
                 <select
@@ -2258,7 +2299,8 @@ export function StrengthView({
                     onClick={() => setQuickLogEditor({
                       kind: 'date',
                       date: logDate,
-                      initialDate: logDate
+                      initialDate: logDate,
+                      ...(selectedWorkoutRhythmId ? { initialRhythmId: selectedWorkoutRhythmId } : {})
                     })}
                   >
                     <span className="strength-quick-log__row-copy">
@@ -2286,14 +2328,14 @@ export function StrengthView({
               </>
             ) : (
               <>
-                <label className="strength-form-field">Workout date<input
+                <label className="strength-form-field" htmlFor="strength-log-date">Workout date<input
+                  id="strength-log-date"
                   name="date"
                   type="date"
                   max={evaluationDate}
                   value={logDate}
                   onChange={event => {
-                    acknowledgedUnlinkedLogIdRef.current = null;
-                    setLogDate(event.currentTarget.value);
+                    changeWorkoutLogDate(event.currentTarget.value);
                   }}
                   required
                 /></label>
@@ -2311,12 +2353,14 @@ export function StrengthView({
             )}
             {!dialog.log && (
               <StrengthRhythmCompletionPicker
-                fieldsetRef={workoutRhythmSelectionRef}
+                selectionRef={workoutRhythmSelectionRef}
                 options={workoutRhythmOptions}
                 {...(selectedWorkoutRhythmId ? { selectedRhythmId: selectedWorkoutRhythmId } : {})}
+                {...(rhythmSelectionNotice ? { selectionNotice: rhythmSelectionNotice } : {})}
                 onSelect={rhythmId => {
                   acknowledgedUnlinkedLogIdRef.current = null;
                   setSelectedWorkoutRhythmId(rhythmId);
+                  setRhythmSelectionNotice('');
                 }}
                 {...(onAddLinkedRhythm ? {
                   onCreateRhythm: event => onAddLinkedRhythm('health-strength', event)
@@ -2333,18 +2377,6 @@ export function StrengthView({
             )}
             {error && <p className="strength-form-error" role="alert">{error}</p>}
             <div className="money-goal-dialog__actions">
-              {!dialog.quick && onStretchAfter && logMuscleIds.length > 0 && (
-                <button
-                  type="button"
-                  className="btn mini ghost"
-                  onClick={event => {
-                    onStretchAfter(logMuscleIds, event);
-                    closeDialog();
-                  }}
-                >
-                  Stretch after?
-                </button>
-              )}
               <button
                 type="submit"
                 className="btn mini"
@@ -2401,8 +2433,7 @@ export function StrengthView({
                   ? { ...current, date }
                   : current);
                 if (date >= (data.trackingStartDate ?? '1900-01-01') && date <= evaluationDate) {
-                  acknowledgedUnlinkedLogIdRef.current = null;
-                  setLogDate(date);
+                  changeWorkoutLogDate(date);
                 }
               }}
               required

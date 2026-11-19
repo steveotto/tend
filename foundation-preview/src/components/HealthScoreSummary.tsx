@@ -24,8 +24,6 @@ type HealthScoreSummaryProps = {
   showMeasures?: boolean;
   showMeasureCaptions?: boolean;
   showHealthMeter?: boolean;
-  consistencyDetailCaption?: string;
-  onTrackDetailCaption?: string;
   consistencyDescription?: string;
   onTrackDescription?: string;
   headerStyle?: 'summary' | 'category';
@@ -50,8 +48,6 @@ export function HealthScoreSummary({
   showMeasures = true,
   showMeasureCaptions = false,
   showHealthMeter = false,
-  consistencyDetailCaption = 'How regularly you show up.',
-  onTrackDetailCaption = 'How caught up you are.',
   consistencyDescription,
   onTrackDescription,
   headerStyle = 'summary'
@@ -126,8 +122,6 @@ export function HealthScoreSummary({
           healthLabel={title}
           consistency={{ score: consistency, state: consistency === null ? 'unavailable' : 'scored' }}
           onTrack={{ score: onTrack, state: onTrack === null ? 'unavailable' : 'scored' }}
-          consistencyCaption={consistencyDetailCaption}
-          onTrackCaption={onTrackDetailCaption}
           showHealthMeter={showHealthMeter}
           showCaptions={showMeasureCaptions}
         />
@@ -145,8 +139,6 @@ export function HealthScoreSummary({
                 score={score}
                 consistency={{ score: consistency }}
                 onTrack={{ score: onTrack }}
-                consistencyCaption={consistencyDetailCaption}
-                onTrackCaption={onTrackDetailCaption}
                 {...(consistencyDescription === undefined ? {} : { consistencyDescription })}
                 {...(onTrackDescription === undefined ? {} : { onTrackDescription })}
               >

@@ -156,8 +156,6 @@ describe('static Health Info content', () => {
         score={0}
         consistency={{ score: 0 }}
         onTrack={{ score: null, state: 'unavailable' }}
-        consistencyCaption="Follow-through over time"
-        onTrackCaption="How caught up you are"
         rollup={config}
       />
     );
@@ -186,6 +184,8 @@ describe('static Health Info content', () => {
     expect(screen.queryByRole('img', { name: 'No linked Rhythms score unavailable' })).toBeNull();
     expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
     expect(screen.getByRole('img', { name: 'On Track: Score unavailable' })).toBeTruthy();
+    expect(screen.getByText('Follow-through over time')).toBeTruthy();
+    expect(screen.getByText('How up to date you are')).toBeTruthy();
   });
 
   it('keeps Cardio details tied to Run logs rather than generic Rhythm credit', async () => {
@@ -196,8 +196,6 @@ describe('static Health Info content', () => {
         consistency={0}
         onTrack={80}
         health={20}
-        consistencyCaption="Four completed weeks of run and distance goals."
-        onTrackCaption="This week’s goal progress."
       />
     );
 
@@ -213,6 +211,8 @@ describe('static Health Info content', () => {
     expect(within(dialog).getByLabelText('75% times 0 equals 0 points')).toBeTruthy();
     expect(within(dialog).getByLabelText('25% times 80 equals 20 points')).toBeTruthy();
     expect(within(dialog).queryByText('Linked Rhythms')).toBeNull();
+    expect(within(dialog).getByText('Follow-through over time')).toBeTruthy();
+    expect(within(dialog).getByText('How up to date you are')).toBeTruthy();
   });
 
   it('rounds weighted panel Health values and marks rounded results approximate', () => {
@@ -223,8 +223,6 @@ describe('static Health Info content', () => {
         score={60}
         consistency={{ score: 72.666 }}
         onTrack={{ score: 90.333 }}
-        consistencyCaption="Follow-through over time"
-        onTrackCaption="How caught up you are"
       />
     );
 
@@ -548,8 +546,6 @@ describe('static Health Info content', () => {
         score={score}
         consistency={consistency}
         onTrack={onTrack}
-        consistencyCaption="How regularly you follow through"
-        onTrackCaption="How caught up you are."
         rollup={faithFlow}
       />
     );
@@ -571,7 +567,7 @@ describe('static Health Info content', () => {
     expect(within(dialogContent).getByText('75%')).toBeTruthy();
     expect(within(dialogContent).getByText('25%')).toBeTruthy();
     expect(within(dialogContent).getByText('Follow-through over time')).toBeTruthy();
-    expect(within(dialogContent).getByText('How caught up you are')).toBeTruthy();
+    expect(within(dialogContent).getByText('How up to date you are')).toBeTruthy();
     expect(dialogContent.querySelector('.rhythm-history-view__health-weight-score')).toBeNull();
     expect(dialogContent.querySelector('.rhythm-history-view__health-weight-description')).toBeNull();
     expect(within(dialogContent).queryByText(/The average/)).toBeNull();

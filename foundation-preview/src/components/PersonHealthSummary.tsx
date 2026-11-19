@@ -79,8 +79,6 @@ export function PersonHealthSummary({
       consistency={health.consistency}
       onTrack={health.onTrack}
       coverage={coverage}
-      consistencyDetailCaption="Follow-through over time"
-      onTrackDetailCaption="How caught up you are"
       expanded={expanded}
       onExpandedChange={setExpanded}
       showMeasures={showMeasures}
@@ -255,8 +253,6 @@ export function PersonOverallHealthDetails({
           ariaLabel="Overall Health score summary"
           consistency={{ score: null, state: 'unavailable' }}
           onTrack={{ score: null, state: 'unavailable' }}
-          consistencyCaption="Follow-through over time"
-          onTrackCaption="How caught up you are"
           showMeasures={false}
         >
           <PersonHealthComponentScores values={areas} areaDetails={areaDetails} />
@@ -328,8 +324,6 @@ export function PersonHealthAreaDetails({
       healthLabel={title}
       consistency={measure(health.consistency)}
       onTrack={measure(health.onTrack)}
-      consistencyCaption="Follow-through over time"
-      onTrackCaption="How caught up you are"
       healthIdentity={{
         name: person.displayName,
         secondary: title,

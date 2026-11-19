@@ -1,21 +1,43 @@
 import type { MouseEvent, RefObject } from 'react';
 import type { StrengthWorkoutRhythmOption } from '../domain/strength-rhythm-linking.ts';
+import { FitnessRhythmCompletionPicker } from './FitnessRhythmCompletionPicker.tsx';
 
 type Props = {
   options: readonly StrengthWorkoutRhythmOption[];
   selectedRhythmId?: string;
+  selectionNotice?: string;
   onSelect: (rhythmId?: string) => void;
   onCreateRhythm?: (event: MouseEvent<HTMLButtonElement>) => void;
+  presentation?: 'manual' | 'guided';
+  selectionRef?: RefObject<HTMLDivElement | null>;
   fieldsetRef?: RefObject<HTMLFieldSetElement | null>;
 };
 
 export function StrengthRhythmCompletionPicker({
   options,
   selectedRhythmId,
+  selectionNotice,
   onSelect,
   onCreateRhythm,
+  presentation = 'manual',
+  selectionRef,
   fieldsetRef
 }: Props) {
+  if (presentation !== 'guided') {
+    return (
+      <FitnessRhythmCompletionPicker
+        options={options}
+        {...(selectedRhythmId ? { selectedRhythmId } : {})}
+        {...(selectionNotice ? { selectionNotice } : {})}
+        onSelect={onSelect}
+        {...(onCreateRhythm ? { onCreateRhythm } : {})}
+        activity="workout"
+        controlId="strength-workout-rhythm"
+        {...(selectionRef ? { selectionRef } : {})}
+      />
+    );
+  }
+
   const eligibleCount = options.filter(option => option.eligible).length;
 
   return (
@@ -66,7 +88,7 @@ export function StrengthRhythmCompletionPicker({
       {eligibleCount === 0 && onCreateRhythm && (
         <button
           type="button"
-          className="btn mini ghost strength-rhythm-completion__create"
+          className="btn mini ghost strength-rhythm-completion__create--guided"
           onClick={onCreateRhythm}
         >
           Create a workout Rhythm

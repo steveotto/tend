@@ -97,7 +97,7 @@ import {
 import type { CategoryPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 45;
+export const PREVIEW_SCHEMA_VERSION = 46;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -158,7 +158,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46; resolvedPersonCategories: number }
   | {
       valid: false;
       kind: 'invalid' | 'unsupported';
@@ -170,6 +170,7 @@ export type PreviewValidationDiagnostic = {
   code: string;
   path: string;
   strengthCompletionLinks?: StrengthCompletionLinkSummary;
+  flexibilityCompletionLinks?: FlexibilityCompletionLinkSummary;
 };
 
 export type StrengthCompletionLinkSummary = {
@@ -186,6 +187,95 @@ export type StrengthCompletionLinkSummary = {
   repeatedCompletion: number;
   archivedRhythm: number;
 };
+
+export type FlexibilityCompletionLinkSummary = {
+  sessions: number;
+  linked: number;
+  unlinked: number;
+  invalid: number;
+  missingRhythm: number;
+  nonFlexibilityRhythm: number;
+  missingCompletion: number;
+  rhythmMismatch: number;
+  dateMismatch: number;
+  repeatedCompletion: number;
+  archivedRhythm: number;
+};
+
+function summarizeFlexibilityCompletionLinks(
+  flexibility: FlexibilityData,
+  savedRhythms: readonly SavedRhythm[],
+  datedRhythmCompletions: readonly DatedRhythmCompletion[],
+  archivedRhythmIds: ReadonlySet<string>
+): FlexibilityCompletionLinkSummary {
+  const summary: FlexibilityCompletionLinkSummary = {
+    sessions: 0,
+    linked: 0,
+    unlinked: 0,
+    invalid: 0,
+    missingRhythm: 0,
+    nonFlexibilityRhythm: 0,
+    missingCompletion: 0,
+    rhythmMismatch: 0,
+    dateMismatch: 0,
+    repeatedCompletion: 0,
+    archivedRhythm: 0
+  };
+  const seenCompletionIds = new Set<string>();
+
+  for (const session of flexibility.sessions) {
+    summary.sessions++;
+    if (!session.linkedRhythmId && !session.completionId) {
+      summary.unlinked++;
+      continue;
+    }
+
+    let invalid = false;
+    if (!session.linkedRhythmId || !session.completionId || !session.rhythmOccurrence) {
+      invalid = true;
+    }
+    if (session.linkedRhythmId && archivedRhythmIds.has(session.linkedRhythmId)) {
+      summary.archivedRhythm++;
+      invalid = true;
+    }
+    if (session.linkedRhythmId) {
+      const rhythm = savedRhythms.find(item => item.id === session.linkedRhythmId);
+      if (!rhythm) {
+        summary.missingRhythm++;
+        invalid = true;
+      } else if (rhythm.healthLogCapability !== 'flexibility'
+        || !rhythm.categoryIds.includes('health')) {
+        summary.nonFlexibilityRhythm++;
+        invalid = true;
+      }
+    }
+    if (session.completionId) {
+      if (seenCompletionIds.has(session.completionId)) {
+        summary.repeatedCompletion++;
+        invalid = true;
+      }
+      seenCompletionIds.add(session.completionId);
+      const completion = datedRhythmCompletions.find(item => item.id === session.completionId);
+      if (!completion) {
+        summary.missingCompletion++;
+        invalid = true;
+      } else {
+        if (completion.rhythmId !== session.linkedRhythmId) {
+          summary.rhythmMismatch++;
+          invalid = true;
+        }
+        if (completion.effectiveDate !== session.rhythmOccurrence
+          || completion.effectiveDate !== session.date) {
+          summary.dateMismatch++;
+          invalid = true;
+        }
+      }
+    }
+    if (invalid) summary.invalid++;
+    else summary.linked++;
+  }
+  return summary;
+}
 
 function summarizeStrengthCompletionLinks(
   strength: StrengthData,
@@ -317,6 +407,7 @@ const dataKeysV42 = [...dataKeysV41, 'showCalendarOnToday'];
 const dataKeysV43 = [...dataKeysV42, 'categoryPreferences'];
 const dataKeysV44 = dataKeysV43;
 const dataKeysV45 = dataKeysV44;
+const dataKeysV46 = dataKeysV45;
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -759,6 +850,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       && value.schemaVersion !== 40
       && value.schemaVersion !== 41 && value.schemaVersion !== 42 && value.schemaVersion !== 43
       && value.schemaVersion !== 44
+      && value.schemaVersion !== 45
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -793,7 +885,8 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV45 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV46 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV45 = value.schemaVersion === 45 || isV46;
   const isV44 = value.schemaVersion === 44 || isV45;
   const isV43 = value.schemaVersion === 43 || isV44;
   const isV42 = value.schemaVersion === 42 || isV43;
@@ -824,7 +917,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV45 ? dataKeysV45 : value.schemaVersion === 44 ? dataKeysV44 : isV43 && value.schemaVersion === 43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV46 ? dataKeysV46 : isV45 ? dataKeysV45 : value.schemaVersion === 44 ? dataKeysV44 : isV43 && value.schemaVersion === 43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   const incompatibleDataKey = isRecord(value.data) && !isV19 && !isV20
@@ -1243,6 +1336,24 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
     return { valid: false, kind: 'invalid', message: 'Flexibility settings, stretch sessions, or draft are invalid.' };
   }
   const flexibility = migrateFlexibilityData(flexibilityInput);
+  const flexibilityCompletionLinks = summarizeFlexibilityCompletionLinks(
+    flexibility,
+    savedRhythms,
+    datedRhythmCompletions,
+    archivedRhythmIds
+  );
+  if (flexibilityCompletionLinks.invalid > 0) {
+    return {
+      valid: false,
+      kind: 'invalid',
+      message: 'A linked Flexibility session must reference its Health Rhythm and matching completion.',
+      diagnostic: {
+        code: 'preview.flexibility.completion-link.invalid',
+        path: 'data.flexibility.sessions[*].completionId',
+        flexibilityCompletionLinks
+      }
+    };
+  }
   const legacyFriendships = isV19 && validateLegacyFriendshipDataV19(value.data.friendships, people.map(person => person.id))
     ? value.data.friendships
     : null;
@@ -1380,6 +1491,7 @@ const validationDiagnosticRules: Array<{
   { matches: message => message.startsWith('Dated completion history must retain'), code: 'preview.rhythm-history.missing-marker', path: 'data.rhythmHistoryIds' },
   { matches: message => message.startsWith('Strength settings, workouts, or workout history'), code: 'preview.strength.invalid', path: 'data.strength' },
   { matches: message => message.startsWith('A linked Strength workout'), code: 'preview.strength.completion-link.invalid', path: 'data.strength.workouts[*].completionId' },
+  { matches: message => message.startsWith('A linked Flexibility session'), code: 'preview.flexibility.completion-link.invalid', path: 'data.flexibility.sessions[*].completionId' },
   { matches: message => message.startsWith('Weight data'), code: 'preview.weight.invalid', path: 'data.weight' },
   { matches: message => message.startsWith('Cardio data'), code: 'preview.cardio.invalid', path: 'data.cardio' },
   { matches: message => message.startsWith('Flexibility settings'), code: 'preview.flexibility.invalid', path: 'data.flexibility' },

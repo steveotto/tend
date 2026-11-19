@@ -3,6 +3,7 @@ import type { KeyboardEventHandler, ReactNode } from 'react';
 import { scoreTone } from '../domain/score-tone.ts';
 import { formatScore } from '../domain/score-display.ts';
 import { RhythmScoreCircle } from './RhythmScoreCircle.tsx';
+import { HEALTH_MEASURE_CAPTIONS } from './health-measure-captions.ts';
 
 export type HealthScoreMetric = {
   score: number | null;
@@ -38,8 +39,6 @@ type HealthScoreMeasuresProps = {
   healthScore: number | null;
   consistency: HealthScoreMetric;
   onTrack: HealthScoreMetric;
-  consistencyCaption: string;
-  onTrackCaption: string;
   healthLabel?: string;
   showHealthMeter?: boolean;
   showCaptions?: boolean;
@@ -67,8 +66,6 @@ export function HealthScoreBreakdown({
   score,
   consistency,
   onTrack,
-  consistencyCaption,
-  onTrackCaption,
   healthLabel = 'Health',
   ariaLabel = 'Health score breakdown',
   headingAction,
@@ -93,8 +90,6 @@ export function HealthScoreBreakdown({
       consistency={consistency}
       onTrack={onTrack}
       healthScore={score}
-      consistencyCaption={consistencyCaption}
-      onTrackCaption={onTrackCaption}
       showCaptions={measureDisclosure || showMeasureCaptions}
       healthLabel={healthLabel}
       showHealthMeter={false}
@@ -158,8 +153,6 @@ export function HealthScoreMeasures({
   healthScore,
   consistency,
   onTrack,
-  consistencyCaption,
-  onTrackCaption,
   healthLabel = 'Health',
   showHealthMeter = true,
   showCaptions = false,
@@ -172,13 +165,13 @@ export function HealthScoreMeasures({
         <HealthScoreMeasure
           label="Consistency"
           metric={consistency}
-          caption={consistencyCaption}
+          caption={HEALTH_MEASURE_CAPTIONS.consistency}
           showCaption={showCaptions}
         />
         <HealthScoreMeasure
           label="On Track"
           metric={onTrack}
-          caption={onTrackCaption}
+          caption={HEALTH_MEASURE_CAPTIONS.onTrack}
           showCaption={showCaptions}
         />
       </div>

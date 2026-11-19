@@ -29,11 +29,6 @@ export type MoneyGoal = {
   supportingRhythmIds?: string[];
 };
 
-export type GoalRhythmAssociationChange = {
-  rhythmId: string;
-  linked: boolean;
-};
-
 export type GoalDraft = {
   title: string;
   foundationId?: string;
@@ -202,35 +197,6 @@ export function goalFromDraft(
       checkIns: existing?.checkIns ?? [],
       correctionHistory: existing?.correctionHistory ?? [],
       supportingRhythmIds: [...(existing?.supportingRhythmIds ?? [])]
-    }
-  };
-}
-
-export function updateGoalSupportingRhythms(
-  goal: MoneyGoal,
-  changes: readonly GoalRhythmAssociationChange[],
-  eligibleRhythmIds: ReadonlySet<string>
-): { goal?: MoneyGoal; error?: string } {
-  const supportingRhythmIds = new Set(goal.supportingRhythmIds ?? []);
-  const seenRhythmIds = new Set<string>();
-
-  for (const change of changes) {
-    if (!change.rhythmId.trim() || seenRhythmIds.has(change.rhythmId)) {
-      return { error: 'Rhythm associations must use unique, non-empty IDs.' };
-    }
-    seenRhythmIds.add(change.rhythmId);
-    if (change.linked && !supportingRhythmIds.has(change.rhythmId)
-      && !eligibleRhythmIds.has(change.rhythmId)) {
-      return { error: 'Only an eligible Finance Rhythm can be newly linked to this goal.' };
-    }
-    if (change.linked) supportingRhythmIds.add(change.rhythmId);
-    else supportingRhythmIds.delete(change.rhythmId);
-  }
-
-  return {
-    goal: {
-      ...goal,
-      supportingRhythmIds: [...supportingRhythmIds]
     }
   };
 }

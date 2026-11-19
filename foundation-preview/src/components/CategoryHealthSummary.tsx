@@ -106,8 +106,6 @@ export function CategoryHealthSummary({
       measureDisclosureLabel={contextTitle}
       consistency={consistencyMetric}
       onTrack={onTrackMetric}
-      consistencyCaption="How regularly you show up"
-      onTrackCaption="Whether your Rhythms are up to date"
       headingAction={(
         <HealthScoreInfoButton
           label={`Show ${contextTitle} scoring explanation`}
@@ -127,8 +125,6 @@ export function CategoryHealthSummary({
               healthLabel={contextTitle}
               consistency={consistencyMetric}
               onTrack={onTrackMetric}
-              consistencyCaption="How regularly you show up"
-              onTrackCaption="Whether your Rhythms are up to date"
               consistencyDescription={consistencyDescription
                 ?? `The average Consistency score of eligible ${itemTerm.plural.toLowerCase()}.`}
               onTrackDescription={onTrackDescription
