@@ -6468,7 +6468,8 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: 'How this Foundation was scored' });
     expect(foundationScoringToggle.getAttribute('aria-expanded')).toBe('false');
     await user.click(foundationScoringToggle);
-    expect(within(foundationDialog).getByText('No eligible linked Rhythms have both scores available.')).toBeTruthy();
+    expect(within(foundationDialog)
+      .getByText('Link a Rhythm to this Foundation to start building your Health score.')).toBeTruthy();
     await expandHealthDisclosure(user, foundationDialog, 'How this Foundation contributes');
     const currentFoundation = foundationDialog.querySelector('.health-info-what-counts__contribution-item.is-current');
     expect(currentFoundation?.textContent).toContain('Connection');
@@ -8248,6 +8249,7 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('tab', { name: 'Foundations' }));
     await user.click(screen.getByRole('button', { name: /Open Flexibility foundation details/ }));
     expect(screen.getByRole('region', { name: 'Flexibility Foundation' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Flexibility Health' }).textContent).toBe('Health');
     await user.click(screen.getByRole('tab', { name: 'Routines' }));
     await user.click(screen.getByRole('button', { name: 'Log stretch' }));
     const dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
@@ -8619,6 +8621,7 @@ describe('Tend Today preview', () => {
     expect(strengthHeader.querySelector('.foundation-card__progress')).toBeNull();
     expect(screen.getByRole('button', { name: 'All Foundations' }).className).toContain('tend-back-button--plain');
     const strengthHealthHeading = screen.getByRole('heading', { name: 'Strength Health' });
+    expect(strengthHealthHeading.textContent).toBe('Health');
     expect(within(strengthHealthHeading.closest('.fitness-score-summary')!)
       .getByRole('img', { name: 'Strength Health: Not enough data' })).toBeTruthy();
     expect(strengthHeader.compareDocumentPosition(strengthHealthHeading) & Node.DOCUMENT_POSITION_FOLLOWING)
@@ -8661,6 +8664,7 @@ describe('Tend Today preview', () => {
     expect(cardioHeader.querySelector('.page-hero-header__icon--foundation .marriage-svg-icon')).toBeTruthy();
     expect(cardioHeader.querySelector('.foundation-card__progress')).toBeNull();
     const cardioHealthHeading = screen.getByRole('heading', { name: 'Cardio Health' });
+    expect(cardioHealthHeading.textContent).toBe('Health');
     expect(cardioHeader.compareDocumentPosition(cardioHealthHeading) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(cardioHealthHeading.compareDocumentPosition(
@@ -8713,6 +8717,7 @@ describe('Tend Today preview', () => {
     expect(weightHeader.querySelector('.page-hero-header__icon--foundation .marriage-svg-icon')).toBeTruthy();
     expect(weightHeader.querySelector('.foundation-card__progress')).toBeNull();
     const weightHealthHeading = screen.getByRole('heading', { name: 'Weight Health' });
+    expect(weightHealthHeading.textContent).toBe('Health');
     expect(weightHeader.compareDocumentPosition(weightHealthHeading) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(weightHealthHeading.compareDocumentPosition(

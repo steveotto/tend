@@ -37,6 +37,7 @@ import { ScoreMeter } from './Cards.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
+import { selectActiveWeightRhythms } from '../domain/category-scoring.ts';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import {
   foundationRhythmIds,
@@ -211,6 +212,7 @@ export function WeightView({
         <FitnessScoreSummary
           category="Weight"
           healthTitle="Weight Health"
+          cardTitle="Health"
           className={`rhythm-history-view__score-card${foundationNavigation ? ' foundation-health-card' : ''}`}
           consistency={healthScore?.consistency ?? null}
           onTrack={healthScore?.onTrack ?? null}
@@ -218,7 +220,7 @@ export function WeightView({
           showMeasures={false}
           overallHealthScore={overallHealthScore}
           categoryHealthScore={categoryHealthScore}
-          linkedRhythmCount={rhythms.filter(rhythm => foundationRhythmIds(rhythm).includes('health-weight')).length}
+          linkedRhythmCount={selectActiveWeightRhythms(rhythms, archivedRhythmIds).length}
           {...(healthScoringEvidence ? { scoringEvidence: healthScoringEvidence } : {})}
           summaryExplanation="Weight Health reflects scheduled weigh-in Rhythms. Recorded weight, distance from the goal path, and the separate Goal Progress score do not affect it."
         />

@@ -38,6 +38,7 @@ import type { Destination } from './AppNavigation.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
+import { cardioHealthStatusMessage } from './health-summary-copy.ts';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { ToolZone, ToolZoneTrendingUpIcon } from './ToolZone.tsx';
 import { FoundationSectionHeading } from './FoundationSectionHeading.tsx';
@@ -145,6 +146,7 @@ export function CardioView({
     <FitnessScoreSummary
       category="Cardio"
       healthTitle="Cardio Health"
+      {...(foundationNavigation ? { cardTitle: 'Health' } : {})}
       className={`rhythm-history-view__score-card${foundationNavigation ? ' foundation-health-card' : ''}`}
       consistency={progress.consistency}
       onTrack={progress.score}
@@ -155,12 +157,13 @@ export function CardioView({
       linkedRhythmCount={0}
       setupRequired={trackingSetupRequired}
       showSetupAction={false}
-      statusMessage={progress.health === null
-        && Boolean(data.trackingStartDate && data.targetHistory?.length)
-        && progress.targetRuns !== null
-        && progress.targetMiles !== null
-        ? 'Your score will appear as tracking builds.'
-        : null}
+      statusMessage={cardioHealthStatusMessage({
+        hasTrackingStartDate: Boolean(data.trackingStartDate),
+        hasWeeklyGoals: Boolean(data.targetHistory?.length)
+          && progress.targetRuns !== null
+          && progress.targetMiles !== null,
+        hasCompletedWeek: progress.consistency !== null
+      })}
       onSetup={event => openDialog({ kind: 'goals' }, event)}
       summaryExplanation="Cardio Health uses run logs and saved weekly goals. Linking or completing a Rhythm without a saved run does not add Cardio credit."
       scoringExplanation={(

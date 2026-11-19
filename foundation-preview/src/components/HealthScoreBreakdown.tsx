@@ -47,6 +47,7 @@ type HealthScoreMeasuresProps = {
 
 type HealthScoreBreakdownProps = Omit<HealthScoreMeasuresProps, 'healthScore'> & {
   title?: string;
+  titleAriaLabel?: string;
   titleId?: string;
   score: number | null;
   healthLabel?: string;
@@ -62,6 +63,7 @@ type HealthScoreBreakdownProps = Omit<HealthScoreMeasuresProps, 'healthScore'> &
 
 export function HealthScoreBreakdown({
   title = 'Health',
+  titleAriaLabel,
   titleId,
   score,
   consistency,
@@ -82,7 +84,7 @@ export function HealthScoreBreakdown({
   const titleBoundary = title.lastIndexOf(' ');
   const titlePrefix = titleBoundary >= 0 ? title.slice(0, titleBoundary + 1) : '';
   const titleSuffix = title.slice(titleBoundary + 1);
-  const disclosureLabel = measureDisclosureLabel ?? title;
+  const disclosureLabel = measureDisclosureLabel ?? titleAriaLabel ?? title;
   const displayScore = score === null || !Number.isFinite(score) ? null : formatScore(score);
   const hasMeasures = showMeasures || measureDisclosure;
   const measures = hasMeasures ? (
@@ -105,7 +107,7 @@ export function HealthScoreBreakdown({
       <header className="health-score-breakdown__header">
         {measureDisclosure && hasMeasures ? (
           <div className="health-score-breakdown__title">
-            <h3 id={titleId} aria-label={title}>
+            <h3 id={titleId} aria-label={titleAriaLabel ?? title}>
               {titlePrefix}
               <span className="health-score-breakdown__title-end">
                 {titleSuffix}

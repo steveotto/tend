@@ -211,11 +211,13 @@ describe('Cardio preview presentation', () => {
     expect(screen.getByRole('meter', { name: 'Miles this week' }).getAttribute('aria-valuenow')).toBe('37.5');
   });
 
-  it('shows one tracking setup callout and explains Cardio’s completed-week and current-week measures', async () => {
+  it('names missing Cardio setup and distinguishes it from insufficient completed-week history', async () => {
     const user = userEvent.setup();
     renderCardio();
-    expect(screen.getByText('Set up tracking to see your scores.')).toBeTruthy();
-    expect(screen.getByText(/Use Cardio tracking settings \(gear\)/)).toBeTruthy();
+    expect(screen.getByText(
+      'Set a Cardio tracking start date and save weekly run and distance goals. Cardio Health uses your run logs and saved goals.'
+    )).toBeTruthy();
+    expect(screen.queryByText(/Set up tracking to see your scores/)).toBeNull();
     expect(screen.queryByText(/Set both weekly run and mileage goals/)).toBeNull();
     const controls = screen.getByRole('group', { name: 'Cardio tracking controls' });
     await user.click(within(controls).getByRole('button', { name: 'Cardio tracking settings' }));
@@ -226,11 +228,14 @@ describe('Cardio preview presentation', () => {
     expect(within(settings).getByRole('button', { name: 'Cancel' })).toBeTruthy();
 
     cleanup();
-    const data: CardioData = {
-      ...createCardioData(),
-      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 }
-    };
+    const data: CardioData = saveCardioGoals(createCardioData(), {
+      weeklyRunTarget: 2,
+      weeklyMileTarget: 8
+    }, '2026-10-22', '2026-10-19');
     renderCardio(data);
+    expect(screen.getByText(
+      'Complete one Monday–Sunday week with saved run and distance goals before a Cardio Health score is available. Cardio Health uses your run logs and weekly goals.'
+    )).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Show Cardio Health scoring details' }));
     const dialog = screen.getByRole('dialog', { name: 'Cardio Health details' });
     const details = screen.getByRole('region', { name: 'Cardio Health scoring details' });

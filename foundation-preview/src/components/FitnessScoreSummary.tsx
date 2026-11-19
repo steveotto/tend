@@ -6,10 +6,12 @@ import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 import { createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import type { HealthRollupConfig } from './HealthRollupDiagram.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
+import { noLinkedRhythmHealthMessage } from './health-summary-copy.ts';
 
 type FitnessScoreSummaryProps = {
   category: 'Strength' | 'Cardio' | 'Weight' | 'Flexibility';
   healthTitle?: string;
+  cardTitle?: string;
   consistency: number | null;
   onTrack: number | null;
   health: number | null;
@@ -53,6 +55,7 @@ const scoreExplanations = {
 export function FitnessScoreSummary({
   category,
   healthTitle = 'Health',
+  cardTitle,
   consistency,
   onTrack,
   health,
@@ -164,13 +167,17 @@ export function FitnessScoreSummary({
     />
   );
   const message = setupRequired
-    ? 'Set up tracking to see your scores.'
-    : statusMessage;
+    ? statusMessage
+    : health === null && linkedRhythmCount === 0 && category !== 'Cardio'
+      ? noLinkedRhythmHealthMessage('Foundation')
+      : statusMessage;
 
   return (
     <section className={`fitness-score-summary ${className}`.trim()} aria-label={`${category} scores`}>
       <HealthScoreBreakdown
-        title={healthTitle}
+        title={cardTitle ?? healthTitle}
+        titleAriaLabel={`${category} Health`}
+        measureDisclosureLabel={`${category} Health`}
         score={health}
         healthLabel={`${category} Health`}
         ariaLabel={`${category} Health scores`}

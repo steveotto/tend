@@ -41,6 +41,7 @@ import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { createHealthFitnessHealthContribution, createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
+import { noLinkedRhythmHealthMessage } from './health-summary-copy.ts';
 
 type HealthFitnessTab = 'today' | 'rhythms' | 'progress';
 type ProgressTab = (typeof healthFoundationDefinitions)[number]['progressId'];
@@ -166,7 +167,7 @@ function linkedRhythmEvidence(
         : [])
     ],
     emptyState: selection.activeLinkedRhythmIds.length === 0
-      ? 'Link a Rhythm to this Foundation; scores appear after its first occurrence is due.'
+      ? noLinkedRhythmHealthMessage('Foundation')
       : 'Scores appear after an eligible linked Rhythm has its first due occurrence.',
     weightSummary: 'Consistency contributes 75% and On Track contributes 25%.'
   };

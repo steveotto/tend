@@ -1324,6 +1324,7 @@ export function StrengthView({
       <FitnessScoreSummary
         category="Strength"
         healthTitle="Strength Health"
+        {...(foundationNavigation ? { cardTitle: 'Health' } : {})}
         className={`rhythm-history-view__score-card${foundationNavigation ? ' foundation-health-card' : ''}`}
         consistency={healthScore?.consistency ?? null}
         onTrack={healthScore?.onTrack ?? null}
@@ -1331,7 +1332,9 @@ export function StrengthView({
         showMeasures={!foundationNavigation}
         overallHealthScore={overallHealthScore}
         categoryHealthScore={categoryHealthScore}
-        linkedRhythmCount={rhythms.filter(item => foundationRhythmIds(item.rhythm).includes('health-strength')).length}
+        linkedRhythmCount={healthScoringEvidence
+          ? healthScoringEvidence.rows.length + (healthScoringEvidence.otherCount ?? 0)
+          : rhythms.filter(item => foundationRhythmIds(item.rhythm).includes('health-strength')).length}
         {...(healthScoringEvidence ? { scoringEvidence: healthScoringEvidence } : {})}
         compact
         summaryExplanation="Strength Health reflects eligible Strength-linked Rhythm scores. Your body, at a glance and its muscle scores and readiness remain training feedback and do not contribute."

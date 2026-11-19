@@ -399,7 +399,8 @@ describe('upcoming calendar agenda', () => {
     ['feed-too-large', 'The calendar feed exceeded the reader size limit.'],
     ['redirect-limit', 'The feed exceeded the redirect limit.'],
     ['feed-retrieval-failed', 'The reader was reached, but the calendar feed could not be retrieved.'],
-    ['feed-parse-failed', 'The feed was retrieved, but its calendar data could not be parsed.']
+    ['feed-parse-failed', 'The feed was retrieved, but its calendar data could not be parsed.'],
+    ['feed-expansion-limit', 'The calendar feed contains too many events to process safely for this date range.']
   ])('reports safe %s diagnostics', async (code, message) => {
     vi.stubGlobal('fetch', vi.fn(async () => response({ code, error: 'safe generic error' }, 422)));
     renderCalendar([{ id: 'home', name: 'Home', url: 'https://p.icloud.com/private' }]);

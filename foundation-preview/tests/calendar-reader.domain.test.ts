@@ -338,6 +338,31 @@ describe('Cloudflare Pages Calendar reader', () => {
     expect(result).not.toContain('secret-event-content');
   });
 
+  it('reports recurrence work limits without returning partial events or feed contents', async () => {
+    const denseFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:synthetic-secondly',
+      'DTSTART:20261114T120000Z',
+      'DTEND:20261114T120001Z',
+      'RRULE:FREQ=SECONDLY',
+      'SUMMARY:Sensitive synthetic summary',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
+    const fetchImpl = vi.fn<typeof fetch>(async () => calendarResponse(denseFeed));
+    const response = await handleCalendarRead(request(validBody()), { fetchImpl });
+    const responseText = await response.text();
+
+    expect(response.status).toBe(422);
+    expect(responseText).toContain('"code":"feed-expansion-limit"');
+    expect(responseText).toContain('too many events to process safely');
+    expect(responseText).not.toContain('Sensitive synthetic summary');
+    expect(responseText).not.toContain(source.url);
+  });
+
   it('enforces method, origin, request-size, and range limits', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () => calendarResponse());
     const methodResponse = await handleCalendarRead(request(null, { method: 'GET' }), { fetchImpl });

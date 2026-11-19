@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { HealthInfoWhatCounts } from '../src/components/HealthInfoWhatCounts.tsx';
 import { HealthScoreDetailsContent } from '../src/components/HealthScoreDetailsContent.tsx';
 import { FitnessScoreSummary } from '../src/components/FitnessScoreSummary.tsx';
+import { noLinkedRhythmHealthMessage } from '../src/components/health-summary-copy.ts';
 import {
   createHealthFitnessHealthContribution,
   createHealthFitnessRollup
@@ -95,6 +96,51 @@ const rhythmContribution: RhythmContributionSelection = {
 afterEach(cleanup);
 
 describe('static Health Info content', () => {
+  it('uses a shared Health title without losing contextual accessibility or linked-Rhythm states', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <FitnessScoreSummary
+        category="Strength"
+        healthTitle="Strength Health"
+        cardTitle="Health"
+        consistency={null}
+        onTrack={null}
+        health={null}
+        linkedRhythmCount={0}
+      />
+    );
+
+    const heading = screen.getByRole('heading', { name: 'Strength Health' });
+    expect(heading.textContent).toBe('Health');
+    expect(screen.getByRole('button', {
+      name: 'Show Strength Health Consistency and On Track breakdown'
+    })).toBeTruthy();
+    expect(screen.getByText('Link a Rhythm to this Foundation to start building your Health score.'))
+      .toBeTruthy();
+    const info = screen.getByRole('button', { name: 'Show Strength Health scoring details' });
+    await user.click(info);
+    expect(screen.getByRole('dialog', { name: 'Strength Health details' })).toBeTruthy();
+
+    cleanup();
+    render(
+      <FitnessScoreSummary
+        category="Strength"
+        healthTitle="Strength Health"
+        cardTitle="Health"
+        consistency={null}
+        onTrack={null}
+        health={null}
+        linkedRhythmCount={1}
+        statusMessage="0 of 1 linked Rhythms scored."
+      />
+    );
+    expect(screen.getByText('0 of 1 linked Rhythms scored.')).toBeTruthy();
+    expect(screen.queryByText(noLinkedRhythmHealthMessage('Foundation'))).toBeNull();
+    expect(noLinkedRhythmHealthMessage('Principle'))
+      .toBe('Link a Rhythm to this Principle to start building your Health score.');
+    expect(container.isConnected).toBe(false);
+  });
+
   it.each([
     {
       label: 'Foundation',

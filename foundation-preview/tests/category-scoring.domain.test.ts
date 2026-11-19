@@ -8,6 +8,7 @@ import {
   selectCategoryScore,
   selectFoundationCategoryScore,
   selectHealthFitnessCategoryScore,
+  selectActiveWeightRhythms,
   selectStrengthCategoryScore,
   selectUnlinkedFlexibilityRhythms,
   selectWeightCategoryScore
@@ -193,6 +194,10 @@ describe('selecting equal-weight Marriage Category scores', () => {
       ]),
       [archived.id]
     );
+    expect(selectActiveWeightRhythms(
+      [zero, unlinked, cardio, archived],
+      [archived.id]
+    ).map(rhythm => rhythm.id)).toEqual([zero.id]);
 
     expect(result).toMatchObject({
       eligibleFoundationIds: ['health-weight'],

@@ -24,7 +24,8 @@ type CalendarFailureCode =
   | 'feed-too-large'
   | 'redirect-limit'
   | 'feed-retrieval-failed'
-  | 'feed-parse-failed';
+  | 'feed-parse-failed'
+  | 'feed-expansion-limit';
 
 type FailureMetadata = {
   upstreamStatus?: number;
@@ -68,7 +69,8 @@ function failureResponse(
     'feed-too-large': 'The calendar feed exceeded the reader size limit.',
     'redirect-limit': 'The feed exceeded the redirect limit.',
     'feed-retrieval-failed': 'The calendar feed could not be retrieved.',
-    'feed-parse-failed': 'The feed could not be parsed as a calendar.'
+    'feed-parse-failed': 'The feed could not be parsed as a calendar.',
+    'feed-expansion-limit': 'The calendar feed contains too many events to process safely for this date range.'
   };
   return respond(status, {
     code,
@@ -386,7 +388,12 @@ export async function handleCalendarRead(
       input.rangeEnd,
       input.timeZone
     );
-    if (!parsed.valid) return fail(422, 'feed-parse-failed');
+    if (!parsed.valid) {
+      const code = parsed.issues.some(issue => issue.kind === 'expansion-limit')
+        ? 'feed-expansion-limit'
+        : 'feed-parse-failed';
+      return fail(422, code);
+    }
     return respond(200, { events: parsed.events, issueCount: parsed.issues.length });
   } catch (error) {
     if (!(error instanceof CalendarReaderError)) options.onException?.(stage, error);
