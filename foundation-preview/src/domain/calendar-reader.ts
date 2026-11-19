@@ -2,7 +2,10 @@ import {
   calendarFeedUrlError,
   validateCalendarSources
 } from './calendar-sources.ts';
-import { parseCalendarFeedForRange } from './calendar-events.ts';
+import {
+  parseCalendarFeedForRange,
+  type CalendarExpansionLimitDiagnostic
+} from './calendar-events.ts';
 
 const maximumRequestBytes = 16_384;
 const maximumFeedBytes = 5 * 1_048_576;
@@ -295,6 +298,7 @@ export async function handleCalendarRead(
     timeoutMs?: number;
     onStage?: (stage: CalendarReaderStage) => void;
     onException?: (stage: CalendarReaderStage, error: unknown) => void;
+    onDiagnostic?: (diagnostic: CalendarExpansionLimitDiagnostic) => void;
   } = {}
 ): Promise<Response> {
   let stage: CalendarReaderStage = 'request_validation';
@@ -389,6 +393,7 @@ export async function handleCalendarRead(
       input.timeZone
     );
     if (!parsed.valid) {
+      if (parsed.expansionLimit) options.onDiagnostic?.(parsed.expansionLimit);
       const code = parsed.issues.some(issue => issue.kind === 'expansion-limit')
         ? 'feed-expansion-limit'
         : 'feed-parse-failed';

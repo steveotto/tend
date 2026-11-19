@@ -16,8 +16,25 @@ export type CalendarFeedIssue = {
   kind: 'invalid-feed' | 'invalid-event' | 'unresolved-exception' | 'duration-too-long' | 'expansion-limit';
 };
 
+export type CalendarExpansionLimitDiagnostic = {
+  limitName: 'event-components' | 'recurrence-values' | 'expanded-occurrences';
+  configuredThreshold: number;
+  observedCount: number;
+  processingStage: 'feed-structure' | 'recurrence-expansion';
+  aggregateCounts: {
+    eventComponents: number;
+    recurrenceValues: number;
+    expandedOccurrences: number;
+  };
+};
+
 export type CalendarFeedResult =
-  | { valid: false; events: []; issues: [CalendarFeedIssue] }
+  | {
+    valid: false;
+    events: [];
+    issues: [CalendarFeedIssue];
+    expansionLimit?: CalendarExpansionLimitDiagnostic;
+  }
   | { valid: true; events: CalendarEvent[]; issues: CalendarFeedIssue[] };
 
 type DateParts = { year: number; month: number; day: number };
@@ -33,6 +50,7 @@ const maximumRecurringDurationDays = 366;
 const maximumEventComponentsPerFeed = 2_048;
 const maximumRecurrenceValuesPerFeed = 1_024;
 const maximumExpandedOccurrencesPerFeed = 4_096;
+const maximumUncountedDailyInterval = 1;
 
 function parseLocalDate(value: string): DateParts | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -196,36 +214,107 @@ function eventDurationDays(event: ICAL.Event): number {
   return Number.isFinite(seconds) ? Math.ceil(seconds / 86_400) : Number.POSITIVE_INFINITY;
 }
 
-function exceedsCalendarStructureLimits(raw: string): boolean {
+function calendarStructureCounts(raw: string): {
+  eventComponents: number;
+  recurrenceValues: number;
+} {
   const unfolded = raw.replace(/\r?\n[ \t]/g, '');
   const eventComponents = /^BEGIN:VEVENT\r?$/gim;
   let eventComponentCount = 0;
-  while (eventComponents.exec(unfolded)) {
-    eventComponentCount += 1;
-    if (eventComponentCount > maximumEventComponentsPerFeed) return true;
-  }
+  while (eventComponents.exec(unfolded)) eventComponentCount += 1;
 
   const recurrenceProperties = /^(?:RRULE|RDATE|EXDATE)(?:;[^:\r\n]*)?:([^\r\n]*)/gim;
   let recurrenceValueCount = 0;
   let match: RegExpExecArray | null;
   while ((match = recurrenceProperties.exec(unfolded)) !== null) {
     recurrenceValueCount += 1;
-    for (const character of match[1]!) {
-      if (character === ',') recurrenceValueCount += 1;
-      if (recurrenceValueCount > maximumRecurrenceValuesPerFeed) return true;
-    }
-    if (recurrenceValueCount > maximumRecurrenceValuesPerFeed) return true;
+    for (const character of match[1]!) if (character === ',') recurrenceValueCount += 1;
   }
 
-  return false;
+  return {
+    eventComponents: eventComponentCount,
+    recurrenceValues: recurrenceValueCount
+  };
 }
 
-function expansionLimitResult(eventNumber: number | null): CalendarFeedResult {
+function structureExpansionLimit(
+  counts: ReturnType<typeof calendarStructureCounts>
+): CalendarExpansionLimitDiagnostic | null {
+  if (counts.eventComponents > maximumEventComponentsPerFeed) {
+    return {
+      limitName: 'event-components',
+      configuredThreshold: maximumEventComponentsPerFeed,
+      observedCount: counts.eventComponents,
+      processingStage: 'feed-structure',
+      aggregateCounts: { ...counts, expandedOccurrences: 0 }
+    };
+  }
+  if (counts.recurrenceValues > maximumRecurrenceValuesPerFeed) {
+    return {
+      limitName: 'recurrence-values',
+      configuredThreshold: maximumRecurrenceValuesPerFeed,
+      observedCount: counts.recurrenceValues,
+      processingStage: 'feed-structure',
+      aggregateCounts: { ...counts, expandedOccurrences: 0 }
+    };
+  }
+  return null;
+}
+
+function expansionLimitResult(
+  eventNumber: number | null,
+  expansionLimit: CalendarExpansionLimitDiagnostic
+): CalendarFeedResult {
   return {
     valid: false,
     events: [],
-    issues: [{ eventNumber, kind: 'expansion-limit' }]
+    issues: [{ eventNumber, kind: 'expansion-limit' }],
+    expansionLimit
   };
+}
+
+function isSimpleUncountedDailySeries(
+  event: ICAL.Event,
+  component: ICAL.Component,
+  exceptions: readonly ICAL.Component[]
+): boolean {
+  if (!event.isRecurring()
+    || component.hasProperty('rdate')
+    || component.hasProperty('exdate')) return false;
+
+  const rules = component.getAllProperties('rrule');
+  if (rules.length !== 1) return false;
+  const rule = rules[0]!.getFirstValue();
+  if (!(rule instanceof ICAL.Recur)
+    || rule.freq !== 'DAILY'
+    || rule.interval !== maximumUncountedDailyInterval
+    || rule.count !== null
+    || rule.until !== null
+    || Object.keys(rule.parts).length > 0) return false;
+
+  const start = event.startDate;
+  if (!start) return false;
+  return exceptions.every(exceptionComponent => {
+    const recurrenceIdProperty = exceptionComponent.getFirstProperty('recurrence-id');
+    if (!recurrenceIdProperty || recurrenceIdProperty.getParameter('range')) return false;
+    const recurrenceId = new ICAL.Event(exceptionComponent).recurrenceId;
+    if (!recurrenceId || recurrenceId.isDate !== start.isDate) return false;
+    const normalized = recurrenceId.convertToZone(start.zone);
+    return normalized.compare(start) >= 0
+      && (start.isDate
+        || (normalized.hour === start.hour
+          && normalized.minute === start.minute
+          && normalized.second === start.second));
+  });
+}
+
+function recurrenceKey(time: ICAL.Time): string {
+  return time.convertToZone(ICAL.Timezone.utcTimezone).toString();
+}
+
+function isExactException(component: ICAL.Component): boolean {
+  const recurrenceId = component.getFirstProperty('recurrence-id');
+  return Boolean(recurrenceId && !recurrenceId.getParameter('range'));
 }
 
 function recurrenceSeekStart(
@@ -239,7 +328,7 @@ function recurrenceSeekStart(
     const rule = property.getFirstValue();
     return !(rule instanceof ICAL.Recur)
       || rule.freq !== 'DAILY'
-      || rule.interval !== 1
+      || rule.interval !== maximumUncountedDailyInterval
       || rule.count !== null;
   })) {
     return null;
@@ -279,6 +368,32 @@ function isWithinLocalDay(
   return startMs < range.end && timedEndsAt > range.start;
 }
 
+function isWithinQuery(
+  start: ICAL.Time,
+  end: ICAL.Time,
+  allDay: boolean,
+  query: CalendarQuery,
+  timeZone: string,
+  localDay: { start: number; end: number } | null,
+  timedEndsAt: number
+): boolean {
+  if (query.kind === 'local-day') {
+    return isWithinLocalDay(
+      start,
+      end,
+      allDay,
+      query.localDate,
+      localDay!,
+      timedEndsAt
+    );
+  }
+  const startsAt = eventStartsAt(start, allDay, timeZone);
+  const endsAt = allDay ? eventEndsAt(end, true, timeZone) : timedEndsAt;
+  return query.kind === 'upcoming'
+    ? endsAt > query.now
+    : endsAt > query.start && startsAt < query.end;
+}
+
 function eventStartsAt(time: ICAL.Time, allDay: boolean, timeZone: string): number {
   return allDay
     ? zonedDateTimeToInstant(parseLocalDate(dateOnlyKey(time))!, timeZone)
@@ -310,10 +425,13 @@ function parseCalendarFeed(
     return { valid: false, events: [], issues: [{ eventNumber: null, kind: 'invalid-feed' }] };
   }
 
+  const structureCounts = calendarStructureCounts(raw);
+  const structureLimit = structureExpansionLimit(structureCounts);
+  if (structureLimit) return expansionLimitResult(null, structureLimit);
+
   let calendar: ICAL.Component;
   let localDay: { start: number; end: number } | null = null;
   try {
-    if (exceedsCalendarStructureLimits(raw)) return expansionLimitResult(null);
     if (date) localDay = localDayRange(date, timeZone);
     new Intl.DateTimeFormat('en', { timeZone }).format();
     calendar = ICAL.Component.fromString(raw);
@@ -327,10 +445,16 @@ function parseCalendarFeed(
   const masterIds = new Set(masters.map(component => component.getFirstPropertyValue('uid')).filter(
     (uid): uid is string => typeof uid === 'string'
   ));
-  const mastersWithExceptions = new Set(components
-    .filter(component => component.hasProperty('recurrence-id'))
-    .map(component => component.getFirstPropertyValue('uid'))
-    .filter((uid): uid is string => typeof uid === 'string'));
+  const exceptionsByUid = new Map<string, ICAL.Component[]>();
+  const componentNumbers = new Map(components.map((component, index) => [component, index + 1]));
+  for (const component of components) {
+    if (!component.hasProperty('recurrence-id')) continue;
+    const uid = component.getFirstPropertyValue('uid');
+    if (typeof uid !== 'string') continue;
+    const exceptions = exceptionsByUid.get(uid) ?? [];
+    exceptions.push(component);
+    exceptionsByUid.set(uid, exceptions);
+  }
   const issues: CalendarFeedIssue[] = [];
   components.forEach((component, index) => {
     if (component.hasProperty('recurrence-id')) {
@@ -344,13 +468,45 @@ function parseCalendarFeed(
   const events: CalendarEvent[] = [];
   let expandedOccurrenceCount = 0;
   let expansionLimitEventNumber: number | null = null;
+  let expansionLimit: CalendarExpansionLimitDiagnostic | null = null;
   for (const [componentIndex, component] of masters.entries()) {
-    const eventNumber = componentIndex + 1;
+    const eventNumber = componentNumbers.get(component) ?? componentIndex + 1;
     try {
-      const event = new ICAL.Event(component);
+      if (component.getFirstPropertyValue('status') === 'CANCELLED') continue;
+      const uid = component.getFirstPropertyValue('uid');
+      const exceptions = typeof uid === 'string' ? exceptionsByUid.get(uid) ?? [] : [];
+      const event = new ICAL.Event(component, {
+        exceptions: [],
+        strictExceptions: true
+      });
       if (!event.startDate) {
         issues.push({ eventNumber, kind: 'invalid-event' });
         continue;
+      }
+      const canSeekPastExactExceptions = exceptions.length > 0
+        && isSimpleUncountedDailySeries(event, component, exceptions);
+      const separatedExceptionKeys = new Set(
+        canSeekPastExactExceptions
+          ? exceptions
+            .map(exception => new ICAL.Event(exception).recurrenceId)
+            .filter((recurrenceId): recurrenceId is ICAL.Time => recurrenceId !== null)
+            .map(recurrenceKey)
+          : []
+      );
+      const cancelledExceptionKeys = new Set(
+        exceptions
+          .filter(exception => isExactException(exception)
+            && exception.getFirstPropertyValue('status') === 'CANCELLED')
+          .map(exception => new ICAL.Event(exception).recurrenceId)
+          .filter((recurrenceId): recurrenceId is ICAL.Time => recurrenceId !== null)
+          .map(recurrenceKey)
+      );
+      for (const exception of exceptions) {
+        if (canSeekPastExactExceptions
+          || (isExactException(exception) && exception.getFirstPropertyValue('status') === 'CANCELLED')) {
+          continue;
+        }
+        event.relateException(exception);
       }
       const recurrenceDurationDays = eventDurationDays(event);
       if (event.isRecurring() && recurrenceDurationDays > maximumRecurringDurationDays) {
@@ -362,9 +518,10 @@ function parseCalendarFeed(
         : query.kind === 'upcoming'
           ? query.now
           : query.start;
-      const seekStart = typeof event.uid === 'string' && mastersWithExceptions.has(event.uid)
-        ? null
-        : recurrenceSeekStart(event, component, queryStart, timeZone);
+      const maySeek = exceptions.length === 0 || canSeekPastExactExceptions;
+      const seekStart = maySeek
+        ? recurrenceSeekStart(event, component, queryStart, timeZone)
+        : null;
       const iterator = event.isRecurring() ? event.iterator(seekStart ?? undefined) : null;
       if (seekStart && iterator) iterator.next();
       let occurrenceNumber = 0;
@@ -375,10 +532,24 @@ function parseCalendarFeed(
         occurrenceNumber += 1;
         if (expandedOccurrenceCount >= maximumExpandedOccurrencesPerFeed) {
           expansionLimitEventNumber = eventNumber;
+          const observedCount = expandedOccurrenceCount + 1;
+          expansionLimit = {
+            limitName: 'expanded-occurrences',
+            configuredThreshold: maximumExpandedOccurrencesPerFeed,
+            observedCount,
+            processingStage: 'recurrence-expansion',
+            aggregateCounts: {
+              ...structureCounts,
+              expandedOccurrences: observedCount
+            }
+          };
           break;
         }
         expandedOccurrenceCount += 1;
+        const occurrenceKey = recurrenceKey(occurrence);
+        if (separatedExceptionKeys.has(occurrenceKey) || cancelledExceptionKeys.has(occurrenceKey)) continue;
         const details = event.getOccurrenceDetails(occurrence);
+        if (details.item.component.getFirstPropertyValue('status') === 'CANCELLED') continue;
         const start = details.startDate;
         const end = details.endDate;
         const occurrenceAllDay = start.isDate;
@@ -386,8 +557,6 @@ function parseCalendarFeed(
         const duration = details.item.endDate.toJSDate().getTime()
           - details.item.startDate.toJSDate().getTime();
         const timedEndsAt = startsAt + duration;
-        if (component.getFirstPropertyValue('status') === 'CANCELLED'
-          || details.item.component.getFirstPropertyValue('status') === 'CANCELLED') continue;
         const endsAt = occurrenceAllDay
           ? eventEndsAt(end, true, timeZone)
           : timedEndsAt;
@@ -395,11 +564,15 @@ function parseCalendarFeed(
           issues.push({ eventNumber, kind: 'invalid-event' });
           continue;
         }
-        const inQuery = query.kind === 'local-day'
-          ? isWithinLocalDay(start, end, occurrenceAllDay, query.localDate, localDay!, timedEndsAt)
-          : query.kind === 'upcoming'
-            ? endsAt > query.now
-            : endsAt > query.start && startsAt < query.end;
+        const inQuery = isWithinQuery(
+          start,
+          end,
+          occurrenceAllDay,
+          query,
+          timeZone,
+          localDay,
+          timedEndsAt
+        );
         if (!inQuery) {
           if (query.kind === 'local-day') {
             if (occurrenceAllDay
@@ -425,13 +598,80 @@ function parseCalendarFeed(
         includedOccurrenceCount += 1;
         if (query.kind === 'upcoming' && includedOccurrenceCount >= 3) break;
       }
+      if (canSeekPastExactExceptions
+        && component.getFirstPropertyValue('status') !== 'CANCELLED'
+        && expansionLimitEventNumber === null) {
+        for (const exceptionComponent of exceptions) {
+          if (expandedOccurrenceCount >= maximumExpandedOccurrencesPerFeed) {
+            expansionLimitEventNumber = eventNumber;
+            const observedCount = expandedOccurrenceCount + 1;
+            expansionLimit = {
+              limitName: 'expanded-occurrences',
+              configuredThreshold: maximumExpandedOccurrencesPerFeed,
+              observedCount,
+              processingStage: 'recurrence-expansion',
+              aggregateCounts: {
+                ...structureCounts,
+                expandedOccurrences: observedCount
+              }
+            };
+            break;
+          }
+          expandedOccurrenceCount += 1;
+          try {
+            if (exceptionComponent.getFirstPropertyValue('status') === 'CANCELLED') continue;
+            const exception = new ICAL.Event(exceptionComponent);
+            if (!exception.startDate) {
+              issues.push({
+                eventNumber: componentNumbers.get(exceptionComponent) ?? null,
+                kind: 'invalid-event'
+              });
+              continue;
+            }
+            const start = exception.startDate;
+            const end = exception.endDate;
+            const allDay = start.isDate;
+            const startsAt = eventStartsAt(start, allDay, timeZone);
+            const duration = exception.endDate.toJSDate().getTime()
+              - exception.startDate.toJSDate().getTime();
+            const timedEndsAt = startsAt + duration;
+            const endsAt = allDay
+              ? eventEndsAt(end, true, timeZone)
+              : timedEndsAt;
+            if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt < startsAt) {
+              issues.push({
+                eventNumber: componentNumbers.get(exceptionComponent) ?? null,
+                kind: 'invalid-event'
+              });
+              continue;
+            }
+            if (!isWithinQuery(start, end, allDay, query, timeZone, localDay, timedEndsAt)) continue;
+            events.push({
+              id: `${source.id}:${event.uid || `event-${eventNumber}`}:${start.toICALString()}`,
+              sourceId: source.id,
+              sourceName: source.name,
+              title: exception.summary || '(untitled)',
+              startsAt,
+              endsAt,
+              allDay
+            });
+          } catch {
+            issues.push({
+              eventNumber: componentNumbers.get(exceptionComponent) ?? null,
+              kind: 'invalid-event'
+            });
+          }
+        }
+      }
     } catch {
       issues.push({ eventNumber, kind: 'invalid-event' });
     }
     if (expansionLimitEventNumber !== null) break;
   }
 
-  if (expansionLimitEventNumber !== null) return expansionLimitResult(expansionLimitEventNumber);
+  if (expansionLimitEventNumber !== null && expansionLimit) {
+    return expansionLimitResult(expansionLimitEventNumber, expansionLimit);
+  }
 
   events.sort((left, right) => left.startsAt - right.startsAt);
   return {
