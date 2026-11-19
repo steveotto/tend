@@ -189,13 +189,121 @@ describe('Pages production artifact', () => {
       'END:VCALENDAR',
       ''
     ].join('\r\n');
+    const newYorkTimeZone = [
+      'BEGIN:VTIMEZONE',
+      'TZID:America/New_York',
+      'BEGIN:DAYLIGHT',
+      'TZOFFSETFROM:-0500',
+      'TZOFFSETTO:-0400',
+      'TZNAME:EDT',
+      'DTSTART:19700308T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+      'END:DAYLIGHT',
+      'BEGIN:STANDARD',
+      'TZOFFSETFROM:-0400',
+      'TZOFFSETTO:-0500',
+      'TZNAME:EST',
+      'DTSTART:19701101T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+      'END:STANDARD',
+      'END:VTIMEZONE'
+    ].join('\r\n');
+    const largeFeedEvents = [
+      [
+        'BEGIN:VEVENT',
+        'UID:synthetic-large-daily',
+        'DTSTART;TZID=America/New_York:20261113T090000',
+        'DTEND;TZID=America/New_York:20261113T093000',
+        'RRULE:FREQ=DAILY',
+        'SUMMARY:Daily meeting',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:synthetic-large-daily',
+        'RECURRENCE-ID;TZID=America/New_York:20261114T090000',
+        'DTSTART;TZID=America/New_York:20261114T110000',
+        'DTEND;TZID=America/New_York:20261114T113000',
+        'SUMMARY:Moved meeting',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:synthetic-large-daily',
+        'RECURRENCE-ID;TZID=America/New_York:20261115T090000',
+        'STATUS:CANCELLED',
+        'SUMMARY:Cancelled meeting',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:synthetic-large-cancelled-master',
+        'DTSTART;TZID=America/New_York:20261114T080000',
+        'DTEND;TZID=America/New_York:20261114T083000',
+        'RRULE:FREQ=DAILY',
+        'STATUS:CANCELLED',
+        'SUMMARY:Cancelled master',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:synthetic-overlapping-all-day',
+        'DTSTART;VALUE=DATE:20261113',
+        'DTEND;VALUE=DATE:20261115',
+        'SUMMARY:Overlapping all-day',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:synthetic-overlapping-overnight',
+        'DTSTART:20261114T043000Z',
+        'DTEND:20261114T053000Z',
+        'SUMMARY:Overlapping overnight',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:synthetic-in-range-single',
+        'DTSTART:20261114T170000Z',
+        'DTEND:20261114T173000Z',
+        'SUMMARY:In-range single',
+        'END:VEVENT'
+      ].join('\r\n'),
+      ...Array.from({ length: 213 }, (_, index) => [
+        'BEGIN:VEVENT',
+        `UID:synthetic-old-recurring-${index}`,
+        'DTSTART:20250101T090000Z',
+        'DTEND:20250101T093000Z',
+        'RRULE:FREQ=YEARLY;COUNT=1',
+        `SUMMARY:Out-of-range recurrence ${index}`,
+        'END:VEVENT'
+      ].join('\r\n')),
+      ...Array.from({ length: 3_937 }, (_, index) => [
+        'BEGIN:VEVENT',
+        `UID:synthetic-old-single-${index}`,
+        'DTSTART:20250101T090000Z',
+        'DTEND:20250101T093000Z',
+        `SUMMARY:Out-of-range single ${index}`,
+        'END:VEVENT'
+      ].join('\r\n'))
+    ];
+    assert.equal(largeFeedEvents.length, 4_157);
+    const manyEventFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      newYorkTimeZone,
+      ...largeFeedEvents,
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
     const readerPath = path.resolve(previewDirectory, 'src/domain/calendar-reader.ts');
     const functionSource = [
       `import { handleCalendarRead } from ${JSON.stringify(readerPath)};`,
       `const feeds = ${JSON.stringify({
         history: historyFeed,
         historyExceptions: historyExceptionsFeed,
-        dense: denseFeed
+        dense: denseFeed,
+        manyEvents: manyEventFeed
       })};`,
       'export async function onRequest({ request }: { request: Request }) {',
       '  return handleCalendarRead(request, {',
@@ -238,8 +346,11 @@ describe('Pages production artifact', () => {
       }
       assert.equal(ready, true, 'Wrangler Pages dev should start and accept requests.');
 
-      const rangeStart = Date.parse('2026-11-14T00:00:00Z');
-      const readFeed = (name: 'history' | 'historyExceptions' | 'dense') => fetch(`${origin}/api/calendar/read`, {
+      const readFeed = (
+        name: 'history' | 'historyExceptions' | 'dense' | 'manyEvents',
+        timeZone = 'UTC',
+        rangeStart = Date.parse('2026-11-14T00:00:00Z')
+      ) => fetch(`${origin}/api/calendar/read`, {
         method: 'POST',
         headers: { origin, 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -251,7 +362,7 @@ describe('Pages production artifact', () => {
           now: rangeStart,
           rangeStart,
           rangeEnd: rangeStart + 31 * 86_400_000,
-          timeZone: 'UTC'
+          timeZone
         })
       });
 
@@ -282,6 +393,31 @@ describe('Pages production artifact', () => {
       assert.equal(denseResponse.status, 422);
       assert.match(denseText, /"code":"feed-expansion-limit"/);
       assert.doesNotMatch(denseText, /Sensitive synthetic summary/);
+
+      const manyEventsResponse = await readFeed(
+        'manyEvents',
+        'America/New_York',
+        Date.parse('2026-11-14T05:00:00Z')
+      );
+      const manyEventsResult = await manyEventsResponse.json() as {
+        events: Array<{ title: string; startsAt: number; endsAt: number; allDay: boolean }>;
+        issueCount: number;
+      };
+      assert.equal(manyEventsResponse.status, 200);
+      assert.equal(manyEventsResult.events.length, 33);
+      assert.equal(manyEventsResult.events.filter(event => event.title === 'Daily meeting').length, 29);
+      assert.ok(manyEventsResult.events.some(event =>
+        event.title === 'Moved meeting' && event.startsAt === Date.parse('2026-11-14T16:00:00Z')));
+      assert.ok(!manyEventsResult.events.some(event =>
+        event.title === 'Cancelled meeting' || event.title === 'Cancelled master'));
+      assert.ok(manyEventsResult.events.some(event => event.title === 'Overlapping all-day' && event.allDay));
+      assert.ok(manyEventsResult.events.some(event =>
+        event.title === 'Overlapping overnight'
+        && event.startsAt === Date.parse('2026-11-14T04:30:00Z')
+        && event.endsAt === Date.parse('2026-11-14T05:30:00Z')));
+      assert.ok(manyEventsResult.events.some(event => event.title === 'In-range single'));
+      assert.ok(!manyEventsResult.events.some(event => event.title.startsWith('Out-of-range')));
+      assert.equal(manyEventsResult.issueCount, 0);
     } finally {
       server.kill('SIGTERM');
       await new Promise<void>(resolve => {

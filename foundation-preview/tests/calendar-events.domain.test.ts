@@ -482,8 +482,154 @@ describe('calendar feed reader', () => {
     });
   });
 
-  it('identifies feeds that exceed the event-component bound', () => {
-    const manyEvents = Array.from({ length: 2_049 }, (_, index) => [
+  it('keeps in-range events from a large feed and ignores out-of-range one-off events', () => {
+    const relevantEvents = [
+      [
+        'BEGIN:VEVENT',
+        'UID:large-daily',
+        'DTSTART;TZID=America/New_York:20261113T090000',
+        'DTEND;TZID=America/New_York:20261113T093000',
+        'RRULE:FREQ=DAILY',
+        'SUMMARY:Daily meeting',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:large-daily',
+        'RECURRENCE-ID;TZID=America/New_York:20261114T090000',
+        'DTSTART;TZID=America/New_York:20261114T110000',
+        'DTEND;TZID=America/New_York:20261114T113000',
+        'SUMMARY:Moved meeting',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:large-daily',
+        'RECURRENCE-ID;TZID=America/New_York:20261115T090000',
+        'STATUS:CANCELLED',
+        'SUMMARY:Cancelled meeting',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:large-cancelled-master',
+        'DTSTART;TZID=America/New_York:20261114T080000',
+        'DTEND;TZID=America/New_York:20261114T083000',
+        'RRULE:FREQ=DAILY',
+        'STATUS:CANCELLED',
+        'SUMMARY:Cancelled master',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:overlapping-all-day',
+        'DTSTART;VALUE=DATE:20261113',
+        'DTEND;VALUE=DATE:20261115',
+        'SUMMARY:Overlapping all-day',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:overlapping-overnight',
+        'DTSTART:20261114T043000Z',
+        'DTEND:20261114T053000Z',
+        'SUMMARY:Overlapping overnight',
+        'END:VEVENT'
+      ].join('\r\n'),
+      [
+        'BEGIN:VEVENT',
+        'UID:in-range-single',
+        'DTSTART:20261114T170000Z',
+        'DTEND:20261114T173000Z',
+        'SUMMARY:In-range single',
+        'END:VEVENT'
+      ].join('\r\n')
+    ];
+    const recurringEvents = Array.from({ length: 213 }, (_, index) => [
+      'BEGIN:VEVENT',
+      `UID:large-recurring-${index}`,
+      'DTSTART:20250101T090000Z',
+      'DTEND:20250101T093000Z',
+      'RRULE:FREQ=YEARLY;COUNT=1',
+      `SUMMARY:Out-of-range recurrence ${index}`,
+      'END:VEVENT'
+    ].join('\r\n'));
+    const oldSingleEvents = Array.from({ length: 3_937 }, (_, index) => [
+      'BEGIN:VEVENT',
+      `UID:large-single-${index}`,
+      'DTSTART:20250101T090000Z',
+      'DTEND:20250101T093000Z',
+      `SUMMARY:Out-of-range single ${index}`,
+      'END:VEVENT'
+    ].join('\r\n'));
+    const manyEvents = [
+      ...relevantEvents,
+      ...recurringEvents,
+      ...oldSingleEvents
+    ].join('\r\n');
+    expect(relevantEvents.length + recurringEvents.length + oldSingleEvents.length).toBe(4_157);
+    const result = parseCalendarFeedForRange(
+      calendar(manyEvents, newYorkTimeZone),
+      source,
+      Date.parse('2026-11-14T05:00:00Z'),
+      Date.parse('2026-12-15T05:00:00Z'),
+      'America/New_York'
+    );
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.events).toHaveLength(33);
+    expect(result.events.filter(event => event.title === 'Daily meeting')).toHaveLength(29);
+    expect(result.events.some(event => event.title === 'Moved meeting'
+      && event.startsAt === Date.parse('2026-11-14T16:00:00Z'))).toBe(true);
+    expect(result.events.some(event => event.title === 'Cancelled meeting'
+      || event.title === 'Cancelled master')).toBe(false);
+    expect(result.events.some(event => event.title === 'Overlapping all-day' && event.allDay)).toBe(true);
+    expect(result.events.some(event => event.title === 'Overlapping overnight'
+      && event.startsAt === Date.parse('2026-11-14T04:30:00Z')
+      && event.endsAt === Date.parse('2026-11-14T05:30:00Z'))).toBe(true);
+    expect(result.events.some(event => event.title === 'In-range single')).toBe(true);
+    expect(result.events.some(event => event.title.startsWith('Out-of-range'))).toBe(false);
+    expect(result.issues).toEqual([]);
+  });
+
+  it('rejects a large in-range event set without returning partial results', () => {
+    const manyEvents = Array.from({ length: 4_097 }, (_, index) => [
+      'BEGIN:VEVENT',
+      `UID:in-range-${index}`,
+      'DTSTART:20261114T090000Z',
+      'DTEND:20261114T093000Z',
+      `SUMMARY:In-range event ${index}`,
+      'END:VEVENT'
+    ].join('\r\n')).join('\r\n');
+    const result = parseCalendarFeedForRange(
+      calendar(manyEvents),
+      source,
+      Date.parse('2026-11-14T00:00:00Z'),
+      Date.parse('2026-12-15T00:00:00Z'),
+      'UTC'
+    );
+
+    expect(result).toEqual({
+      valid: false,
+      events: [],
+      issues: [{ eventNumber: 4_097, kind: 'expansion-limit' }],
+      expansionLimit: {
+        limitName: 'expanded-occurrences',
+        configuredThreshold: 4_096,
+        observedCount: 4_097,
+        processingStage: 'recurrence-expansion',
+        aggregateCounts: {
+          eventComponents: 4_097,
+          recurrenceValues: 0,
+          expandedOccurrences: 4_097
+        }
+      }
+    });
+  });
+
+  it('identifies feeds that exceed the hard event-component bound', () => {
+    const manyEvents = Array.from({ length: 8_193 }, (_, index) => [
       'BEGIN:VEVENT',
       `UID:component-${index}`,
       'DTSTART:20261114T090000Z',
@@ -503,11 +649,11 @@ describe('calendar feed reader', () => {
       issues: [{ eventNumber: null, kind: 'expansion-limit' }],
       expansionLimit: {
         limitName: 'event-components',
-        configuredThreshold: 2_048,
-        observedCount: 2_049,
+        configuredThreshold: 8_192,
+        observedCount: 8_193,
         processingStage: 'feed-structure',
         aggregateCounts: {
-          eventComponents: 2_049,
+          eventComponents: 8_193,
           recurrenceValues: 0,
           expandedOccurrences: 0
         }
