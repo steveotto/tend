@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -123,6 +123,124 @@ describe('Pages production artifact', () => {
       assert.equal(response.status, 405);
       assert.equal(response.headers.get('allow'), 'POST');
       assert.match(response.headers.get('content-type') ?? '', /application\/json/);
+    } finally {
+      server.kill('SIGTERM');
+      await new Promise<void>(resolve => {
+        if (server.exitCode !== null) resolve();
+        else server.once('exit', () => resolve());
+      });
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds synthetic recurrence work through the Wrangler Pages runtime', async () => {
+    const temporaryDirectory = mkdtempSync(path.join(tmpdir(), 'tend-pages-calendar-runtime-'));
+    const functionDirectory = path.join(temporaryDirectory, 'functions', 'api', 'calendar');
+    const port = await availablePort();
+    const historyFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:synthetic-old-daily',
+      'DTSTART:18000101T090000Z',
+      'DTEND:18000101T093000Z',
+      'RRULE:FREQ=DAILY',
+      'SUMMARY:Historical daily event',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
+    const denseFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:synthetic-secondly',
+      'DTSTART:20261114T120000Z',
+      'DTEND:20261114T120001Z',
+      'RRULE:FREQ=SECONDLY',
+      'SUMMARY:Sensitive synthetic summary',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
+    const readerPath = path.resolve(previewDirectory, 'src/domain/calendar-reader.ts');
+    const functionSource = [
+      `import { handleCalendarRead } from ${JSON.stringify(readerPath)};`,
+      `const feeds = ${JSON.stringify({ history: historyFeed, dense: denseFeed })};`,
+      'export async function onRequest({ request }: { request: Request }) {',
+      '  return handleCalendarRead(request, {',
+      '    fetchImpl: async (target) => {',
+      '      const key = new URL(String(target)).pathname.endsWith("/dense") ? "dense" : "history";',
+      '      return new Response(feeds[key], { status: 200, headers: { "content-type": "text/calendar" } });',
+      '    }',
+      '  });',
+      '}'
+    ].join('\n');
+    mkdirSync(functionDirectory, { recursive: true });
+    writeFileSync(path.join(functionDirectory, 'read.ts'), functionSource);
+
+    const server = spawn(path.resolve(previewDirectory, 'node_modules/.bin/wrangler'), [
+      'pages',
+      'dev',
+      artifactDirectory,
+      '--ip',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--persist-to',
+      path.join(temporaryDirectory, 'state'),
+      '--no-show-interactive-dev-session',
+      '--log-level',
+      'error'
+    ], { cwd: temporaryDirectory, stdio: 'ignore' });
+    try {
+      const origin = `http://127.0.0.1:${port}`;
+      let ready = false;
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        if (server.exitCode !== null) throw new Error(`Wrangler Pages dev exited with ${server.exitCode}.`);
+        try {
+          await fetch(`${origin}/api/calendar/read`, { method: 'GET' });
+          ready = true;
+          break;
+        } catch {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      assert.equal(ready, true, 'Wrangler Pages dev should start and accept requests.');
+
+      const rangeStart = Date.parse('2026-11-14T00:00:00Z');
+      const readFeed = (name: 'history' | 'dense') => fetch(`${origin}/api/calendar/read`, {
+        method: 'POST',
+        headers: { origin, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          source: {
+            id: 'calendar-source-fixture',
+            name: 'Synthetic fixture',
+            url: `webcal://p123-caldav.icloud.com/published/${name}`
+          },
+          now: rangeStart,
+          rangeStart,
+          rangeEnd: rangeStart + 31 * 86_400_000,
+          timeZone: 'UTC'
+        })
+      });
+
+      const historyResponse = await readFeed('history');
+      const historyResult = await historyResponse.json() as {
+        events: Array<{ startsAt: number }>;
+        issueCount: number;
+      };
+      assert.equal(historyResponse.status, 200);
+      assert.equal(historyResult.events.length, 31);
+      assert.equal(historyResult.issueCount, 0);
+      assert.equal(historyResult.events[0]?.startsAt, Date.parse('2026-11-14T09:00:00Z'));
+      assert.equal(historyResult.events.at(-1)?.startsAt, Date.parse('2026-12-14T09:00:00Z'));
+
+      const denseResponse = await readFeed('dense');
+      const denseText = await denseResponse.text();
+      assert.equal(denseResponse.status, 422);
+      assert.match(denseText, /"code":"feed-expansion-limit"/);
+      assert.doesNotMatch(denseText, /Sensitive synthetic summary/);
     } finally {
       server.kill('SIGTERM');
       await new Promise<void>(resolve => {

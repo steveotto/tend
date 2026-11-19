@@ -41,6 +41,7 @@ import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
+import { noLinkedRhythmHealthMessage } from './health-summary-copy.ts';
 import type { HealthRollupConfig, HealthRollupGroup } from './HealthRollupDiagram.tsx';
 import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
@@ -923,7 +924,9 @@ function FoundationList({
             ? ['Linked Rhythms without both scores are excluded from both averages.']
             : [])
         ],
-        emptyState: 'No eligible linked Rhythms have both scores available.'
+        emptyState: selectedFoundationScore.activeLinkedRhythmIds.length === 0
+          ? noLinkedRhythmHealthMessage(foundationTerm.singular)
+          : 'No eligible linked Rhythms have both scores available.'
       }
     : undefined;
   const foundationRollup = selectedFoundation

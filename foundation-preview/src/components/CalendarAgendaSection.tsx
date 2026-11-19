@@ -51,7 +51,8 @@ type CalendarReadFailureCode =
   | 'feed-too-large'
   | 'redirect-limit'
   | 'feed-retrieval-failed'
-  | 'feed-parse-failed';
+  | 'feed-parse-failed'
+  | 'feed-expansion-limit';
 
 class CalendarReadError extends Error {
   constructor(
@@ -87,7 +88,8 @@ function isCalendarReadFailureCode(value: unknown): value is CalendarReadFailure
     || value === 'feed-too-large'
     || value === 'redirect-limit'
     || value === 'feed-retrieval-failed'
-    || value === 'feed-parse-failed';
+    || value === 'feed-parse-failed'
+    || value === 'feed-expansion-limit';
 }
 
 function failureDescription(code: CalendarReadFailureCode): string {
@@ -132,6 +134,8 @@ function failureDescription(code: CalendarReadFailureCode): string {
       return 'The reader was reached, but the calendar feed could not be retrieved.';
     case 'feed-parse-failed':
       return 'The feed was retrieved, but its calendar data could not be parsed.';
+    case 'feed-expansion-limit':
+      return 'The calendar feed contains too many events to process safely for this date range.';
   }
 }
 

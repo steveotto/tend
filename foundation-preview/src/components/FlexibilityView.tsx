@@ -683,6 +683,7 @@ export function FlexibilityView({
       <FitnessScoreSummary
         category="Flexibility"
         healthTitle="Flexibility Health"
+        {...(foundationNavigation ? { cardTitle: 'Health' } : {})}
         className={`rhythm-history-view__score-card flexibility-summary${foundationNavigation ? ' foundation-health-card' : ''}`}
         consistency={healthScore.consistency}
         onTrack={healthScore.onTrack}
@@ -690,6 +691,7 @@ export function FlexibilityView({
         showMeasures={!foundationNavigation}
         overallHealthScore={overallHealthScore}
         categoryHealthScore={categoryHealthScore}
+        linkedRhythmCount={scoringEvidence.rows.length + (scoringEvidence.otherCount ?? 0)}
         summaryExplanation="Flexibility Health averages Consistency and On Track from active linked stretch Rhythms equally, then applies the 75/25 blend. Stretch-region history is diagnostic only."
         statusMessage={`${healthScore.health === null ? 'Flexibility Health is not yet scored. ' : ''}${
           scoringEvidence.coverage ?? 'No linked stretch Rhythms are available yet.'

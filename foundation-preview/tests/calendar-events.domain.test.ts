@@ -316,7 +316,7 @@ describe('calendar feed reader', () => {
     expect(cancelled.valid && cancelled.events).toEqual([]);
   });
 
-  it('stops recurrence expansion at the existing per-event processing bound', () => {
+  it('seeks an old unbounded daily recurrence to the requested overlap window', () => {
     const raw = calendar([
       'BEGIN:VEVENT',
       'UID:bounded-daily',
@@ -337,8 +337,80 @@ describe('calendar feed reader', () => {
 
     expect(result.valid).toBe(true);
     if (!result.valid) return;
-    expect(result.events).toEqual([]);
-    expect(result.issues).toEqual([{ eventNumber: 1, kind: 'expansion-limit' }]);
+    expect(result.events.map(event => new Date(event.startsAt).toISOString())).toEqual(
+      Array.from({ length: 31 }, (_, index) => {
+        const day = String(14 + index).padStart(2, '0');
+        const month = index < 17 ? '11' : '12';
+        const adjustedDay = index < 17 ? day : String(index - 16).padStart(2, '0');
+        return `2026-${month}-${adjustedDay}T09:00:00.000Z`;
+      })
+    );
+    expect(result.issues).toEqual([]);
+  });
+
+  it('preserves finite recurrence counts and fails explicitly when an old phased rule exceeds its work budget', () => {
+    const counted = parseCalendarFeedForRange(calendar([
+      'BEGIN:VEVENT',
+      'UID:counted-daily',
+      'DTSTART:18000101T090000Z',
+      'DTEND:18000101T093000Z',
+      'RRULE:FREQ=DAILY;COUNT=3',
+      'SUMMARY:Finite historical recurrence',
+      'END:VEVENT'
+    ].join('\r\n')), source, Date.parse('2026-11-14T00:00:00Z'), Date.parse('2026-12-15T00:00:00Z'), 'UTC');
+    expect(counted).toEqual({ valid: true, events: [], issues: [] });
+
+    const phased = parseCalendarFeedForRange(calendar([
+      'BEGIN:VEVENT',
+      'UID:phased-daily',
+      'DTSTART:18000101T090000Z',
+      'DTEND:18000101T093000Z',
+      'RRULE:FREQ=DAILY;INTERVAL=2',
+      'SUMMARY:Phased historical recurrence',
+      'END:VEVENT'
+    ].join('\r\n')), source, Date.parse('2026-11-14T00:00:00Z'), Date.parse('2026-12-15T00:00:00Z'), 'UTC');
+    expect(phased).toEqual({
+      valid: false,
+      events: [],
+      issues: [{ eventNumber: 1, kind: 'expansion-limit' }]
+    });
+  });
+
+  it('rejects recurrence-value lists above the parser work bound before expanding them', () => {
+    const dates = Array.from({ length: 1_025 }, () => '20261114T090000Z').join(',');
+    const result = parseCalendarFeedForRange(calendar([
+      'BEGIN:VEVENT',
+      'UID:large-rdate-list',
+      'DTSTART:20261114T090000Z',
+      'DTEND:20261114T093000Z',
+      `RDATE:${dates}`,
+      'SUMMARY:Large explicit recurrence list',
+      'END:VEVENT'
+    ].join('\r\n')), source, Date.parse('2026-11-14T00:00:00Z'), Date.parse('2026-12-15T00:00:00Z'), 'UTC');
+
+    expect(result).toEqual({
+      valid: false,
+      events: [],
+      issues: [{ eventNumber: null, kind: 'expansion-limit' }]
+    });
+  });
+
+  it('returns no partial results when an in-range recurrence exceeds the feed work budget', () => {
+    const result = parseCalendarFeedForRange(calendar([
+      'BEGIN:VEVENT',
+      'UID:secondly',
+      'DTSTART:20261114T120000Z',
+      'DTEND:20261114T120001Z',
+      'RRULE:FREQ=SECONDLY',
+      'SUMMARY:High-frequency recurrence',
+      'END:VEVENT'
+    ].join('\r\n')), source, Date.parse('2026-11-14T12:00:00Z'), Date.parse('2026-11-15T12:00:00Z'), 'UTC');
+
+    expect(result).toEqual({
+      valid: false,
+      events: [],
+      issues: [{ eventNumber: 1, kind: 'expansion-limit' }]
+    });
   });
 
   it('uses the feed time zone across a daylight-saving transition and the viewer local-day boundary', () => {

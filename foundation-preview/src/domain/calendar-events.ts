@@ -30,7 +30,9 @@ export type CalendarRange = 'today' | 'week' | 'month';
 export type CalendarRangeWindow = { start: number; end: number };
 
 const maximumRecurringDurationDays = 366;
-const maximumOccurrencesPerEvent = 50_000;
+const maximumEventComponentsPerFeed = 2_048;
+const maximumRecurrenceValuesPerFeed = 1_024;
+const maximumExpandedOccurrencesPerFeed = 4_096;
 
 function parseLocalDate(value: string): DateParts | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -194,6 +196,73 @@ function eventDurationDays(event: ICAL.Event): number {
   return Number.isFinite(seconds) ? Math.ceil(seconds / 86_400) : Number.POSITIVE_INFINITY;
 }
 
+function exceedsCalendarStructureLimits(raw: string): boolean {
+  const unfolded = raw.replace(/\r?\n[ \t]/g, '');
+  const eventComponents = /^BEGIN:VEVENT\r?$/gim;
+  let eventComponentCount = 0;
+  while (eventComponents.exec(unfolded)) {
+    eventComponentCount += 1;
+    if (eventComponentCount > maximumEventComponentsPerFeed) return true;
+  }
+
+  const recurrenceProperties = /^(?:RRULE|RDATE|EXDATE)(?:;[^:\r\n]*)?:([^\r\n]*)/gim;
+  let recurrenceValueCount = 0;
+  let match: RegExpExecArray | null;
+  while ((match = recurrenceProperties.exec(unfolded)) !== null) {
+    recurrenceValueCount += 1;
+    for (const character of match[1]!) {
+      if (character === ',') recurrenceValueCount += 1;
+      if (recurrenceValueCount > maximumRecurrenceValuesPerFeed) return true;
+    }
+    if (recurrenceValueCount > maximumRecurrenceValuesPerFeed) return true;
+  }
+
+  return false;
+}
+
+function expansionLimitResult(eventNumber: number | null): CalendarFeedResult {
+  return {
+    valid: false,
+    events: [],
+    issues: [{ eventNumber, kind: 'expansion-limit' }]
+  };
+}
+
+function recurrenceSeekStart(
+  event: ICAL.Event,
+  component: ICAL.Component,
+  queryStart: number,
+  timeZone: string
+): ICAL.Time | null {
+  const rules = component.getAllProperties('rrule');
+  if (rules.length === 0 || rules.some(property => {
+    const rule = property.getFirstValue();
+    return !(rule instanceof ICAL.Recur)
+      || rule.freq !== 'DAILY'
+      || rule.interval !== 1
+      || rule.count !== null;
+  })) {
+    return null;
+  }
+
+  const start = event.startDate;
+  if (!start) return null;
+  const earliestPossibleStart = queryStart - Math.abs(event.duration.toSeconds()) * 1_000;
+  const referenceDate = start.isDate
+    ? partsAt(earliestPossibleStart, timeZone)
+    : (() => {
+      const localTime = ICAL.Time.fromJSDate(new Date(earliestPossibleStart), true)
+        .convertToZone(start.zone);
+      return { year: localTime.year, month: localTime.month, day: localTime.day };
+    })();
+  const seekDate = shiftDate(referenceDate, -1);
+  const seekStart = start.clone();
+  seekStart.year = seekDate.year;
+  seekStart.month = seekDate.month;
+  seekStart.day = seekDate.day;
+  return seekStart.compare(start) > 0 ? seekStart : null;
+}
+
 function isWithinLocalDay(
   start: ICAL.Time,
   end: ICAL.Time,
@@ -244,6 +313,7 @@ function parseCalendarFeed(
   let calendar: ICAL.Component;
   let localDay: { start: number; end: number } | null = null;
   try {
+    if (exceedsCalendarStructureLimits(raw)) return expansionLimitResult(null);
     if (date) localDay = localDayRange(date, timeZone);
     new Intl.DateTimeFormat('en', { timeZone }).format();
     calendar = ICAL.Component.fromString(raw);
@@ -257,6 +327,10 @@ function parseCalendarFeed(
   const masterIds = new Set(masters.map(component => component.getFirstPropertyValue('uid')).filter(
     (uid): uid is string => typeof uid === 'string'
   ));
+  const mastersWithExceptions = new Set(components
+    .filter(component => component.hasProperty('recurrence-id'))
+    .map(component => component.getFirstPropertyValue('uid'))
+    .filter((uid): uid is string => typeof uid === 'string'));
   const issues: CalendarFeedIssue[] = [];
   components.forEach((component, index) => {
     if (component.hasProperty('recurrence-id')) {
@@ -268,30 +342,42 @@ function parseCalendarFeed(
   });
 
   const events: CalendarEvent[] = [];
-  masters.forEach((component, componentIndex) => {
+  let expandedOccurrenceCount = 0;
+  let expansionLimitEventNumber: number | null = null;
+  for (const [componentIndex, component] of masters.entries()) {
     const eventNumber = componentIndex + 1;
     try {
       const event = new ICAL.Event(component);
       if (!event.startDate) {
         issues.push({ eventNumber, kind: 'invalid-event' });
-        return;
+        continue;
       }
       const recurrenceDurationDays = eventDurationDays(event);
       if (event.isRecurring() && recurrenceDurationDays > maximumRecurringDurationDays) {
         issues.push({ eventNumber, kind: 'duration-too-long' });
-        return;
+        continue;
       }
-      const iterator = event.isRecurring() ? event.iterator() : null;
-      let occurrenceCount = 0;
+      const queryStart = query.kind === 'local-day'
+        ? localDay!.start
+        : query.kind === 'upcoming'
+          ? query.now
+          : query.start;
+      const seekStart = typeof event.uid === 'string' && mastersWithExceptions.has(event.uid)
+        ? null
+        : recurrenceSeekStart(event, component, queryStart, timeZone);
+      const iterator = event.isRecurring() ? event.iterator(seekStart ?? undefined) : null;
+      if (seekStart && iterator) iterator.next();
+      let occurrenceNumber = 0;
       let includedOccurrenceCount = 0;
       while (true) {
-        const occurrence = iterator ? iterator.next() : occurrenceCount === 0 ? event.startDate : null;
+        const occurrence = iterator ? iterator.next() : occurrenceNumber === 0 ? event.startDate : null;
         if (!occurrence) break;
-        occurrenceCount += 1;
-        if (occurrenceCount > maximumOccurrencesPerEvent) {
-          issues.push({ eventNumber, kind: 'expansion-limit' });
+        occurrenceNumber += 1;
+        if (expandedOccurrenceCount >= maximumExpandedOccurrencesPerFeed) {
+          expansionLimitEventNumber = eventNumber;
           break;
         }
+        expandedOccurrenceCount += 1;
         const details = event.getOccurrenceDetails(occurrence);
         const start = details.startDate;
         const end = details.endDate;
@@ -342,7 +428,10 @@ function parseCalendarFeed(
     } catch {
       issues.push({ eventNumber, kind: 'invalid-event' });
     }
-  });
+    if (expansionLimitEventNumber !== null) break;
+  }
+
+  if (expansionLimitEventNumber !== null) return expansionLimitResult(expansionLimitEventNumber);
 
   events.sort((left, right) => left.startsAt - right.startsAt);
   return {

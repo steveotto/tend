@@ -36,6 +36,7 @@ const unscoredEvidence: HealthAggregateEvidence = {
   description: 'Each eligible linked Rhythm counts equally.',
   itemLabel: 'Rhythm',
   rows: [],
+  otherCount: 0,
   consistencyAverage: null,
   consistencyCount: 0,
   onTrackAverage: null,
@@ -368,6 +369,7 @@ describe('Flexibility foundation presentation', () => {
     const user = userEvent.setup();
     const scoringEvidence: HealthAggregateEvidence = {
       ...unscoredEvidence,
+      otherCount: 1,
       coverage: '0 of 1 linked Rhythms scored.',
       emptyState: 'Scores appear after an eligible linked Rhythm has its first due occurrence.'
     };
@@ -538,7 +540,8 @@ describe('Flexibility foundation presentation', () => {
     await user.click(within(screen.getByRole('dialog', { name: 'Save without a Rhythm?' }))
       .getByRole('button', { name: 'Save stretch only' }));
 
-    expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
+    expect(screen.getByText('Link a Rhythm to this Foundation to start building your Health score.'))
+      .toBeTruthy();
     const absRow = container.querySelector<HTMLButtonElement>('.flexibility-region[aria-label^="Abs"]');
     expect(absRow?.getAttribute('aria-label')).toContain('Due in 3 days.');
     expect(absRow?.querySelector('.strength-muscle-row__next-due')?.textContent).toBe('Next stretch in 3d');
@@ -555,7 +558,8 @@ describe('Flexibility foundation presentation', () => {
 
     await user.click(screen.getByRole('button', { name: /Delete manual stretch on/ }));
     expect(confirm).toHaveBeenCalledOnce();
-    expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
+    expect(screen.getByText('Link a Rhythm to this Foundation to start building your Health score.'))
+      .toBeTruthy();
     expect(container.querySelector('.flexibility-region[aria-label^="Abs"]')?.getAttribute('aria-label'))
       .toContain('Not logged yet.');
   });
@@ -670,7 +674,8 @@ describe('Flexibility foundation presentation', () => {
 
     expect(screen.getByRole('tab', { name: 'Routines' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('heading', { name: 'Evening Stretch' })).toBeTruthy();
-    expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
+    expect(screen.getByText('Link a Rhythm to this Foundation to start building your Health score.'))
+      .toBeTruthy();
     expect(container.querySelector('.flexibility-history__list')).toBeNull();
     await user.click(container.querySelector('.strength-template__menu summary')!);
     await user.click(screen.getByRole('button', { name: 'Edit routine' }));
@@ -712,7 +717,8 @@ describe('Flexibility foundation presentation', () => {
     await user.click(within(editor).getByRole('button', { name: 'Save routine' }));
 
     expect(screen.getByRole('heading', { name: 'Morning routine' })).toBeTruthy();
-    expect(screen.getByText(/0 of 0 linked Rhythms scored\./)).toBeTruthy();
+    expect(screen.getByText('Link a Rhythm to this Foundation to start building your Health score.'))
+      .toBeTruthy();
     expect(container.querySelector('.flexibility-history__list')).toBeNull();
   });
 

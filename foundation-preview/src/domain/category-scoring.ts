@@ -148,16 +148,7 @@ export function selectWeightCategoryScore(
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>,
   archivedRhythmIds: readonly string[]
 ): CategoryScoreSelection {
-  const archived = new Set(archivedRhythmIds);
-  const linkedRhythms = [...new Map(rhythms
-    .filter(rhythm =>
-      rhythm.healthLogCapability === 'weight'
-      && rhythm.categoryIds?.includes('health')
-      && foundationRhythmIds(rhythm).includes('health-weight')
-    )
-    .map(rhythm => [rhythm.id, rhythm] as const)
-  ).values()];
-  const activeRhythms = linkedRhythms.filter(rhythm => !archived.has(rhythm.id));
+  const activeRhythms = selectActiveWeightRhythms(rhythms, archivedRhythmIds);
   const consistency = averageAvailableScores(activeRhythms.map(rhythm =>
     scoredMetricScore(rhythmScores.get(rhythm.id), 'consistency')
   ));
@@ -177,6 +168,22 @@ export function selectWeightCategoryScore(
     onTrack,
     health
   };
+}
+
+export function selectActiveWeightRhythms(
+  rhythms: readonly RhythmPreview[],
+  archivedRhythmIds: Iterable<string>
+): RhythmPreview[] {
+  const archived = new Set(archivedRhythmIds);
+  const linkedRhythms = [...new Map(rhythms
+    .filter(rhythm =>
+      rhythm.healthLogCapability === 'weight'
+      && rhythm.categoryIds?.includes('health')
+      && foundationRhythmIds(rhythm).includes('health-weight')
+    )
+    .map(rhythm => [rhythm.id, rhythm] as const)
+  ).values()];
+  return linkedRhythms.filter(rhythm => !archived.has(rhythm.id));
 }
 
 export function selectStrengthCategoryScore(
