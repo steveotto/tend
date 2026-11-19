@@ -47,7 +47,7 @@ export type CalendarRange = 'today' | 'week' | 'month';
 export type CalendarRangeWindow = { start: number; end: number };
 
 const maximumRecurringDurationDays = 366;
-const maximumEventComponentsPerFeed = 2_048;
+const maximumEventComponentsPerFeed = 8_192;
 const maximumRecurrenceValuesPerFeed = 1_024;
 const maximumExpandedOccurrencesPerFeed = 4_096;
 const maximumUncountedDailyInterval = 1;
@@ -518,6 +518,22 @@ function parseCalendarFeed(
         : query.kind === 'upcoming'
           ? query.now
           : query.start;
+      if (!event.isRecurring()) {
+        const start = event.startDate;
+        const end = event.endDate;
+        const allDay = start.isDate;
+        const startsAt = eventStartsAt(start, allDay, timeZone);
+        const duration = end.toJSDate().getTime() - start.toJSDate().getTime();
+        if (!isWithinQuery(
+          start,
+          end,
+          allDay,
+          query,
+          timeZone,
+          localDay,
+          startsAt + duration
+        )) continue;
+      }
       const maySeek = exceptions.length === 0 || canSeekPastExactExceptions;
       const seekStart = maySeek
         ? recurrenceSeekStart(event, component, queryStart, timeZone)
