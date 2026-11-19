@@ -54,6 +54,13 @@ export async function onRequest(context: { request: Request }): Promise<Response
         stageStartedAt = performance.now();
         log({ stage, outcome: 'started' });
       },
+      onDiagnostic: diagnostic => {
+        log({
+          stage: 'feed_parse',
+          outcome: 'limit_exceeded',
+          ...diagnostic
+        });
+      },
       onException: (failedStage, error) => {
         log({
           stage: failedStage,

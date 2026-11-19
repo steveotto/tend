@@ -253,6 +253,53 @@ describe('Cloudflare Pages Calendar reader', () => {
     expect(loggedText).not.toContain(source.url);
   });
 
+  it('correlates privacy-safe recurrence-limit diagnostics to the reader request', async () => {
+    const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
+    const denseFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:private-synthetic-uid',
+      'DTSTART:20261114T120000Z',
+      'DTEND:20261114T120001Z',
+      'RRULE:FREQ=SECONDLY',
+      'SUMMARY:private synthetic title',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => calendarResponse(denseFeed)));
+
+    const response = await onRequest({
+      request: request(validBody(), { requestId })
+    });
+    const entries = log.mock.calls.map(([entry]) => JSON.parse(String(entry)) as Record<string, unknown>);
+    const diagnostic = entries.find(entry => entry.outcome === 'limit_exceeded');
+    const loggedText = log.mock.calls.map(([entry]) => String(entry)).join('\n');
+
+    expect(response.status).toBe(422);
+    expect(response.headers.get('x-tend-calendar-request-id')).toBe(requestId);
+    expect(diagnostic).toMatchObject({
+      event: 'calendar_reader',
+      requestId,
+      stage: 'feed_parse',
+      outcome: 'limit_exceeded',
+      limitName: 'expanded-occurrences',
+      configuredThreshold: 4_096,
+      observedCount: 4_097,
+      processingStage: 'recurrence-expansion',
+      aggregateCounts: {
+        eventComponents: 1,
+        recurrenceValues: 1,
+        expandedOccurrences: 4_097
+      }
+    });
+    expect(loggedText).not.toContain(source.url);
+    expect(loggedText).not.toContain('private-synthetic-uid');
+    expect(loggedText).not.toContain('private synthetic title');
+  });
+
   it('returns a server-generated correlation ID when the supplied ID is malformed', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const response = await onRequest({

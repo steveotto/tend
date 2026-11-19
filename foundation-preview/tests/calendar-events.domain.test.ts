@@ -348,6 +348,28 @@ describe('calendar feed reader', () => {
     expect(result.issues).toEqual([]);
   });
 
+  it('does not spend the recurrence budget on a cancelled master series', () => {
+    const raw = calendar([
+      'BEGIN:VEVENT',
+      'UID:cancelled-old-daily',
+      'DTSTART:18000101T090000Z',
+      'DTEND:18000101T093000Z',
+      'RRULE:FREQ=DAILY',
+      'STATUS:CANCELLED',
+      'SUMMARY:Cancelled historical series',
+      'END:VEVENT'
+    ].join('\r\n'));
+    const result = parseCalendarFeedForRange(
+      raw,
+      source,
+      Date.parse('2026-11-14T00:00:00Z'),
+      Date.parse('2026-12-15T00:00:00Z'),
+      'UTC'
+    );
+
+    expect(result).toEqual({ valid: true, events: [], issues: [] });
+  });
+
   it('preserves finite recurrence counts and fails explicitly when an old phased rule exceeds its work budget', () => {
     const counted = parseCalendarFeedForRange(calendar([
       'BEGIN:VEVENT',
@@ -372,8 +394,62 @@ describe('calendar feed reader', () => {
     expect(phased).toEqual({
       valid: false,
       events: [],
-      issues: [{ eventNumber: 1, kind: 'expansion-limit' }]
+      issues: [{ eventNumber: 1, kind: 'expansion-limit' }],
+      expansionLimit: {
+        limitName: 'expanded-occurrences',
+        configuredThreshold: 4_096,
+        observedCount: 4_097,
+        processingStage: 'recurrence-expansion',
+        aggregateCounts: {
+          eventComponents: 1,
+          recurrenceValues: 1,
+          expandedOccurrences: 4_097
+        }
+      }
     });
+  });
+
+  it('seeks an old daily series with exact moved and cancelled exceptions without losing in-range results', () => {
+    const raw = calendar([
+      'BEGIN:VEVENT',
+      'UID:daily-with-exceptions',
+      'DTSTART;TZID=America/New_York:20000101T090000',
+      'DTEND;TZID=America/New_York:20000101T093000',
+      'RRULE:FREQ=DAILY',
+      'SUMMARY:Daily meeting',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:daily-with-exceptions',
+      'RECURRENCE-ID;TZID=America/New_York:20000102T090000',
+      'DTSTART;TZID=America/New_York:20261114T110000',
+      'DTEND;TZID=America/New_York:20261114T113000',
+      'SUMMARY:Moved meeting',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:daily-with-exceptions',
+      'RECURRENCE-ID;TZID=America/New_York:20261115T090000',
+      'STATUS:CANCELLED',
+      'SUMMARY:Cancelled meeting',
+      'END:VEVENT'
+    ].join('\r\n'), newYorkTimeZone);
+
+    const result = parseCalendarFeedForRange(
+      raw,
+      source,
+      Date.parse('2026-11-14T05:00:00Z'),
+      Date.parse('2026-12-15T05:00:00Z'),
+      'America/New_York'
+    );
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.events).toHaveLength(31);
+    expect(result.events.map(event => [event.title, event.startsAt])).toContainEqual([
+      'Moved meeting',
+      Date.parse('2026-11-14T16:00:00Z')
+    ]);
+    expect(result.events.map(event => event.startsAt)).not.toContain(Date.parse('2026-11-15T14:00:00Z'));
+    expect(result.issues).toEqual([]);
   });
 
   it('rejects recurrence-value lists above the parser work bound before expanding them', () => {
@@ -391,7 +467,51 @@ describe('calendar feed reader', () => {
     expect(result).toEqual({
       valid: false,
       events: [],
-      issues: [{ eventNumber: null, kind: 'expansion-limit' }]
+      issues: [{ eventNumber: null, kind: 'expansion-limit' }],
+      expansionLimit: {
+        limitName: 'recurrence-values',
+        configuredThreshold: 1_024,
+        observedCount: 1_025,
+        processingStage: 'feed-structure',
+        aggregateCounts: {
+          eventComponents: 1,
+          recurrenceValues: 1_025,
+          expandedOccurrences: 0
+        }
+      }
+    });
+  });
+
+  it('identifies feeds that exceed the event-component bound', () => {
+    const manyEvents = Array.from({ length: 2_049 }, (_, index) => [
+      'BEGIN:VEVENT',
+      `UID:component-${index}`,
+      'DTSTART:20261114T090000Z',
+      'END:VEVENT'
+    ].join('\r\n')).join('\r\n');
+    const result = parseCalendarFeedForRange(
+      calendar(manyEvents),
+      source,
+      Date.parse('2026-11-14T00:00:00Z'),
+      Date.parse('2026-12-15T00:00:00Z'),
+      'UTC'
+    );
+
+    expect(result).toEqual({
+      valid: false,
+      events: [],
+      issues: [{ eventNumber: null, kind: 'expansion-limit' }],
+      expansionLimit: {
+        limitName: 'event-components',
+        configuredThreshold: 2_048,
+        observedCount: 2_049,
+        processingStage: 'feed-structure',
+        aggregateCounts: {
+          eventComponents: 2_049,
+          recurrenceValues: 0,
+          expandedOccurrences: 0
+        }
+      }
     });
   });
 
@@ -409,7 +529,47 @@ describe('calendar feed reader', () => {
     expect(result).toEqual({
       valid: false,
       events: [],
-      issues: [{ eventNumber: 1, kind: 'expansion-limit' }]
+      issues: [{ eventNumber: 1, kind: 'expansion-limit' }],
+      expansionLimit: {
+        limitName: 'expanded-occurrences',
+        configuredThreshold: 4_096,
+        observedCount: 4_097,
+        processingStage: 'recurrence-expansion',
+        aggregateCounts: {
+          eventComponents: 1,
+          recurrenceValues: 1,
+          expandedOccurrences: 4_097
+        }
+      }
+    });
+  });
+
+  it('fails explicitly when an old THISANDFUTURE exception prevents a safe recurrence seek', () => {
+    const result = parseCalendarFeedForRange(calendar([
+      'BEGIN:VEVENT',
+      'UID:old-range-exception',
+      'DTSTART:20000101T090000Z',
+      'DTEND:20000101T093000Z',
+      'RRULE:FREQ=DAILY',
+      'SUMMARY:Daily meeting',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:old-range-exception',
+      'RECURRENCE-ID;RANGE=THISANDFUTURE:20000102T090000Z',
+      'DTSTART:20000102T100000Z',
+      'DTEND:20000102T103000Z',
+      'SUMMARY:Shifted series',
+      'END:VEVENT'
+    ].join('\r\n')), source, Date.parse('2026-11-14T00:00:00Z'), Date.parse('2026-12-15T00:00:00Z'), 'UTC');
+
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.events).toEqual([]);
+    expect(result.expansionLimit).toMatchObject({
+      limitName: 'expanded-occurrences',
+      configuredThreshold: 4_096,
+      observedCount: 4_097,
+      processingStage: 'recurrence-expansion'
     });
   });
 

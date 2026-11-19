@@ -150,6 +150,32 @@ describe('Pages production artifact', () => {
       'END:VCALENDAR',
       ''
     ].join('\r\n');
+    const historyExceptionsFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:synthetic-old-daily-with-exceptions',
+      'DTSTART:20000101T090000Z',
+      'DTEND:20000101T093000Z',
+      'RRULE:FREQ=DAILY',
+      'SUMMARY:Daily meeting',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-old-daily-with-exceptions',
+      'RECURRENCE-ID:20000102T090000Z',
+      'DTSTART:20261114T110000Z',
+      'DTEND:20261114T113000Z',
+      'SUMMARY:Moved meeting',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-old-daily-with-exceptions',
+      'RECURRENCE-ID:20261115T090000Z',
+      'STATUS:CANCELLED',
+      'SUMMARY:Cancelled meeting',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
     const denseFeed = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
@@ -166,11 +192,15 @@ describe('Pages production artifact', () => {
     const readerPath = path.resolve(previewDirectory, 'src/domain/calendar-reader.ts');
     const functionSource = [
       `import { handleCalendarRead } from ${JSON.stringify(readerPath)};`,
-      `const feeds = ${JSON.stringify({ history: historyFeed, dense: denseFeed })};`,
+      `const feeds = ${JSON.stringify({
+        history: historyFeed,
+        historyExceptions: historyExceptionsFeed,
+        dense: denseFeed
+      })};`,
       'export async function onRequest({ request }: { request: Request }) {',
       '  return handleCalendarRead(request, {',
       '    fetchImpl: async (target) => {',
-      '      const key = new URL(String(target)).pathname.endsWith("/dense") ? "dense" : "history";',
+      '      const key = new URL(String(target)).pathname.split("/").at(-1);',
       '      return new Response(feeds[key], { status: 200, headers: { "content-type": "text/calendar" } });',
       '    }',
       '  });',
@@ -209,7 +239,7 @@ describe('Pages production artifact', () => {
       assert.equal(ready, true, 'Wrangler Pages dev should start and accept requests.');
 
       const rangeStart = Date.parse('2026-11-14T00:00:00Z');
-      const readFeed = (name: 'history' | 'dense') => fetch(`${origin}/api/calendar/read`, {
+      const readFeed = (name: 'history' | 'historyExceptions' | 'dense') => fetch(`${origin}/api/calendar/read`, {
         method: 'POST',
         headers: { origin, 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -235,6 +265,17 @@ describe('Pages production artifact', () => {
       assert.equal(historyResult.issueCount, 0);
       assert.equal(historyResult.events[0]?.startsAt, Date.parse('2026-11-14T09:00:00Z'));
       assert.equal(historyResult.events.at(-1)?.startsAt, Date.parse('2026-12-14T09:00:00Z'));
+
+      const exceptionResponse = await readFeed('historyExceptions');
+      const exceptionResult = await exceptionResponse.json() as {
+        events: Array<{ startsAt: number }>;
+        issueCount: number;
+      };
+      assert.equal(exceptionResponse.status, 200);
+      assert.equal(exceptionResult.events.length, 31);
+      assert.equal(exceptionResult.issueCount, 0);
+      assert.ok(exceptionResult.events.some(event => event.startsAt === Date.parse('2026-11-14T11:00:00Z')));
+      assert.ok(!exceptionResult.events.some(event => event.startsAt === Date.parse('2026-11-15T09:00:00Z')));
 
       const denseResponse = await readFeed('dense');
       const denseText = await denseResponse.text();
