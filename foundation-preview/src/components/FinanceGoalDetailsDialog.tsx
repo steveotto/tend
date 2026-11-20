@@ -16,14 +16,6 @@ export function FinanceGoalDetailsDialog({
   onCorrectCheckIn: (checkIn: MoneyGoal['checkIns'][number]) => void;
   onClose: () => void;
 }) {
-  const availableFoundations = useAvailableFoundations(foundations);
-  const linkedFoundation = goal.foundationId
-    ? availableFoundations.find(foundation => foundation.id === goal.foundationId)
-    : undefined;
-  const hasSavedFoundation = goal.foundationId
-    ? foundations.some(foundation => foundation.id === goal.foundationId)
-    : false;
-
   return (
     <MoneyGoalDialog
       eyebrow={goal.direction === 'increase' ? 'Savings increase' : 'Debt reduction'}
