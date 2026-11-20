@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   cardioDataIssues,
+  cardioDistanceFromMiles,
+  cardioDistanceToMiles,
+  cardioPaceSecondsPerUnit,
   cardioWeekStart,
   createCardioData,
   deleteCardioRun,
   parseCardioGoalInput,
+  parseCardioRunDuration,
   saveCardioDataCommand,
   saveCardioGoals,
   saveCardioRun,
@@ -16,6 +20,7 @@ import {
 import type { CardioData, CardioRun } from '../src/domain/cardio.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import { todayRhythms } from '../src/domain/preview-data.ts';
+import { createPreviewEnvelope, createSamplePreviewData, parsePreviewBackup } from '../src/domain/preview-state.ts';
 import { prepareDatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -261,6 +266,41 @@ describe('Cardio domain', () => {
     expect(validateCardioGoals({ weeklyRunTarget: 2, weeklyMileTarget: 8.5 })).toBeNull();
   });
 
+  it('parses optional durations and calculates pace in miles or kilometers without inventing invalid results', () => {
+    expect(parseCardioRunDuration('', '', '')).toEqual({ valid: true, durationSeconds: null });
+    expect(parseCardioRunDuration('1', '02', '03')).toEqual({ valid: true, durationSeconds: 3723 });
+    expect(parseCardioRunDuration('', '60', '0').valid).toBe(false);
+    expect(parseCardioRunDuration('', '0', '0').valid).toBe(false);
+    expect(cardioPaceSecondsPerUnit(2700, 6)).toBe(450);
+    expect(cardioPaceSecondsPerUnit(3600, 10)).toBe(360);
+    expect(cardioPaceSecondsPerUnit(null, 10)).toBeNull();
+    expect(cardioPaceSecondsPerUnit(0, 10)).toBeNull();
+    expect(cardioPaceSecondsPerUnit(3600, 0)).toBeNull();
+    expect(cardioPaceSecondsPerUnit(3600, Number.NaN)).toBeNull();
+    expect(cardioDistanceFromMiles(cardioDistanceToMiles(10, 'km'), 'km')).toBeCloseTo(10, 10);
+  });
+
+  it('round-trips an optional run duration and entry unit in the versioned preview envelope', () => {
+    const data = createSamplePreviewData();
+    data.cardio.runs = [run({
+      id: 'timed-kilometer-run',
+      distance: cardioDistanceToMiles(10, 'km'),
+      distanceUnit: 'km',
+      durationSeconds: 3600
+    })];
+
+    const backup = JSON.stringify(createPreviewEnvelope(data));
+    const restored = parsePreviewBackup(backup, today);
+
+    expect(restored.valid).toBe(true);
+    if (!restored.valid) return;
+    expect(restored.envelope.data.cardio.runs).toEqual([expect.objectContaining({
+      id: 'timed-kilometer-run',
+      distanceUnit: 'km',
+      durationSeconds: 3600
+    })]);
+  });
+
   it('uses explicit date-only Monday–Sunday boundaries across month, year, and DST dates', () => {
     expect(cardioWeekStart('2026-10-18')).toBe('2026-10-12');
     expect(cardioWeekStart('2026-10-19')).toBe('2026-10-19');
@@ -321,6 +361,31 @@ describe('Cardio domain', () => {
     expect(saveCardioRun(edited.data, run({ id: 'bad-distance', distance: Number.NaN }), today)).toMatchObject({ valid: false });
     expect(deleteCardioRun(edited.data, 'stable').deleted?.id).toBe('stable');
     expect(deleteCardioRun(edited.data, 'stable').data.runs).toEqual([]);
+  });
+
+  it('preserves duration and display units, clears them explicitly, and rejects invalid stored durations', () => {
+    const saved = saveCardioRun(createCardioData(), run({
+      id: 'timed-run',
+      distance: cardioDistanceToMiles(10, 'km'),
+      distanceUnit: 'km',
+      durationSeconds: 3600
+    }), today);
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(validatedCardioRuns(saved.data, today).records[0]).toMatchObject({
+      distanceUnit: 'km',
+      durationSeconds: 3600
+    });
+
+    const cleared = saveCardioRun(saved.data, run({ id: 'timed-run' }), today);
+    expect(cleared.valid).toBe(true);
+    if (!cleared.valid) return;
+    expect(cleared.data.runs[0]).not.toHaveProperty('distanceUnit');
+    expect(cleared.data.runs[0]).not.toHaveProperty('durationSeconds');
+    expect(saveCardioRun(createCardioData(), run({ durationSeconds: 0 }), today))
+      .toMatchObject({ valid: false });
+    expect(saveCardioRun(createCardioData(), run({ durationSeconds: Number.NaN }), today))
+      .toMatchObject({ valid: false });
   });
 
   it('resolves Cardio logging through the selected date schedule and season, including backfill', () => {

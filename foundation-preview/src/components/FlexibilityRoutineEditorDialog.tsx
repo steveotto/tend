@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
@@ -39,7 +39,7 @@ export function FlexibilityRoutineEditorDialog({
     onDraftChangeRef.current = onDraftChange;
   }, [onDraftChange]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onDraftChangeRef.current?.(draft);
   }, [draft]);
 

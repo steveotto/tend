@@ -94,7 +94,7 @@ type WeightTab = 'progress' | 'measurements' | 'rhythms';
 
 const weightTabs = [
   { id: 'progress', label: 'Progress', tabId: 'weight-tab-progress', panelId: 'weight-panel-progress' },
-  { id: 'measurements', label: 'Measurements', tabId: 'weight-tab-measurements', panelId: 'weight-panel-measurements' },
+  { id: 'measurements', label: 'Weigh-Ins', tabId: 'weight-tab-measurements', panelId: 'weight-panel-measurements' },
   { id: 'rhythms', label: 'Rhythms', tabId: 'weight-tab-rhythms', panelId: 'weight-panel-rhythms' }
 ] as const satisfies readonly SegmentedTab<WeightTab>[];
 
@@ -235,7 +235,7 @@ export function WeightView({
       )}
       <section
         className={foundationNavigation ? 'strength-section-panels' : 'weight-progress'}
-        aria-label="Weight progress and measurement history"
+        aria-label="Weight progress and weigh-in history"
       >
         <section
           id="weight-panel-progress"
@@ -333,7 +333,7 @@ export function WeightView({
         >
           {foundationNavigation && (
             <FoundationSectionHeading
-              title="Measurements"
+              title="Weigh-Ins"
               headingId="weight-measurements-heading"
               subtitle="Your recorded weigh-ins."
               actions={
@@ -348,7 +348,7 @@ export function WeightView({
             {!foundationNavigation && (
               <header className="weight-card-heading">
                 <div><h2 id="weight-history-heading">Weigh-in history</h2>
-                  <p>Measurements are stored independently from workout templates.</p>
+                  <p>Weigh-ins are stored independently from workout templates.</p>
                 </div>
                 <button type="button" className="btn mini"
                   onClick={event => openDialog({ kind: 'weigh-in' }, event)}>Add weigh-in</button>
@@ -533,7 +533,7 @@ function WeightGoalsDialog({
 
   return (
     <MoneyGoalDialog title="Weight goals" labelledBy="weight-goals-title" titleId="weight-goals-title"
-      initialFocusId="weight-goal-start" onClose={onClose} closeLabel="Close Weight goals"
+      onClose={onClose} closeLabel="Close Weight goals"
       bodyClassName="fitness-goals-dialog-body" dialogClassName="money-goal-dialog--fitness-goals" phoneFullScreen>
       <form className="weight-form fitness-goals-form" noValidate onSubmit={submit}>
         <div className="fitness-goals-scroll">
@@ -702,7 +702,7 @@ function WeightLogDialog({
   return (
     <MoneyGoalDialog title={measurement ? 'Edit weigh-in' : 'Add weigh-in'}
       labelledBy="weight-entry-title" titleId="weight-entry-title"
-      initialFocusId="weight-entry-date" onClose={onClose} closeLabel="Close weigh-in">
+      onClose={onClose} closeLabel="Close weigh-in" phoneFullScreen>
       <form className="weight-form" noValidate onSubmit={submit}>
         <label>Date
           <input id="weight-entry-date" type="date" max={today} value={date}

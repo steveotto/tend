@@ -98,6 +98,8 @@ describe('Friendships view', () => {
       <PeopleCard
         person={{ ...syntheticPeople[0]!, displayName: 'Alexandria Brooks-Williams' }}
         classifications={[]}
+        relationshipLabel="A long-standing synthetic relationship"
+        relationshipTone="marriage"
         birthday={{ dateLabel: 'Dec 2', countdownLabel: 'in 32d', age: 47 }}
         connectionRecency={{ date: '2026-09-28', label: '3 wk ago' }}
         onSelect={onSelect}
@@ -111,6 +113,8 @@ describe('Friendships view', () => {
     expect(within(navigation).getByText('Age 47').tagName).toBe('STRONG');
     expect(within(navigation).getByText('Dec 2')).toBeTruthy();
     expect(within(navigation).getByText('Alexandria')).toBeTruthy();
+    expect(navigation.querySelector('.people-card__name')?.nextElementSibling?.textContent)
+      .toContain('A long-standing synthetic relationship');
     expect(within(navigation).queryByText('Alexandria Brooks-Williams')).toBeNull();
     expect(within(navigation).queryByText('Score unavailable')).toBeNull();
     expect(within(navigation).queryByText('No connections yet')).toBeNull();
@@ -119,6 +123,9 @@ describe('Friendships view', () => {
     expect(within(navigation).queryByText('Last connected')).toBeNull();
     expect(within(navigation).getByText('3 wk ago')).toBeTruthy();
     expect(navigation.querySelector('.people-card__connection-icon')?.getAttribute('aria-hidden')).toBe('true');
+    const birthdayFooter = navigation.querySelector('.people-card__birthday-footer');
+    expect(birthdayFooter?.children[0]?.classList.contains('people-card__birthday')).toBe(true);
+    expect(birthdayFooter?.children[1]?.classList.contains('people-card__age')).toBe(true);
 
     await user.tab();
     expect(document.activeElement).toBe(navigation);
@@ -128,7 +135,7 @@ describe('Friendships view', () => {
     expect(onSelect).toHaveBeenCalledOnce();
   });
 
-  it('shows only the stable assigned relationship group beside connection detail', () => {
+  it('shows every existing category badge before the right-aligned connection detail', () => {
     const person = {
       ...syntheticPeople[0]!,
       displayName: 'Alexandria Brooks-Williams'
@@ -160,12 +167,12 @@ describe('Friendships view', () => {
     const relationshipGroup = within(identity).getByRole('group', {
       name: 'Alexandria Brooks-Williams relationship group'
     });
-    expect(relationshipGroup.textContent).toBe('Marriage');
-    expect(relationshipGroup.children).toHaveLength(1);
+    expect(relationshipGroup.textContent).toBe('MarriageParentingFriends');
+    expect(relationshipGroup.children).toHaveLength(3);
     const metaRow = identity.querySelector('.people-card__meta-row');
     expect(metaRow?.contains(relationshipGroup)).toBe(true);
     expect(metaRow?.contains(connectionDetail)).toBe(true);
-    expect(connectionDetail.compareDocumentPosition(relationshipGroup) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(relationshipGroup.compareDocumentPosition(connectionDetail) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(within(connectionDetail).getByText('3 wk ago').previousElementSibling?.textContent).toBe('Connected');
     expect(within(connectionDetail).getByText('3 wk ago').classList.contains('people-card__connection-time')).toBe(true);

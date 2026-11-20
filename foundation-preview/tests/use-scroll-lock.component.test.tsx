@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useScrollLock } from '../src/hooks/useScrollLock.ts';
+import { MoneyGoalDialog } from '../src/components/MoneyGoalDialog.tsx';
 
 function Lock({ locked }: { locked: boolean }) {
   useScrollLock(locked);
@@ -17,6 +18,43 @@ function NestedLocks() {
       <Lock locked={secondLocked} />
       <button onClick={() => setFirstLocked(false)}>Close first</button>
       <button onClick={() => setSecondLocked(false)}>Close second</button>
+    </>
+  );
+}
+
+function NestedDialogs() {
+  const [parentOpen, setParentOpen] = useState(false);
+  const [childOpen, setChildOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setParentOpen(true)}>Open parent</button>
+      {parentOpen && (
+        <MoneyGoalDialog
+          title="Parent dialog"
+          labelledBy="parent-dialog-heading"
+          titleId="parent-dialog-heading"
+          initialFocusId="date-field"
+          onClose={() => setParentOpen(false)}
+          closeLabel="Close parent"
+          inert={childOpen}
+        >
+          <input id="date-field" type="date" />
+          <button type="button" onClick={() => setChildOpen(true)}>Open child</button>
+          <button type="button" onClick={() => setParentOpen(false)}>Save parent</button>
+          {childOpen && (
+            <MoneyGoalDialog
+              title="Child dialog"
+              labelledBy="child-dialog-heading"
+              titleId="child-dialog-heading"
+              onClose={() => setChildOpen(false)}
+              closeLabel="Close child"
+              portalToBody
+            >
+              <button type="button" onClick={() => setChildOpen(false)}>Close child content</button>
+            </MoneyGoalDialog>
+          )}
+        </MoneyGoalDialog>
+      )}
     </>
   );
 }
@@ -84,5 +122,39 @@ describe('useScrollLock', () => {
 
     expect(document.body.style.position).toBe('');
     expect(window.scrollTo).toHaveBeenCalledWith(0, 75);
+  });
+
+  it('focuses a dialog heading instead of a date field and preserves nested locks and focus', () => {
+    const queuedFrames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      queuedFrames.push(callback);
+      return queuedFrames.length;
+    });
+    const flushFrames = () => act(() => {
+      for (const callback of queuedFrames.splice(0)) callback(0);
+    });
+    render(<NestedDialogs />);
+    const opener = screen.getByRole('button', { name: 'Open parent' });
+    opener.focus();
+    fireEvent.click(opener);
+    const parent = screen.getByRole('dialog', { name: 'Parent dialog' });
+    const parentHeading = screen.getByRole('heading', { name: 'Parent dialog' });
+    expect(document.activeElement).toBe(parentHeading);
+    expect(document.activeElement).not.toBe(parent.querySelector('#date-field'));
+    expect(document.body.style.position).toBe('fixed');
+
+    const childOpener = within(parent).getByRole('button', { name: 'Open child' });
+    childOpener.focus();
+    fireEvent.click(childOpener);
+    expect(screen.getByRole('heading', { name: 'Child dialog' })).toBe(document.activeElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Close child content' }));
+    expect(document.body.style.position).toBe('fixed');
+    flushFrames();
+    expect(document.activeElement).toBe(childOpener);
+
+    fireEvent.click(within(parent).getByRole('button', { name: 'Save parent' }));
+    expect(document.body.style.position).toBe('');
+    flushFrames();
+    expect(document.activeElement).toBe(opener);
   });
 });

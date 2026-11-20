@@ -181,7 +181,10 @@ describe('Classic Tend import dry run', () => {
         }],
         runs: [{
           id: 'run-one', date: '2026-10-12', distance: 2.75, unit: 'mi',
-          rhythmId: 'run-rhythm', rhythmOccurrence: '2026-10-12', fitnessType: 'cardio'
+          rhythmId: 'run-rhythm', rhythmOccurrence: '2026-10-12', fitnessType: 'cardio',
+          durationSeconds: 1800
+        }, {
+          id: 'run-two', date: '2026-10-14', distance: 1.5, unit: 'mi'
         }],
         weighIns: [{ id: 'weight-one', date: '2026-10-13', weight: 150.25, unit: 'lb' }]
       }
@@ -191,11 +194,11 @@ describe('Classic Tend import dry run', () => {
     expect(result.candidate).not.toBeNull();
     expect(result.report.source).toEqual(expect.objectContaining({
       people: 2, rhythms: 3, events: 3, notes: 1, strengthTemplates: 1,
-      strengthLogs: 1, cardioRuns: 1, weightMeasurements: 1
+      strengthLogs: 1, cardioRuns: 2, weightMeasurements: 1
     }));
     expect(result.report.supported).toEqual(expect.objectContaining({
       rhythms: 3, rhythmCompletions: 2, connections: 1, cadences: 1, notes: 1,
-      strengthTemplates: 1, strengthLogs: 1, cardioGoals: 1, cardioRuns: 1,
+      strengthTemplates: 1, strengthLogs: 1, cardioGoals: 1, cardioRuns: 2,
       weightGoals: 1, weightMeasurements: 1
     }));
     expect(result.report.invalid).toEqual([]);
@@ -206,12 +209,21 @@ describe('Classic Tend import dry run', () => {
     expect(candidate.archivedRhythmIds).toContain(
       candidate.savedRhythms.find(item => item.title === 'Archived practice')!.id
     );
-    const run = candidate.cardio.runs[0] as { rhythmId: string; rhythmOccurrence: string; completionId: string; distance: number };
+    const run = candidate.cardio.runs[0] as {
+      rhythmId: string;
+      rhythmOccurrence: string;
+      completionId: string;
+      distance: number;
+      durationSeconds: number;
+    };
     expect(run).toMatchObject({
       rhythmId,
       rhythmOccurrence: '2026-10-12',
-      distance: 2.75
+      distance: 2.75,
+      durationSeconds: 1800
     });
+    expect(candidate.cardio.runs).toHaveLength(2);
+    expect(candidate.cardio.runs[1]).not.toHaveProperty('durationSeconds');
     expect(candidate.datedRhythmCompletions).toHaveLength(2);
     expect(candidate.datedRhythmCompletions.filter(item => item.rhythmId === rhythmId)).toHaveLength(1);
     expect(candidate.friendships.connections).toHaveLength(1);
@@ -224,6 +236,14 @@ describe('Classic Tend import dry run', () => {
       .toBe(poundsToKilograms(150.25));
     expect(candidate.people.some(person => person.id.startsWith('sample-person-'))).toBe(false);
     expect(validatePreviewEnvelope(createPreviewEnvelope(candidate), '2026-10-31').valid).toBe(true);
+
+    const invalidDuration = analyzeLegacyTendImport(JSON.stringify({
+      people: [{ id: 'legacy-person', name: 'Taylor Example' }],
+      fitness: {
+        runs: [{ id: 'invalid-run', date: '2026-10-15', distance: 2, unit: 'mi', durationSeconds: 0 }]
+      }
+    }), '2026-10-31');
+    expect(invalidDuration.report.invalid).toContainEqual({ path: '/fitness/runs/0', count: 1 });
 
     const values = new Map<string, string>();
     const storage = {

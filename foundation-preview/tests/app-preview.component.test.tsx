@@ -5883,7 +5883,6 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     const weekday = new Date().getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
     const weekdayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][weekday]!;
-    const weekdayCardLabel = ['Su', 'M', 'T', 'W', 'R', 'F', 'S'][weekday]!;
     render(<App />);
     await saveCardCompletion(user, 'Pray together');
     let editor = await openRhythmEditorFromScore(user, 'Pray together');
@@ -5903,7 +5902,7 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: 'Apply' }));
     const updatedCard = getTodayRhythmArticle('Updated prayer rhythm');
     expect(updatedCard.querySelector('.rhythm-metadata-schedule-label')?.textContent)
-      .toBe(`Every ${weekdayCardLabel}`);
+      .toBe(weekdayName);
     editor = await openRhythmEditorFromScore(user, 'Updated prayer rhythm');
     const unsavedTitle = within(editor).getByLabelText('Title');
     await user.clear(unsavedTitle);
@@ -6000,7 +5999,7 @@ describe('Tend Today preview', () => {
       name: historyButtonName('View scores and history for Updated prayer rhythm')
     })).toBeTruthy();
     expect(archivedDetails.querySelector('.rhythm-metadata-schedule-label')?.textContent)
-      .toBe(`Every ${weekdayCardLabel}`);
+      .toBe(weekdayName);
     expect(archivedDetails.querySelector('.rhythm-metadata-schedule-group .visually-hidden')?.textContent)
       .toContain(weekdayName);
     expect(within(archivedDetails).queryByRole('button', { name: /^Edit / })).toBeNull();
@@ -6046,7 +6045,7 @@ describe('Tend Today preview', () => {
     expect(restoredCard).toBeTruthy();
     expect(within(screen.getByRole('article', { name: 'Updated prayer rhythm' })).queryByText('Archived', { exact: true })).toBeNull();
     expect(restoredCard.querySelector('.rhythm-metadata-schedule-label')?.textContent)
-      .toBe(`Every ${weekdayCardLabel}`);
+      .toBe(weekdayName);
     expect(restoredCard.querySelector('.rhythm-metadata-schedule-group .visually-hidden')?.textContent)
       .toContain(weekdayName);
     await waitFor(() => {
@@ -6123,7 +6122,7 @@ describe('Tend Today preview', () => {
     await user.click(within(library).getByRole('button', { name: 'Create' }));
     const editor = screen.getByRole('dialog', { name: 'Create goal' });
     await user.type(within(editor).getByLabelText('Title'), 'Car payoff');
-    await user.selectOptions(within(editor).getByLabelText('Goal type'), 'decrease');
+    await user.selectOptions(within(editor).getByRole('combobox', { name: 'Goal type' }), 'decrease');
     await user.type(within(editor).getByLabelText('Starting balance'), '100.00');
     fireEvent.change(within(editor).getByLabelText('Starting date'), { target: { value: '2026-10-01' } });
     await user.type(within(editor).getByLabelText('Target balance'), '120.00');
@@ -6212,8 +6211,7 @@ describe('Tend Today preview', () => {
     expect(within(details).queryByRole('button', { name: /supporting Rhythm/i })).toBeNull();
     await user.click(within(details).getByRole('button', { name: 'Edit goal' }));
     let editor = screen.getByRole('dialog', { name: 'Edit goal' });
-    expect((within(editor).getByLabelText('Related Finance Foundation') as HTMLSelectElement).value)
-      .toBe(FINANCE_SAVING_RESERVES_ID);
+    expect(within(editor).queryByLabelText('Related Finance Foundation')).toBeNull();
     expect(within(editor).queryByText(/supporting Rhythm/i)).toBeNull();
     const title = within(editor).getByLabelText('Title');
     await user.clear(title);
@@ -8319,7 +8317,7 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('region', { name: 'Foundations' }))
       .getByRole('button', { name: /Open Weight foundation details/ }));
     expect(screen.getByRole('heading', { name: 'Body weight progress' })).toBeTruthy();
-    await user.click(screen.getByRole('tab', { name: 'Measurements' }));
+    await user.click(screen.getByRole('tab', { name: 'Weigh-Ins' }));
     expect(screen.getByRole('heading', { name: 'Weigh-in history' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Add weigh-in' }));
     const foundationWeighInDialog = screen.getByRole('dialog', { name: 'Add weigh-in' });
@@ -9487,7 +9485,7 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('tab', { name: 'Foundations' }));
     await user.click(within(screen.getByRole('region', { name: 'Foundations' }))
       .getByRole('button', { name: /Open Weight foundation details/ }));
-    await user.click(screen.getByRole('tab', { name: 'Measurements' }));
+    await user.click(screen.getByRole('tab', { name: 'Weigh-Ins' }));
     await user.click(screen.getByRole('button', { name: /^Delete weigh-in from/ }));
     await waitFor(() => {
       const afterDelete = parsePreviewBackup(
@@ -9614,8 +9612,12 @@ describe('Tend Today preview', () => {
     expect(cardioDetailScore).toBe(Number(categoryMeter.getAttribute('aria-valuenow')));
     expect(cardioCard.querySelector('.foundation-card__score')?.textContent)
       .toBe(String(Math.round(cardioDetailScore)));
-    expect(screen.getByText('3 mi')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /^Delete run from/ }));
+    expect(screen.getByText('3 miles')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Edit run from/ }));
+    const editRun = screen.getByRole('dialog', { name: 'Edit run' });
+    await user.click(within(editRun).getByRole('button', { name: 'Delete run' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Delete this run?' }))
+      .getByRole('button', { name: 'Delete run' }));
     await waitFor(() => {
       const afterDelete = parsePreviewBackup(
         window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,

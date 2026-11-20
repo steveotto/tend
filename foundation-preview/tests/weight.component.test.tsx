@@ -76,7 +76,7 @@ describe('Weight preview presentation', () => {
     expect(onAddLinkedRhythm).not.toHaveBeenCalled();
   });
 
-  it('uses keyboard-operable Progress, Measurements, and Rhythms Foundation panels', async () => {
+  it('uses keyboard-operable Progress, Weigh-Ins, and Rhythms Foundation panels', async () => {
     const user = userEvent.setup();
     const data: WeightData = {
       ...createWeightData(),
@@ -92,7 +92,7 @@ describe('Weight preview presentation', () => {
     const tabs = screen.getByRole('tablist', { name: 'Weight Foundation sections' });
     const insights = screen.getByRole('region', { name: 'Weight insights' });
     const progress = within(tabs).getByRole('tab', { name: 'Progress' });
-    const measurements = within(tabs).getByRole('tab', { name: 'Measurements' });
+    const measurements = within(tabs).getByRole('tab', { name: 'Weigh-Ins' });
     const rhythms = within(tabs).getByRole('tab', { name: 'Rhythms' });
     expect(progress.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tabpanel', { name: 'Progress' })).toBeTruthy();
@@ -112,10 +112,12 @@ describe('Weight preview presentation', () => {
     expect(progress.getAttribute('aria-selected')).toBe('true');
     await user.keyboard('{ArrowRight}');
     expect(measurements.getAttribute('aria-selected')).toBe('true');
-    expect(within(screen.getByRole('tabpanel', { name: 'Measurements' }))
+    expect(within(screen.getByRole('tabpanel', { name: 'Weigh-Ins' }))
       .getByText('Oct 20, 2026')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Add weigh-in' }));
-    expect(screen.getByRole('dialog', { name: 'Add weigh-in' })).toBeTruthy();
+    const dialog = screen.getByRole('dialog', { name: 'Add weigh-in' });
+    expect(document.activeElement).toBe(within(dialog).getByRole('heading', { name: 'Add weigh-in' }));
+    expect(document.activeElement).not.toBe(within(dialog).getByLabelText('Date'));
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(measurements.getAttribute('aria-selected')).toBe('true');
     expect(onChange).not.toHaveBeenCalled();
@@ -280,6 +282,8 @@ describe('Weight preview presentation', () => {
     const opener = screen.getByRole('button', { name: 'Add weigh-in' });
     await user.click(opener);
     const dialog = screen.getByRole('dialog');
+    expect(document.activeElement).toBe(within(dialog).getByRole('heading', { name: 'Add weigh-in' }));
+    expect(document.activeElement).not.toBe(within(dialog).getByLabelText('Date'));
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(onChange).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(opener);
@@ -318,7 +322,7 @@ describe('Weight preview presentation', () => {
       />
     );
     const dialog = await screen.findByRole('dialog', { name: 'Add weigh-in' });
-    expect(screen.getByRole('tab', { name: 'Measurements' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Weigh-Ins' }).getAttribute('aria-selected')).toBe('true');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(onChange).not.toHaveBeenCalled();
     expect(onLogRequestClosed).toHaveBeenCalledOnce();
@@ -357,6 +361,8 @@ describe('Weight preview presentation', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(dialog.querySelector('.fitness-goals-scroll')).toBeTruthy();
+    expect(document.activeElement).toBe(within(dialog).getByRole('heading', { name: 'Weight goals' }));
+    expect(document.activeElement).not.toBe(within(dialog).getByLabelText('Starting weight (lb)'));
     await user.type(within(dialog).getByLabelText('Starting weight (lb)'), '200');
     await user.type(within(dialog).getByLabelText('Starting date'), '2026-10-01');
     await user.type(within(dialog).getByLabelText('Target weight (lb)'), '180');

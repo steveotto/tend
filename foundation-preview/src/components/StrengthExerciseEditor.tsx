@@ -318,7 +318,7 @@ export function StrengthExerciseEditor({
           <h3 id="strength-exercise-group-title">Exercise</h3>
           <label className="strength-form-field">
             Exercise name
-            <input autoFocus value={draft.name} maxLength={120} aria-invalid={Boolean(errors.name)}
+            <input value={draft.name} maxLength={120} aria-invalid={Boolean(errors.name)}
               aria-describedby={errors.name ? 'strength-exercise-name-error' : undefined}
               onChange={event => update('name', event.currentTarget.value)} />
             {errors.name && <span id="strength-exercise-name-error" className="strength-form-error">{errors.name}</span>}

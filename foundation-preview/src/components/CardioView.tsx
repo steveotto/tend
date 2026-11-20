@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import {
   cardioDataIssues,
+  cardioDistanceFromMiles,
+  cardioDistanceToMiles,
   cardioGoalSettings,
+  cardioPaceSecondsPerUnit,
   cardioRhythmOccurrenceError,
   addDateDays,
   cardioTargetsForDate,
@@ -10,6 +13,7 @@ import {
   deleteCardioRun,
   isCardioRun,
   parseCardioGoalInput,
+  parseCardioRunDuration,
   saveCardioGoals,
   saveCardioRun,
   selectCardioProgress,
@@ -17,7 +21,7 @@ import {
   validatedCardioRuns,
   validateCardioGoals
 } from '../domain/cardio.ts';
-import type { CardioData, CardioRun } from '../domain/cardio.ts';
+import type { CardioData, CardioDistanceUnit, CardioRun } from '../domain/cardio.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import {
   foundationCatalogue,
@@ -228,15 +232,16 @@ export function CardioView({
     }
   }
 
-  function removeRun(run: CardioRun) {
+  function removeRun(run: CardioRun): string | null {
     const result = deleteCardioRun(data, run.id);
-    if (!result.deleted) return;
+    if (!result.deleted) return 'This run is no longer available to delete.';
     const error = onChange(result.data);
     if (error) {
       setActionError(error);
-      return;
+      return error;
     }
     setActionError('');
+    return null;
   }
 
   return (
@@ -365,16 +370,12 @@ export function CardioView({
                 {[...runs].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).map(run => (
                   <li key={run.id}>
                     <div>
-                      <strong>{formatNumber(run.distance)} mi</strong>
+                      <strong>{formatRunDistance(run)}</strong>
                       <time dateTime={run.date}>{formatLongDate(run.date)}</time>
-                      {run.notes && <p>{run.notes}</p>}
-                      {run.rhythmId && <small>Linked to {rhythms.find(item => item.id === run.rhythmId)?.title ?? 'an unresolved Rhythm'}</small>}
                     </div>
                     <div className="cardio-history-actions">
                       <button type="button" className="btn mini ghost" aria-label={`Edit run from ${formatLongDate(run.date)}`}
                         onClick={event => openDialog({ kind: 'run', run }, event)}>Edit</button>
-                      <button type="button" className="btn mini ghost" aria-label={`Delete run from ${formatLongDate(run.date)}`}
-                        onClick={() => removeRun(run)}>Delete</button>
                     </div>
                   </li>
                 ))}
@@ -473,6 +474,7 @@ export function CardioView({
           {...(dialog.rhythm ? { initialRhythm: dialog.rhythm } : {})}
           onSave={onChange}
           onClose={closeDialog}
+          onDelete={removeRun}
         />
       )}
       {issues.length > 0 && (
@@ -650,6 +652,7 @@ function CardioRunDialog({
   run,
   initialRhythm,
   onSave,
+  onDelete,
   onClose
 }: {
   data: CardioData;
@@ -659,33 +662,61 @@ function CardioRunDialog({
   run?: CardioRun;
   initialRhythm?: RhythmPreview;
   onSave: (data: CardioData) => string | null;
+  onDelete: (run: CardioRun) => string | null;
   onClose: () => void;
 }) {
   const [date, setDate] = useState(run?.date ?? today);
-  const [distance, setDistance] = useState(run ? String(run.distance) : '');
-  const [distanceUnit, setDistanceUnit] = useState<'mi' | 'km'>(
-    run ? 'mi' : initialRhythm?.healthRunTarget?.unit ?? 'mi'
+  const [distanceUnit, setDistanceUnit] = useState<CardioDistanceUnit>(
+    run?.distanceUnit ?? initialRhythm?.healthRunTarget?.unit ?? 'mi'
   );
+  const [distance, setDistance] = useState(run
+    ? formatDistanceInput(cardioDistanceFromMiles(run.distance, run.distanceUnit ?? 'mi'))
+    : '');
+  const [durationHours, setDurationHours] = useState(run?.durationSeconds
+    ? String(Math.floor(run.durationSeconds / 3600)) : '');
+  const [durationMinutes, setDurationMinutes] = useState(run?.durationSeconds
+    ? String(Math.floor(run.durationSeconds % 3600 / 60)) : '');
+  const [durationSeconds, setDurationSeconds] = useState(run?.durationSeconds
+    ? String(run.durationSeconds % 60) : '');
   const [notes, setNotes] = useState(run?.notes ?? '');
   const [rhythmId, setRhythmId] = useState(run?.rhythmId ?? initialRhythm?.id ?? '');
   const [error, setError] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const submitting = useRef(false);
   const eligible = rhythms.filter(rhythm => rhythm.healthLogCapability === 'cardio');
   const selectedRhythm = rhythms.find(rhythm => rhythm.id === rhythmId);
+  const parsedDuration = parseCardioRunDuration(durationHours, durationMinutes, durationSeconds);
+  const numericDistance = Number(distance);
+  const paceSeconds = parsedDuration.valid
+    ? cardioPaceSecondsPerUnit(parsedDuration.durationSeconds, numericDistance)
+    : null;
   const associationError = rhythmId
     ? cardioRhythmOccurrenceError(selectedRhythm, date, today, archivedRhythmIds)
     : null;
 
+  function changeDistanceUnit(value: string) {
+    if (value !== 'mi' && value !== 'km') return;
+    const parsedDistance = Number(distance);
+    if (distance.trim() && Number.isFinite(parsedDistance) && parsedDistance > 0) {
+      const miles = cardioDistanceToMiles(parsedDistance, distanceUnit);
+      setDistance(formatDistanceInput(cardioDistanceFromMiles(miles, value)));
+    }
+    setDistanceUnit(value);
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current) return;
-    const numericDistance = Number(distance);
     if (!Number.isFinite(numericDistance) || numericDistance <= 0) {
       setError('Enter a distance greater than zero.');
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) {
       setError('Choose a valid activity date that is today or earlier.');
+      return;
+    }
+    if (!parsedDuration.valid) {
+      setError(parsedDuration.error);
       return;
     }
     if (notes.length > 1000) {
@@ -699,11 +730,13 @@ function CardioRunDialog({
     const id = run?.id ?? `cardio-${globalThis.crypto.randomUUID()}`;
     const previous = data.runs.find((item): item is CardioRun => isCardioRun(item) && item.id === id);
     const sameLink = previous !== undefined && previous.rhythmId === rhythmId;
-    const distanceMiles = distanceUnit === 'km' ? numericDistance / 1.609344 : numericDistance;
+    const distanceMiles = cardioDistanceToMiles(numericDistance, distanceUnit);
     const saved = saveCardioRun(data, {
       id,
       date,
       distance: distanceMiles,
+      distanceUnit,
+      ...(parsedDuration.durationSeconds === null ? {} : { durationSeconds: parsedDuration.durationSeconds }),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       ...(rhythmId ? {
         rhythmId,
@@ -724,28 +757,60 @@ function CardioRunDialog({
     } else onClose();
   }
 
+  function deleteRun() {
+    if (!run) return;
+    const deleteError = onDelete(run);
+    if (deleteError) {
+      setError(deleteError);
+      setConfirmingDelete(false);
+    }
+    else onClose();
+  }
+
+  const paceLabel = paceSeconds === null
+    ? '—'
+    : `${Math.floor(paceSeconds / 60)}:${String(paceSeconds % 60).padStart(2, '0')} per ${distanceUnit === 'mi' ? 'mile' : 'kilometer'}`;
+
   return (
+    <>
     <MoneyGoalDialog title={run ? 'Edit run' : 'Log run'} labelledBy="cardio-run-title" titleId="cardio-run-title"
-      initialFocusId="cardio-run-date" onClose={onClose} closeLabel="Close run" phoneFullScreen>
+      onClose={onClose} closeLabel="Close run" phoneFullScreen inert={confirmingDelete}>
       <form className="cardio-form" onSubmit={submit}>
         <label>Activity date
           <input id="cardio-run-date" type="date" max={today} value={date}
             onChange={event => setDate(event.currentTarget.value)} required />
         </label>
-        <label>Distance ({distanceUnit === 'mi' ? 'miles' : 'km'})
+        <label>Distance ({distanceUnit === 'mi' ? 'miles' : 'kilometers'})
           <input type="number" min="0.01" step="0.01" value={distance}
             onChange={event => setDistance(event.currentTarget.value)} required />
         </label>
         <label>Distance unit
-          <select value={distanceUnit} onChange={event => {
-            if (event.currentTarget.value === 'mi' || event.currentTarget.value === 'km') {
-              setDistanceUnit(event.currentTarget.value);
-            }
-          }}>
+          <select value={distanceUnit} onChange={event => changeDistanceUnit(event.currentTarget.value)}>
             <option value="mi">Miles</option>
             <option value="km">Kilometers</option>
           </select>
         </label>
+        <fieldset className="cardio-duration">
+          <legend>Run duration (optional)</legend>
+          <div className="cardio-duration__fields">
+            <label>Hours
+              <input type="number" min="0" max="167" step="1" inputMode="numeric"
+                value={durationHours} onChange={event => setDurationHours(event.currentTarget.value)} />
+            </label>
+            <label>Minutes
+              <input type="number" min="0" max="59" step="1" inputMode="numeric"
+                value={durationMinutes} onChange={event => setDurationMinutes(event.currentTarget.value)} />
+            </label>
+            <label>Seconds
+              <input type="number" min="0" max="59" step="1" inputMode="numeric"
+                value={durationSeconds} onChange={event => setDurationSeconds(event.currentTarget.value)} />
+            </label>
+          </div>
+        </fieldset>
+        <p className="cardio-pace" aria-live="polite">
+          <strong>Pace</strong>
+          <span>{paceLabel}</span>
+        </p>
         {selectedRhythm?.healthRunTarget && (
           <p className="cardio-form__notice">
             Rhythm target: {selectedRhythm.healthRunTarget.distance} {selectedRhythm.healthRunTarget.unit}.
@@ -765,12 +830,41 @@ function CardioRunDialog({
         </label>
         {associationError && <p className="cardio-form__notice" role="status">{associationError}</p>}
         {error && <p className="goal-field-error" role="alert">{error}</p>}
-        <div className="profile-editor-actions">
-          <button type="submit" className="btn mini">{run ? 'Save changes' : 'Save run'}</button>
-          <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
+        <div className="cardio-form__actions">
+          {run && (
+            <button type="button" className="btn mini ghost cardio-form__delete"
+              aria-label="Delete run" onClick={() => setConfirmingDelete(true)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m3 3v7m6-7v7" />
+              </svg>
+              Delete run
+            </button>
+          )}
+          <div className="profile-editor-actions cardio-form__submit-actions">
+            <button type="submit" className="btn mini">{run ? 'Save changes' : 'Save run'}</button>
+            <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
+          </div>
         </div>
       </form>
     </MoneyGoalDialog>
+    {confirmingDelete && run && (
+      <MoneyGoalDialog
+        title="Delete this run?"
+        labelledBy="cardio-delete-title"
+        titleId="cardio-delete-title"
+        onClose={() => setConfirmingDelete(false)}
+        closeLabel="Close delete confirmation"
+        dialogClassName="cardio-delete-confirmation"
+        portalToBody
+      >
+        <p>This also removes the run’s linked Rhythm completion, if any.</p>
+        <div className="cardio-delete-confirmation__actions">
+          <button type="button" className="btn mini ghost" onClick={() => setConfirmingDelete(false)}>Keep run</button>
+          <button type="button" className="btn mini" onClick={deleteRun}>Delete run</button>
+        </div>
+      </MoneyGoalDialog>
+    )}
+    </>
   );
 }
 
@@ -798,6 +892,21 @@ function cardioLinkIssues(
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatDistanceInput(value: number): string {
+  return Number(value.toFixed(2)).toString();
+}
+
+function formatRunDistance(run: CardioRun): string {
+  const unit = run.distanceUnit ?? 'mi';
+  const distance = cardioDistanceFromMiles(run.distance, unit);
+  const formatted = formatNumber(distance);
+  const isOne = Number(formatted.replaceAll(',', '')) === 1;
+  const label = unit === 'mi'
+    ? isOne ? 'mile' : 'miles'
+    : isOne ? 'kilometer' : 'kilometers';
+  return `${formatted} ${label}`;
 }
 
 function runTargetText(value: string): string {

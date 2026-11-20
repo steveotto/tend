@@ -132,9 +132,27 @@ export function RhythmDetailsDialog({
     }
     const dialog = dialogRef.current;
     if (!dialog) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      && document.activeElement !== document.body
+      ? document.activeElement
+      : null;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
-    dialog.focus({ preventScroll: true });
+    titleRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (dialog.open && typeof dialog.close === 'function') dialog.close();
+      else dialog.removeAttribute('open');
+      if (!previouslyFocused) return;
+      window.requestAnimationFrame(() => {
+        const containingDialog = previouslyFocused.closest('dialog');
+        if (previouslyFocused.isConnected
+          && !previouslyFocused.matches(':disabled')
+          && !previouslyFocused.closest('[inert], [hidden]')
+          && !(containingDialog instanceof HTMLDialogElement && !containingDialog.open)) {
+          previouslyFocused.focus({ preventScroll: true });
+        }
+      });
+    };
   }, [embedded, inline]);
 
   useEffect(() => {

@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
-import { resolvePersonCategory } from '../domain/person-categories.ts';
 import { CategoryHealthBadge } from './Cards.tsx';
 import { BirthdayCakeIcon } from './BirthdayCakeIcon.tsx';
 import { personFirstName, PersonAvatar } from './PersonBadge.tsx';
@@ -37,10 +36,6 @@ export function PeopleCard({
   children?: ReactNode;
 }) {
   const displayScore = score !== null && score !== undefined && Number.isFinite(score) ? score : null;
-  const relationshipGroupId = resolvePersonCategory(classifications.map(group => group.id));
-  const relationshipGroup = relationshipGroupId
-    ? classifications.find(group => group.id === relationshipGroupId)
-    : undefined;
 
   return (
     <article className={`people-card ${className}`.trim()}>
@@ -75,8 +70,21 @@ export function PeopleCard({
             accessibleLabel={`Person Health ${displayScore === null ? 'unavailable' : displayScore}`}
           />
         </span>
-        {(connectionRecency || relationshipGroup) && (
+        {(connectionRecency || classifications.length > 0) && (
           <span className="people-card__meta-row">
+            {classifications.length > 0 && (
+              <span className="people-card__classifications" role="group" aria-label={`${person.displayName} relationship group`}>
+                {classifications.map((classification, index) => (
+                  <span
+                    key={`${classification.id}-${index}`}
+                    className={`people-card__classification people-card__classification--${classification.id}`}
+                  >
+                    <span aria-hidden="true" />
+                    {classification.label}
+                  </span>
+                ))}
+              </span>
+            )}
             {connectionRecency && (
               <span className="people-card__connection-detail">
                 <span className="people-card__connection-icon" aria-hidden="true">
@@ -93,19 +101,10 @@ export function PeopleCard({
                 </span>
               </span>
             )}
-            {relationshipGroup && (
-              <span className="people-card__classifications" role="group" aria-label={`${person.displayName} relationship group`}>
-                <span className={`people-card__classification people-card__classification--${relationshipGroup.id}`}>
-                  <span aria-hidden="true" />
-                  {relationshipGroup.label}
-                </span>
-              </span>
-            )}
           </span>
         )}
         {(birthday?.age !== undefined || birthday) && (
           <span className="people-card__birthday-footer">
-            {birthday?.age !== undefined && <strong className="people-card__age">Age {birthday.age}</strong>}
             {birthday && (
               <span className="people-card__birthday">
                 <BirthdayCakeIcon />
@@ -114,6 +113,7 @@ export function PeopleCard({
                 <span className="people-card__birthday-countdown">{birthday.countdownLabel}</span>
               </span>
             )}
+            {birthday?.age !== undefined && <strong className="people-card__age">Age {birthday.age}</strong>}
           </span>
         )}
       </button>

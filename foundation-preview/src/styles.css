@@ -3508,83 +3508,6 @@ a:focus-visible {
       cursor: pointer;
     }
 
-    .money-goal-dialog.money-goal-dialog--scrollable-body {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .money-goal-dialog--scrollable-body > .money-goal-dialog__surface {
-      display: flex;
-      min-height: 0;
-      flex: 1 1 auto;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    .money-goal-dialog__persistent-header {
-      display: flex;
-      min-width: 0;
-      flex: 0 0 auto;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--tend-line, var(--line));
-      background: var(--canvas);
-    }
-
-    .money-goal-dialog__heading {
-      min-width: 0;
-      flex: 1 1 auto;
-    }
-
-    .money-goal-dialog__heading > h2 {
-      margin: 0;
-      overflow-wrap: anywhere;
-      font-size: calc(1.25rem * var(--app-text-scale, 1));
-    }
-
-    .money-goal-dialog--scrollable-body .money-goal-dialog__close {
-      position: static;
-      display: grid;
-      width: 44px;
-      min-width: 44px;
-      height: 44px;
-      flex: 0 0 44px;
-      place-items: center;
-      border: 1px solid var(--tend-line, var(--line));
-      border-radius: 12px;
-      background: var(--tend-surface, var(--canvas));
-      color: var(--ink);
-    }
-
-    .money-goal-dialog--scrollable-body .money-goal-dialog__close:hover {
-      background: var(--tend-mist, var(--canvas));
-    }
-
-    .money-goal-dialog--fitness-log .money-goal-dialog__scroll-region {
-      padding-inline: 5px;
-    }
-
-    .money-goal-dialog--scrollable-body .money-goal-dialog__close:focus-visible,
-    .money-goal-dialog__scroll-region:focus-visible {
-      outline: 3px solid var(--tend-focus, #39704d);
-      outline-offset: 2px;
-    }
-
-    .money-goal-dialog__scroll-region {
-      min-width: 0;
-      min-height: 0;
-      flex: 1 1 auto;
-      overflow-x: hidden;
-      overflow-y: auto;
-      overscroll-behavior-y: contain;
-      padding-top: 14px;
-      touch-action: pan-y;
-      -webkit-overflow-scrolling: touch;
-    }
-
     .money-goal-dialog__surface > h2 {
       margin: 0;
       font-size: calc(1.25rem * var(--app-text-scale, 1));
@@ -4922,6 +4845,7 @@ a:focus-visible {
     .money-goal-dialog__actions {
       display: flex;
       flex-wrap: wrap;
+      align-items: center;
       gap: 8px;
       margin-top: 16px;
     }
@@ -4935,11 +4859,22 @@ a:focus-visible {
       outline-offset: 2px;
     }
 
-    .money-goal-dialog .goal-field :is(input:not([type="checkbox"]), select, textarea):focus,
-    .money-goal-dialog .rhythm-select__trigger:focus {
+    .money-goal-dialog .goal-field :is(input:not([type="checkbox"]), select, textarea):focus {
       border-color: var(--forest);
       outline: none;
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--mist) 72%, transparent);
+    }
+
+    .money-goal-dialog .rhythm-select__trigger:focus:not(:focus-visible) {
+      border-color: var(--line);
+      outline: none;
+      box-shadow: none;
+    }
+
+    .money-goal-dialog .rhythm-select__trigger:focus-visible {
+      border-color: var(--forest);
+      outline: none;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--forest) 38%, transparent);
     }
 
     .money-goal-dialog .goal-field input[aria-invalid="true"]:focus {
@@ -5120,6 +5055,13 @@ a:focus-visible {
 .tend-app-preview .category-page--segmented {
   display: grid;
   gap: 12px;
+}
+
+.tend-app-preview.wrap > #view > .category-page:not(.health-fitness-page--foundation-detail):not(.marriage-page--foundation-detail) {
+  box-sizing: border-box;
+  width: min(100%, 872px);
+  min-width: 0;
+  margin-inline: auto;
 }
 
 .category-page--with-header {
@@ -7970,26 +7912,33 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .people-card__connection-detail {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
   align-items: center;
-  gap: 10px;
-  flex: 0 0 auto;
-  min-width: max-content;
-}
-
-.people-card__connection-icon {
-  display: grid;
-  flex: 0 0 32px;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  gap: 6px;
+  margin-left: auto;
+  padding: 5px 9px;
+  border: 1px solid #dfe9e1;
+  border-radius: 999px;
   background: #edf5ef;
   color: #527660;
 }
 
+.people-card__connection-icon {
+  display: grid;
+  flex: 0 0 22px;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #dce9df;
+  color: #527660;
+}
+
 .people-card__connection-icon svg {
-  width: 17px;
-  height: 17px;
+  width: 14px;
+  height: 14px;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -7997,23 +7946,26 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .people-card__connection-copy {
-  display: grid;
-  gap: 1px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 4px;
   min-width: 0;
   text-align: left;
 }
 
 .people-card__connection-label {
-  color: var(--ink-soft, #66736b);
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  color: #527660;
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  font-weight: 600;
   line-height: 1.25;
 }
 
 .people-card__connection-time {
-  color: var(--ink, #25332b);
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  color: #355943;
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
   font-weight: 600;
-  line-height: inherit;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
@@ -8028,41 +7980,41 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .people-card__classifications {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   justify-content: flex-start;
   gap: 5px;
   min-width: 0;
-  margin-left: auto;
   padding: 0;
 }
 
 .people-card__birthday-footer {
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
   min-width: 0;
-  margin-top: auto;
-  padding: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line, #e5e9e5);
   color: var(--ink-soft, #66736b);
   font-size: calc(0.75rem * var(--app-text-scale, 1));
 }
 
 .people-card__age {
   flex: none;
+  margin-left: auto;
   color: var(--ink, #25332b);
   font-weight: 700;
 }
 
 .people-card__birthday {
-  margin-left: auto;
+  flex: 1 1 auto;
+  min-width: 0;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 6px;
-  min-width: 0;
-  text-align: right;
+  text-align: left;
 }
 
 .people-card__birthday svg {
@@ -8326,7 +8278,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   display: grid;
   justify-items: center;
   align-content: start;
-  gap: 4px;
+  gap: var(--tend-space-unit, 8px);
   width: 100%;
   min-width: 0;
   min-height: 44px;
@@ -13128,6 +13080,62 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   outline-offset: 2px;
 }
 
+.money-goal-dialog :is(
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"],
+  [role="link"],
+  [role="tab"],
+  [role="option"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="menuitem"],
+  [role="treeitem"]
+)[tabindex="-1"]:focus-visible:not(.rhythm-select__trigger) {
+  outline: 3px solid var(--tend-focus, var(--tend-forest));
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.strength-recommended-workout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.strength-recommended-workout__summary {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.strength-recommended-workout__summary h3,
+.strength-recommended-workout__summary p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.strength-recommended-workout__summary h3 {
+  color: var(--tend-ink);
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+}
+
+.strength-recommended-workout__summary p {
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.strength-recommended-workout__action {
+  justify-self: end;
+}
+
 .segmented-tabs--compact {
   width: min(100%, 340px);
   margin-inline: auto;
@@ -13303,6 +13311,10 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   color: var(--tend-secondary);
   font-size: calc(1.5rem * var(--app-text-scale, 1));
   line-height: 1;
+}
+
+.money-goals-page > .segmented-tabs--compact {
+  width: 100%;
 }
 
 .strength-history-more {
@@ -15204,6 +15216,83 @@ button.strength-guided__performance:focus-visible {
   color: var(--tend-tool-zone-ink);
 }
 
+.money-goal-dialog.money-goal-dialog--scrollable-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.money-goal-dialog--scrollable-body > .money-goal-dialog__surface {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.money-goal-dialog__persistent-header {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--tend-line, var(--line));
+  background: var(--canvas);
+}
+
+.money-goal-dialog__heading {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.money-goal-dialog__heading > h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: calc(1.25rem * var(--app-text-scale, 1));
+}
+
+.money-goal-dialog--scrollable-body .money-goal-dialog__close {
+  position: static;
+  display: grid;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 12px;
+  background: var(--tend-surface, var(--canvas));
+  color: var(--ink);
+}
+
+.money-goal-dialog--scrollable-body .money-goal-dialog__close:hover {
+  background: var(--tend-mist, var(--canvas));
+}
+
+.money-goal-dialog--fitness-log .money-goal-dialog__scroll-region {
+  padding-inline: 5px;
+}
+
+.money-goal-dialog--scrollable-body .money-goal-dialog__close:focus-visible,
+.money-goal-dialog__scroll-region:focus-visible {
+  outline: 3px solid var(--tend-focus, #39704d);
+  outline-offset: 2px;
+}
+
+.money-goal-dialog__scroll-region {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding-top: 14px;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
 .tool-zone__header {
   display: flex;
   min-width: 0;
@@ -16319,7 +16408,7 @@ button.strength-guided__performance:focus-visible {
     position: sticky;
     bottom: 0;
     margin: 0 -2px;
-    padding: 10px 2px 2px;
+    padding: 10px 2px max(12px, env(safe-area-inset-bottom, 0px));
   }
 
   .tend-app-preview .fitness-goals-scroll {
@@ -19267,19 +19356,19 @@ button.strength-guided__performance:focus-visible {
   height: 9px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--tend-mist);
+  background: var(--tend-tool-zone-selection);
 }
 
 .cardio-measure__track > span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--tend-forest);
+  background: var(--tend-tool-zone-accent);
   transition: width 180ms ease;
 }
 
 .cardio-measure__footer > span {
-  color: var(--tend-forest);
+  color: var(--tend-tool-zone-accent);
   font-size: calc(0.75rem * var(--app-text-scale, 1));
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -19328,8 +19417,11 @@ button.strength-guided__performance:focus-visible {
 
 .cardio-week-day > span:first-child,
 .cardio-week-day small {
+  width: 100%;
+  min-width: 0;
   font-size: calc(0.6875rem * var(--app-text-scale, 1));
   font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .cardio-week-day i {
@@ -19346,9 +19438,159 @@ button.strength-guided__performance:focus-visible {
 }
 
 .cardio-week-day__today {
+  width: 100%;
+  min-width: 0;
+  justify-self: center;
   color: var(--tend-tool-zone-accent);
   font-size: calc(0.5625rem * var(--app-text-scale, 1));
   font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 430px) {
+  .cardio-week-strip {
+    gap: 0;
+  }
+
+  .cardio-week-day {
+    padding-inline: 0;
+  }
+}
+
+.cardio-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cardio-duration {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+}
+
+.cardio-duration legend {
+  padding-inline: 4px;
+  color: var(--tend-ink);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 700;
+}
+
+.cardio-duration__fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cardio-duration__fields label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 600;
+}
+
+.cardio-duration__fields input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 10px;
+  border: 1px solid var(--tend-line);
+  border-radius: 9px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+}
+
+.cardio-pace {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--tend-tool-zone-selection);
+  color: var(--tend-tool-zone-accent);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.cardio-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tend-line);
+}
+
+.cardio-form__delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+}
+
+.cardio-form__delete svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.cardio-form__submit-actions {
+  margin-left: auto;
+}
+
+.profile-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cardio-delete-confirmation {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-mist);
+}
+
+.cardio-delete-confirmation h2,
+.cardio-delete-confirmation p {
+  margin: 0;
+}
+
+.cardio-delete-confirmation h2 {
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+}
+
+.cardio-delete-confirmation p {
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
+.cardio-delete-confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
 }
 
 .cardio-history-list,
@@ -19485,6 +19727,16 @@ button.strength-guided__performance:focus-visible {
   font: inherit;
 }
 
+.money-goal-dialog .cardio-form :is(input, select, textarea):focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.money-goal-dialog .cardio-form :is(input, select, textarea):focus-visible {
+  border-color: var(--tend-tool-zone-accent);
+  box-shadow: inset 0 0 0 1px var(--tend-tool-zone-accent);
+}
+
 .cardio-form textarea {
   resize: vertical;
 }
@@ -19593,11 +19845,6 @@ button.strength-guided__performance:focus-visible {
     margin-inline: calc((100% - 100vw) / 2);
     padding: 0 max(22px, env(safe-area-inset-right, 0px)) 32px
       max(22px, env(safe-area-inset-left, 0px));
-  }
-
-  .health-fitness-page--foundation-detail .health-fitness-progress__detail > .category-page {
-    padding-inline: max(16px, env(safe-area-inset-left, 0px))
-      max(16px, env(safe-area-inset-right, 0px));
   }
 
   .page-hero-header-stack {
@@ -20123,6 +20370,39 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
       calc(env(safe-area-inset-bottom, 0px) + 12px)
       max(16px, env(safe-area-inset-left, 0px));
     overflow: hidden;
+  }
+
+  .money-goal-dialog.dialog--phone-fullscreen > .money-goal-dialog__surface > form:not(.fitness-goals-form) {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .money-goal-dialog.dialog--phone-fullscreen > .money-goal-dialog__surface > form > .profile-editor-actions,
+  .money-goal-dialog.dialog--phone-fullscreen > .money-goal-dialog__surface > form > .cardio-form__actions,
+  .money-goal-dialog.dialog--phone-fullscreen .money-goal-dialog__actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    justify-content: flex-end;
+    margin-top: 12px;
+    padding: 12px 0 max(12px, env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--tend-line);
+    background: var(--tend-surface);
+  }
+
+  .money-goal-dialog.dialog--phone-fullscreen .profile-editor-actions > .btn,
+  .money-goal-dialog.dialog--phone-fullscreen .money-goal-dialog__actions > .btn {
+    min-height: 44px;
+  }
+
+  .money-goal-dialog.dialog--phone-fullscreen .cardio-form__actions {
+    gap: 12px;
   }
 
   .money-goal-dialog.dialog--phone-fullscreen .friendships-connection-form {
@@ -22529,7 +22809,7 @@ html[data-mobile-text-size="larger"] .rhythm-editor__association-category-list--
 }
 
 .person-health-component-score__label {
-  display: inline;
+  display: block;
   min-width: 0;
   color: var(--tend-ink, var(--ink));
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
@@ -26568,6 +26848,10 @@ button.person-health-component-score:focus-visible {
   margin: 8px 0 18px;
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
   line-height: 1.5;
+}
+
+.tend-app-preview .finance-goal-fullscreen-dialog .money-goal-dialog__scroll-region:focus-visible {
+  outline: none;
 }
 
 .tend-app-preview .finance-goal-fullscreen-dialog .money-goal-dialog__actions {

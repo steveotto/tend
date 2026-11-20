@@ -8,7 +8,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import type { Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
 import { createEmptyPreviewData, createPreviewEnvelope, parsePreviewBackup } from '../src/domain/preview-state.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
@@ -1169,6 +1169,159 @@ async function verifyFinanceGoalDetailsPalette(page: Page, goalTitle: string): P
   assert.equal(await details.getByRole('button', { name: 'Close goal details' }).isVisible(), true);
 }
 
+async function verifyFinanceCheckInPalette(page: Page, viewportWidth: number): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Record balance check-in' });
+  const palette = await dialog.evaluate(element => {
+    const zone = element.querySelector<HTMLElement>('.finance-check-in-tool-zone');
+    const purpose = zone?.querySelector<HTMLElement>('.tool-zone__purpose');
+    const primaryAction = zone?.querySelector<HTMLElement>('.money-goal-dialog__actions .btn:not(.ghost)');
+    const scrollRegion = element.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+    const close = element.querySelector<HTMLElement>('.money-goal-dialog__close');
+    if (!zone || !purpose || !primaryAction || !scrollRegion || !close) {
+      throw new Error('Finance check-in is missing its shared blue zone, actions, or dialog controls.');
+    }
+    scrollRegion.focus();
+    const dialogRect = element.getBoundingClientRect();
+    const closeStyle = getComputedStyle(close);
+    return {
+      zoneBackground: getComputedStyle(zone).backgroundColor,
+      zoneBorder: getComputedStyle(zone).borderTopColor,
+      purposeColor: getComputedStyle(purpose).color,
+      actionBackground: getComputedStyle(primaryAction).backgroundColor,
+      actionColor: getComputedStyle(primaryAction).color,
+      scrollRegionOutline: getComputedStyle(scrollRegion).outlineStyle,
+      position: getComputedStyle(element).position,
+      width: dialogRect.width,
+      height: dialogRect.height,
+      closePosition: closeStyle.position,
+      closeTop: closeStyle.top,
+      closeRight: closeStyle.right
+    };
+  });
+  assert.deepEqual(palette, {
+    zoneBackground: 'rgb(238, 242, 247)',
+    zoneBorder: 'rgb(215, 223, 233)',
+    purposeColor: 'rgb(74, 107, 148)',
+    actionBackground: 'rgb(74, 107, 148)',
+    actionColor: 'rgb(255, 255, 255)',
+    scrollRegionOutline: 'none',
+    position: 'fixed',
+    width: viewportWidth,
+    height: 844,
+    closePosition: 'fixed',
+    closeTop: '8px',
+    closeRight: '12px'
+  });
+  assert.equal(await dialog.getByRole('button', { name: 'Close balance check-in' }).isVisible(), true);
+}
+
+async function verifyCardioRunDialogLayout(page: Page, viewportWidth: number): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Log run' });
+  const layout = await dialog.evaluate(element => {
+    const form = element.querySelector<HTMLElement>('.cardio-form');
+    const date = element.querySelector<HTMLInputElement>('#cardio-run-date');
+    const duration = element.querySelector<HTMLElement>('.cardio-duration__fields');
+    const pace = element.querySelector<HTMLElement>('.cardio-pace');
+    const actions = element.querySelector<HTMLElement>('.cardio-form__actions');
+    if (!form || !date || !duration || !pace || !actions) {
+      throw new Error('The run form is missing duration, pace, date, or action controls.');
+    }
+    const dialogRect = element.getBoundingClientRect();
+    const formRect = form.getBoundingClientRect();
+    const durationRect = duration.getBoundingClientRect();
+    const actionRect = actions.getBoundingClientRect();
+    const inputBounds = [...form.querySelectorAll<HTMLElement>('input, select, textarea')]
+      .map(input => input.getBoundingClientRect());
+    const actionButtons = [...actions.querySelectorAll<HTMLButtonElement>('button')].map(button => {
+      const rect = button.getBoundingClientRect();
+      return { x: rect.x, right: rect.right, top: rect.top, bottom: rect.bottom };
+    });
+    const gridColumns = getComputedStyle(duration).gridTemplateColumns.trim().split(/\s+/).length;
+    return {
+      viewportWidth: document.documentElement.clientWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      dialog: { x: dialogRect.x, y: dialogRect.y, width: dialogRect.width, height: dialogRect.height },
+      formWidth: formRect.width,
+      formScrollWidth: form.scrollWidth,
+      dateType: date.type,
+      durationColumns: gridColumns,
+      durationFieldsFit: durationRect.left >= formRect.left - 1
+        && durationRect.right <= formRect.right + 1,
+      inputsFit: inputBounds.every(rect => rect.left >= formRect.left - 1 && rect.right <= formRect.right + 1),
+      pace: pace.querySelector('span')?.textContent?.trim(),
+      actions: {
+        left: actionRect.left,
+        right: actionRect.right,
+        bottomPadding: Number.parseFloat(getComputedStyle(actions).paddingBottom),
+        buttons: actionButtons
+      }
+    };
+  });
+  assert.equal(layout.viewportWidth, viewportWidth);
+  assert.equal(layout.documentWidth, viewportWidth);
+  assert.deepEqual(layout.dialog, { x: 0, y: 0, width: viewportWidth, height: 844 });
+  assert.ok(layout.formWidth > 0);
+  assert.ok(layout.formScrollWidth <= layout.formWidth + 1);
+  assert.equal(layout.dateType, 'date');
+  assert.equal(layout.durationColumns, 3);
+  assert.equal(layout.durationFieldsFit, true);
+  assert.equal(layout.inputsFit, true);
+  assert.equal(layout.pace, '—');
+  assert.ok(layout.actions.left >= 0 && layout.actions.right <= viewportWidth);
+  assert.ok(layout.actions.bottomPadding >= 12);
+  assert.equal(layout.actions.buttons.length, 2);
+  assert.ok(layout.actions.buttons.every(button => button.x >= 0 && button.right <= viewportWidth));
+}
+
+async function verifyWeightEntryDialogLayout(page: Page, viewportWidth: number): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Add weigh-in' });
+  const layout = await dialog.evaluate(element => {
+    const form = element.querySelector<HTMLElement>('.weight-form');
+    const date = element.querySelector<HTMLInputElement>('#weight-entry-date');
+    const actions = form?.querySelector<HTMLElement>('.profile-editor-actions');
+    const numeric = form?.querySelector<HTMLElement>('.numeric-control');
+    if (!form || !date || !actions || !numeric) {
+      throw new Error('The weigh-in form is missing its date, weight, or action controls.');
+    }
+    const dialogRect = element.getBoundingClientRect();
+    const formRect = form.getBoundingClientRect();
+    const dateRect = date.getBoundingClientRect();
+    const numericRect = numeric.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+    return {
+      viewportWidth: document.documentElement.clientWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      dialog: { x: dialogRect.x, y: dialogRect.y, width: dialogRect.width, height: dialogRect.height },
+      formWidth: formRect.width,
+      formScrollWidth: form.scrollWidth,
+      dateType: date.type,
+      dateFits: dateRect.left >= formRect.left - 1 && dateRect.right <= formRect.right + 1,
+      numericFits: numericRect.left >= formRect.left - 1 && numericRect.right <= formRect.right + 1,
+      actions: {
+        left: actionsRect.left,
+        right: actionsRect.right,
+        bottomPadding: Number.parseFloat(getComputedStyle(actions).paddingBottom),
+        buttons: [...actions.querySelectorAll<HTMLButtonElement>('button')].map(button => {
+          const rect = button.getBoundingClientRect();
+          return { x: rect.x, right: rect.right };
+        })
+      }
+    };
+  });
+  assert.equal(layout.viewportWidth, viewportWidth);
+  assert.equal(layout.documentWidth, viewportWidth);
+  assert.deepEqual(layout.dialog, { x: 0, y: 0, width: viewportWidth, height: 844 });
+  assert.ok(layout.formWidth > 0);
+  assert.ok(layout.formScrollWidth <= layout.formWidth + 1);
+  assert.equal(layout.dateType, 'date');
+  assert.equal(layout.dateFits, true);
+  assert.equal(layout.numericFits, true);
+  assert.ok(layout.actions.left >= 0 && layout.actions.right <= viewportWidth);
+  assert.ok(layout.actions.bottomPadding >= 12);
+  assert.equal(layout.actions.buttons.length, 2);
+  assert.ok(layout.actions.buttons.every(button => button.x >= 0 && button.right <= viewportWidth));
+}
+
 async function verifyFitnessLogDialogLayout(
   page: Page,
   {
@@ -1380,6 +1533,645 @@ async function verifyFitnessLogDialogLayout(
     }
   }
   if (previousViewport) await page.setViewportSize(previousViewport);
+}
+
+async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, baseUrl: string) {
+  const previewData = createEmptyPreviewData();
+  const today = localDateString(new Date());
+  const personId = 'layout-long-person';
+  const recentConnectionDate = new Date();
+  recentConnectionDate.setDate(recentConnectionDate.getDate() - 7);
+  const recentConnection = localDateString(recentConnectionDate);
+  previewData.people = [{
+    id: personId,
+    displayName: 'Alexandria-Brooks-Williams-ExtremelyLong Synthetic Person'
+  }];
+  previewData.peopleGroups = previewData.peopleGroups.map(group => ({
+    ...group,
+    memberIds: group.id === 'marriage' ? [personId] : []
+  }));
+  previewData.personDetails = [{
+    personId,
+    relationshipLabel: 'A very long synthetic relationship that wraps at narrow widths',
+    birthday: { monthDay: '01-01', year: new Date().getFullYear() - 47 }
+  }];
+  previewData.friendships.connections = [{
+    id: 'synthetic-recent-person-connection',
+    type: 'call',
+    date: recentConnection,
+    participantIds: [personId]
+  }];
+  const startedAt = `${today}T12:00:00.000Z`;
+  const finishedAt = `${today}T12:45:00.000Z`;
+  const confirmedAt = `${today}T12:15:00.000Z`;
+  previewData.strength.workouts = [{
+    id: 'synthetic-long-history',
+    date: today,
+    muscleIds: ['biceps', 'triceps'],
+    workoutName: 'Synthetic long history workout',
+    notes: 'Final synthetic note marker. '.repeat(12),
+    startedAt,
+    finishedAt,
+    timeZone: 'UTC',
+    supersetGroups: [],
+    exercises: Array.from({ length: 18 }, (_, index) => ({
+      id: `synthetic-history-exercise-${index + 1}`,
+      name: `Synthetic exercise ${String(index + 1).padStart(2, '0')}`,
+      muscleIds: [index % 2 === 0 ? 'biceps' as const : 'triceps' as const],
+      equipment: 'Dumbbells',
+      restDurationSeconds: 60,
+      sets: [{
+        id: `synthetic-history-set-${index + 1}`,
+        measurement: { kind: 'reps' as const },
+        targetReps: 10,
+        status: 'performed' as const,
+        actualReps: 10,
+        confirmedAt
+      }]
+    }))
+  }];
+  previewData.cardio.runs = [{
+    id: 'synthetic-cardio-run',
+    date: today,
+    distance: 4.2,
+    distanceUnit: 'mi',
+    durationSeconds: 30 * 60
+  }];
+  const envelope = createPreviewEnvelope(previewData);
+  const validation = parsePreviewBackup(JSON.stringify(envelope), today);
+  if (!validation.valid) {
+    throw new Error(`Synthetic Foundation browser fixture is invalid: ${validation.message}`);
+  }
+
+  const userId = 'c0000000-0000-4000-8000-000000000003';
+  const storageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${userId}`;
+  const context = await browser.newContext({
+    viewport: { width: 375, height: 844 },
+    hasTouch: true
+  });
+  await context.addInitScript(({ key, value }) => {
+    const session = {
+      user: { id: 'c0000000-0000-4000-8000-000000000003', email: 'browser-test@example.test' }
+    };
+    Object.assign(window, {
+      supabase: {
+        createClient: () => ({
+          auth: {
+            onAuthStateChange(callback: (event: string, value: typeof session) => void) {
+              callback('INITIAL_SESSION', session);
+              return { data: { subscription: { unsubscribe() {} } } };
+            },
+            async signInWithPassword() { return { error: null, data: { session } }; },
+            async resetPasswordForEmail() { return { error: null }; },
+            async updateUser() { return { error: null }; },
+            async signOut() { return { error: null }; }
+          }
+        })
+      }
+    });
+    window.localStorage.setItem(key, value);
+  }, {
+    key: storageKey,
+    value: JSON.stringify(envelope)
+  });
+  const page = await context.newPage();
+  await page.route('**/*', route => {
+    if (new URL(route.request().url()).origin === baseUrl) return route.continue();
+    return route.abort();
+  });
+  await page.goto(`${baseUrl}/app-preview.html?identity=dashboard`);
+  await page.locator('.home-dashboard').waitFor();
+  await page.getByRole('button', { name: 'Health & Fitness' }).click();
+  await page.getByRole('tab', { name: 'Foundations' }).click();
+
+  const foundations = [
+    {
+      name: 'Strength',
+      tablist: 'Strength sections',
+      tabs: ['Body', 'Workouts', 'Rhythms'],
+      panels: ['strength-panel-body', 'strength-panel-workouts', 'strength-panel-rhythms']
+    },
+    {
+      name: 'Cardio',
+      tablist: 'Cardio Foundation sections',
+      tabs: ['Progress', 'Activities', 'Rhythms'],
+      panels: ['cardio-panel-progress', 'cardio-panel-activities', 'cardio-panel-rhythms']
+    },
+    {
+      name: 'Weight',
+      tablist: 'Weight Foundation sections',
+      tabs: ['Progress', 'Weigh-Ins', 'Rhythms'],
+      panels: ['weight-panel-progress', 'weight-panel-measurements', 'weight-panel-rhythms']
+    },
+    {
+      name: 'Flexibility',
+      tablist: 'Flexibility sections',
+      tabs: ['Body', 'Routines', 'Rhythms'],
+      panels: ['flexibility-panel-body', 'flexibility-panel-routines', 'flexibility-panel-rhythms']
+    }
+  ] as const;
+
+  for (const textSize of ['small', 'medium', 'large'] as const) {
+    await setPreviewTextSize(page, textSize);
+    if (textSize !== 'small') {
+      await page.getByRole('button', { name: 'All Foundations' }).click();
+    }
+    for (const [foundationIndex, foundation] of foundations.entries()) {
+      if (foundationIndex > 0) {
+        await page.getByRole('button', { name: 'All Foundations' }).click();
+      }
+      await page.getByRole('button', {
+        name: `Open ${foundation.name} foundation details`
+      }).click();
+      const tabs = page.getByRole('tablist', { name: foundation.tablist });
+
+      for (let tabIndex = 0; tabIndex < foundation.tabs.length; tabIndex += 1) {
+        const tabName = foundation.tabs[tabIndex]!;
+        await tabs.getByRole('tab', { name: tabName, exact: true }).click();
+        const panel = page.locator(`#${foundation.panels[tabIndex]}`);
+
+        for (const viewportWidth of [375, 390, 430]) {
+          await page.setViewportSize({ width: viewportWidth, height: 844 });
+          const layout = await panel.evaluate((element, tablistName) => {
+            const activePanel = element as HTMLElement;
+            const detail = activePanel.closest<HTMLElement>('.health-fitness-progress__detail');
+            const header = detail?.querySelector<HTMLElement>('.foundation-detail-header');
+            const health = detail?.querySelector<HTMLElement>('.foundation-health-card');
+            const tablist = detail?.querySelector<HTMLElement>(
+              `[role="tablist"][aria-label="${tablistName}"]`
+            );
+            if (!detail || !header || !health || !tablist || activePanel.hidden) {
+              throw new Error('The active Foundation needs a visible header, Health card, tablist, and panel.');
+            }
+            const bounds = (node: Element) => {
+              const rect = node.getBoundingClientRect();
+              return { left: rect.left, right: rect.right, width: rect.width };
+            };
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              header: bounds(header),
+              health: bounds(health),
+              tabs: bounds(tablist),
+              content: [...activePanel.children]
+                .filter(child => !child.hasAttribute('hidden') && getComputedStyle(child).display !== 'none')
+                .map(child => ({ className: child.className, ...bounds(child) }))
+            };
+          }, foundation.tablist);
+          const label = `${foundation.name} ${tabName} at ${viewportWidth}px / ${textSize} text`;
+          assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport width`);
+          assert.equal(layout.documentWidth, viewportWidth, `${label} must not overflow horizontally`);
+          assert.ok(layout.content.length > 0, `${label} must render a top-level content container`);
+          for (const [name, bounds] of [
+            ['Health card', layout.health],
+            ['segmented tabs', layout.tabs],
+            ...layout.content.map((entry, index) => [`content ${index + 1} (${entry.className})`, entry] as const)
+          ] as const) {
+            assert.ok(Math.abs(bounds.left - layout.header.left) <= 1,
+              `${label} ${name} left edge ${bounds.left} must align with header ${layout.header.left}.`);
+            assert.ok(Math.abs(bounds.right - layout.header.right) <= 1,
+              `${label} ${name} right edge ${bounds.right} must align with header ${layout.header.right}.`);
+          }
+        }
+      }
+    }
+  }
+
+  await setPreviewTextSize(page, 'small');
+  await page.setViewportSize({ width: 375, height: 390 });
+  await page.getByRole('button', { name: 'All Foundations' }).click();
+  await page.getByRole('button', { name: 'Open Strength foundation details' }).click();
+  const strengthTabs = page.getByRole('tablist', { name: 'Strength sections' });
+  await strengthTabs.getByRole('tab', { name: 'Workouts' }).click();
+  const historyRegion = page.getByRole('region', { name: 'History' });
+  const historyOpener = historyRegion.getByRole('button', {
+    name: /View Synthetic long history workout/
+  });
+  await historyOpener.waitFor();
+  await historyOpener.scrollIntoViewIfNeeded();
+  const beforeOpen = await page.evaluate(() => {
+    const root = document.scrollingElement;
+    if (!root || root.scrollHeight <= root.clientHeight) {
+      throw new Error('The synthetic Strength page must be scrollable before opening History.');
+    }
+    root.scrollTop = Math.min(Math.max(root.scrollTop, 120), root.scrollHeight - root.clientHeight);
+    return {
+      scrollTop: root.scrollTop,
+      bodyPosition: document.body.style.position,
+      bodyTop: document.body.style.top,
+      bodyOverflow: document.body.style.overflow
+    };
+  });
+  await historyOpener.click();
+  const historyDialog = page.getByRole('dialog', { name: 'Synthetic long history workout' });
+  await historyDialog.waitFor();
+  const openingFocus = await historyDialog.evaluate(dialog => {
+    const title = dialog.querySelector<HTMLElement>('.money-goal-dialog__heading > h2');
+    const header = dialog.querySelector<HTMLElement>('.money-goal-dialog__persistent-header');
+    const activeElement = document.activeElement;
+    if (!title || !header) throw new Error('History must retain its shared dialog heading and header.');
+    return {
+      titleFocused: activeElement === title,
+      inputFocused: activeElement instanceof HTMLInputElement,
+      headingOutline: getComputedStyle(title).outlineStyle,
+      headerOutline: getComputedStyle(header).outlineStyle,
+      dialogLabelledBy: dialog.getAttribute('aria-labelledby'),
+      scrollRegion: dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region') !== null
+    };
+  });
+  assert.equal(openingFocus.titleFocused, true, 'History should initially focus its announced static title.');
+  assert.equal(openingFocus.inputFocused, false);
+  assert.equal(openingFocus.headingOutline, 'none', 'Pointer opening must not outline the static History heading.');
+  assert.equal(openingFocus.headerOutline, 'none', 'Pointer opening must not outline the History header.');
+  assert.equal(openingFocus.dialogLabelledBy, 'strength-history-detail-title');
+  assert.equal(openingFocus.scrollRegion, true);
+  const scrollRegion = historyDialog.getByRole('region', { name: 'Synthetic long history workout content' });
+  const initialScroll = await scrollRegion.evaluate(element => ({
+    top: element.scrollTop,
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+    overflowY: getComputedStyle(element).overflowY,
+    touchAction: getComputedStyle(element).touchAction,
+    webkitOverflowScrolling: getComputedStyle(element).getPropertyValue('-webkit-overflow-scrolling')
+  }));
+  assert.equal(initialScroll.top, 0);
+  assert.ok(initialScroll.clientHeight > 0, 'The History scroll region must retain a visible height.');
+  assert.equal(initialScroll.overflowY, 'auto');
+  assert.equal(initialScroll.touchAction, 'pan-y');
+  assert.ok(initialScroll.scrollHeight > initialScroll.clientHeight,
+    'The long History details must have a bounded, scrollable content region.');
+
+  const scrollBounds = await scrollRegion.boundingBox();
+  if (!scrollBounds) throw new Error('The History scroll region has no browser geometry.');
+  await scrollRegion.evaluate(element => {
+    element.addEventListener('wheel', () => {
+      element.dataset.wheelReceived = 'true';
+    }, { once: true });
+  });
+  await scrollRegion.focus();
+  await page.mouse.move(
+    scrollBounds.x + scrollBounds.width / 2,
+    scrollBounds.y + scrollBounds.height / 2
+  );
+  await page.mouse.wheel(0, 800);
+  await page.waitForFunction(() => (
+    document.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')?.scrollTop ?? 0
+  ) > 0);
+  const wheelState = await scrollRegion.evaluate(element => ({
+    top: element.scrollTop,
+    wheelReceived: element.dataset.wheelReceived === 'true'
+  }));
+  const wheelScrollTop = wheelState.top;
+  assert.ok(wheelScrollTop > 0,
+    'Wheel/trackpad scrolling must move the History content region.');
+  assert.equal(wheelState.wheelReceived, true);
+
+  await scrollRegion.focus();
+  await page.keyboard.press('End');
+  await page.waitForFunction(() => {
+    const region = document.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+    return region !== null && region.scrollTop >= region.scrollHeight - region.clientHeight;
+  });
+  const finalContent = await scrollRegion.evaluate(region => {
+    const lastAction = region.querySelector<HTMLElement>('.money-goal-dialog__actions button:last-child');
+    const notes = region.querySelector<HTMLElement>('.strength-history-detail__notes');
+    if (!lastAction || !notes) throw new Error('History is missing its final actions or synthetic note.');
+    const regionRect = region.getBoundingClientRect();
+    const actionRect = lastAction.getBoundingClientRect();
+    return {
+      atBottom: region.scrollTop >= region.scrollHeight - region.clientHeight,
+      regionFocused: document.activeElement === region,
+      regionFocusVisible: region.matches(':focus-visible'),
+      finalActionVisible: actionRect.top >= regionRect.top && actionRect.bottom <= regionRect.bottom,
+      noteText: notes.textContent
+    };
+  });
+  assert.equal(finalContent.atBottom, true, 'End must reach the final History content.');
+  assert.equal(finalContent.regionFocused, true, 'The scroll region must receive keyboard input.');
+  assert.equal(finalContent.regionFocusVisible, true, 'The keyboard-scrollable region must keep visible keyboard focus.');
+  assert.equal(finalContent.finalActionVisible, true, 'The final History action must be reachable inside the scroll viewport.');
+  assert.match(finalContent.noteText ?? '', /Final synthetic note marker/);
+
+  await page.keyboard.press('Home');
+  await page.waitForFunction(() => (
+    document.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')?.scrollTop ?? -1
+  ) === 0);
+  const visibleExerciseNames = new Set<string>();
+  const collectVisibleExercises = async () => scrollRegion.evaluate(region => {
+    const regionRect = region.getBoundingClientRect();
+    return [...region.querySelectorAll<HTMLElement>('.strength-exercise-results-list > section')]
+      .filter(section => {
+        const heading = section.querySelector<HTMLElement>('h3');
+        if (!heading) return false;
+        const bounds = heading.getBoundingClientRect();
+        return bounds.top >= regionRect.top && bounds.bottom <= regionRect.bottom;
+      })
+      .map(section => section.querySelector<HTMLElement>('h3')?.textContent?.trim() ?? '');
+  });
+  for (let step = 0; step < 40; step += 1) {
+    for (const name of await collectVisibleExercises()) visibleExerciseNames.add(name);
+    const position = await scrollRegion.evaluate(region => ({
+      top: region.scrollTop,
+      bottom: region.scrollTop >= region.scrollHeight - region.clientHeight
+    }));
+    if (position.bottom) break;
+    await page.keyboard.press('PageDown');
+    await page.waitForFunction(previousTop => {
+      const region = document.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+      return region !== null && (
+        region.scrollTop > previousTop ||
+        region.scrollTop >= region.scrollHeight - region.clientHeight
+      );
+    }, position.top);
+  }
+  for (let index = 1; index <= 18; index += 1) {
+    const exerciseName = `Synthetic exercise ${String(index).padStart(2, '0')}`;
+    assert.ok(visibleExerciseNames.has(exerciseName),
+      `Keyboard scrolling must make ${exerciseName} visible.`);
+  }
+  assert.ok(visibleExerciseNames.has('Synthetic exercise 18'),
+    'Keyboard scrolling must reach the final exercise.');
+
+  await page.keyboard.press('Home');
+  await page.waitForFunction(() => (
+    document.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')?.scrollTop ?? -1
+  ) === 0);
+  const touchSession = await context.newCDPSession(page);
+  const touchX = Math.round(scrollBounds.x + scrollBounds.width / 2);
+  const touchStartY = Math.round(scrollBounds.y + scrollBounds.height - 36);
+  await touchSession.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: touchX, y: touchStartY, id: 1 }]
+  });
+  await touchSession.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{ x: touchX, y: touchStartY - 140, id: 1 }]
+  });
+  await touchSession.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: []
+  });
+  await page.waitForFunction(() => (
+    document.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')?.scrollTop ?? 0
+  ) > 0);
+  const touchScrollTop = await scrollRegion.evaluate(region => region.scrollTop);
+  assert.ok(touchScrollTop > 0, 'Touch scrolling must move the History content region.');
+  await touchSession.detach();
+
+  await historyDialog.locator('.money-goal-dialog__heading > h2').focus();
+  await page.keyboard.press('Tab');
+  const closeFocus = await historyDialog.getByRole('button', { name: 'Close workout details' }).evaluate(button => ({
+    active: document.activeElement === button,
+    focusVisible: button.matches(':focus-visible'),
+    outlineStyle: getComputedStyle(button).outlineStyle
+  }));
+  assert.equal(closeFocus.active, true, 'Keyboard focus should advance from the title to Close.');
+  assert.equal(closeFocus.focusVisible, true);
+  assert.equal(closeFocus.outlineStyle, 'solid');
+  await page.keyboard.press('Escape');
+  await historyDialog.waitFor({ state: 'detached' });
+  await page.waitForFunction(() =>
+    document.activeElement?.getAttribute('aria-label')?.startsWith('View Synthetic long history workout')
+  );
+
+  await historyOpener.click();
+  const reopenedHistory = page.getByRole('dialog', { name: 'Synthetic long history workout' });
+  await reopenedHistory.waitFor();
+  const editButton = reopenedHistory.getByRole('button', { name: 'Edit', exact: true });
+  await editButton.click();
+  const editWorkoutDialog = page.getByRole('dialog', { name: 'Edit workout log' });
+  await editWorkoutDialog.waitFor();
+  await reopenedHistory.waitFor({ state: 'detached' });
+  assert.equal(await page.evaluate(() => document.body.style.position), 'fixed',
+    'Opening the editor must keep page scrolling locked.');
+  await editWorkoutDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await editWorkoutDialog.waitFor({ state: 'detached' });
+  await page.waitForFunction(() =>
+    document.activeElement?.getAttribute('aria-label')?.startsWith('View Synthetic long history workout')
+  );
+  const afterClose = await page.evaluate(() => ({
+    scrollTop: document.scrollingElement?.scrollTop ?? null,
+    bodyPosition: document.body.style.position,
+    bodyTop: document.body.style.top,
+    bodyOverflow: document.body.style.overflow
+  }));
+  assert.equal(afterClose.scrollTop, beforeOpen.scrollTop,
+    'Canceling Edit must restore the page scroll position.');
+  assert.equal(afterClose.bodyPosition, beforeOpen.bodyPosition);
+  assert.equal(afterClose.bodyTop, beforeOpen.bodyTop);
+  assert.equal(afterClose.bodyOverflow, beforeOpen.bodyOverflow);
+
+  await historyOpener.click();
+  const historyAfterEditCancel = page.getByRole('dialog', { name: 'Synthetic long history workout' });
+  await historyAfterEditCancel.waitFor();
+  await historyAfterEditCancel.getByRole('button', { name: 'Close workout details' }).click();
+  await historyAfterEditCancel.waitFor({ state: 'detached' });
+  await page.waitForFunction(() =>
+    document.activeElement?.getAttribute('aria-label')?.startsWith('View Synthetic long history workout')
+  );
+  const afterCloseHistory = await page.evaluate(() => ({
+    scrollTop: document.scrollingElement?.scrollTop ?? null,
+    bodyPosition: document.body.style.position,
+    bodyTop: document.body.style.top,
+    bodyOverflow: document.body.style.overflow
+  }));
+  assert.equal(afterCloseHistory.scrollTop, beforeOpen.scrollTop,
+    'Closing History must restore the page scroll position.');
+  assert.equal(afterCloseHistory.bodyPosition, beforeOpen.bodyPosition);
+  assert.equal(afterCloseHistory.bodyTop, beforeOpen.bodyTop);
+  assert.equal(afterCloseHistory.bodyOverflow, beforeOpen.bodyOverflow);
+
+  await historyOpener.click();
+  const reopenedAgain = page.getByRole('dialog', { name: 'Synthetic long history workout' });
+  await reopenedAgain.waitFor();
+  await reopenedAgain.getByRole('button', { name: 'Close workout details' }).click();
+  await reopenedAgain.waitFor({ state: 'detached' });
+  assert.equal(await page.evaluate(() => document.scrollingElement?.scrollTop ?? null), beforeOpen.scrollTop,
+    'History must reopen and close without losing the restored page position.');
+
+  await page.getByRole('button', { name: 'All Foundations' }).click();
+  await page.getByRole('button', { name: 'Open Cardio foundation details' }).click();
+  const cardioTabs = page.getByRole('tablist', { name: 'Cardio Foundation sections' });
+  await cardioTabs.getByRole('tab', { name: 'Activities' }).click();
+  const activityCard = page.locator('#cardio-panel-activities .cardio-history-card');
+  const runEditButton = activityCard.getByRole('button', { name: /Edit run from/ });
+
+  async function verifyRunDialog(isEdit: boolean) {
+    const dialogName = isEdit ? 'Edit run' : 'Log run';
+    const dialog = page.getByRole('dialog', { name: dialogName });
+    if (!isEdit) {
+      await page.getByRole('button', { name: 'Log run' }).click();
+    } else {
+      await runEditButton.click();
+    }
+    await dialog.waitFor();
+    const initialFocus = await dialog.evaluate(element => {
+      const title = element.querySelector<HTMLElement>('#cardio-run-title');
+      const date = element.querySelector<HTMLInputElement>('#cardio-run-date');
+      return {
+        titleFocused: document.activeElement === title,
+        dateFocused: document.activeElement === date,
+        activeTag: document.activeElement?.tagName ?? null
+      };
+    });
+    assert.equal(initialFocus.titleFocused, true, `${dialogName} should initially focus its static title.`);
+    assert.equal(initialFocus.dateFocused, false, `${dialogName} must not focus or open the date picker.`);
+    const fieldNames = ['Distance (miles)', 'Hours', 'Minutes', 'Seconds'] as const;
+    const fields = fieldNames.map(name => dialog.getByRole('spinbutton', { name }));
+    const originalBorderColors = await Promise.all(fields.map(field =>
+      field.evaluate(input => getComputedStyle(input).borderTopColor)
+    ));
+    const originalFieldBounds = await Promise.all(fields.map(field => field.boundingBox()));
+    for (const [index, field] of fields.entries()) {
+      await field.click();
+      const pointerStyle = await field.evaluate(input => ({
+        outlineStyle: getComputedStyle(input).outlineStyle,
+        boxShadow: getComputedStyle(input).boxShadow
+      }));
+      assert.equal(pointerStyle.outlineStyle, 'none', `${dialogName} pointer focus should not add an outer ring.`);
+      assert.ok(pointerStyle.boxShadow === 'none' || pointerStyle.boxShadow.includes('inset'),
+        `${dialogName} pointer focus must not add an outer box shadow.`);
+      const currentBounds = await field.boundingBox();
+      const originalBounds = originalFieldBounds[index];
+      assert.ok(currentBounds && originalBounds
+        && Math.abs(currentBounds.width - originalBounds.width) <= 0.5
+        && Math.abs(currentBounds.height - originalBounds.height) <= 0.5,
+      `${dialogName} pointer focus should not change field dimensions.`);
+    }
+
+    await dialog.getByRole('button', { name: 'Close run' }).focus();
+    const dateField = dialog.locator('#cardio-run-date');
+    await page.keyboard.press('Tab');
+    assert.equal(await dateField.evaluate(input => document.activeElement === input),
+      true, `${dialogName} keyboard order should reach the date field after Close.`);
+    for (const [index, field] of fields.entries()) {
+      let isActive = await field.evaluate(input => document.activeElement === input);
+      for (let tabCount = 0; tabCount < 12 && !isActive; tabCount += 1) {
+        await page.keyboard.press('Tab');
+        isActive = await field.evaluate(input => document.activeElement === input);
+      }
+      const keyboardStyle = await field.evaluate(input => ({
+        active: document.activeElement === input,
+        visible: input.matches(':focus-visible'),
+        outlineStyle: getComputedStyle(input).outlineStyle,
+        outlineWidth: getComputedStyle(input).outlineWidth,
+        borderColor: getComputedStyle(input).borderTopColor,
+        activeDescription: document.activeElement instanceof HTMLElement
+          ? `${document.activeElement.tagName}#${document.activeElement.id}.${document.activeElement.className} type=${document.activeElement.getAttribute('type') ?? ''}`
+          : null
+      }));
+      assert.equal(keyboardStyle.active, true,
+        `${dialogName} keyboard order should reach ${fieldNames[index]}; focused ${keyboardStyle.activeDescription}.`);
+      assert.equal(keyboardStyle.visible, true);
+      assert.equal(keyboardStyle.outlineStyle, 'none', `${dialogName} should not add an outer ring for keyboard focus.`);
+      assert.notEqual(keyboardStyle.borderColor, originalBorderColors[index],
+        `${dialogName} keyboard focus should visibly change the existing ${fieldNames[index]} border.`);
+    }
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await dialog.waitFor({ state: 'detached' });
+  }
+
+  for (const textSize of ['small', 'medium', 'large'] as const) {
+    await setPreviewTextSize(page, textSize);
+    for (const viewportWidth of [375, 390, 430]) {
+      await page.setViewportSize({ width: viewportWidth, height: 844 });
+      await verifyRunDialog(false);
+      await verifyRunDialog(true);
+    }
+  }
+
+  await page.getByRole('button', { name: 'People', exact: true }).click();
+  const peopleCard = page.locator('.people-view__list .people-card').first();
+  const peopleCardButton = peopleCard.locator('.people-card__open');
+  await peopleCardButton.waitFor();
+  assert.equal(await peopleCardButton.getAttribute('aria-label'),
+    'Open profile for Alexandria-Brooks-Williams-ExtremelyLong Synthetic Person');
+  assert.equal(await peopleCard.locator('.people-card__name').textContent(),
+    'Alexandria-Brooks-Williams-ExtremelyLong');
+  assert.equal(await peopleCard.locator('.people-card__relationship').textContent(),
+    'A very long synthetic relationship that wraps at narrow widths');
+  assert.equal(await peopleCard.locator('.people-card__classification').textContent(), 'Marriage');
+  assert.equal(await peopleCard.locator('.people-card__connection-label').textContent(), 'Connected');
+  assert.equal(await peopleCard.locator('.people-card__connection-time').textContent(), '1 wk ago');
+  assert.equal(await peopleCard.locator('.people-card__age').textContent(), 'Age 47');
+  assert.equal(await peopleCard.locator('.people-card__age').count(), 1);
+  assert.ok(await peopleCard.locator('.person-badge-avatar').count() > 0,
+    'People cards retain the initials fallback when there is no saved photo.');
+
+  for (const textSize of ['small', 'medium', 'large'] as const) {
+    await setPreviewTextSize(page, textSize);
+    for (const viewportWidth of [375, 390, 430]) {
+      await page.setViewportSize({ width: viewportWidth, height: 844 });
+      const layout = await peopleCard.evaluate(card => {
+        const button = card.querySelector<HTMLElement>('.people-card__open');
+        const score = card.querySelector<HTMLElement>('.people-card__score');
+        const connection = card.querySelector<HTMLElement>('.people-card__connection-detail');
+        const age = card.querySelector<HTMLElement>('.people-card__age');
+        const footer = card.querySelector<HTMLElement>('.people-card__birthday-footer');
+        const birthdayIcon = card.querySelector<HTMLElement>('.people-card__birthday svg');
+        const classification = card.querySelector<HTMLElement>('.people-card__classifications');
+        const name = card.querySelector<HTMLElement>('.people-card__name');
+        const relationship = card.querySelector<HTMLElement>('.people-card__relationship');
+        const avatar = card.querySelector<HTMLElement>('.person-badge-avatar');
+        if (!button || !score || !connection || !age || !footer || !birthdayIcon
+          || !classification || !name || !relationship || !avatar) {
+          throw new Error('The synthetic People card is missing required content.');
+        }
+        const rect = (element: Element) => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            left: bounds.left,
+            right: bounds.right,
+            top: bounds.top,
+            bottom: bounds.bottom
+          };
+        };
+        const style = getComputedStyle(button);
+        const buttonBounds = rect(button);
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          contentLeft: buttonBounds.left + Number.parseFloat(style.paddingLeft),
+          contentRight: buttonBounds.right - Number.parseFloat(style.paddingRight),
+          score: rect(score),
+          connection: rect(connection),
+          age: rect(age),
+          footer: rect(footer),
+          birthdayIcon: rect(birthdayIcon),
+          classification: rect(classification),
+          name: rect(name),
+          relationship: rect(relationship),
+          avatar: rect(avatar)
+        };
+      });
+      const label = `People card at ${viewportWidth}px / ${textSize} text`;
+      assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport width`);
+      assert.equal(layout.documentWidth, viewportWidth, `${label} must not overflow horizontally`);
+      for (const [name, right] of [
+        ['Health score', layout.score.right],
+        ['Connected badge', layout.connection.right],
+        ['Age', layout.age.right],
+        ['divider', layout.footer.right]
+      ] as const) {
+        assert.ok(Math.abs(right - layout.contentRight) <= 1,
+          `${label} ${name} right edge ${right} must align to shared content edge ${layout.contentRight}.`);
+      }
+      for (const [name, left] of [
+        ['category badge group', layout.classification.left],
+        ['birthday icon', layout.birthdayIcon.left],
+        ['divider', layout.footer.left]
+      ] as const) {
+        assert.ok(Math.abs(left - layout.contentLeft) <= 1,
+          `${label} ${name} left edge ${left} must align to shared content edge ${layout.contentLeft}.`);
+      }
+      assert.ok(layout.avatar.left < layout.name.left && layout.avatar.right < layout.name.left,
+        `${label} photo should sit to the left of the name.`);
+      assert.ok(layout.relationship.top >= layout.name.bottom,
+        `${label} relationship should sit below the name.`);
+    }
+  }
+
+  await context.close();
 }
 
 async function main() {
@@ -4009,31 +4801,66 @@ async function main() {
                 descriptionVisible: descriptionBounds.width > 0 && descriptionBounds.height > 0
               };
             });
-            const personHealthLayout = await page.evaluate(() => {
+            const personHealthLayouts = await page.evaluate(() => {
               const settings = document.querySelector<HTMLElement>('.prayer-settings');
               if (!settings) throw new Error('Prayer Settings is missing its responsive layout host.');
-              const fixture = document.createElement('div');
-              fixture.className = 'person-health-component-scores';
-              fixture.dataset.count = '2';
-              fixture.setAttribute('aria-hidden', 'true');
-              fixture.style.width = '100%';
-              for (const label of ['Rhythms', 'Connections']) {
-                const item = document.createElement('button');
-                item.type = 'button';
-                item.className = 'person-health-component-score';
-                item.textContent = label;
-                fixture.append(item);
-              }
-              settings.append(fixture);
-              const tracks = getComputedStyle(fixture).gridTemplateColumns.match(/[\d.]+px/g) ?? [];
-              const dividers = [...fixture.children].map(element => getComputedStyle(element).borderLeftWidth);
-              const result = {
-                tracks: tracks.map(Number.parseFloat),
-                dividers,
-                width: fixture.getBoundingClientRect().width
-              };
-              fixture.remove();
-              return result;
+              return [2, 3].map(count => {
+                const fixture = document.createElement('div');
+                fixture.className = 'person-health-component-scores';
+                fixture.dataset.count = String(count);
+                fixture.setAttribute('aria-hidden', 'true');
+                fixture.style.width = '100%';
+                const areas = count === 2
+                  ? [{ label: 'Rhythms', score: '72' }, { label: 'Connections', score: '—' }]
+                  : [
+                      { label: 'Rhythms', score: '72' },
+                      { label: 'Connections', score: '—' },
+                      { label: 'Prayer', score: '0' }
+                    ];
+                for (const { label, score } of areas) {
+                  const item = document.createElement('div');
+                  item.className = 'person-health-component-score';
+                  const badge = document.createElement('span');
+                  badge.className = 'category-health-badge person-health-component-score__badge';
+                  badge.textContent = score;
+                  const labelElement = document.createElement('span');
+                  labelElement.className = 'person-health-component-score__label';
+                  labelElement.textContent = label;
+                  item.append(badge, labelElement);
+                  fixture.append(item);
+                }
+                settings.append(fixture);
+                const tracks = getComputedStyle(fixture).gridTemplateColumns.match(/[\d.]+px/g) ?? [];
+                const items = [...fixture.querySelectorAll<HTMLElement>('.person-health-component-score')]
+                  .map(item => {
+                    const badge = item.querySelector<HTMLElement>('.person-health-component-score__badge');
+                    const label = item.querySelector<HTMLElement>('.person-health-component-score__label');
+                    if (!badge || !label) throw new Error('A Person Health item is missing its badge or label.');
+                    const itemRect = item.getBoundingClientRect();
+                    const badgeRect = badge.getBoundingClientRect();
+                    const labelRect = label.getBoundingClientRect();
+                    return {
+                      gap: Number.parseFloat(getComputedStyle(item).rowGap),
+                      verticalSeparation: labelRect.top - badgeRect.bottom,
+                      badgeCenterOffset: Math.abs(
+                        badgeRect.left + badgeRect.width / 2 - (itemRect.left + itemRect.width / 2)
+                      ),
+                      labelCenterOffset: Math.abs(
+                        labelRect.left + labelRect.width / 2 - (itemRect.left + itemRect.width / 2)
+                      ),
+                      labelHeight: labelRect.height
+                    };
+                  });
+                const result = {
+                  count,
+                  tracks: tracks.map(Number.parseFloat),
+                  dividers: [...fixture.children].map(element => getComputedStyle(element).borderLeftWidth),
+                  items,
+                  width: fixture.getBoundingClientRect().width
+                };
+                fixture.remove();
+                return result;
+              });
             });
             assert.equal(prayerSettingsLayout.documentWidth, viewportWidth,
               `Prayer Settings must not overflow at ${viewportWidth}px / ${textSize}.`);
@@ -4044,11 +4871,20 @@ async function main() {
             assert.equal(prayerSettingsLayout.toggleHeight, 26);
             assert.equal(prayerSettingsLayout.descriptionFits, true);
             assert.equal(prayerSettingsLayout.descriptionVisible, true);
-            assert.equal(personHealthLayout.tracks.length, 2);
-            assert.ok(Math.abs(personHealthLayout.tracks[0]! - personHealthLayout.tracks[1]!) < 1,
-              'Prayer-off Person Health must keep Rhythms and Connections evenly spaced.');
-            assert.deepEqual(personHealthLayout.dividers, ['0px', '1px']);
-            assert.ok(personHealthLayout.width <= viewportWidth);
+            for (const layout of personHealthLayouts) {
+              assert.equal(layout.tracks.length, layout.count);
+              assert.ok(layout.tracks.every(track => Math.abs(track - layout.tracks[0]!) < 1),
+                `Person Health must retain equal ${layout.count}-column tracks at ${viewportWidth}px / ${textSize}.`);
+              assert.deepEqual(layout.dividers, ['0px', ...Array.from({ length: layout.count - 1 }, () => '1px')]);
+              assert.ok(layout.width <= viewportWidth);
+              assert.ok(layout.items.every(item =>
+                Math.abs(item.gap - 8) < 0.5
+                && item.verticalSeparation >= 7.5
+                && item.badgeCenterOffset < 1
+                && item.labelCenterOffset < 1
+                && item.labelHeight > 0
+              ), `Person Health badges and labels must stack and stay centered at ${viewportWidth}px / ${textSize}.`);
+            }
           }
         }
         await page.getByRole('button', { name: '‹ Settings' }).click();
@@ -5561,7 +6397,7 @@ async function main() {
           {
             name: 'Weight',
             tablist: 'Weight Foundation sections',
-            tabs: ['Progress', 'Measurements', 'Rhythms'],
+            tabs: ['Progress', 'Weigh-Ins', 'Rhythms'],
             panels: ['weight-panel-progress', 'weight-panel-measurements', 'weight-panel-rhythms'],
             gear: 'Weight tracking settings',
             dialog: 'Weight goals',
@@ -5572,6 +6408,7 @@ async function main() {
           }
         ] as const;
 
+        let cardioGoalsConfigured = false;
         for (const [foundationIndex, foundation] of cardioWeightFoundations.entries()) {
           if (foundationIndex > 0) {
             await page.getByRole('button', { name: /All Foundations/ }).click();
@@ -5676,7 +6513,7 @@ async function main() {
                 assert.ok(panelLayout.actionHeights.every(height => height >= 44),
                   `${foundation.name} ${tabName} actions must retain touch targets.`);
                 if ((foundation.name === 'Cardio' && tabName === 'Activities')
-                  || (foundation.name === 'Weight' && tabName === 'Measurements')) {
+                  || (foundation.name === 'Weight' && tabName === 'Weigh-Ins')) {
                   const sectionSpacing = await panel.evaluate(element => {
                     const heading = element.querySelector<HTMLElement>('.strength-section-heading');
                     const historyCard = element.querySelector<HTMLElement>(
@@ -5712,6 +6549,14 @@ async function main() {
                       if (!day || !zone || !purpose || !weekday || !date || !today || !activity) {
                         throw new Error('Cardio Activity insights needs a complete current-day highlight.');
                       }
+                      const dayRect = day.getBoundingClientRect();
+                      const dayCenter = dayRect.left + dayRect.width / 2;
+                      const textCenters = [weekday, date, today].map(element => {
+                        const rect = element.getBoundingClientRect();
+                        return rect.left + rect.width / 2;
+                      });
+                      const meters = [...zone.querySelectorAll<HTMLElement>('.cardio-measure__track')];
+                      const fills = meters.map(meter => meter.querySelector<HTMLElement>(':scope > span'));
                       return {
                         dayBackground: getComputedStyle(day).backgroundColor,
                         zoneBackground: getComputedStyle(zone).backgroundColor,
@@ -5721,7 +6566,12 @@ async function main() {
                         dateColor: getComputedStyle(date).color,
                         todayColor: getComputedStyle(today).color,
                         accentColor: getComputedStyle(purpose).color,
-                        activityColor: getComputedStyle(activity).color
+                        activityColor: getComputedStyle(activity).color,
+                        centeringOffsets: textCenters.map(center => center - dayCenter),
+                        centered: textCenters.every(center => Math.abs(center - dayCenter) <= 1),
+                        meterLabels: meters.map(meter => meter.getAttribute('aria-label')),
+                        meterTrackColors: meters.map(meter => getComputedStyle(meter).backgroundColor),
+                        meterFillColors: fills.map(fill => fill ? getComputedStyle(fill).backgroundColor : null)
                       };
                     });
                     assert.equal(todayHighlight.dayBackground, todayHighlight.zoneBackground);
@@ -5731,6 +6581,17 @@ async function main() {
                     assert.equal(todayHighlight.todayColor, todayHighlight.accentColor);
                     assert.notEqual(todayHighlight.activityColor, todayHighlight.accentColor,
                       'The activity marker must retain its semantic status color.');
+                    assert.equal(todayHighlight.centered, true,
+                      `The Today day, date, and label should be centered at ${viewportWidth}px / ${textSize} text: ${todayHighlight.centeringOffsets.join(', ')}px.`);
+                    if (cardioGoalsConfigured) {
+                      assert.deepEqual(todayHighlight.meterLabels, ['Runs this week', 'Miles this week']);
+                      assert.deepEqual(todayHighlight.meterTrackColors, [
+                        'rgb(227, 235, 244)', 'rgb(227, 235, 244)'
+                      ]);
+                      assert.deepEqual(todayHighlight.meterFillColors, [
+                        'rgb(74, 107, 148)', 'rgb(74, 107, 148)'
+                      ]);
+                    }
                   } else {
                     const calculationLink = panel.locator('.weight-calculation-info summary');
                     const baseStyle = await panel.evaluate(element => {
@@ -5813,13 +6674,13 @@ async function main() {
                       documentWidth: 375
                     });
                     assert.equal(await settings.getByRole('button', { name: 'Save goals' }).isVisible(), true);
-                    const dateInput = settings.locator('input[type="date"]').first();
-                    await dateInput.focus();
+                    const firstInput = settings.locator('input').first();
+                    await firstInput.focus();
                     await page.keyboard.press('Tab');
                     await page.keyboard.press('Shift+Tab');
-                    const dateFocus = await dateInput.evaluate(input => {
+                    const fieldFocus = await firstInput.evaluate(input => {
                       const region = input.closest<HTMLElement>('.fitness-goals-scroll');
-                      if (!region) throw new Error('Foundation tracking date needs a scroll region.');
+                      if (!region) throw new Error('Foundation settings input needs a scroll region.');
                       const style = getComputedStyle(input);
                       const rect = input.getBoundingClientRect();
                       const regionRect = region.getBoundingClientRect();
@@ -5834,10 +6695,10 @@ async function main() {
                         requiredClearance: clearance
                       };
                     });
-                    assert.equal(dateFocus.active, true);
-                    assert.equal(dateFocus.visible, true);
-                    assert.ok(dateFocus.leftClearance >= dateFocus.requiredClearance);
-                    assert.ok(dateFocus.rightClearance >= dateFocus.requiredClearance);
+                    assert.equal(fieldFocus.active, true);
+                    assert.equal(fieldFocus.visible, true);
+                    assert.ok(fieldFocus.leftClearance >= fieldFocus.requiredClearance);
+                    assert.ok(fieldFocus.rightClearance >= fieldFocus.requiredClearance);
 
                     const numericInput = settings.locator('.numeric-control__input').first();
                     await numericInput.focus();
@@ -5865,11 +6726,18 @@ async function main() {
                     assert.equal(numericFocus.outlineOffset, '2px');
                     assert.ok(numericFocus.leftClearance >= numericFocus.requiredClearance);
                     assert.ok(numericFocus.rightClearance >= numericFocus.requiredClearance);
-                    await settings.getByRole('button', { name: 'Cancel' }).click();
+                    if (foundation.name === 'Cardio' && !cardioGoalsConfigured) {
+                      await settings.getByRole('spinbutton', { name: 'Runs per week' }).fill('3');
+                      await settings.getByRole('spinbutton', { name: 'Miles per week' }).fill('12');
+                      await settings.getByRole('button', { name: 'Save goals' }).click();
+                      cardioGoalsConfigured = true;
+                    } else {
+                      await settings.getByRole('button', { name: 'Cancel' }).click();
+                    }
                     await page.waitForFunction(label =>
                       document.activeElement?.getAttribute('aria-label') === label, foundation.gear);
                   }
-                } else if (tabName === 'Activities' || tabName === 'Measurements') {
+                } else if (tabName === 'Activities' || tabName === 'Weigh-Ins') {
                   assert.equal(await panel.getByText(foundation.emptyActivity, { exact: true }).isVisible(), true);
                   if (foundation.name === 'Cardio') {
                     const runDivider = await panel.evaluate(element => {
@@ -5886,6 +6754,23 @@ async function main() {
                     });
                     assert.equal(runDivider, '0px',
                       'Run-history rows should not use an internal top divider.');
+                    await panel.getByRole('button', { name: 'Log run' }).click();
+                    const runDialog = page.getByRole('dialog', { name: 'Log run' });
+                    const runHeading = runDialog.getByRole('heading', { name: 'Log run' });
+                    assert.equal(await runHeading.evaluate(heading => heading === document.activeElement), true);
+                    assert.equal(await runDialog.getByLabel('Activity date')
+                      .evaluate(input => input === document.activeElement), false);
+                    await verifyCardioRunDialogLayout(page, viewportWidth);
+                    await runDialog.getByRole('button', { name: 'Cancel' }).click();
+                  } else {
+                    await panel.getByRole('button', { name: 'Add weigh-in' }).last().click();
+                    const weighInDialog = page.getByRole('dialog', { name: 'Add weigh-in' });
+                    const weighInHeading = weighInDialog.getByRole('heading', { name: 'Add weigh-in' });
+                    assert.equal(await weighInHeading.evaluate(heading => heading === document.activeElement), true);
+                    assert.equal(await weighInDialog.getByLabel('Date')
+                      .evaluate(input => input === document.activeElement), false);
+                    await verifyWeightEntryDialogLayout(page, viewportWidth);
+                    await weighInDialog.getByRole('button', { name: 'Cancel' }).click();
                   }
                 } else {
                   assert.equal(await panel.getByText(foundation.emptyRhythms, { exact: true }).isVisible(), true);
@@ -6376,9 +7261,13 @@ async function main() {
               const tablist = element.querySelector<HTMLElement>('[role="tablist"]');
               const panel = element.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])');
               const content = panel?.firstElementChild as HTMLElement | null;
-              if (!tablist || !panel || !content) {
+              const hero = element.querySelector<HTMLElement>('.page-hero-header-stack');
+              const healthCard = element.querySelector<HTMLElement>('.category-health-summary');
+              if (!tablist || !panel || !content || !hero || !healthCard) {
                 throw new Error('Finance must expose a tablist and one visible panel.');
               }
+              const heroRect = hero.getBoundingClientRect();
+              const healthRect = healthCard.getBoundingClientRect();
               const tabsRect = tablist.getBoundingClientRect();
               const panelRect = panel.getBoundingClientRect();
               const contentRect = content.getBoundingClientRect();
@@ -6387,7 +7276,13 @@ async function main() {
                 documentWidth: document.documentElement.scrollWidth,
                 summaryAndTabs: Math.round(tabsRect.top - element.querySelector('.category-health-summary')!.getBoundingClientRect().bottom),
                 tabsToContent: Math.round(contentRect.top - tabsRect.bottom),
-                panelVisible: panelRect.width > 0 && panelRect.height > 0
+                panelVisible: panelRect.width > 0 && panelRect.height > 0,
+                heroLeft: heroRect.left,
+                heroRight: heroRect.right,
+                healthLeft: healthRect.left,
+                healthRight: healthRect.right,
+                tabsLeft: tabsRect.left,
+                tabsRight: tabsRect.right
               };
             });
             assert.equal(layout.viewportWidth, viewportWidth);
@@ -6398,6 +7293,12 @@ async function main() {
             assert.ok(Math.abs(layout.tabsToContent - 12) <= 1,
               `Finance tabs and content should use the shared 12px gap at ${viewportWidth}px / ${textSize}.`);
             assert.equal(layout.panelVisible, true);
+            assert.ok(Math.abs(layout.heroLeft - layout.healthLeft) <= 1
+              && Math.abs(layout.heroRight - layout.healthRight) <= 1,
+            `Finance content should align with its header card at ${viewportWidth}px / ${textSize}.`);
+            assert.ok(Math.abs(layout.tabsLeft - layout.healthLeft) <= 1
+              && Math.abs(layout.tabsRight - layout.healthRight) <= 1,
+            `Finance tabs should match the Health card width at ${viewportWidth}px / ${textSize}.`);
 
             for (const tabName of ['Foundations', 'Goals', 'Rhythms'] as const) {
               await financeTabs.getByRole('tab', { name: tabName, exact: true }).click();
@@ -6432,6 +7333,19 @@ async function main() {
                   await panel.getByRole('button', { name: 'View details for Browser review goal' }).waitFor();
                   browserGoalCreated = true;
                 }
+                const checkInTrigger = panel.getByRole('button', { name: 'Check in' }).first();
+                await checkInTrigger.click();
+                const checkInDialog = page.getByRole('dialog', { name: 'Record balance check-in' });
+                const checkInHeading = checkInDialog.getByRole('heading', { name: 'Record balance check-in' });
+                assert.equal(await checkInHeading.evaluate(heading => heading === document.activeElement), true);
+                await page.keyboard.press('Tab');
+                const closeCheckIn = checkInDialog.getByRole('button', { name: 'Close balance check-in' });
+                assert.equal(await closeCheckIn.evaluate(button => button === document.activeElement), true);
+                assert.equal(await closeCheckIn.evaluate(button => getComputedStyle(button).outlineStyle), 'solid');
+                await verifyFinanceCheckInPalette(page, viewportWidth);
+                await checkInDialog.getByRole('button', { name: 'Cancel' }).click();
+                assert.equal(await checkInTrigger.evaluate(button => button === document.activeElement), true);
+
                 const detailsTrigger = panel.getByRole('button', { name: /^View details for / }).first();
                 const detailsLabel = await detailsTrigger.getAttribute('aria-label');
                 assert.ok(detailsLabel);
@@ -6914,6 +7828,7 @@ async function main() {
       await personProfile.getByRole('tab', { name: 'Connections' }).click();
       await profilePage.setViewportSize({ width: 375, height: 844 });
       let checkedKeyboardSelect = false;
+      let checkedTouchSelect = false;
       for (const textSize of ['small', 'medium', 'large'] as const) {
         await profilePage.evaluate(size => {
           document.documentElement.dataset.mobileTextSize = size === 'small'
@@ -6935,6 +7850,20 @@ async function main() {
           }));
           await addConnection.click();
           const connectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
+          const typeSelect = connectionDialog.getByRole('combobox', { name: 'Connection type: Text' });
+          const pointerFocus = await typeSelect.evaluate(trigger => ({
+            active: document.activeElement === trigger,
+            focusVisible: trigger.matches(':focus-visible'),
+            outlineStyle: getComputedStyle(trigger).outlineStyle,
+            borderColor: getComputedStyle(trigger).borderTopColor,
+            boxShadow: getComputedStyle(trigger).boxShadow
+          }));
+          assert.equal(pointerFocus.active, true, 'The Connection type control should remain the dialog initial focus target.');
+          assert.equal(pointerFocus.focusVisible, false,
+            'Opening Log connection by pointer should not classify its initial focus as keyboard focus.');
+          assert.equal(pointerFocus.outlineStyle, 'none');
+          assert.equal(pointerFocus.boxShadow, 'none',
+            'Pointer focus should retain the normal Connection type border without an outer shadow.');
           const connectionGeometry = await connectionDialog.evaluate(dialog => {
             const form = dialog.querySelector<HTMLElement>('.friendships-connection-form');
             const actions = dialog.querySelector<HTMLElement>('.friendships-connection-form button[type="submit"]');
@@ -6972,7 +7901,27 @@ async function main() {
           assert.equal(await connectionDialog.getByRole('button', { name: 'Cancel' }).isVisible(), true);
 
           if (!checkedKeyboardSelect) {
-            const typeSelect = connectionDialog.getByRole('combobox', { name: 'Connection type: Text' });
+            await profilePage.keyboard.press('Escape');
+            await connectionDialog.waitFor({ state: 'detached' });
+            await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+            await profilePage.keyboard.press('Enter');
+            await connectionDialog.waitFor();
+            const keyboardFocus = await typeSelect.evaluate(trigger => ({
+              active: document.activeElement === trigger,
+              focusVisible: trigger.matches(':focus-visible'),
+              outlineStyle: getComputedStyle(trigger).outlineStyle,
+              borderColor: getComputedStyle(trigger).borderTopColor,
+              boxShadow: getComputedStyle(trigger).boxShadow
+            }));
+            assert.equal(keyboardFocus.active, true);
+            assert.equal(keyboardFocus.focusVisible, true,
+              'Keyboard opening should retain visible focus on the Connection type control.');
+            assert.equal(keyboardFocus.outlineStyle, 'none',
+              'Keyboard focus should not use the clipped outer outline.');
+            assert.notEqual(keyboardFocus.borderColor, pointerFocus.borderColor,
+              'Keyboard focus styling should use the existing field border.');
+            assert.ok(keyboardFocus.boxShadow.includes('inset'),
+              'Keyboard focus should use a subtle inset indicator that cannot be clipped.');
             await typeSelect.press('Enter');
             await profilePage.keyboard.press('ArrowDown');
             await profilePage.keyboard.press('Enter');
@@ -6982,6 +7931,26 @@ async function main() {
 
           await connectionDialog.getByRole('button', { name: 'Close connection editor' }).click();
           await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+          if (!checkedTouchSelect) {
+            const bounds = await addConnection.boundingBox();
+            if (!bounds) throw new Error('The Connection type opener must remain visible for touch verification.');
+            await profilePage.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+            await connectionDialog.waitFor();
+            const touchFocus = await typeSelect.evaluate(trigger => ({
+              active: document.activeElement === trigger,
+              focusVisible: trigger.matches(':focus-visible'),
+              outlineStyle: getComputedStyle(trigger).outlineStyle,
+              boxShadow: getComputedStyle(trigger).boxShadow
+            }));
+            assert.equal(touchFocus.active, true);
+            assert.equal(touchFocus.focusVisible, false,
+              'Opening Log connection by touch should not show a keyboard focus ring.');
+            assert.equal(touchFocus.outlineStyle, 'none');
+            assert.equal(touchFocus.boxShadow, 'none');
+            await connectionDialog.getByRole('button', { name: 'Close connection editor' }).click();
+            await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+            checkedTouchSelect = true;
+          }
           assert.deepEqual(await profilePage.evaluate(() => ({
             overflow: document.body.style.overflow,
             position: document.body.style.position,
@@ -7360,6 +8329,7 @@ async function main() {
       await context.close();
     }
 
+    await verifyFoundationAlignmentAndDialogScrolling(browser, baseUrl);
     console.log('Browser CSS contract passed: sign-in and dashboard layouts render without tend.css.');
   } finally {
     await browser?.close();

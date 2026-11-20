@@ -508,7 +508,8 @@ describe('shared Season correction score preview', () => {
       makeRecord('earliest', '2026-10-17')
     ], onSave);
 
-    expect(document.activeElement).toBe(screen.getByLabelText('Season name (optional)'));
+    const correctionDialog = screen.getByRole('dialog');
+    expect(document.activeElement).toBe(correctionDialog.querySelector('h2'));
     expect(document.activeElement).not.toBe(screen.getByLabelText('Starting date'));
     const savedSchedule = screen.getByRole('region', { name: 'Your saved schedule' });
     expect(savedSchedule.textContent).toContain('Every day');

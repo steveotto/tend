@@ -15,15 +15,66 @@ import type {
   DatedRhythmCompletion
 } from './rhythm-completion.ts';
 
+export type CardioDistanceUnit = 'mi' | 'km';
+
 export type CardioRun = {
   id: string;
   date: string;
   distance: number;
+  distanceUnit?: CardioDistanceUnit;
+  durationSeconds?: number;
   notes?: string;
   rhythmId?: string;
   rhythmOccurrence?: string;
   completionId?: string;
 };
+
+export const MAX_CARDIO_RUN_DURATION_SECONDS = 7 * 24 * 60 * 60;
+
+export function parseCardioRunDuration(
+  hoursText: string,
+  minutesText: string,
+  secondsText: string
+): { valid: true; durationSeconds: number | null } | { valid: false; error: string } {
+  const parts = [hoursText, minutesText, secondsText] as const;
+  if (parts.every(part => !part.trim())) return { valid: true, durationSeconds: null };
+  const parsePart = (part: string): number | null => {
+    if (!part.trim()) return 0;
+    if (!/^\d+$/.test(part.trim())) return null;
+    const parsed = Number(part);
+    return Number.isSafeInteger(parsed) ? parsed : null;
+  };
+  const values = [parsePart(hoursText), parsePart(minutesText), parsePart(secondsText)] as const;
+  const [hours, minutes, seconds] = values;
+  if (hours === null || minutes === null || seconds === null
+    || minutes > 59 || seconds > 59) {
+    return { valid: false, error: 'Enter a valid duration using whole hours, minutes, and seconds.' };
+  }
+  const durationSeconds = hours * 3600 + minutes * 60 + seconds;
+  if (!Number.isSafeInteger(durationSeconds) || durationSeconds <= 0
+    || durationSeconds > MAX_CARDIO_RUN_DURATION_SECONDS) {
+    return { valid: false, error: `Duration must be greater than zero and no longer than 7 days.` };
+  }
+  return { valid: true, durationSeconds };
+}
+
+export function cardioDistanceFromMiles(distanceMiles: number, unit: CardioDistanceUnit): number {
+  return unit === 'km' ? distanceMiles * 1.609344 : distanceMiles;
+}
+
+export function cardioDistanceToMiles(distance: number, unit: CardioDistanceUnit): number {
+  return unit === 'km' ? distance / 1.609344 : distance;
+}
+
+export function cardioPaceSecondsPerUnit(
+  durationSeconds: number | null | undefined,
+  distanceInUnit: number
+): number | null {
+  if (typeof durationSeconds !== 'number' || !Number.isSafeInteger(durationSeconds) || durationSeconds <= 0
+    || !Number.isFinite(distanceInUnit) || distanceInUnit <= 0) return null;
+  const pace = Math.round(durationSeconds / distanceInUnit);
+  return Number.isSafeInteger(pace) && pace > 0 ? pace : null;
+}
 
 export type CardioData = {
   goals: unknown;
@@ -187,6 +238,11 @@ export function isCardioRun(value: unknown): value is CardioRun {
     && typeof value.id === 'string' && value.id.trim().length > 0 && value.id.length <= 160
     && typeof value.date === 'string' && isValidDate(value.date)
     && typeof value.distance === 'number' && Number.isFinite(value.distance) && value.distance > 0
+    && (value.distanceUnit === undefined || value.distanceUnit === 'mi' || value.distanceUnit === 'km')
+    && (value.durationSeconds === undefined
+      || typeof value.durationSeconds === 'number'
+        && Number.isSafeInteger(value.durationSeconds) && value.durationSeconds > 0
+        && value.durationSeconds <= MAX_CARDIO_RUN_DURATION_SECONDS)
     && (value.notes === undefined || typeof value.notes === 'string' && value.notes.length <= 1000)
     && ((value.rhythmId === undefined && value.rhythmOccurrence === undefined && value.completionId === undefined)
       || (typeof value.rhythmId === 'string' && value.rhythmId.length > 0
@@ -379,7 +435,14 @@ export function saveCardioRun(
     data: {
       ...data,
       runs: matches.length
-        ? data.runs.map(value => isRecord(value) && value.id === run.id ? { ...value, ...run } : value)
+        ? data.runs.map(value => {
+            if (!isRecord(value) || value.id !== run.id) return value;
+            const updated: Record<string, unknown> = { ...value, ...run };
+            for (const key of ['distanceUnit', 'durationSeconds', 'notes', 'rhythmId', 'rhythmOccurrence', 'completionId'] as const) {
+              if (!Object.hasOwn(run, key)) delete updated[key];
+            }
+            return updated;
+          })
         : [...data.runs, run]
     }
   };

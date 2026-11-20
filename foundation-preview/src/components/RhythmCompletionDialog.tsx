@@ -18,6 +18,7 @@ export function RhythmCompletionDialog({
       labelledBy="rhythm-completion-heading"
       initialFocusId="rhythm-completion-heading"
       surfaceClassName="money-goal-dialog__surface--flush"
+      phoneFullScreen
       onClose={onClose}
     >
       <RhythmCompletionForm

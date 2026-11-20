@@ -8,7 +8,11 @@ import { createStrengthData, strengthMuscles } from './strength.ts';
 import type { StrengthMuscleId, StrengthSavedWorkout, StrengthWorkoutLog } from './strength.ts';
 import { poundsToKilograms, validateWeightDataShape } from './weight.ts';
 import type { WeightMeasurement } from './weight.ts';
-import { cardioGoalSettings, validateCardioDataShape } from './cardio.ts';
+import {
+  cardioGoalSettings,
+  MAX_CARDIO_RUN_DURATION_SECONDS,
+  validateCardioDataShape
+} from './cardio.ts';
 import type { CardioRun } from './cardio.ts';
 import { createFriendshipData } from './friendships.ts';
 import type { ConnectionCadence, FriendshipConnection } from './friendships.ts';
@@ -1210,6 +1214,7 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
       const runIds = new Set<string>();
       for (const [index, raw] of legacyRuns.entries()) {
         const path = `/fitness/runs/${index}`;
+        const durationSeconds = isRecord(raw) ? raw.durationSeconds : undefined;
         if (isRecord(raw) && raw.unit !== undefined && raw.unit !== 'mi') {
           addIssue(report.unsupported, `${path}/unit`);
           continue;
@@ -1217,6 +1222,9 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
         if (!isRecord(raw) || !isNonEmptyText(raw.id) || typeof raw.date !== 'string'
           || !isValidDate(raw.date) || raw.date > currentDate
           || !isNonNegativeNumber(raw.distance) || raw.distance <= 0
+          || durationSeconds !== undefined
+            && (typeof durationSeconds !== 'number' || !Number.isSafeInteger(durationSeconds)
+              || durationSeconds <= 0 || durationSeconds > MAX_CARDIO_RUN_DURATION_SECONDS)
           || raw.notes !== undefined && (typeof raw.notes !== 'string' || raw.notes.length > 1000)) {
           addIssue(report.invalid, path);
           continue;
@@ -1231,13 +1239,14 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
           id: raw.id,
           date: raw.date,
           distance: raw.distance,
+          ...(durationSeconds === undefined ? {} : { durationSeconds }),
           ...(typeof raw.notes === 'string' && raw.notes ? { notes: raw.notes } : {}),
           ...(completionLink ? completionLink : {})
         });
         runIds.add(raw.id);
         report.supported.cardioRuns++;
         for (const key of Object.keys(raw)) {
-          if (!['id', 'date', 'distance', 'unit', 'notes', 'rhythmId',
+          if (!['id', 'date', 'distance', 'unit', 'durationSeconds', 'notes', 'rhythmId',
             'rhythmOccurrence', 'completionId', 'fitnessType'].includes(key)) {
             addIssue(report.unsupported, `${path}/${key}`);
           }

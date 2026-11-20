@@ -10,6 +10,7 @@ import {
 } from '../domain/money-goals.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonDateField } from './PersonDateField.tsx';
+import { ToolZone, ToolZoneTrendingUpIcon } from './ToolZone.tsx';
 
 type ProgressCheckInProps = {
   goal: MoneyGoal;
@@ -55,11 +56,23 @@ export function ProgressCheckIn({ goal, checkIn, currentDate, onSave, onClose }:
   return (
     <MoneyGoalDialog
       title={checkIn ? 'Correct balance check-in' : 'Record balance check-in'}
+      labelledBy="finance-check-in-title"
+      titleId="finance-check-in-title"
       intro={`${goal.title} · ${goal.currency}. Enter an observed balance, not a payment amount.`}
+      closeLabel="Close balance check-in"
       phoneFullScreen
       scrollableBody
+      dialogClassName="finance-goal-fullscreen-dialog"
       onClose={onClose}
     >
+      <ToolZone
+        className="finance-check-in-tool-zone"
+        headingId="finance-check-in-tool-zone-title"
+        icon={<ToolZoneTrendingUpIcon />}
+        purposeLabel="Balance progress"
+        subtitle="Record the observed balance for this date."
+        scoringFootnote="Goal balances do not change your Health score."
+      >
       <form onSubmit={submit} noValidate>
           <div className="goal-field">
             <label htmlFor="check-in-date">Effective date</label>
@@ -121,6 +134,7 @@ export function ProgressCheckIn({ goal, checkIn, currentDate, onSave, onClose }:
             <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
           </div>
       </form>
+      </ToolZone>
     </MoneyGoalDialog>
   );
 }
