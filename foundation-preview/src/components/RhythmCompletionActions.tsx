@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import type { MouseEvent } from 'react';
 
 type RhythmCompletionActionsProps = {
+  rhythmId: string;
   rhythmTitle: string;
   completed: boolean;
   actionLabel?: string | undefined;
@@ -12,6 +13,7 @@ type RhythmCompletionActionsProps = {
 };
 
 export function RhythmCompletionActions({
+  rhythmId,
   rhythmTitle,
   completed,
   actionLabel = 'Tend',
@@ -24,6 +26,7 @@ export function RhythmCompletionActions({
     <>
       <button
         ref={tendButtonRef}
+        data-rhythm-tend-button={rhythmId}
         type="button"
         className="rhythm-card__tend"
         aria-label={completed ? `${completedLabel} ${rhythmTitle}` : `${actionAccessibleLabel} ${rhythmTitle}`}

@@ -10,6 +10,7 @@ import {
 } from './preview-data.ts';
 import type { FoundationPreview, PersonId, RhythmPreview } from './preview-data.ts';
 import type { HealthRunTarget } from './preview-data.ts';
+import type { StrengthRotationAdvanceMode } from './strength.ts';
 import {
   effectiveRhythmSchedule,
   rhythmTimeOptions,
@@ -113,8 +114,10 @@ export type RhythmDraft = {
   secondaryFoundationIds?: string[];
   healthLogCapability?: RhythmHealthLogCapability | null;
   healthRunTarget?: HealthRunTarget | null;
-  healthWorkoutMode?: 'recommended' | 'specific' | 'custom';
+  healthWorkoutMode?: 'recommended' | 'specific' | 'custom' | 'rotation';
   healthWorkoutId?: string;
+  healthWorkoutRotationWorkoutIds?: string[];
+  healthWorkoutRotationAdvanceMode?: StrengthRotationAdvanceMode;
 };
 
 export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule' | 'foundationIds' | 'form', string>>;

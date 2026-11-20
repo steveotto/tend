@@ -64,8 +64,8 @@ function makeRhythm(id: string, title: string, timeOfDay: NonNullable<RhythmPrev
 }
 
 function TodayHarness({
+  greeting = 'Good morning',
   satisfiedRhythmIds = new Set(['sample-pray-together']),
-  showTended = true,
   timeBlockSettings = defaultTimeBlocks,
   categoryHealthScores = new Map(),
   rhythms = todayRhythms,
@@ -75,8 +75,8 @@ function TodayHarness({
   calendarSources = [],
   weatherController = unavailableWeather
 }: {
+  greeting?: string;
   satisfiedRhythmIds?: ReadonlySet<string>;
-  showTended?: boolean;
   timeBlockSettings?: TimeBlockSettings;
   categoryHealthScores?: ReadonlyMap<string, number | null>;
   rhythms?: readonly RhythmPreview[];
@@ -87,22 +87,19 @@ function TodayHarness({
   weatherController?: TodayWeatherController;
 }) {
   const [view, setView] = useState<TodayViewId>(initialView);
-  const [tendedVisible, setTendedVisible] = useState(showTended);
-  const completedRhythms = new Set<string>();
+  const [completedRhythms, setCompletedRhythms] = useState<ReadonlySet<string>>(new Set());
   return (
     <TimeBlocksProvider settings={timeBlockSettings}>
       <TodayView
-        greeting="Good morning"
+        greeting={greeting}
         evaluationInstant={evaluationInstant}
         localDate={localDate}
         view={view}
         onViewChange={setView}
         weatherController={weatherController}
         completedRhythms={completedRhythms}
-        undoableRhythms={new Set()}
-        satisfiedRhythmIds={satisfiedRhythmIds}
-        showTended={tendedVisible}
-        onShowTendedChange={setTendedVisible}
+        undoableRhythms={new Set(rhythms.map(rhythm => rhythm.id))}
+        satisfiedRhythmIds={new Set([...satisfiedRhythmIds, ...completedRhythms])}
         rhythms={rhythms}
         rhythmScores={new Map()}
         prayerRequests={[]}
@@ -113,9 +110,13 @@ function TodayHarness({
         foundations={foundationCatalogue}
         onOpenFoundation={vi.fn()}
         onHistory={vi.fn()}
-        onTend={vi.fn()}
+        onTend={id => setCompletedRhythms(current => new Set(current).add(id))}
         onEditRhythm={vi.fn()}
-        onUndo={vi.fn()}
+        onUndo={id => setCompletedRhythms(current => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        })}
         calendarSources={calendarSources}
       />
     </TimeBlocksProvider>
@@ -123,8 +124,8 @@ function TodayHarness({
 }
 
 function renderToday(options: {
+  greeting?: string;
   satisfiedRhythmIds?: ReadonlySet<string>;
-  showTended?: boolean;
   timeBlockSettings?: TimeBlockSettings;
   categoryHealthScores?: ReadonlyMap<string, number | null>;
   rhythms?: readonly RhythmPreview[];
@@ -213,10 +214,43 @@ describe('Today time-frame interaction', () => {
     expect(document.querySelector('.today-plan__title-weather')).toBeNull();
   });
 
+  it('places the simple greeting directly above the existing Overall Health card', () => {
+    renderToday();
+    const dashboard = document.querySelector('.home-dashboard');
+    const greeting = dashboard?.querySelector(':scope > .sectiontitle.dashboard-greeting');
+    const overall = screen.getByRole('region', { name: 'Overall health summary' });
+    expect(dashboard).toBeTruthy();
+    expect(greeting?.tagName).toBe('DIV');
+    expect(within(greeting as HTMLElement).getByRole('heading', { name: 'Good morning' })).toBeTruthy();
+    expect(greeting?.querySelector('.dashboard-greeting__subline')).toBeNull();
+    expect(greeting?.nextElementSibling).toBe(overall);
+    expect(document.querySelector('.today-dawn-hero')).toBeNull();
+    expect(within(overall).getByText('Overall health')).toBeTruthy();
+    expect(overall.querySelector('[role="meter"]')).toBeTruthy();
+
+    const categories = screen.getByRole('navigation', { name: 'Today categories' });
+    const plan = screen.getByRole('region', { name: "Today's plan" });
+    expect(overall.contains(categories)).toBe(true);
+    expect(greeting && (greeting.compareDocumentPosition(categories) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+    expect(categories.compareDocumentPosition(plan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(categories).getAllByRole('button')).toHaveLength(areas.length);
+    expect(within(categories).getAllByRole('button')
+      .every(category => category.querySelector('.ma-score__value')?.textContent?.trim() === '—')).toBe(true);
+  });
+
+  it('preserves the existing time-based greeting without a supporting sentence', () => {
+    for (const greeting of ['Good morning', 'Good afternoon', 'Good evening']) {
+      const { unmount } = renderToday({ greeting });
+      expect(screen.getByRole('heading', { name: greeting })).toBeTruthy();
+      expect(document.querySelector('.dashboard-greeting__subline')).toBeNull();
+      unmount();
+    }
+  });
+
   it('keeps Overall Health category labels intact and in order beside their icon and score', () => {
     renderToday();
-    const overall = screen.getByRole('region', { name: 'Overall health summary' });
-    const categoryCards = within(overall).getAllByRole('button');
+    const categoryNavigation = screen.getByRole('navigation', { name: 'Today categories' });
+    const categoryCards = within(categoryNavigation).getAllByRole('button');
     expect(categoryCards.map(card => card.querySelector('.ma-name')?.textContent))
       .toEqual(areas.map(area => area.label));
     for (const card of categoryCards) {
@@ -234,6 +268,12 @@ describe('Today time-frame interaction', () => {
       ])
     });
     const overall = screen.getByRole('region', { name: 'Overall health summary' });
+    const categories = screen.getByRole('navigation', { name: 'Today categories' });
+    expect(overall.contains(categories)).toBe(true);
+    expect(within(categories).getAllByRole('button')).toHaveLength(areas.length);
+    expect(within(categories).getAllByRole('button').slice(0, 3)
+      .map(category => category.querySelector('.ma-score__value')?.textContent?.trim()))
+      .toEqual(['100', '13', '13']);
     expect(within(overall).getByText('42', { selector: '.ov-score' })).toBeTruthy();
     expect(within(overall).queryByText(/categories scored/)).toBeNull();
     expect(overall.querySelector('.overall-health-coverage')).toBeNull();
@@ -345,7 +385,7 @@ describe('Today time-frame interaction', () => {
     expect(plan.querySelectorAll('.today-plan__agenda-group--expanded')).toHaveLength(2);
   });
 
-  it('offers the quiet View all today action when Now is empty and distinguishes hidden tended items', async () => {
+  it('offers View all today when Now is empty and keeps completed Rhythms in done rows', async () => {
     const user = userEvent.setup();
     const afternoon = makeRhythm('afternoon-item', 'Afternoon item', 'afternoon');
     renderToday({ rhythms: [afternoon], satisfiedRhythmIds: new Set() });
@@ -357,12 +397,15 @@ describe('Today time-frame interaction', () => {
     cleanup();
     renderToday({
       rhythms: [makeRhythm('morning-item', 'Morning item', 'morning')],
-      satisfiedRhythmIds: new Set(['morning-item']),
-      showTended: false
+      satisfiedRhythmIds: new Set(['morning-item'])
     });
-    const hiddenPlan = todayPlan();
-    expect(within(hiddenPlan).getByRole('status').textContent).toContain('You’ve tended everything here.');
-    expect(within(hiddenPlan).queryByText('No active Rhythms right now.')).toBeNull();
+    const completedPlan = todayPlan();
+    const completedRow = within(completedPlan).getByRole('button', {
+      name: 'Morning item, Tended today'
+    });
+    expect(completedRow.getAttribute('aria-expanded')).toBe('false');
+    expect(within(completedPlan).queryByRole('article', { name: 'Morning item' })).toBeNull();
+    expect(within(completedPlan).queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
   });
 
   it('updates Now when the time advances and uses configured block labels and hours', () => {
@@ -563,30 +606,59 @@ describe('Today time-frame interaction', () => {
     expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(0);
   });
 
-  it('shows collection counts before hiding tended Rhythms and keeps progress in collapsed summaries', async () => {
+  it('keeps tended Rhythms in their original time group and position through expand, collapse, and Undo', async () => {
     const user = userEvent.setup();
     const rhythms = [
       makeRhythm('morning-one', 'Morning one', 'morning'),
       makeRhythm('morning-two', 'Morning two', 'morning'),
       makeRhythm('lunch-one', 'Lunch one', 'lunch')
     ];
-    renderToday({
-      rhythms,
-      satisfiedRhythmIds: new Set(['morning-one']),
-      showTended: false
-    });
+    renderToday({ rhythms, satisfiedRhythmIds: new Set() });
     const plan = todayPlan();
-    expect(within(plan).getByText('1 of 2 tended')).toBeTruthy();
-    expect(within(plan).getByRole('article', { name: 'Morning two' })).toBeTruthy();
-    expect(within(plan).queryByRole('article', { name: 'Morning one' })).toBeNull();
+    expect(within(plan).queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
 
     await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
-    const morning = within(plan).getByRole('button', { name: /^Morning/ });
-    expect(morning.getAttribute('aria-label')).toContain('1 of 2 tended');
+    const morning = within(plan).getByRole('button', { name: /^Morning,/ });
+    const morningPanelId = morning.getAttribute('aria-controls')!;
+    const morningPanel = plan.querySelector<HTMLElement>(`#${morningPanelId}`)!;
     expect(morning.getAttribute('aria-expanded')).toBe('true');
+    const morningOrder = () => [...morningPanel.querySelectorAll<HTMLElement>('[data-tended-rhythm-item]')]
+      .map(item => item.dataset.tendedRhythmItem);
+    expect(morningOrder()).toEqual(['morning-one', 'morning-two']);
+    expect(morning.querySelector('.today-timeframe-header__progress')?.textContent).toBe('0 of 2');
+
+    await user.click(within(morningPanel).getByRole('button', { name: 'Tend Morning one' }));
+    const row = within(morningPanel).getByRole('button', { name: 'Morning one, Tended today' });
+    expect(morningOrder()).toEqual(['morning-one', 'morning-two']);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(row);
+    expect(morning.querySelector('.today-timeframe-header__progress')?.textContent).toBe('1 of 2');
+    expect(plan.querySelector('.today-plan__title-progress')?.textContent).toContain('1 of 3 tended');
+    expect(within(morningPanel).getByRole('article', { name: 'Morning two' })).toBeTruthy();
+    expect(within(morningPanel).queryByRole('heading', { name: 'Tended today' })).toBeNull();
+
+    await user.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(within(morningPanel).getByRole('article', { name: 'Morning one' })).toBeTruthy();
+    expect(morningOrder()).toEqual(['morning-one', 'morning-two']);
+    await user.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(within(morningPanel).queryByRole('article', { name: 'Morning one' })).toBeNull();
+    expect(morningOrder()).toEqual(['morning-one', 'morning-two']);
+
+    await user.click(row);
+    const tendedItem = row.closest<HTMLElement>('[data-tended-rhythm-item]')!;
+    await user.click(within(tendedItem).getByRole('button', { name: /Undo/ }));
+    expect(within(morningPanel).getByRole('article', { name: 'Morning one' })).toBeTruthy();
+    expect(morningOrder()).toEqual(['morning-one', 'morning-two']);
+    expect(document.activeElement).toBe(within(morningPanel).getByRole('button', { name: 'Tend Morning one' }));
+    expect(morning.querySelector('.today-timeframe-header__progress')?.textContent).toBe('0 of 2');
+    expect(plan.querySelector('.today-plan__title-progress')?.textContent).toContain('0 of 3 tended');
+
     await user.click(morning);
     expect(morning.getAttribute('aria-expanded')).toBe('false');
-    expect(morning.getAttribute('aria-label')).toContain('1 of 2 tended');
+    expect(morningPanel.hidden).toBe(true);
+    expect(morning.querySelector('.today-timeframe-header__progress')?.textContent).toBe('0 of 2');
   });
 
   it('renders 20-plus Rhythms without losing group counts or progress', async () => {

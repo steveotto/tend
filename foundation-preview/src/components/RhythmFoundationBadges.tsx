@@ -7,6 +7,8 @@ import {
   type RhythmPreview
 } from '../domain/preview-data.ts';
 import { resolveRhythmFoundationLinks } from '../domain/foundation-rhythm-associations.ts';
+import { selectAvailableFoundationIds } from '../domain/category-availability.ts';
+import { useAreaAvailability } from './CategoryAvailabilityContext.tsx';
 import { hasFoundationIcon, MarriageIcon } from './MarriageIcon.tsx';
 
 type RhythmFoundationBadgesProps = {
@@ -27,7 +29,12 @@ export function RhythmFoundationBadges({
   onOpenFoundation
 }: RhythmFoundationBadgesProps) {
   const interactive = presentation === 'interactive' && onOpenFoundation !== undefined;
-  const { foundations: resolvedFoundations, unresolvedIds } = resolveRhythmFoundationLinks(rhythm, foundations);
+  const availability = useAreaAvailability();
+  const { foundations: allResolvedFoundations, unresolvedIds } = resolveRhythmFoundationLinks(rhythm, foundations);
+  const availableFoundationIds = selectAvailableFoundationIds(availability, allResolvedFoundations);
+  const resolvedFoundations = allResolvedFoundations.filter(foundation =>
+    availableFoundationIds.has(foundation.id)
+  );
   const displayableFoundations = resolvedFoundations;
   const unresolvedCount = unresolvedIds.length;
   const linkTerms = terminologyForLinks(

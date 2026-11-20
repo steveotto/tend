@@ -32,6 +32,7 @@ import {
   selectStrengthWorkoutHistory,
   selectStrengthExerciseVolume,
   selectStrengthExerciseVolumeComparison,
+  selectStrengthExerciseProgress,
   saveStrengthScoringSetup,
   selectStrengthConsistency,
   selectStrengthMuscleScores,
@@ -1815,6 +1816,7 @@ describe('Strength selector and command behavior', () => {
     );
     expect(comparison?.workout.id).toBe(previousLog.id);
     expect(comparison?.volume.value).toBe(100.6);
+    expect(comparison?.changeValue).toBeCloseTo(4.8);
     expect(comparison?.changePercent).toBeCloseTo((105.4 - 100.6) / 100.6 * 100);
     expect(formatStrengthVolumeChangePercent(comparison!.changePercent!)).toBe('+5%');
     expect(selectStrengthExerciseVolumeComparison(
@@ -1880,11 +1882,13 @@ describe('Strength selector and command behavior', () => {
       ...previousLog,
       exercises: [makeExercise('volume-stable-bench', 0)]
     };
-    expect(selectStrengthExerciseVolumeComparison(
+    const zeroComparison = selectStrengthExerciseVolumeComparison(
       [zeroPrevious],
       { id: currentLog.id, date: currentLog.date, startedAt: currentLog.startedAt! },
       current
-    )?.changePercent).toBeUndefined();
+    );
+    expect(zeroComparison?.changeValue).toBeCloseTo(105.4);
+    expect(zeroComparison?.changePercent).toBeUndefined();
     const sameDayFuture = {
       ...previousLog,
       date: currentLog.date,
@@ -1895,5 +1899,159 @@ describe('Strength selector and command behavior', () => {
       { id: currentLog.id, date: currentLog.date, startedAt: currentLog.startedAt! },
       current
     )).toBeNull();
+  });
+
+  it('derives Epley best-set estimates and same-position progress by exercise ID', () => {
+    const makeExercise = (
+      id: string,
+      name: string,
+      values: Array<{ weight: number; reps: number; unit?: 'lb' | 'kg' }>
+    ): StrengthWorkoutExerciseSnapshot => ({
+      id,
+      name,
+      muscleIds: ['chest'],
+      equipment: name === 'Bench Press' ? 'Dumbbells' : 'Barbell',
+      loadMeaning: 'total',
+      restDurationSeconds: 180,
+      sets: values.map((value, index) => ({
+        id: `${id}-set-${index + 1}`,
+        targetReps: value.reps,
+        status: 'performed',
+        actualReps: value.reps,
+        actualLoad: { kind: 'external', meaning: 'total', value: value.weight, unit: value.unit ?? 'lb' },
+        confirmedAt: `2026-10-22T10:${String(index + 1).padStart(2, '0')}:00.000Z`
+      }))
+    });
+    const previousExercise = makeExercise('stable-bench-id', 'Barbell Bench Press', [
+      { weight: 145, reps: 10 },
+      { weight: 140, reps: 10 },
+      { weight: 155, reps: 8 }
+    ]);
+    const previousLog: StrengthWorkoutLog = {
+      id: 'progress-previous',
+      date: '2026-10-22',
+      muscleIds: ['chest'],
+      startedAt: '2026-10-22T10:00:00.000Z',
+      finishedAt: '2026-10-22T10:30:00.000Z',
+      exercises: [previousExercise]
+    };
+    const sameNameDifferentId: StrengthWorkoutLog = {
+      id: 'progress-name-only',
+      date: '2026-10-22',
+      muscleIds: ['chest'],
+      startedAt: '2026-10-22T10:40:00.000Z',
+      finishedAt: '2026-10-22T10:50:00.000Z',
+      exercises: [makeExercise('other-bench-id', 'Bench Press', [{ weight: 500, reps: 1 }])]
+    };
+    const currentExercise = makeExercise('stable-bench-id', 'Bench Press', [
+      { weight: 155, reps: 10 },
+      { weight: 140, reps: 10 },
+      { weight: 150, reps: 8 }
+    ]);
+    const currentReference = {
+      id: 'progress-current',
+      date: '2026-10-22',
+      startedAt: '2026-10-22T11:00:00.000Z'
+    };
+    const progress = selectStrengthExerciseProgress(
+      [previousLog, sameNameDifferentId],
+      currentReference,
+      currentExercise
+    );
+
+    expect(progress.previousExercise?.name).toBe('Barbell Bench Press');
+    expect(progress.currentBest).toEqual({ value: 207, reps: 10, meaning: 'total' });
+    expect(progress.previousBest).toEqual({ value: 196, reps: 8, meaning: 'total' });
+    expect(progress.sets).toEqual([
+      { kind: 'change', weightDelta: 10, repsDelta: 0 },
+      { kind: 'same' },
+      { kind: 'change', weightDelta: -5, repsDelta: 0 }
+    ]);
+  });
+
+  it('compares same-position rep progress and keeps high-rep and converted estimates explicit', () => {
+    const makeExercise = (
+      id: string,
+      sets: Array<{ weight: number; reps: number; unit: 'lb' | 'kg' }>
+    ): StrengthWorkoutExerciseSnapshot => ({
+      id,
+      name: 'Bench Press',
+      muscleIds: ['chest'],
+      equipment: 'Barbell',
+      loadMeaning: 'total',
+      restDurationSeconds: 180,
+      sets: sets.map((set, index) => ({
+        id: `${id}-set-${index + 1}`,
+        targetReps: set.reps,
+        status: 'performed',
+        actualReps: set.reps,
+        actualLoad: { kind: 'external', meaning: 'total', value: set.weight, unit: set.unit },
+        confirmedAt: `2026-10-20T10:${String(index + 1).padStart(2, '0')}:00.000Z`
+      }))
+    });
+    const previousExercise = makeExercise('bench-progress', [
+      { weight: 135, reps: 12, unit: 'lb' },
+      { weight: 125, reps: 10, unit: 'lb' }
+    ]);
+    const currentExercise = makeExercise('bench-progress', [
+      { weight: 135, reps: 13, unit: 'lb' },
+      { weight: 125, reps: 11, unit: 'lb' },
+      { weight: 100, reps: 20, unit: 'kg' }
+    ]);
+    const previousLog: StrengthWorkoutLog = {
+      id: 'rep-progress-previous',
+      date: '2026-10-20',
+      muscleIds: ['chest'],
+      exercises: [previousExercise]
+    };
+    const progress = selectStrengthExerciseProgress(
+      [previousLog],
+      { id: 'rep-progress-current', date: '2026-10-22' },
+      currentExercise
+    );
+
+    expect(progress.currentBest).toMatchObject({ reps: 20 });
+    expect(progress.currentBest?.value).toBe(Math.round(100 / 0.45359237 * (1 + 20 / 30)));
+    expect(progress.sets).toEqual([
+      { kind: 'change', weightDelta: 0, repsDelta: 1 },
+      { kind: 'change', weightDelta: 0, repsDelta: 1 },
+      { kind: 'first-log' }
+    ]);
+  });
+
+  it('calculates current and previous e1RM in the requested display unit', () => {
+    const makeExercise = (id: string, weight: number): StrengthWorkoutExerciseSnapshot => ({
+      id,
+      name: 'Dumbbell Press',
+      muscleIds: ['chest'],
+      equipment: 'Dumbbells',
+      loadMeaning: 'per-dumbbell',
+      restDurationSeconds: 60,
+      sets: [{
+        id: `${id}-set`,
+        targetReps: 10,
+        status: 'performed',
+        actualReps: 10,
+        actualLoad: { kind: 'external', meaning: 'per-dumbbell', value: weight, unit: 'kg' },
+        confirmedAt: '2026-10-20T10:00:00.000Z'
+      }]
+    });
+    const previousExercise = makeExercise('dumbbell-press', 65);
+    const currentExercise = makeExercise('dumbbell-press', 70);
+    const progress = selectStrengthExerciseProgress(
+      [{
+        id: 'kg-previous',
+        date: '2026-10-20',
+        muscleIds: ['chest'],
+        exercises: [previousExercise]
+      }],
+      { id: 'kg-current', date: '2026-10-22' },
+      currentExercise,
+      'kg'
+    );
+
+    expect(progress.currentBest).toEqual({ value: 93, reps: 10, meaning: 'per-dumbbell' });
+    expect(progress.previousBest).toEqual({ value: 87, reps: 10, meaning: 'per-dumbbell' });
+    expect(progress.sets).toEqual([{ kind: 'change', weightDelta: 5, repsDelta: 0 }]);
   });
 });

@@ -15,6 +15,7 @@ import {
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { FoundationScoreSelection } from '../domain/foundation-scoring.ts';
 import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
+import { selectAvailableFoundationLinkedItems } from '../domain/category-availability.ts';
 import { rhythmsForSuggestionSource } from '../domain/category-rhythms.ts';
 import { effectiveRhythmSchedule, rhythmScheduleSummary } from '../domain/rhythm-schedule.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
@@ -43,7 +44,7 @@ import { MarriageIcon } from './MarriageIcon.tsx';
 import { CategoryRhythmCollection } from './CategoryRhythmCollection.tsx';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
-import { BackButton } from './BackButton.tsx';
+import { useAreaAvailability, useAvailableFoundations } from './CategoryAvailabilityContext.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import { ToolZone, ToolZoneTrendingUpIcon } from './ToolZone.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
@@ -117,7 +118,7 @@ type FinanceGoalsViewProps = {
 export function FinanceGoalsView({
   goals,
   currentDate,
-  financeFoundations: financeFoundationList,
+  financeFoundations: allFinanceFoundations,
   rhythms,
   archivedRhythms,
   categoryRhythms,
@@ -147,6 +148,21 @@ export function FinanceGoalsView({
   foundationNavigationRequest,
   onFoundationNavigationHandled
 }: FinanceGoalsViewProps) {
+  const availability = useAreaAvailability();
+  const financeFoundationList = useAvailableFoundations(allFinanceFoundations)
+    .filter(foundation => foundation.categoryId === 'finances');
+  const availableSuggestionCatalogue = {
+    ...suggestionCatalogue,
+    groups: suggestionCatalogue.groups.map(group => ({
+      ...group,
+      suggestions: selectAvailableFoundationLinkedItems(
+        availability,
+        group.suggestions,
+        suggestion => foundationRhythmIds(suggestion.rhythm)
+      )
+    })).filter(group => group.suggestions.length > 0)
+  };
+  const hasAvailableSuggestions = availableSuggestionCatalogue.groups.length > 0;
   const [dialog, setDialog] = useState<GoalDialogState | null>(null);
   const [selectedTab, setSelectedTab] = useState<FinanceTab>('foundations');
   const [selectedFoundationId, setSelectedFoundationId] = useState<string | null>(null);
@@ -272,7 +288,7 @@ export function FinanceGoalsView({
     onEditRhythm(rhythm, event, returnToPicker);
   }
 
-  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = suggestionCatalogue.groups.map(group => ({
+  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = availableSuggestionCatalogue.groups.map(group => ({
     id: group.id,
     title: group.title,
     subtitle: group.subtitle,
@@ -399,6 +415,13 @@ export function FinanceGoalsView({
     onFoundationNavigationHandled?.();
   }, [foundationNavigationRequest?.requestId, financeFoundationList, onFoundationNavigationHandled]);
 
+  useEffect(() => {
+    if (selectedFoundationId && !financeFoundationIds.has(selectedFoundationId)) {
+      setSelectedFoundationId(null);
+      setSelectedTab('foundations');
+    }
+  }, [selectedFoundationId, financeFoundationIds]);
+
   function openFoundationOrCategory(foundationId: string) {
     if (financeFoundationIds.has(foundationId)) setSelectedFoundationId(foundationId);
     else onOpenFoundation(foundationId, `finance-foundation-select-${foundationId}`);
@@ -472,17 +495,20 @@ export function FinanceGoalsView({
           icon={<AreaIcon id="finances" />}
           onHome={onToday}
           subtitle="Build Finance Health with Rhythms; track goal balances with manual check-ins."
-          trailing={<span className="hint">Synthetic preview · no account connection</span>}
         />
+      )}
+      {!selectedFoundation && (
+        <div className="category-page-header-action">
+          <span className="hint">Synthetic preview · no account connection</span>
+        </div>
       )}
       {selectedFoundation ? (
         <section className="marriage-foundation-detail finance-foundation-detail" aria-labelledby={`finance-foundation-${selectedFoundation.id}-heading`}>
-          <BackButton onClick={() => setSelectedFoundationId(null)} variant="plain">
-            Back to Finance Foundations
-          </BackButton>
           <FoundationDetailHeader
             foundation={selectedFoundation}
             headingId={`finance-foundation-${selectedFoundation.id}-heading`}
+            backLabel="Back to Finance Foundations"
+            onBack={() => setSelectedFoundationId(null)}
           />
           {selectedFoundationScore && selectedFoundationRollup && (
             <CategoryHealthSummary
@@ -683,7 +709,9 @@ export function FinanceGoalsView({
             archivedRhythmsOpenerRef={archivedRhythmsOpenerRef}
             showArchivedRhythms={showArchivedRhythms}
             onAddRhythm={onAddRhythm}
-            onBrowseSuggestions={browseSuggestions}
+            {...(hasAvailableSuggestions
+              ? { onBrowseSuggestions: browseSuggestions }
+              : { suggestionsUnavailableReason: 'Suggestions for turned-off Foundations are hidden.' })}
             onShowArchivedRhythms={() => setShowArchivedRhythms(true)}
             onPersonSelect={onPersonSelect}
             onOpenFoundation={openFoundationOrCategory}
@@ -782,7 +810,7 @@ export function FinanceGoalsView({
         />
       )}
       <RhythmSuggestionPicker
-        title={suggestionCatalogue.title}
+        title={availableSuggestionCatalogue.title}
         open={showSuggestions}
         groups={suggestionPickerGroups}
         onClose={() => setShowSuggestions(false)}

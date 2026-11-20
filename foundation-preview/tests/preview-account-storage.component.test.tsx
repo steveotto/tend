@@ -165,14 +165,21 @@ describe('account-isolated Preview storage', () => {
       setItem: (key, value) => window.localStorage.setItem(key, value)
     }, accountA);
     if (!scope) return;
-    const initialData = createEmptyPreviewData();
+    const initialData = accountData('Account A');
     const saved = writePreview(scope.storage, initialData, null, { currentDate: '2026-11-01' });
     expect(saved.kind).toBe('saved');
 
+    const user = userEvent.setup();
+    const openProfile = async () => {
+      await user.click(screen.getByRole('button', { name: 'People' }));
+      await user.click(await screen.findByRole('button', { name: 'Open profile for Account A' }));
+      return screen.getByRole('main', { name: 'Account A' });
+    };
     const firstRender = render(<App identity={accountA} />);
-    const toggle = await screen.findByRole('button', { name: /Show tended Rhythms/ });
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    fireEvent.click(toggle);
+    const firstProfile = await openProfile();
+    const toggle = await within(firstProfile).findByRole('button', { name: /Show tended/ });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    await user.click(toggle);
     await waitFor(() => {
       const loaded = loadPreview(scope.storage, '2026-11-01');
       expect(loaded.kind === 'loaded' && loaded.data.showTended).toBe(true);
@@ -180,7 +187,9 @@ describe('account-isolated Preview storage', () => {
     firstRender.unmount();
 
     render(<App identity={accountA} />);
-    expect((await screen.findByRole('button', { name: /Hide tended Rhythms/ })).getAttribute('aria-expanded')).toBe('true');
+    const reloadedProfile = await openProfile();
+    expect((await within(reloadedProfile).findByRole('button', { name: /Hide tended/ }))
+      .getAttribute('aria-pressed')).toBe('true');
     const loadedAgain = loadPreview(scope.storage, '2026-11-01');
     expect(loadedAgain.kind).toBe('loaded');
     if (loadedAgain.kind === 'loaded') {

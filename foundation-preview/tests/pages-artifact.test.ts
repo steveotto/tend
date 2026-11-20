@@ -189,6 +189,62 @@ describe('Pages production artifact', () => {
       'END:VCALENDAR',
       ''
     ].join('\r\n');
+    const timeZoneFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:synthetic-pages-new-york',
+      'DTSTART;TZID=America/New_York:20261118T090000',
+      'DTEND;TZID=America/New_York:20261118T093000',
+      'SUMMARY:New York appointment',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-pages-floating',
+      'DTSTART:20261118T090000',
+      'DTEND:20261118T093000',
+      'SUMMARY:Floating appointment',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-pages-utc',
+      'DTSTART:20261118T140000Z',
+      'DTEND:20261118T143000Z',
+      'SUMMARY:UTC appointment',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-pages-kolkata',
+      'DTSTART;TZID=Asia/Kolkata:20261118T090000',
+      'DTEND;TZID=Asia/Kolkata:20261118T093000',
+      'SUMMARY:Kolkata appointment',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-pages-all-day',
+      'DTSTART;VALUE=DATE:20261118',
+      'DTEND;VALUE=DATE:20261119',
+      'SUMMARY:All-day appointment',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
+    const dstFeed = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'BEGIN:VEVENT',
+      'UID:synthetic-pages-dst-series',
+      'DTSTART;TZID=America/New_York:20260307T090000',
+      'DTEND;TZID=America/New_York:20260307T100000',
+      'RRULE:FREQ=DAILY;COUNT=3',
+      'SUMMARY:Daily check-in',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-pages-dst-series',
+      'RECURRENCE-ID;TZID=America/New_York:20260308T090000',
+      'DTSTART;TZID=America/New_York:20260308T110000',
+      'DTEND;TZID=America/New_York:20260308T120000',
+      'SUMMARY:Moved check-in',
+      'END:VEVENT',
+      'END:VCALENDAR',
+      ''
+    ].join('\r\n');
     const newYorkTimeZone = [
       'BEGIN:VTIMEZONE',
       'TZID:America/New_York',
@@ -303,6 +359,8 @@ describe('Pages production artifact', () => {
         history: historyFeed,
         historyExceptions: historyExceptionsFeed,
         dense: denseFeed,
+        timeZone: timeZoneFeed,
+        dst: dstFeed,
         manyEvents: manyEventFeed
       })};`,
       'export async function onRequest({ request }: { request: Request }) {',
@@ -347,9 +405,10 @@ describe('Pages production artifact', () => {
       assert.equal(ready, true, 'Wrangler Pages dev should start and accept requests.');
 
       const readFeed = (
-        name: 'history' | 'historyExceptions' | 'dense' | 'manyEvents',
+        name: 'history' | 'historyExceptions' | 'dense' | 'timeZone' | 'dst' | 'manyEvents',
         timeZone = 'UTC',
-        rangeStart = Date.parse('2026-11-14T00:00:00Z')
+        rangeStart = Date.parse('2026-11-14T00:00:00Z'),
+        rangeEnd = rangeStart + 31 * 86_400_000
       ) => fetch(`${origin}/api/calendar/read`, {
         method: 'POST',
         headers: { origin, 'content-type': 'application/json' },
@@ -361,7 +420,7 @@ describe('Pages production artifact', () => {
           },
           now: rangeStart,
           rangeStart,
-          rangeEnd: rangeStart + 31 * 86_400_000,
+          rangeEnd,
           timeZone
         })
       });
@@ -418,6 +477,50 @@ describe('Pages production artifact', () => {
       assert.ok(manyEventsResult.events.some(event => event.title === 'In-range single'));
       assert.ok(!manyEventsResult.events.some(event => event.title.startsWith('Out-of-range')));
       assert.equal(manyEventsResult.issueCount, 0);
+
+      const timeZoneResponse = await readFeed(
+        'timeZone',
+        'America/Los_Angeles',
+        Date.parse('2026-11-18T00:00:00Z'),
+        Date.parse('2026-11-19T00:00:00Z')
+      );
+      const timeZoneResult = await timeZoneResponse.json() as {
+        events: Array<{ title: string; startsAt: number }>;
+        issueCount: number;
+      };
+      assert.equal(timeZoneResponse.status, 200);
+      assert.equal(timeZoneResult.issueCount, 0);
+      assert.deepEqual(
+        Object.fromEntries(timeZoneResult.events.map(event => [event.title, event.startsAt])),
+        {
+          'All-day appointment': Date.parse('2026-11-18T08:00:00Z'),
+          'Kolkata appointment': Date.parse('2026-11-18T03:30:00Z'),
+          'New York appointment': Date.parse('2026-11-18T14:00:00Z'),
+          'UTC appointment': Date.parse('2026-11-18T14:00:00Z'),
+          'Floating appointment': Date.parse('2026-11-18T17:00:00Z')
+        }
+      );
+
+      const dstResponse = await readFeed(
+        'dst',
+        'Asia/Kolkata',
+        Date.parse('2026-03-07T00:00:00Z'),
+        Date.parse('2026-03-10T00:00:00Z')
+      );
+      const dstResult = await dstResponse.json() as {
+        events: Array<{ title: string; startsAt: number; endsAt: number }>;
+        issueCount: number;
+      };
+      assert.equal(dstResponse.status, 200);
+      assert.equal(dstResult.issueCount, 0);
+      assert.deepEqual(
+        dstResult.events.map(event => [event.title, event.startsAt, event.endsAt]),
+        [
+          ['Daily check-in', Date.parse('2026-03-07T14:00:00Z'), Date.parse('2026-03-07T15:00:00Z')],
+          ['Moved check-in', Date.parse('2026-03-08T15:00:00Z'), Date.parse('2026-03-08T16:00:00Z')],
+          ['Daily check-in', Date.parse('2026-03-09T13:00:00Z'), Date.parse('2026-03-09T14:00:00Z')]
+        ]
+      );
     } finally {
       server.kill('SIGTERM');
       await new Promise<void>(resolve => {

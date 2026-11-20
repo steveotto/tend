@@ -1,7 +1,18 @@
 import { areas } from './preview-data.ts';
-import type { CategoryId, FoundationPreview, PersonPickerGroup, PersonPickerGroupId } from './preview-data.ts';
+import { foundationCatalogue } from './preview-data.ts';
+import type {
+  CategoryId,
+  FoundationPreview,
+  PersonPickerGroup,
+  PersonPickerGroupId
+} from './preview-data.ts';
 
 export type CategoryPreferences = Readonly<Record<CategoryId, boolean>>;
+export type FoundationPreferences = Readonly<Record<string, boolean>>;
+export type AreaAvailabilityPreferences = {
+  categoryPreferences: CategoryPreferences;
+  foundationPreferences: FoundationPreferences;
+};
 
 export const defaultCategoryPreferences: CategoryPreferences = {
   faith: true,
@@ -12,7 +23,13 @@ export const defaultCategoryPreferences: CategoryPreferences = {
   friendships: true
 };
 
+export const defaultFoundationPreferences: FoundationPreferences = Object.fromEntries(
+  foundationCatalogue.map(foundation => [foundation.id, true])
+);
+
 const categoryIds = new Set<CategoryId>(areas.map(area => area.id));
+const foundationsById = new Map(foundationCatalogue.map(foundation => [foundation.id, foundation]));
+const foundationIds = new Set(foundationsById.keys());
 
 export function isCategoryPreferences(value: unknown): value is CategoryPreferences {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
@@ -20,6 +37,14 @@ export function isCategoryPreferences(value: unknown): value is CategoryPreferen
   return entries.length === areas.length
     && entries.every(([id, enabled]) => categoryIds.has(id as CategoryId) && typeof enabled === 'boolean')
     && areas.every(area => Object.hasOwn(value, area.id));
+}
+
+export function isFoundationPreferences(value: unknown): value is FoundationPreferences {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  return entries.length === foundationIds.size
+    && entries.every(([id, enabled]) => foundationIds.has(id) && typeof enabled === 'boolean')
+    && [...foundationIds].every(id => Object.hasOwn(value, id));
 }
 
 export function selectAvailableCategories(
@@ -43,12 +68,38 @@ export function isCategoryEnabled(
     && preferences[categoryId as CategoryId] === true;
 }
 
+export function isFoundationEnabled(
+  availability: AreaAvailabilityPreferences,
+  foundationId: string
+): boolean {
+  const foundation = foundationsById.get(foundationId);
+  return foundation !== undefined
+    && isCategoryEnabled(availability.categoryPreferences, foundation.categoryId)
+    && availability.foundationPreferences[foundationId] === true;
+}
+
 export function selectAvailableFoundations(
-  preferences: CategoryPreferences,
-  foundations: readonly FoundationPreview[]
+  availability: AreaAvailabilityPreferences,
+  foundations: readonly FoundationPreview[] = foundationCatalogue
 ): FoundationPreview[] {
-  const availableIds = selectAvailableCategoryIds(preferences);
-  return foundations.filter(foundation => availableIds.has(foundation.categoryId));
+  return foundations.filter(foundation => isFoundationEnabled(availability, foundation.id));
+}
+
+export function selectAvailableFoundationIds(
+  availability: AreaAvailabilityPreferences,
+  foundations: readonly FoundationPreview[] = foundationCatalogue
+): ReadonlySet<string> {
+  return new Set(selectAvailableFoundations(availability, foundations).map(foundation => foundation.id));
+}
+
+export function selectAvailableFoundationLinkedItems<T>(
+  availability: AreaAvailabilityPreferences,
+  items: readonly T[],
+  linkedFoundationIds: (item: T) => readonly string[]
+): T[] {
+  return items.filter(item =>
+    linkedFoundationIds(item).some(id => isFoundationEnabled(availability, id))
+  );
 }
 
 export function selectCategoryAssociationsForValidation(

@@ -56,7 +56,7 @@ import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { createPersonHealthRollup } from './HealthRollupDiagram.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
-import { useAvailablePersonGroups } from './CategoryAvailabilityContext.tsx';
+import { useAvailablePersonGroups, usePrayerEnabled } from './CategoryAvailabilityContext.tsx';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { selectPersonOverallHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
 import { personPrayerRequestsForPerson } from '../domain/person-prayers.ts';
@@ -197,13 +197,25 @@ export function PersonProfileView({
   const [tab, setTab] = useState<ProfileTab>('rhythms');
   const [targetPrayerRequestId, setTargetPrayerRequestId] = useState<string | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
+  const prayerEnabled = usePrayerEnabled();
+  const visibleProfileTabs = prayerEnabled ? profileTabs : profileTabs.filter(item => item.id !== 'prayer');
+  const lastHandledNavigationRequest = useRef<number | null>(null);
 
   useEffect(() => {
     if (!navigationRequest || navigationRequest.personId !== personId) return;
+    if (lastHandledNavigationRequest.current === navigationRequest.requestId) return;
+    lastHandledNavigationRequest.current = navigationRequest.requestId;
+    if (!prayerEnabled && navigationRequest.tab === 'prayer') return;
     setTab(navigationRequest.tab);
     setTargetPrayerRequestId(navigationRequest.targetPrayerRequestId ?? null);
     setNotesOpen(false);
-  }, [navigationRequest, personId]);
+  }, [navigationRequest, personId, prayerEnabled]);
+  useEffect(() => {
+    if (prayerEnabled || tab !== 'prayer') return;
+    setTab('rhythms');
+    setNotesOpen(false);
+    tabRefs.current[0]?.focus({ preventScroll: true });
+  }, [prayerEnabled, tab]);
   const [connectionEditor, setConnectionEditor] = useState<{
     record?: FriendshipConnection;
   } | null>(null);
@@ -241,11 +253,11 @@ export function PersonProfileView({
     rhythmScores,
     archivedRhythmIds
   );
-  const overallHealth = selectPersonOverallHealth(personRhythmHealth);
+  const overallHealth = selectPersonOverallHealth(personRhythmHealth, prayerEnabled);
   const componentScores = [
     { id: 'rhythms', label: 'Rhythms', score: personRhythmHealth.health },
     { id: 'connections', label: 'Connections', score: null },
-    { id: 'prayer', label: 'Prayer', score: null }
+    ...(prayerEnabled ? [{ id: 'prayer' as const, label: 'Prayer', score: null }] : [])
   ] as const;
   const connectionCadenceLabel = personConnectionStatus.cadence
     ? connectionCadenceOptions.find(option => option.value === personConnectionStatus.cadence)?.label
@@ -409,19 +421,20 @@ export function PersonProfileView({
   }, [showArchived]);
 
   function selectTab(next: ProfileTab) {
+    if (next === 'prayer' && !prayerEnabled) return;
     setTab(next);
     setNotesOpen(false);
   }
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let target: number | null = null;
-    if (event.key === 'ArrowRight') target = (index + 1) % profileTabs.length;
-    else if (event.key === 'ArrowLeft') target = (index - 1 + profileTabs.length) % profileTabs.length;
+    if (event.key === 'ArrowRight') target = (index + 1) % visibleProfileTabs.length;
+    else if (event.key === 'ArrowLeft') target = (index - 1 + visibleProfileTabs.length) % visibleProfileTabs.length;
     else if (event.key === 'Home') target = 0;
-    else if (event.key === 'End') target = profileTabs.length - 1;
+    else if (event.key === 'End') target = visibleProfileTabs.length - 1;
     if (target === null) return;
     event.preventDefault();
-    selectTab(profileTabs[target]!.id);
+    selectTab(visibleProfileTabs[target]!.id);
     tabRefs.current[target]?.focus();
   }
 
@@ -579,10 +592,10 @@ export function PersonProfileView({
                       title: `${personFirstName(person.displayName)}’s Connection Health details`,
                       content: healthDetailsFor('connections')
                     },
-                    prayer: {
+                    ...(prayerEnabled ? { prayer: {
                       title: `${personFirstName(person.displayName)}’s Prayer Health details`,
                       content: healthDetailsFor('prayer')
-                    }
+                    } } : {})
                   }}
                 />
               )}
@@ -591,8 +604,8 @@ export function PersonProfileView({
               )}
             />
           </div>
-          <div className="faith-view-nav marriage-view-nav person-profile__nav" role="tablist" aria-label={`${person.displayName} profile`}>
-            {profileTabs.map((item, index) => (
+          <div className={`faith-view-nav marriage-view-nav person-profile__nav${prayerEnabled ? '' : ' person-profile__nav--prayer-disabled'}`} role="tablist" aria-label={`${person.displayName} profile`}>
+            {visibleProfileTabs.map((item, index) => (
               <button
                 key={item.id}
                 ref={element => { tabRefs.current[index] = element; }}
@@ -716,11 +729,12 @@ export function PersonProfileView({
             id="person-profile-panel-prayer"
             className="person-profile__panel marriage-view-panel"
             role="tabpanel"
-            aria-labelledby="person-profile-tab-prayer"
-            hidden={notesOpen || tab !== 'prayer'}
+            {...(prayerEnabled ? { 'aria-labelledby': 'person-profile-tab-prayer' } : {})}
+            hidden={!prayerEnabled || notesOpen || tab !== 'prayer'}
           >
             <PersonPrayerPanel
               personId={personId}
+              enabled={prayerEnabled}
               people={people}
               peopleGroups={peopleGroups}
               requests={prayerRequests}
