@@ -14634,6 +14634,69 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   overflow-wrap: anywhere;
 }
 
+.strength-exercise-results__headline {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #e2efe6;
+}
+
+.strength-exercise-results__headline-main {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  color: var(--tend-forest);
+}
+
+.strength-exercise-results__headline-label {
+  font-size: calc(.75rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1.25;
+}
+
+.strength-exercise-results__headline-value {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: calc(1.3125rem * var(--app-text-scale, 1));
+  font-weight: 800;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.strength-exercise-results__headline-value > span {
+  font-size: calc(.8125rem * var(--app-text-scale, 1));
+  font-weight: 700;
+}
+
+.strength-exercise-results__headline-delta {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--tend-surface);
+  box-shadow: inset 0 0 0 1px rgba(28, 88, 68, .25);
+  color: var(--tend-forest);
+  font-size: calc(.78125rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.strength-exercise-results__headline-delta--muted,
+.strength-exercise-results__headline-delta--baseline,
+.strength-exercise-results__headline-delta--unavailable {
+  box-shadow: inset 0 0 0 1px var(--tend-line);
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-weight: 600;
+}
+
 .strength-exercise-results__sets {
   display: grid;
   gap: 0;
@@ -14643,14 +14706,12 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 }
 
 .strength-exercise-results__set {
-  display: grid;
+  display: flex;
   min-width: 0;
-  grid-template-columns: 52px minmax(0, 1fr) auto;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  padding: 8px 0;
+  padding: 11px 2px;
   border-bottom: 1px solid var(--tend-line);
-  font-size: calc(.82rem * var(--app-text-scale, 1));
 }
 
 .strength-exercise-results__set:last-child {
@@ -14658,15 +14719,27 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 }
 
 .strength-exercise-results__set-number {
+  flex: 0 0 44px;
+  width: 44px;
   color: var(--tend-secondary);
+  font-size: calc(.84375rem * var(--app-text-scale, 1));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .strength-exercise-results__set-value {
+  flex: 1 1 auto;
   min-width: 0;
-  font-weight: 600;
+  color: var(--tend-ink);
+  font-size: calc(.9375rem * var(--app-text-scale, 1));
+  font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.strength-exercise-results__set-label {
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-size: calc(.78rem * var(--app-text-scale, 1));
+  font-weight: 500;
 }
 
 .strength-exercise-results__set-value time {
@@ -14675,32 +14748,54 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   font-weight: 450;
 }
 
-.strength-exercise-results__status {
-  color: var(--tend-secondary);
-  font-size: calc(.7rem * var(--app-text-scale, 1));
-  white-space: nowrap;
-}
-
-.strength-exercise-results__status--performed {
+.strength-exercise-results__set-delta {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #e2efe6;
   color: var(--tend-forest);
+  font-size: calc(.75rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.strength-exercise-results__status--skipped {
-  color: #8c5734;
+.strength-exercise-results__set-delta--muted,
+.strength-exercise-results__set-delta--unavailable {
+  background: var(--tend-mist);
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-weight: 600;
+}
+
+.strength-exercise-results__set-delta--first {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--tend-line);
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-weight: 600;
 }
 
 .strength-exercise-results__volume {
   display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
   gap: 4px 12px;
-  color: var(--tend-secondary);
-  font-size: calc(.76rem * var(--app-text-scale, 1));
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tend-line);
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-size: calc(.78125rem * var(--app-text-scale, 1));
   font-variant-numeric: tabular-nums;
 }
 
 .strength-exercise-results__volume > span:first-child {
   color: var(--tend-ink);
-  font-weight: 600;
+  font-weight: 500;
+}
+
+.strength-exercise-results__footnote {
+  font-size: calc(.6875rem * var(--app-text-scale, 1));
 }
 
 .strength-guided__discard {

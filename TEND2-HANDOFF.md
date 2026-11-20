@@ -1,5 +1,17 @@
 # Tend 2 Foundation handoff
 
+## Strength exercise session progress (local review)
+
+**Change:** `StrengthExerciseResults` now shows the best-set Epley estimate (in pounds) and its change from the previous earlier workout containing the same exercise ID. Set rows compare the same set position and show first-log, same, positive, negative, skipped, unfinished, or unavailable states. The volume footer summarizes current and prior-session volume; estimates whose best set exceeds 15 reps carry the requested rough-estimate marker. Guided Finish & review and workout History continue to render the same shared result card. Logging, history data, storage, and scoring are unchanged.
+
+**Reuse map and duplication review:** `StrengthExerciseResults` is the sole results-card implementation consumed by `StrengthGuidedSessionDialog` and workout History. It composes pure `selectStrengthExerciseProgress` and the existing `selectStrengthExerciseVolume`; `strength.ts` owns previous-session selection, Epley estimates, and per-set comparisons. No presentation-specific copy of the card or scoring calculation was introduced. The old “Performed” status column was removed with the previous layout.
+
+**Comparison limitation:** Matching is by exercise ID only, including across name or equipment changes. Renamed or variant exercises with different IDs will not compare; conversely, reusing an ID for a different exercise will compare those logs.
+
+**Verification:** `npm run typecheck`, `npm test` (reader, component/domain, legacy, and production browser CSS contract), and `npm run build` passed; the build transformed **247 app modules** and **3 scoring modules**. Focused Strength component tests passed **90/90**. `npm run test:pages-artifact` passed **10/10**. The build retains the existing runtime `/tend.css` resolution warning in the component-catalogue build and the >500 kB JavaScript chunk advisory. `git diff --check` passed before this handoff update.
+
+**Limits and release boundary:** Tests use synthetic exercise logs and do not replace physical-device or screen-reader review. No database, live-account, sync, scoring-policy, or dependency changes were made. The work remains on its fresh-main feature branch and is not merged.
+
 ## Shared Health breakdown disclosure (local review)
 
 **Change:** Added one collapsed-by-default Consistency / On Track disclosure to the shared Health summary cards. Its 26px circular button follows the heading text, remains attached to its final word when the heading wraps, and shows a 12px outlined chevron that turns upward when expanded. The button exposes `aria-expanded` and `aria-controls` and has visible keyboard focus. Expanding reveals the existing gauges and captions without a collapsed layout gap; the score, progress bar, info action, scoring, and data remain unchanged.
