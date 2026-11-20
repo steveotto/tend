@@ -38,6 +38,7 @@ export type CalendarFeedResult =
   | { valid: true; events: CalendarEvent[]; issues: CalendarFeedIssue[] };
 
 type DateParts = { year: number; month: number; day: number };
+type DateTimeParts = DateParts & { hour: number; minute: number; second: number };
 type CalendarQuery =
   | { kind: 'local-day'; localDate: string }
   | { kind: 'upcoming'; now: number }
@@ -136,6 +137,79 @@ function zonedDateTimeToInstant(parts: DateParts, timeZone: string): number {
     else low = middle;
   }
   return high * 1000;
+}
+
+function zonedWallTimeToInstant(parts: DateTimeParts, timeZone: string): number {
+  const target = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second
+  );
+  let guess = target;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const actual = partsAt(guess, timeZone);
+    const represented = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second
+    );
+    const difference = target - represented;
+    if (difference === 0) return guess;
+    guess += difference;
+  }
+  throw new RangeError('Could not resolve the local calendar time in the selected time zone.');
+}
+
+function eventTimeZone(
+  time: ICAL.Time,
+  fallbackTimeZone: string,
+  component?: ICAL.Component,
+  propertyName?: string
+): string | null {
+  if (time.zone.component) return null;
+  const propertyTimeZoneValue = propertyName
+    ? component?.getFirstProperty(propertyName)?.getParameter('tzid')
+    : null;
+  if (Array.isArray(propertyTimeZoneValue)) {
+    if (propertyTimeZoneValue.length > 1
+      || (propertyTimeZoneValue.length === 1 && typeof propertyTimeZoneValue[0] !== 'string')) {
+      throw new RangeError('The event time zone parameter is invalid.');
+    }
+  } else if (propertyTimeZoneValue != null && typeof propertyTimeZoneValue !== 'string') {
+    throw new RangeError('The event time zone parameter is invalid.');
+  }
+  const propertyTimeZone = Array.isArray(propertyTimeZoneValue)
+    ? propertyTimeZoneValue[0] ?? null
+    : propertyTimeZoneValue ?? null;
+  if (propertyTimeZone) return propertyTimeZone;
+  if (time.zone === ICAL.Timezone.localTimezone || time.zone.tzid === 'floating') {
+    return fallbackTimeZone;
+  }
+  return time.zone.tzid;
+}
+
+function eventTimeToInstant(
+  time: ICAL.Time,
+  fallbackTimeZone: string,
+  component?: ICAL.Component,
+  propertyName?: string
+): number {
+  const timeZone = eventTimeZone(time, fallbackTimeZone, component, propertyName);
+  if (timeZone === null) return time.toJSDate().getTime();
+  return zonedWallTimeToInstant({
+    year: time.year,
+    month: time.month,
+    day: time.day,
+    hour: time.hour,
+    minute: time.minute,
+    second: time.second
+  }, timeZone);
 }
 
 function localDayRange(parts: DateParts, timeZone: string): { start: number; end: number } {
@@ -340,8 +414,9 @@ function recurrenceSeekStart(
   const referenceDate = start.isDate
     ? partsAt(earliestPossibleStart, timeZone)
     : (() => {
-      const localTime = ICAL.Time.fromJSDate(new Date(earliestPossibleStart), true)
-        .convertToZone(start.zone);
+      const startTimeZone = eventTimeZone(start, timeZone, component, 'dtstart');
+      if (startTimeZone) return partsAt(earliestPossibleStart, startTimeZone);
+      const localTime = ICAL.Time.fromJSDate(new Date(earliestPossibleStart), true).convertToZone(start.zone);
       return { year: localTime.year, month: localTime.month, day: localTime.day };
     })();
   const seekDate = shiftDate(referenceDate, -1);
@@ -358,14 +433,14 @@ function isWithinLocalDay(
   allDay: boolean,
   localDate: string,
   range: { start: number; end: number },
+  timedStartsAt: number,
   timedEndsAt: number
 ): boolean {
   if (allDay) {
     return dateOnlyKey(start) < localDateKey(shiftDate(parseLocalDate(localDate)!, 1))
       && dateOnlyKey(end) > localDate;
   }
-  const startMs = start.toJSDate().getTime();
-  return startMs < range.end && timedEndsAt > range.start;
+  return timedStartsAt < range.end && timedEndsAt > range.start;
 }
 
 function isWithinQuery(
@@ -375,6 +450,7 @@ function isWithinQuery(
   query: CalendarQuery,
   timeZone: string,
   localDay: { start: number; end: number } | null,
+  timedStartsAt: number,
   timedEndsAt: number
 ): boolean {
   if (query.kind === 'local-day') {
@@ -384,26 +460,39 @@ function isWithinQuery(
       allDay,
       query.localDate,
       localDay!,
-      timedEndsAt
+      timedStartsAt,
+      timedEndsAt,
     );
   }
-  const startsAt = eventStartsAt(start, allDay, timeZone);
+  const startsAt = allDay ? eventStartsAt(start, allDay, timeZone) : timedStartsAt;
   const endsAt = allDay ? eventEndsAt(end, true, timeZone) : timedEndsAt;
   return query.kind === 'upcoming'
     ? endsAt > query.now
     : endsAt > query.start && startsAt < query.end;
 }
 
-function eventStartsAt(time: ICAL.Time, allDay: boolean, timeZone: string): number {
+function eventStartsAt(
+  time: ICAL.Time,
+  allDay: boolean,
+  timeZone: string,
+  component?: ICAL.Component,
+  propertyName = 'dtstart'
+): number {
   return allDay
     ? zonedDateTimeToInstant(parseLocalDate(dateOnlyKey(time))!, timeZone)
-    : time.toJSDate().getTime();
+    : eventTimeToInstant(time, timeZone, component, propertyName);
 }
 
-function eventEndsAt(time: ICAL.Time, allDay: boolean, timeZone: string): number {
+function eventEndsAt(
+  time: ICAL.Time,
+  allDay: boolean,
+  timeZone: string,
+  component?: ICAL.Component,
+  propertyName = component?.hasProperty('dtend') ? 'dtend' : 'dtstart'
+): number {
   return allDay
     ? zonedDateTimeToInstant(parseLocalDate(dateOnlyKey(time))!, timeZone)
-    : time.toJSDate().getTime();
+    : eventTimeToInstant(time, timeZone, component, propertyName);
 }
 
 function parseCalendarFeed(
@@ -522,8 +611,8 @@ function parseCalendarFeed(
         const start = event.startDate;
         const end = event.endDate;
         const allDay = start.isDate;
-        const startsAt = eventStartsAt(start, allDay, timeZone);
-        const duration = end.toJSDate().getTime() - start.toJSDate().getTime();
+        const startsAt = eventStartsAt(start, allDay, timeZone, component);
+        const duration = eventEndsAt(end, allDay, timeZone, component) - startsAt;
         if (!isWithinQuery(
           start,
           end,
@@ -531,6 +620,7 @@ function parseCalendarFeed(
           query,
           timeZone,
           localDay,
+          startsAt,
           startsAt + duration
         )) continue;
       }
@@ -569,9 +659,19 @@ function parseCalendarFeed(
         const start = details.startDate;
         const end = details.endDate;
         const occurrenceAllDay = start.isDate;
-        const startsAt = eventStartsAt(start, occurrenceAllDay, timeZone);
-        const duration = details.item.endDate.toJSDate().getTime()
-          - details.item.startDate.toJSDate().getTime();
+        const occurrenceComponent = details.item.component;
+        const startsAt = eventStartsAt(start, occurrenceAllDay, timeZone, occurrenceComponent);
+        const duration = eventEndsAt(
+          details.item.endDate,
+          occurrenceAllDay,
+          timeZone,
+          occurrenceComponent
+        ) - eventStartsAt(
+          details.item.startDate,
+          occurrenceAllDay,
+          timeZone,
+          occurrenceComponent
+        );
         const timedEndsAt = startsAt + duration;
         const endsAt = occurrenceAllDay
           ? eventEndsAt(end, true, timeZone)
@@ -587,13 +687,14 @@ function parseCalendarFeed(
           query,
           timeZone,
           localDay,
+          startsAt,
           timedEndsAt
         );
         if (!inQuery) {
           if (query.kind === 'local-day') {
             if (occurrenceAllDay
               ? dateOnlyKey(start) > localDateKey(shiftDate(date!, 1))
-              : start.toJSDate().getTime() >= localDay!.end) break;
+              : startsAt >= localDay!.end) break;
           } else if (query.kind === 'upcoming' && startsAt >= query.now) {
             break;
           } else if (query.kind === 'range' && startsAt >= query.end) {
@@ -647,9 +748,8 @@ function parseCalendarFeed(
             const start = exception.startDate;
             const end = exception.endDate;
             const allDay = start.isDate;
-            const startsAt = eventStartsAt(start, allDay, timeZone);
-            const duration = exception.endDate.toJSDate().getTime()
-              - exception.startDate.toJSDate().getTime();
+            const startsAt = eventStartsAt(start, allDay, timeZone, exceptionComponent);
+            const duration = eventEndsAt(end, allDay, timeZone, exceptionComponent) - startsAt;
             const timedEndsAt = startsAt + duration;
             const endsAt = allDay
               ? eventEndsAt(end, true, timeZone)
@@ -661,7 +761,16 @@ function parseCalendarFeed(
               });
               continue;
             }
-            if (!isWithinQuery(start, end, allDay, query, timeZone, localDay, timedEndsAt)) continue;
+            if (!isWithinQuery(
+              start,
+              end,
+              allDay,
+              query,
+              timeZone,
+              localDay,
+              startsAt,
+              timedEndsAt
+            )) continue;
             events.push({
               id: `${source.id}:${event.uid || `event-${eventNumber}`}:${start.toICALString()}`,
               sourceId: source.id,

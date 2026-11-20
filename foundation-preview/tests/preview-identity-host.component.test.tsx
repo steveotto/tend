@@ -393,11 +393,12 @@ describe('PreviewIdentityHost', () => {
   it('loads supported preceding-schema account data without losing its Rhythm history', async () => {
     const storage = installMemoryStorage();
     const data = scoredFaithFixture();
-    const precedingEnvelope = {
-      ...createPreviewEnvelope(data),
-      schemaVersion: PREVIEW_SCHEMA_VERSION - 1
-    };
-    const originalRaw = JSON.stringify(precedingEnvelope);
+    const currentEnvelope = createPreviewEnvelope(data);
+    const originalRaw = JSON.stringify({
+      ...currentEnvelope,
+      schemaVersion: PREVIEW_SCHEMA_VERSION - 1,
+      data: currentEnvelope.data
+    });
     storage.setItem(accountStorageKey, originalRaw);
     const user = userEvent.setup();
     const auth = fakeAuth(session);

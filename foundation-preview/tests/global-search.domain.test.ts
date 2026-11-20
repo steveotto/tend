@@ -90,6 +90,23 @@ describe('global search selector', () => {
     expect(selectGlobalSearchResults('not found', data).isEmpty).toBe(true);
   });
 
+  it('hides Prayer requests and request-derived notes while keeping ordinary prayer Rhythms searchable', () => {
+    const data = {
+      people: [amy],
+      rhythms: [rhythm('prayer-rhythm', 'Prayer Practice Rhythm')],
+      prayerRequests: [prayer('hidden-request', 'Private request')],
+      personNotes: [],
+      friendships: createFriendshipData(),
+      prayerEnabled: false
+    };
+
+    const results = selectGlobalSearchResults('prayer', data);
+    expect(results.groups.map(group => group.id)).not.toContain('prayers');
+    expect(results.visibleResults.map(result => result.kind)).toEqual(['rhythm']);
+    expect(results.visibleResults[0]?.title).toBe('Prayer Practice Rhythm');
+    expect(selectGlobalSearchResults('', data).groups.map(group => group.id)).not.toContain('prayers');
+  });
+
   it('includes owning-person names when matching related records', () => {
     const results = selectGlobalSearchResults('aMy', {
       people: [amy, sam],

@@ -74,6 +74,7 @@ export type GlobalSearchData = {
   personNotes: readonly PersonNote[];
   friendships: FriendshipData;
   availableCategoryIds?: ReadonlySet<CategoryId>;
+  prayerEnabled?: boolean;
 };
 
 const groupDefinitions: readonly { id: GlobalSearchGroupId; label: string }[] = [
@@ -131,7 +132,9 @@ export function selectGlobalSearchResults(
   const hasQuery = query.length > 0;
   if (!hasQuery) {
     return {
-      groups: groupDefinitions.map(group => createGroup(group.id, group.label, [])),
+      groups: groupDefinitions
+        .filter(group => data.prayerEnabled !== false || group.id !== 'prayers')
+        .map(group => createGroup(group.id, group.label, [])),
       hasQuery: false,
       isEmpty: false,
       visibleResults: []
@@ -180,7 +183,7 @@ export function selectGlobalSearchResults(
     });
   }
 
-  for (const request of data.prayerRequests) {
+  for (const request of data.prayerEnabled === false ? [] : data.prayerRequests) {
     const ownerName = personName(peopleById, request.personId);
     if (!matches(query, request.title, request.details, ownerName)) continue;
     groupResults.prayers.push({
@@ -245,7 +248,9 @@ export function selectGlobalSearchResults(
     });
   }
 
-  const groups = groupDefinitions.map(group =>
+  const groups = groupDefinitions
+    .filter(group => data.prayerEnabled !== false || group.id !== 'prayers')
+    .map(group =>
     createGroup(group.id, group.label, groupResults[group.id])
   );
   const visibleResults = groups.flatMap(group => group.results);

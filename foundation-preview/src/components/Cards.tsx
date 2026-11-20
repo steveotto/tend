@@ -734,6 +734,7 @@ function SimpleRhythmCard({
         <RhythmDetailsButton rhythm={rhythm} onDetails={onDetails} />
         {onTend && (
           <RhythmCompletionActions
+            rhythmId={rhythm.id}
             rhythmTitle={rhythm.title}
             completed={completed}
             actionLabel={completionActionLabel}

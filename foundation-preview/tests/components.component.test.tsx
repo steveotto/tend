@@ -1681,10 +1681,14 @@ describe('shared preview components', () => {
         <FoundationDetailHeader
           foundation={community}
           headingId="community-title"
+          backLabel="All Practices"
+          onBack={() => undefined}
         />
         <FoundationDetailHeader
           foundation={sabbath}
           headingId="sabbath-title"
+          backLabel="All Practices"
+          onBack={() => undefined}
         />
       </>
     );
@@ -1693,6 +1697,9 @@ describe('shared preview components', () => {
     expect(within(communityHeader as HTMLElement).getByRole('heading', { name: 'Community' })).toBeTruthy();
     expect(within(communityHeader as HTMLElement).getByText(community.description)).toBeTruthy();
     expect(within(sabbathHeader as HTMLElement).getByText(sabbath.description)).toBeTruthy();
+    expect(communityHeader?.parentElement?.classList.contains('page-hero-header-stack')).toBe(true);
+    expect(within(communityHeader?.parentElement as HTMLElement)
+      .getByRole('button', { name: 'All Practices' })).toBeTruthy();
     expect(communityHeader?.querySelectorAll('.foundation-detail-header__circle').length).toBe(3);
     expect(communityHeader?.querySelector('.foundation-detail-header__circles')?.getAttribute('aria-hidden')).toBe('true');
     expect(container.querySelector('.foundation-detail-header__actions')).toBeNull();

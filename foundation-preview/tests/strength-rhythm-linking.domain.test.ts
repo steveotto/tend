@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { selectStrengthWorkoutRhythmOptions } from '../src/domain/strength-rhythm-linking.ts';
+import {
+  isPinnedStrengthRotationRepair,
+  selectStrengthWorkoutRhythmOptions
+} from '../src/domain/strength-rhythm-linking.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import { todayRhythms } from '../src/domain/preview-data.ts';
+import type {
+  StrengthGuidedSessionDraft,
+  StrengthSavedWorkout,
+  StrengthWorkoutLog
+} from '../src/domain/strength.ts';
 
 function rhythm(overrides: Partial<RhythmPreview> = {}): RhythmPreview {
   const source = todayRhythms[0]!;
@@ -166,5 +174,96 @@ describe('Strength workout Rhythm selection', () => {
       undefined,
       cardio.id
     )).toEqual([]);
+  });
+
+  it('allows only an active session to keep its pinned workout when that template is unavailable', () => {
+    const linked = rhythm();
+    const savedWorkouts: StrengthSavedWorkout[] = [{
+      id: 'available-workout',
+      name: 'Available workout',
+      muscleIds: ['abs'],
+      sharedWith: []
+    }];
+    const setting = {
+      rhythm: linked,
+      mode: 'rotation' as const,
+      rotationHistory: [{
+        effectiveFrom: '2026-10-22',
+        workoutIds: ['deleted-workout', 'available-workout'],
+        workoutNames: ['Deleted workout', 'Available workout'],
+        advanceMode: 'after-completion' as const,
+        startIndex: 0
+      }]
+    };
+
+    expect(selectStrengthWorkoutRhythmOptions(
+      [setting], [], [], '2026-10-22', 'deleted-workout', linked.id, [], savedWorkouts
+    )[0]).toMatchObject({
+      eligible: false,
+      reason: '“Deleted workout” is unavailable. Edit this Rhythm’s rotation to repair it.'
+    });
+    expect(selectStrengthWorkoutRhythmOptions(
+      [setting], [], [], '2026-10-22', 'deleted-workout', linked.id, [], savedWorkouts, linked.id
+    )[0]).toMatchObject({ eligible: true });
+    expect(selectStrengthWorkoutRhythmOptions(
+      [setting], [], [], '2026-10-22', 'available-workout', linked.id, [], savedWorkouts, linked.id
+    )[0]).toMatchObject({
+      eligible: false,
+      reason: '“Deleted workout” is unavailable. Edit this Rhythm’s rotation to repair it.'
+    });
+    expect(selectStrengthWorkoutRhythmOptions(
+      [setting], [], [completion(linked.id, '2026-10-22')],
+      '2026-10-22', 'deleted-workout', linked.id, [], savedWorkouts, linked.id
+    )[0]).toMatchObject({
+      eligible: false,
+      reason: 'A completion already exists for this Rhythm on this date.'
+    });
+  });
+
+  it('accepts a deleted template only for the exact active session completion', () => {
+    const repair = {
+      kind: 'repair' as const,
+      workoutId: 'deleted-workout',
+      workoutName: 'Deleted workout',
+      rotationIndex: 0,
+      available: false as const,
+      reason: 'Repair this rotation.'
+    };
+    const log: StrengthWorkoutLog = {
+      id: 'completed-session',
+      date: '2026-10-22',
+      muscleIds: ['abs'],
+      savedWorkoutId: 'deleted-workout',
+      rhythmId: 'strength-rhythm',
+      rhythmOccurrence: '2026-10-22',
+      completionId: 'session-completion'
+    };
+    const activeDraft: StrengthGuidedSessionDraft = {
+      id: 'active-session',
+      templateId: 'deleted-workout',
+      workoutName: 'Deleted workout',
+      date: '2026-10-22',
+      startedAt: '2026-10-22T10:00:00.000Z',
+      timeZone: 'UTC',
+      muscleIds: ['abs'],
+      sharedWith: [],
+      rhythmId: 'strength-rhythm',
+      rhythmOccurrence: '2026-10-22',
+      completionId: 'session-completion',
+      currentExerciseIndex: 0,
+      currentSetId: 'set-1',
+      exercises: []
+    };
+
+    expect(isPinnedStrengthRotationRepair(repair, log, activeDraft)).toBe(true);
+    expect(isPinnedStrengthRotationRepair(repair, log)).toBe(false);
+    expect(isPinnedStrengthRotationRepair(repair, {
+      ...log,
+      completionId: 'different-completion'
+    }, activeDraft)).toBe(false);
+    expect(isPinnedStrengthRotationRepair(repair, {
+      ...log,
+      savedWorkoutId: 'different-workout'
+    }, activeDraft)).toBe(false);
   });
 });

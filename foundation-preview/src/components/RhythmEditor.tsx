@@ -9,7 +9,10 @@ import {
 } from '../domain/preview-data.ts';
 import type { CategoryId, FoundationPreview, PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
-import type { StrengthMode, StrengthSavedWorkout } from '../domain/strength.ts';
+import type {
+  StrengthRhythmMode,
+  StrengthSavedWorkout
+} from '../domain/strength.ts';
 import {
   foundationRequirementMessage,
   foundationCategoryId,
@@ -40,15 +43,17 @@ import { AreaIcon } from './AreaIcon.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { PeopleAssociationRow, PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
-import { useCategoryAvailability } from './CategoryAvailabilityContext.tsx';
+import { useAreaAvailability } from './CategoryAvailabilityContext.tsx';
 import {
   isCategoryEnabled,
   selectAvailableCategories,
   selectAvailableCategoryIds,
+  selectAvailableFoundationIds,
   selectCategoryAssociationsForValidation
 } from '../domain/category-availability.ts';
 import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
+import { CheckboxTileOptions } from './CheckboxTileOptions.tsx';
 
 function mergePickerSelection(
   existingIds: readonly string[],
@@ -119,7 +124,7 @@ type RhythmEditorProps = {
   peopleGroups?: readonly PersonPickerGroup[];
   hasDatedCompletionHistory?: boolean;
   savedWorkouts?: readonly StrengthSavedWorkout[];
-  healthWorkoutSetting?: { mode: StrengthMode; workoutId?: string };
+  healthWorkoutSetting?: Pick<StrengthRhythmMode, 'mode' | 'workoutId' | 'rotationHistory'>;
   onSave: (draft: RhythmDraft) => RhythmDraftErrors;
   onArchive?: (id: string) => void;
   onClose: () => void;
@@ -191,9 +196,12 @@ export function RhythmEditor({
   onArchive,
   onClose
 }: RhythmEditorProps) {
-  const categoryPreferences = useCategoryAvailability();
+  const availability = useAreaAvailability();
+  const savedRotationVersion = healthWorkoutSetting?.rotationHistory?.at(-1);
+  const categoryPreferences = availability.categoryPreferences;
   const availableCategories = selectAvailableCategories(categoryPreferences);
   const availableCategoryIds = selectAvailableCategoryIds(categoryPreferences);
+  const availableFoundationIds = selectAvailableFoundationIds(availability, foundationCatalogue);
   const timeOptions = useRhythmTimeOptions();
   const [draft, setDraft] = useState<RhythmDraft>(() => {
     const openingDraft = initialDraft
@@ -213,6 +221,14 @@ export function RhythmEditor({
           ...openingDraft,
           healthLogCapability: openingDraft.healthLogCapability ?? 'workout',
           healthWorkoutMode: healthWorkoutSetting?.mode ?? openingDraft.healthWorkoutMode ?? 'recommended',
+          healthWorkoutRotationWorkoutIds: [
+            ...(openingDraft.healthWorkoutRotationWorkoutIds
+              ?? healthWorkoutSetting?.rotationHistory?.at(-1)?.workoutIds
+              ?? [])
+          ],
+          healthWorkoutRotationAdvanceMode: openingDraft.healthWorkoutRotationAdvanceMode
+            ?? healthWorkoutSetting?.rotationHistory?.at(-1)?.advanceMode
+            ?? 'after-completion',
           ...((healthWorkoutSetting?.workoutId ?? openingDraft.healthWorkoutId)
             ? { healthWorkoutId: healthWorkoutSetting?.workoutId ?? openingDraft.healthWorkoutId }
             : {})
@@ -307,6 +323,34 @@ export function RhythmEditor({
       if (field === 'schedule') delete next.schedule;
       return next;
     });
+  }
+
+  function rotationDraftErrors(candidate: RhythmDraft): RhythmDraftErrors {
+    if (candidate.healthLogCapability !== 'workout' || candidate.healthWorkoutMode !== 'rotation') return {};
+    const ids = candidate.healthWorkoutRotationWorkoutIds ?? [];
+    if (ids.length < 2 || new Set(ids).size !== ids.length) {
+      return { healthWorkoutRotationWorkoutIds: 'Select at least two distinct saved workouts.' };
+    }
+    if (ids.some(id => !savedWorkouts.some(workout => workout.id === id))) {
+      return { healthWorkoutRotationWorkoutIds: 'Remove unavailable workouts or save them again before continuing.' };
+    }
+    return {};
+  }
+
+  function toggleRotationWorkout(id: string) {
+    const selected = draft.healthWorkoutRotationWorkoutIds ?? [];
+    update('healthWorkoutRotationWorkoutIds', selected.includes(id)
+      ? selected.filter(selectedId => selectedId !== id)
+      : [...selected, id]);
+  }
+
+  function moveRotationWorkout(id: string, offset: -1 | 1) {
+    const ids = [...(draft.healthWorkoutRotationWorkoutIds ?? [])];
+    const index = ids.indexOf(id);
+    const nextIndex = index + offset;
+    if (index < 0 || nextIndex < 0 || nextIndex >= ids.length) return;
+    [ids[index], ids[nextIndex]] = [ids[nextIndex]!, ids[index]!];
+    update('healthWorkoutRotationWorkoutIds', ids);
   }
 
   function updateFitnessActivity(value: 'workout' | 'cardio' | 'weight' | 'flexibility') {
@@ -472,6 +516,7 @@ export function RhythmEditor({
         && !savedWorkouts.some(workout => workout.id === draft.healthWorkoutId)) {
         nextErrors.healthWorkoutId = 'Select an available saved workout.';
       }
+      Object.assign(nextErrors, rotationDraftErrors(draft));
       setErrors(nextErrors);
       if (Object.keys(nextErrors).length === 0) {
         if (scheduleFlowOpeningDraftRef.current === null) {
@@ -625,6 +670,7 @@ export function RhythmEditor({
     const categoryFoundations = allFoundations.filter(foundation =>
       foundationCategoryId(foundation.id, allFoundations) === area.id
         && selectedFoundationIds.includes(foundation.id)
+        && availableFoundationIds.has(foundation.id)
     );
     return {
       area,
@@ -675,6 +721,7 @@ export function RhythmEditor({
   };
   const foundationChoicesForCategory = (categoryId: string) => allFoundations.filter(foundation =>
     foundationCategoryId(foundation.id, allFoundations) === categoryId
+    && availableFoundationIds.has(foundation.id)
     && ((foundation.lifecycle === 'active' && foundation.capabilities.rhythms)
       || pickerFoundationSelection.includes(foundation.id))
   );
@@ -966,10 +1013,12 @@ export function RhythmEditor({
                       options={[
                         { value: 'recommended', label: 'Recommended Workout' },
                         { value: 'specific', label: 'Specific saved workout' },
-                        { value: 'custom', label: 'Custom workout' }
+                        { value: 'custom', label: 'Custom workout' },
+                        { value: 'rotation', label: 'Workout rotation' }
                       ]}
                       onChange={value => {
-                        if (value === 'recommended' || value === 'specific' || value === 'custom') {
+                        if (value === 'recommended' || value === 'specific' || value === 'custom'
+                          || value === 'rotation') {
                           update('healthWorkoutMode', value);
                         }
                       }}
@@ -992,6 +1041,89 @@ export function RhythmEditor({
                         onChange={value => update('healthWorkoutId', value)}
                       />
                       {fieldError('healthWorkoutId')}
+                    </div>
+                  )}
+                  {draft.healthWorkoutMode === 'rotation' && (
+                    <div className="rhythm-editor__rotation-setup">
+                      <fieldset className="rhythm-editor__rotation-workouts">
+                        <legend>Select workouts</legend>
+                        <CheckboxTileOptions
+                          options={[
+                            ...savedWorkouts.map(workout => ({ id: workout.id, label: workout.name })),
+                            ...(draft.healthWorkoutRotationWorkoutIds ?? [])
+                              .filter(id => !savedWorkouts.some(workout => workout.id === id))
+                              .map(id => ({
+                                id,
+                                label: `${savedRotationVersion?.workoutNames[
+                                  savedRotationVersion.workoutIds.indexOf(id)
+                                ] ?? 'Saved workout'} (unavailable)`
+                              }))
+                          ]}
+                          selectedIds={draft.healthWorkoutRotationWorkoutIds ?? []}
+                          onToggle={toggleRotationWorkout}
+                        />
+                        {fieldError('healthWorkoutRotationWorkoutIds')}
+                      </fieldset>
+                      <div className="goal-field">
+                        <span className="rhythm-editor__rotation-order-label">Rotation order</span>
+                        {(draft.healthWorkoutRotationWorkoutIds ?? []).length === 0
+                          ? <p className="rhythm-editor__rotation-empty">Select at least two saved workouts.</p>
+                          : <ol className="rhythm-editor__rotation-order">
+                            {(draft.healthWorkoutRotationWorkoutIds ?? []).map((id, index, ids) => {
+                              const workout = savedWorkouts.find(item => item.id === id);
+                              const savedName = healthWorkoutSetting?.rotationHistory?.at(-1)?.workoutIds
+                                .indexOf(id) ?? -1;
+                              const name = workout?.name
+                                ?? savedRotationVersion?.workoutNames[savedName]
+                                ?? 'Unavailable saved workout';
+                              return (
+                                <li key={id} className={!workout ? 'is-unavailable' : undefined}>
+                                  <span>{name}{workout ? '' : ' (unavailable)'}</span>
+                                  <span className="rhythm-editor__rotation-order-actions">
+                                    <button
+                                      className="btn mini"
+                                      type="button"
+                                      aria-label={`Move ${name} up`}
+                                      disabled={index === 0}
+                                      onClick={() => moveRotationWorkout(id, -1)}
+                                    >Move up</button>
+                                    <button
+                                      className="btn mini"
+                                      type="button"
+                                      aria-label={`Move ${name} down`}
+                                      disabled={index === ids.length - 1}
+                                      onClick={() => moveRotationWorkout(id, 1)}
+                                    >Move down</button>
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ol>}
+                      </div>
+                      <p className="rhythm-editor__rotation-help">
+                        Each time this Rhythm is due, use the next workout in your rotation.
+                      </p>
+                      <div className="goal-field">
+                        <label>Advance rotation</label>
+                        <StyledSelect
+                          label="Advance rotation"
+                          value={draft.healthWorkoutRotationAdvanceMode ?? 'after-completion'}
+                          options={[
+                            { value: 'after-completion', label: 'After completion' },
+                            { value: 'each-scheduled-occurrence', label: 'Each scheduled occurrence' }
+                          ]}
+                          onChange={value => {
+                            if (value === 'after-completion' || value === 'each-scheduled-occurrence') {
+                              update('healthWorkoutRotationAdvanceMode', value);
+                            }
+                          }}
+                        />
+                        <p className="goal-field-hint">
+                          {draft.healthWorkoutRotationAdvanceMode === 'each-scheduled-occurrence'
+                            ? 'Move to the next workout whenever this Rhythm is due, even if the previous one was missed.'
+                            : 'Repeat the same workout until you complete it.'}
+                        </p>
+                      </div>
                     </div>
                   )}
                 </>

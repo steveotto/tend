@@ -229,32 +229,42 @@ export function selectHealthFitnessCategoryScore(
   cardio: CategoryScoreSelection,
   weight: CategoryScoreSelection,
   strength: CategoryScoreSelection,
-  flexibility: CategoryScoreSelection | null = null
+  flexibility: CategoryScoreSelection | null = null,
+  availableFoundationIds?: ReadonlySet<string>
 ): CategoryScoreSelection {
-  const consistency = averageAvailableScores([
-    cardio.consistency,
-    weight.consistency,
-    strength.consistency,
-    flexibility?.consistency ?? null
-  ]);
-  const onTrack = averageAvailableScores([
-    cardio.onTrack,
-    weight.onTrack,
-    strength.onTrack,
-    flexibility?.onTrack ?? null
-  ]);
+  const areas = [
+    { id: 'health-cardio', score: cardio },
+    { id: 'health-weight', score: weight },
+    { id: 'health-strength', score: strength },
+    ...(flexibility ? [{ id: 'health-flexibility', score: flexibility }] : [])
+  ];
+  const includedAreas = availableFoundationIds
+    ? areas.filter(area => availableFoundationIds.has(area.id))
+    : areas;
+  const consistency = averageAvailableScores(includedAreas.map(area => area.score.consistency));
+  const onTrack = averageAvailableScores(includedAreas.map(area => area.score.onTrack));
   const health = consistency === null || onTrack === null
     ? null
     : consistency * HEALTH_CONSISTENCY_WEIGHT + onTrack * HEALTH_ON_TRACK_WEIGHT;
-  const availableMeasures = [
-    ...(consistency === null ? [] : ['consistency']),
-    ...(onTrack === null ? [] : ['on-track'])
-  ];
+  const availableMeasures = availableFoundationIds
+    ? includedAreas
+      .filter(area => area.score.consistency !== null && area.score.onTrack !== null)
+      .map(area => area.id)
+    : [
+        ...(consistency === null ? [] : ['consistency']),
+        ...(onTrack === null ? [] : ['on-track'])
+      ];
 
   return {
-    foundationIds: ['consistency', 'on-track'],
+    foundationIds: availableFoundationIds
+      ? includedAreas.map(area => area.id)
+      : ['consistency', 'on-track'],
     eligibleFoundationIds: availableMeasures,
-    excludedFoundationIds: [],
+    excludedFoundationIds: availableFoundationIds
+      ? includedAreas
+        .filter(area => area.score.consistency === null || area.score.onTrack === null)
+        .map(area => area.id)
+      : [],
     unresolvedFoundationIds: [],
     consistency,
     onTrack,

@@ -224,9 +224,19 @@ describe('person Health selectors', () => {
     );
     const unavailable = selectPersonRhythmHealth('sample-person-avery', [rhythm], new Map(), new Set());
 
-    expect(selectPersonOverallHealth(scored).health).toBe(scored.health);
+    const enabled = selectPersonOverallHealth(scored);
+    const prayerDisabled = selectPersonOverallHealth(scored, false);
+    expect(enabled.health).toBe(scored.health);
+    expect(enabled.componentIds).toEqual(['rhythms', 'connection', 'prayer']);
+    expect(prayerDisabled.componentIds).toEqual(['rhythms', 'connection']);
+    expect(prayerDisabled.unscoredComponentIds).toEqual(['connection']);
+    expect(prayerDisabled.health).toBe(enabled.health);
     expect(selectPersonOverallHealth(scored).health).toBe(35);
     expect(selectPersonOverallHealth(zero).health).toBe(0);
     expect(selectPersonOverallHealth(unavailable).health).toBeNull();
+    expect(selectPersonOverallHealth(unavailable, false)).toMatchObject({
+      componentIds: ['rhythms', 'connection'],
+      health: null
+    });
   });
 });

@@ -4,6 +4,8 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PersonProfileView } from '../src/components/PersonProfileView.tsx';
+import { CategoryAvailabilityProvider } from '../src/components/CategoryAvailabilityContext.tsx';
+import { defaultCategoryPreferences, defaultFoundationPreferences } from '../src/domain/category-availability.ts';
 import { addOrUpdateConnection, createFriendshipData, setFriendCadence } from '../src/domain/friendships.ts';
 import type { FriendshipData } from '../src/domain/friendships.ts';
 import {
@@ -106,6 +108,7 @@ function scoredProfileRhythmScore(consistency: number, onTrack: number): RhythmS
 function ProfileHarness({
   personId = 'sample-person-avery',
   category = 'friends',
+  prayerEnabled = true,
   initialDetails = [],
   initialNotes = [],
   failNoteUpdates = false,
@@ -126,6 +129,7 @@ function ProfileHarness({
 }: {
   personId?: PersonId;
   category?: 'marriage' | 'parenting' | 'friends' | null;
+  prayerEnabled?: boolean;
   initialDetails?: readonly PersonDetails[];
   initialNotes?: readonly PersonNote[];
   failNoteUpdates?: boolean;
@@ -154,7 +158,12 @@ function ProfileHarness({
     ? setPersonGroupMembership(emptyForPerson, category, personId, true)
     : emptyForPerson;
   return (
-    <>
+    <CategoryAvailabilityProvider
+      preferences={defaultCategoryPreferences}
+      foundationPreferences={defaultFoundationPreferences}
+      prayerEnabled={prayerEnabled}
+    >
+      <>
       <PersonProfileView
         personId={personId}
         peopleGroups={groups}
@@ -215,7 +224,8 @@ function ProfileHarness({
         {JSON.stringify(friendships)}
       </output>
       <output data-testid="saved-person-notes">{JSON.stringify(personNotes)}</output>
-    </>
+      </>
+    </CategoryAvailabilityProvider>
   );
 }
 
@@ -360,6 +370,35 @@ describe('shared person profile', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(1);
     expect(screen.getByRole('tab', { name: 'Prayer' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Notes (0)' })).toBeTruthy();
+  });
+
+  it('removes Prayer from the profile and Overall Health while preserving an open request draft', async () => {
+    const user = userEvent.setup();
+    const view = render(<ProfileHarness />);
+    const overall = screen.getByRole('region', { name: 'Overall Health summary' });
+    expect(within(overall).getByRole('group', { name: 'Health by area' }).getAttribute('data-count')).toBe('3');
+
+    await user.click(screen.getByRole('tab', { name: 'Prayer' }));
+    await user.click(screen.getByRole('button', { name: 'Add prayer request' }));
+    const title = screen.getByRole('textbox', { name: 'Title' }) as HTMLInputElement;
+    await user.type(title, 'A saved draft');
+
+    view.rerender(<ProfileHarness prayerEnabled={false} />);
+    expect(screen.queryByRole('tab', { name: 'Prayer' })).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Rhythms' }).getAttribute('aria-selected')).toBe('true');
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(within(overall).getByRole('group', { name: 'Health by area' }).getAttribute('data-count')).toBe('2');
+    expect(within(overall).queryByText('Prayer')).toBeNull();
+    await user.click(within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' }));
+    expect(within(screen.getByRole('dialog', { name: 'Avery’s Overall Health details' }))
+      .queryByText('Prayer')).toBeNull();
+
+    view.rerender(<ProfileHarness prayerEnabled />);
+    await user.click(screen.getByRole('tab', { name: 'Prayer' }));
+    expect((screen.getByRole('textbox', { name: 'Title' }) as HTMLInputElement).value)
+      .toBe('A saved draft');
   });
 
   it('keeps area scores static and opens area explanations from Overall Health Info', async () => {

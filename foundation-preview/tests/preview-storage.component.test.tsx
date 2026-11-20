@@ -20,7 +20,10 @@ import { createFlexibilityData } from '../src/domain/flexibility.ts';
 import { createFriendshipData } from '../src/domain/friendships.ts';
 import { createPersonPickerGroups, createSamplePeople, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import { createDefaultTimeBlockSettings } from '../src/domain/time-blocks.ts';
-import { defaultCategoryPreferences } from '../src/domain/category-availability.ts';
+import {
+  defaultCategoryPreferences,
+  defaultFoundationPreferences
+} from '../src/domain/category-availability.ts';
 import type { StrengthSavedWorkout } from '../src/domain/strength.ts';
 import {
   browserPreviewStorage,
@@ -60,6 +63,7 @@ import {
   loadV43RecoveryCopy,
   loadV44RecoveryCopy,
   loadV45RecoveryCopy,
+  loadV46RecoveryCopy,
   createPreviewStorageScope,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
   loadV39RecoveryCopy,
@@ -103,6 +107,9 @@ import {
   PREVIEW_V43_RECOVERY_KEY,
   PREVIEW_V44_RECOVERY_KEY,
   PREVIEW_V45_RECOVERY_KEY,
+  PREVIEW_V46_RECOVERY_KEY,
+  PREVIEW_V47_RECOVERY_KEY,
+  loadV47RecoveryCopy,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -159,6 +166,8 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V43_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V44_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V45_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V46_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V47_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -184,6 +193,27 @@ function olderSchemaRaw(version: 43 | 44 | 45, data = sampleWithHistory()): stri
     if (version < 45) delete goal.foundationId;
     if (version === 43) delete goal.supportingRhythmIds;
   }
+  return JSON.stringify(envelope);
+}
+
+function schema46Raw(data = sampleWithHistory()): string {
+  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    schemaVersion: number;
+    data: Record<string, unknown>;
+  };
+  envelope.schemaVersion = 46;
+  delete envelope.data.foundationPreferences;
+  delete envelope.data.prayerEnabled;
+  return JSON.stringify(envelope);
+}
+
+function schema47Raw(data = sampleWithHistory()): string {
+  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    schemaVersion: number;
+    data: Record<string, unknown>;
+  };
+  envelope.schemaVersion = 47;
+  delete envelope.data.prayerEnabled;
   return JSON.stringify(envelope);
 }
 
@@ -627,7 +657,10 @@ describe('synthetic preview storage adapter and envelope', () => {
 
       render(<App />);
       await screen.findByText('Preview data saved in this browser.');
-      await user.click(await screen.findByRole('button', { name: /Show tended/ }));
+      await user.click(screen.getByRole('button', { name: 'People' }));
+      await user.click(await screen.findByRole('button', { name: /Open profile for Avery Brooks/ }));
+      const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+      await user.click(await within(profile).findByRole('button', { name: /Show tended/ }));
       await waitFor(() => {
         expect(JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').schemaVersion)
           .toBe(PREVIEW_SCHEMA_VERSION);
@@ -940,6 +973,126 @@ describe('synthetic preview storage adapter and envelope', () => {
     });
     expect(conflicted.values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
     expect(conflicted.values.get(PREVIEW_V45_RECOVERY_KEY)).toBe(conflictingArchive);
+  });
+
+  it('defaults schema v46 child preferences and preserves exact source bytes before the first save', () => {
+    const raw = `\n${schema46Raw()}\n`;
+    const storage = browserPreviewStorage();
+    storage.setItem(PREVIEW_STORAGE_KEY, raw);
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.foundationPreferences).toEqual(defaultFoundationPreferences);
+
+    const changed = {
+      ...loaded.data,
+      foundationPreferences: {
+        ...defaultFoundationPreferences,
+        'health-strength': false
+      }
+    };
+    const saved = writePreview(storage, changed, loaded.raw, { currentDate: '2026-10-31' });
+    expect(saved.kind).toBe('saved');
+    expect(storage.getItem(PREVIEW_V46_RECOVERY_KEY)).toBe(raw);
+    expect(loadV46RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    if (saved.kind !== 'saved') return;
+
+    const reloaded = loadPreview(storage, '2026-10-31');
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    expect(reloaded.data.foundationPreferences['health-strength']).toBe(false);
+    expect(reloaded.data.strength).toEqual(loaded.data.strength);
+    expect(parsePreviewBackup(saved.raw, '2026-10-31')).toMatchObject({
+      valid: true,
+      envelope: { data: { foundationPreferences: changed.foundationPreferences } }
+    });
+    const restored = writePreview(storage, {
+      ...reloaded.data,
+      foundationPreferences: { ...defaultFoundationPreferences }
+    }, reloaded.raw, { currentDate: '2026-10-31' });
+    expect(restored.kind).toBe('saved');
+    if (restored.kind !== 'saved') return;
+    const roundTrip = parsePreviewBackup(restored.raw, '2026-10-31');
+    expect(roundTrip.valid && roundTrip.envelope.data.foundationPreferences)
+      .toEqual(defaultFoundationPreferences);
+    expect(roundTrip.valid && roundTrip.envelope.data.strength).toEqual(loaded.data.strength);
+
+    const conflictStorage = storageFixture({
+      [PREVIEW_STORAGE_KEY]: raw,
+      [PREVIEW_V46_RECOVERY_KEY]: 'different synthetic recovery'
+    });
+    const conflictSource = loadPreview(conflictStorage.storage, '2026-10-31');
+    expect(conflictSource.kind).toBe('loaded');
+    if (conflictSource.kind !== 'loaded') return;
+    expect(writePreview(conflictStorage.storage, changed, conflictSource.raw, {
+      currentDate: '2026-10-31'
+    })).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-conflict' }
+    });
+    expect(conflictStorage.values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+  });
+
+  it('defaults Prayer on in schema v47 and preserves Rhythm completion history before the first v48 save', () => {
+    const data = sampleWithHistory();
+    const completion = {
+      id: 'synthetic-prayer-switch-completion',
+      rhythmId: 'sample-pray-together',
+      effectiveDate: '2026-10-30',
+      localTime: '09:00',
+      timeZone: 'UTC',
+      completedAt: '2026-10-30T09:00:00.000Z',
+      recordedAt: '2026-10-30T09:00:00.000Z'
+    };
+    data.datedRhythmCompletions = [completion];
+    data.activeRhythmCompletions = [{
+      rhythmId: completion.rhythmId,
+      completionId: completion.id
+    }];
+    data.rhythmHistoryIds = [completion.rhythmId];
+    const raw = `\n${schema47Raw(data)}\n`;
+    const storage = browserPreviewStorage();
+    storage.setItem(PREVIEW_STORAGE_KEY, raw);
+
+    const loaded = loadPreview(storage, '2026-10-31');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.prayerEnabled).toBe(true);
+    expect(loaded.data.datedRhythmCompletions).toEqual([completion]);
+    expect(loaded.data.activeRhythmCompletions).toEqual([{
+      rhythmId: completion.rhythmId,
+      completionId: completion.id
+    }]);
+    expect(loaded.data.rhythmHistoryIds).toEqual([completion.rhythmId]);
+
+    const disabled = { ...loaded.data, prayerEnabled: false };
+    const saved = writePreview(storage, disabled, loaded.raw, { currentDate: '2026-10-31' });
+    expect(saved.kind).toBe('saved');
+    expect(storage.getItem(PREVIEW_V47_RECOVERY_KEY)).toBe(raw);
+    expect(loadV47RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    if (saved.kind !== 'saved') return;
+
+    const imported = parsePreviewBackup(saved.raw, '2026-10-31');
+    expect(imported.valid).toBe(true);
+    if (!imported.valid) return;
+    expect(imported.envelope.data.prayerEnabled).toBe(false);
+    expect(imported.envelope.data.datedRhythmCompletions).toEqual([completion]);
+    expect(imported.envelope.data.activeRhythmCompletions).toEqual([{
+      rhythmId: completion.rhythmId,
+      completionId: completion.id
+    }]);
+    expect(imported.envelope.data.rhythmHistoryIds).toEqual([completion.rhythmId]);
+
+    const reEnabled = writePreview(storage, {
+      ...imported.envelope.data,
+      prayerEnabled: true
+    }, saved.raw, { currentDate: '2026-10-31' });
+    expect(reEnabled.kind).toBe('saved');
+    if (reEnabled.kind !== 'saved') return;
+    const roundTrip = parsePreviewBackup(reEnabled.raw, '2026-10-31');
+    expect(roundTrip.valid && roundTrip.envelope.data.prayerEnabled).toBe(true);
+    expect(roundTrip.valid && roundTrip.envelope.data.datedRhythmCompletions).toEqual([completion]);
   });
 
   it('retains the Appearance preference from the alternate schema v40 document', () => {
@@ -1829,6 +1982,8 @@ describe('synthetic preview storage adapter and envelope', () => {
       showTended: false,
       showCalendarOnToday: true,
       categoryPreferences: { ...defaultCategoryPreferences },
+      foundationPreferences: { ...defaultFoundationPreferences },
+      prayerEnabled: true,
       todayView: 'now' as const,
       textSize: 'small' as const,
       calendarSources: []
@@ -1897,7 +2052,9 @@ describe('synthetic preview storage adapter and envelope', () => {
       textSize: 'small',
       calendarSources: [],
       showCalendarOnToday: true,
-      categoryPreferences: defaultCategoryPreferences
+      categoryPreferences: defaultCategoryPreferences,
+      foundationPreferences: defaultFoundationPreferences,
+      prayerEnabled: true
     });
   });
 
@@ -3051,6 +3208,14 @@ describe('synthetic preview storage adapter and envelope', () => {
       valid: false,
       kind: 'unsupported'
     });
+    const invalidPrayerPreference = createPreviewEnvelope(createSamplePreviewData());
+    expect(validatePreviewEnvelope({
+      ...invalidPrayerPreference,
+      data: { ...invalidPrayerPreference.data, prayerEnabled: 'enabled' }
+    }, '2026-10-21')).toMatchObject({
+      valid: false,
+      diagnostic: { code: 'preview.prayer-preference.invalid', path: 'data.prayerEnabled' }
+    });
     expect(validatePreviewEnvelope(alteredEnvelope(value => {
       const data = value.data as Record<string, unknown>;
       (data.goals as Array<Record<string, unknown>>)[0]!.targetBalanceMinor = -1;
@@ -3569,7 +3734,11 @@ describe('preview backup controls', () => {
     const completionDialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
     await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Tended Pray together' }).matches(':disabled')).toBe(true));
+    await waitFor(() => {
+      expect(screen.getByRole('button', {
+        name: accessibleName => accessibleName.startsWith('Pray together, Tended ')
+      })).toBeTruthy();
+    });
     await openFinances();
     const goal = screen.getByRole('article', { name: 'Starter reserve' });
     await user.click(within(goal).getByRole('button', { name: 'View details for Starter reserve' }));

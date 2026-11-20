@@ -1,12 +1,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import type { MouseEvent } from 'react';
+import type { ReactNode } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { AnchoredPopover } from './AnchoredPopover.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { PersonBadge } from './PersonBadge.tsx';
 import { StrengthExerciseResults } from './StrengthExerciseResults.tsx';
 import { StrengthRhythmCompletionPicker } from './StrengthRhythmCompletionPicker.tsx';
-import { StrengthWorkoutOnlyConfirmationDialog } from './StrengthWorkoutOnlyConfirmationDialog.tsx';
 import {
   addStrengthSessionSet,
   confirmStrengthSessionSet,
@@ -43,6 +42,7 @@ import type {
   StrengthLoadMeaning,
   StrengthPlannedSet,
   StrengthSessionRestTimer,
+  StrengthSavedWorkout,
   StrengthWorkoutLog
 } from '../domain/strength.ts';
 import { localDateTimeInZone } from '../domain/rhythm-completion.ts';
@@ -59,9 +59,9 @@ type Props = {
   rhythms: readonly StrengthRhythmSetting[];
   archivedRhythms?: readonly RhythmPreview[];
   datedRhythmCompletions: readonly DatedRhythmCompletion[];
-  onAddLinkedRhythm?: (foundationId: string, event: MouseEvent<HTMLButtonElement>) => void;
   session: StrengthGuidedSessionDraft;
   workouts: readonly StrengthWorkoutLog[];
+  savedWorkouts?: readonly StrengthSavedWorkout[];
   preferredWeightUnit?: 'lb' | 'kg';
   onChange: (session: StrengthGuidedSessionDraft) => string | null;
   onFinish: (log: StrengthWorkoutLog) => string | null;
@@ -94,9 +94,9 @@ export function StrengthGuidedSessionDialog({
   rhythms,
   archivedRhythms = [],
   datedRhythmCompletions,
-  onAddLinkedRhythm,
   session,
   workouts,
+  savedWorkouts = [],
   preferredWeightUnit = 'lb',
   onChange,
   onFinish,
@@ -117,13 +117,12 @@ export function StrengthGuidedSessionDialog({
   const [customRestSeconds, setCustomRestSeconds] = useState('0');
   const [restDurationDraft, setRestDurationDraft] = useState<number | null>(null);
   const [restDurationSource, setRestDurationSource] = useState<'preset' | 'custom'>('preset');
-  const [confirmingWorkoutOnly, setConfirmingWorkoutOnly] = useState(false);
+  const [workoutOnlySelected, setWorkoutOnlySelected] = useState(!session.rhythmId);
   const [autoStartRestDraft, setAutoStartRestDraft] = useState(false);
   const [soundDraftEnabled, setSoundDraftEnabled] = useState(false);
   const [error, setError] = useState('');
   const workoutRhythmSelectionRef = useRef<HTMLFieldSetElement | null>(null);
   const finishingRef = useRef(false);
-  const acknowledgedUnlinkedSessionRef = useRef(false);
   const exercise = session.exercises[session.currentExerciseIndex]!;
   const setIndex = exercise.sets.findIndex(set => set.id === session.currentSetId);
   const set = exercise.sets[setIndex]!;
@@ -150,8 +149,11 @@ export function StrengthGuidedSessionDialog({
     datedRhythmCompletions,
     session.date,
     session.templateId,
+    session.rhythmId,
+    workouts,
+    savedWorkouts,
     session.rhythmId
-  ), [archivedRhythms, datedRhythmCompletions, rhythms, session.date, session.rhythmId, session.templateId]);
+  ), [archivedRhythms, datedRhythmCompletions, rhythms, savedWorkouts, session.date, session.rhythmId, session.templateId, workouts]);
   const currentInputKey = sessionInputKey(exercise.id, set.id);
   const currentWorkoutLoad = latestPerformedLoad(session, exercise.id, exercise.loadMeaning, preferredWeightUnit);
   const initialInput = () => createInput(
@@ -293,7 +295,6 @@ export function StrengthGuidedSessionDialog({
     const saveError = onChange(next);
     setError(saveError ?? '');
     if (!saveError) {
-      acknowledgedUnlinkedSessionRef.current = false;
       afterRestTimerChange(next);
     }
     return !saveError;
@@ -308,7 +309,14 @@ export function StrengthGuidedSessionDialog({
       setError(result.error);
       return;
     }
+    if (rhythmId) setWorkoutOnlySelected(false);
     apply(result.session);
+  }
+
+  function chooseWorkoutOnly(selected: boolean) {
+    setWorkoutOnlySelected(selected);
+    setError('');
+    if (selected) selectWorkoutRhythm(undefined);
   }
 
   function playRestAlert() {
@@ -752,28 +760,40 @@ export function StrengthGuidedSessionDialog({
     }
   }
 
-  function finish(saveWorkoutOnly = false) {
+  function finish() {
     if (finishingRef.current) return;
     if (!hasPerformedStrengthSessionSet(session)) {
       setError('Confirm at least one set before saving completed activity.');
       return;
     }
-    if (session.rhythmId) {
-      const option = rhythmOptions.find(item => item.rhythm.id === session.rhythmId);
-      if (!option?.eligible) {
-        setError(option?.reason ?? 'Choose an eligible workout Rhythm or select Workout only.');
-        return;
-      }
-    } else if (!saveWorkoutOnly && !acknowledgedUnlinkedSessionRef.current) {
-      setConfirmingWorkoutOnly(true);
-      setError('');
+    const eligibleOptions = rhythmOptions.filter(option => option.eligible);
+    const selectedOption = session.rhythmId
+      ? rhythmOptions.find(item => item.rhythm.id === session.rhythmId)
+      : undefined;
+    const selectingWorkoutOnly = eligibleOptions.length === 0 || workoutOnlySelected;
+    let sessionToFinish = session;
+    if (!selectingWorkoutOnly && !selectedOption?.eligible) {
+      setError(selectedOption?.reason ?? 'Choose a Rhythm or select Workout only before saving.');
+      workoutRhythmSelectionRef.current?.focus({ preventScroll: true });
       return;
     }
-    if (saveWorkoutOnly) acknowledgedUnlinkedSessionRef.current = true;
+    if (selectingWorkoutOnly && session.rhythmId) {
+      const detached = updateStrengthGuidedSessionRhythm(session, undefined);
+      if (!detached.valid) {
+        setError(detached.error);
+        return;
+      }
+      const draftSaveError = onChange(detached.session);
+      if (draftSaveError) {
+        setError(draftSaveError);
+        return;
+      }
+      sessionToFinish = detached.session;
+    }
     finishingRef.current = true;
     const result = finishStrengthGuidedSession(
-      session,
-      `guided-workout-${session.id}`,
+      sessionToFinish,
+      `guided-workout-${sessionToFinish.id}`,
       new Date().toISOString()
     );
     if (!result.valid) {
@@ -785,8 +805,6 @@ export function StrengthGuidedSessionDialog({
     if (saveError) {
       setError(saveError);
       finishingRef.current = false;
-    } else {
-      setConfirmingWorkoutOnly(false);
     }
   }
 
@@ -832,11 +850,21 @@ export function StrengthGuidedSessionDialog({
   const exerciseExternalLoad = exercise.sets
     .map(item => item.targetLoad)
     .find((load): load is Extract<StrengthLoad, { kind: 'external' }> => load?.kind === 'external');
+  const targetLoadMeaning = exercise.loadMeaning
+    ?? exerciseExternalLoad?.meaning
+    ?? (set.targetLoad?.kind === 'bodyweight' ? 'bodyweight'
+      : set.targetLoad?.kind === 'external' ? set.targetLoad.meaning : undefined);
   const previousWorkout = previous?.workout;
   const previousWorkoutExercise = previousWorkout?.exercises?.find(item => item.id === exercise.id);
   const previousWorkoutSet = previousWorkoutExercise?.sets[setIndex];
   const previousPerformance = previousWorkoutSet?.status === 'performed'
     ? formatSet(previousWorkoutSet, preferredWeightUnit)
+    : null;
+  const lastSetInput = lastSet
+    ? performanceInputChanges(lastSet.set, targetLoadMeaning, preferredWeightUnit)
+    : null;
+  const previousSetInput = previousWorkoutSet?.status === 'performed'
+    ? performanceInputChanges(previousWorkoutSet, targetLoadMeaning, preferredWeightUnit)
     : null;
   const superset = session.supersetGroups?.find(group => group.exerciseIds.includes(exercise.id));
   const supersetRoundCount = superset
@@ -862,6 +890,9 @@ export function StrengthGuidedSessionDialog({
         ? 'Stop rest alarm'
         : 'Start rest timer';
   const finishReview = () => {
+    setWorkoutOnlySelected(
+      !session.rhythmId || !rhythmOptions.some(option => option.eligible)
+    );
     setReviewing(true);
     setError('');
   };
@@ -881,24 +912,47 @@ export function StrengthGuidedSessionDialog({
       >
       {reviewing ? (
         <div className="strength-guided__review">
-          <label className="strength-form-field">Workout date
-            <input type="date" value={session.date} onChange={event => updateDateTime(event.currentTarget.value, timeFields.time)} />
-          </label>
-          <label className="strength-form-field">Workout start time ({session.timeZone})
-            <input type="time" value={timeFields.time} onChange={event => updateDateTime(session.date, event.currentTarget.value)} />
-          </label>
+          <div className="strength-guided__metadata strength-guided__review-metadata">
+            <label className="strength-form-field">Workout date
+              <input type="date" value={session.date} onChange={event => updateDateTime(event.currentTarget.value, timeFields.time)} />
+            </label>
+            <label className="strength-form-field">Start time
+              <input type="time" value={timeFields.time} onChange={event => updateDateTime(session.date, event.currentTarget.value)} />
+            </label>
+          </div>
           <section aria-labelledby="guided-review-summary">
             <h3 id="guided-review-summary">Session summary</h3>
-            <p>{performedSetCount(session)} performed · {countStatus(session, 'skipped')} skipped · {countStatus(session, 'pending')} unfinished</p>
-            <div className="strength-guided__participants" role="group" aria-label="Workout participants">
-              <span>Participants:</span>
-              {session.sharedWith.length
-                ? session.sharedWith.map(id => {
+            <div
+              className="strength-guided__summary-grid"
+              role="group"
+              aria-label="Workout summary"
+              aria-describedby="guided-review-summary-description"
+            >
+              <p id="guided-review-summary-description" className="sr-only">
+                Sets counts include performed sets only; unfinished and skipped sets are counted separately.
+              </p>
+              <SummaryMetric count={session.exercises.length} singular="exercise" plural="exercises" />
+              <SummaryMetric count={performedSetCount(session)} singular="set" plural="sets" />
+              <SummaryMetric
+                count={countStatus(session, 'pending')}
+                singular="set unfinished"
+                plural="sets unfinished"
+              />
+              <SummaryMetric
+                count={countStatus(session, 'skipped')}
+                singular="set skipped"
+                plural="sets skipped"
+              />
+            </div>
+            {session.sharedWith.length > 0 && (
+              <div className="strength-guided__participants" role="group" aria-label="Workout participants">
+                <span>Participants:</span>
+                {session.sharedWith.map(id => {
                     const person = people.find(item => item.id === id);
                     return person ? <PersonBadge key={id} person={person} presentation="static" /> : null;
-                  })
-                : <span>None</span>}
-            </div>
+                  })}
+              </div>
+            )}
             {session.notes && <p>Workout notes: {session.notes}</p>}
           </section>
           <div className="strength-exercise-results-list">
@@ -928,10 +982,9 @@ export function StrengthGuidedSessionDialog({
             fieldsetRef={workoutRhythmSelectionRef}
             options={rhythmOptions}
             {...(session.rhythmId ? { selectedRhythmId: session.rhythmId } : {})}
+            workoutOnlySelected={workoutOnlySelected}
+            onWorkoutOnlyChange={chooseWorkoutOnly}
             onSelect={selectWorkoutRhythm}
-            {...(onAddLinkedRhythm ? {
-              onCreateRhythm: event => onAddLinkedRhythm('health-strength', event)
-            } : {})}
           />
           {error && <p className="strength-form-error" role="alert">{error}</p>}
           <div className="money-goal-dialog__actions">
@@ -1215,15 +1268,25 @@ export function StrengthGuidedSessionDialog({
           <section className="strength-guided__entry"
             aria-label={`Set ${setIndex + 1}${set.label ? `, ${set.label}` : ''} entry`}>
             <div className="strength-guided__performance-references">
-              <div className="strength-guided__performance">
+              <PerformanceReference
+                {...(lastSetInput && lastSet ? {
+                  accessibleName: `Copy values from this workout's last set, ${lastSet.exercise.name}, to the current set`,
+                  onCopy: () => updateInput(lastSetInput)
+                } : {})}
+              >
                 <span>{lastSet?.exercise.id !== exercise.id && lastSet
                   ? `This workout · Last set · ${lastSet.exercise.name}`
                   : 'This workout · Last set'}</span>
                 <strong className={lastSet ? undefined : 'strength-guided__previous-value--empty'}>
                   {lastSet ? formatSet(lastSet.set, preferredWeightUnit) : 'No previous set'}
                 </strong>
-              </div>
-              <div className="strength-guided__performance">
+              </PerformanceReference>
+              <PerformanceReference
+                {...(previousSetInput ? {
+                  accessibleName: `Copy values from last workout, set ${setIndex + 1} for ${exercise.name}, to the current set`,
+                  onCopy: () => updateInput(previousSetInput)
+                } : {})}
+              >
                 <div className="strength-guided__previous-meta">
                   <span>Last workout · Set {setIndex + 1}</span>
                   {previousPerformance && previousWorkout
@@ -1232,7 +1295,7 @@ export function StrengthGuidedSessionDialog({
                 <strong className={previousPerformance ? undefined : 'strength-guided__previous-value--empty'}>
                   {previousPerformance ?? 'No previous performance'}
                 </strong>
-              </div>
+              </PerformanceReference>
             </div>
             {previous?.loadMeaningMismatch && (
               <p className="strength-guided__notice">Previous load meaning differs; not copied.</p>
@@ -1378,17 +1441,6 @@ export function StrengthGuidedSessionDialog({
         </div>
       )}
       </MoneyGoalDialog>
-      {confirmingWorkoutOnly && (
-        <StrengthWorkoutOnlyConfirmationDialog
-          error={error}
-          onClose={() => setConfirmingWorkoutOnly(false)}
-          onChooseRhythm={() => {
-            setConfirmingWorkoutOnly(false);
-            requestAnimationFrame(() => workoutRhythmSelectionRef.current?.focus({ preventScroll: true }));
-          }}
-          onSaveWorkoutOnly={() => finish(true)}
-        />
-      )}
       {notesOpen && (
         <MoneyGoalDialog
           title="Workout notes"
@@ -1423,6 +1475,59 @@ export function StrengthGuidedSessionDialog({
 
 function sessionInputKey(exerciseId: string, setId: string): string {
   return `${exerciseId}:${setId}`;
+}
+
+function performanceInputChanges(
+  set: StrengthGuidedSessionDraft['exercises'][number]['sets'][number],
+  targetLoadMeaning: StrengthLoadMeaning | undefined,
+  preferredWeightUnit: 'lb' | 'kg'
+): Partial<SetInput> | null {
+  if (set.status !== 'performed') return null;
+  const changes: Partial<SetInput> = {};
+
+  const actualReps = set.actualReps;
+  if (typeof actualReps === 'number' && Number.isInteger(actualReps)
+    && actualReps >= 1 && actualReps <= 1000) {
+    changes.reps = String(actualReps);
+  }
+
+  if (set.actualLoad?.kind === 'bodyweight' && targetLoadMeaning === 'bodyweight') {
+    changes.load = '';
+    changes.meaning = 'bodyweight';
+  } else if (set.actualLoad?.kind === 'external'
+    && set.actualLoad.meaning === targetLoadMeaning
+    && Number.isFinite(set.actualLoad.value)
+    && set.actualLoad.value >= 0
+    && set.actualLoad.value <= 10_000) {
+    const displayLoad = convertStrengthLoad(set.actualLoad, preferredWeightUnit);
+    if (displayLoad.kind === 'external' && displayLoad.value <= 10_000) {
+      changes.load = String(displayLoad.value);
+      changes.meaning = displayLoad.meaning;
+      changes.unit = displayLoad.unit;
+    }
+  }
+
+  return Object.keys(changes).length > 0 ? changes : null;
+}
+
+function PerformanceReference({
+  children,
+  accessibleName,
+  onCopy
+}: {
+  children: ReactNode;
+  accessibleName?: string;
+  onCopy?: () => void;
+}) {
+  if (accessibleName && onCopy) {
+    return (
+      <button type="button" className="strength-guided__performance"
+        aria-label={accessibleName} onClick={onCopy}>
+        {children}
+      </button>
+    );
+  }
+  return <div className="strength-guided__performance">{children}</div>;
 }
 
 function previousPerformedLoad(
@@ -1561,6 +1666,23 @@ function formatSet(
 
 function performedSetCount(session: StrengthGuidedSessionDraft): number {
   return countStatus(session, 'performed');
+}
+
+function SummaryMetric({
+  count,
+  singular,
+  plural
+}: {
+  count: number;
+  singular: string;
+  plural: string;
+}) {
+  return (
+    <div className="strength-guided__summary-metric">
+      <strong className="strength-guided__summary-count">{count}</strong>
+      <span className="strength-guided__summary-label">{count === 1 ? singular : plural}</span>
+    </div>
+  );
 }
 
 function countStatus(session: StrengthGuidedSessionDraft, status: 'pending' | 'skipped' | 'performed'): number {

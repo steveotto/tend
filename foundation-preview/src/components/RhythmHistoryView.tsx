@@ -24,6 +24,7 @@ import {
   selectRhythmSeasonScore
 } from '../domain/rhythm-scoring.ts';
 import type { SelectRhythmScoreInput } from '../domain/rhythm-scoring.ts';
+import { createRhythmScoreInput } from '../domain/foundation-scoring.ts';
 import {
   effectiveRhythmSchedule,
   formatRhythmSchedule,
@@ -59,7 +60,7 @@ import { useCategoryAvailability } from './CategoryAvailabilityContext.tsx';
 import { selectAvailableCategoryIds } from '../domain/category-availability.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import type { Destination } from './AppNavigation.tsx';
-import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
+import { useRhythmTimeOptions, useTimeBlockSettings } from './TimeBlocksContext.tsx';
 import { isValidDate } from '../domain/money-goals.ts';
 import type { StrengthMode } from '../domain/strength.ts';
 
@@ -121,6 +122,7 @@ export function RhythmHistoryView({
   onOpenCategory?: (categoryId: Destination, openerId: string) => void;
 }) {
   const timeOptions = useRhythmTimeOptions();
+  const timeBlockSettings = useTimeBlockSettings();
   const historyRecords: readonly RhythmCompletion[] | undefined =
     rhythm.completionHistory === undefined && !completionHistoryAvailable && datedCompletions.length === 0
       ? undefined
@@ -141,20 +143,17 @@ export function RhythmHistoryView({
     rhythmId: rhythm.id
   }));
   const effectiveSchedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
-  const scoringInput = {
-    rhythmId: rhythm.id,
-    ...(rhythm.cadence ? { cadence: rhythm.cadence } : {}),
-    ...(effectiveSchedule ? { schedule: effectiveSchedule } : {}),
-    ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
-    ...(rhythm.createdLocalDate ? { createdLocalDate: rhythm.createdLocalDate } : {}),
-    ...(rhythm.createdTimeZone ? { createdTimeZone: rhythm.createdTimeZone } : {}),
-    ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
+  const scoringInput = createRhythmScoreInput({
+    rhythm,
     records: scoringRecords,
-    recordsAvailable: completionHistoryAvailable || rhythm.completionHistory !== undefined || datedCompletions.length > 0,
+    recordsAvailable: completionHistoryAvailable
+      || rhythm.completionHistory !== undefined
+      || datedCompletions.length > 0,
     archived,
-    asOfDate,
-    timeZone: scoringTimeZone
-  } as const;
+    evaluationInstant: scoringInstant,
+    localTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timeBlockSettings
+  });
   const score = selectRhythmScore(scoringInput);
   const categoryAvailability = useCategoryAvailability();
   const availableCategoryIds = selectAvailableCategoryIds(categoryAvailability);
@@ -281,6 +280,9 @@ export function RhythmHistoryView({
     : rhythm.healthLogCapability === 'workout'
       && healthWorkoutSetting?.mode === 'custom'
       ? 'Custom workout'
+      : rhythm.healthLogCapability === 'workout'
+        && healthWorkoutSetting?.mode === 'rotation'
+        ? 'Workout rotation'
       : undefined;
   const [editingRecord, setEditingRecord] = useState<RhythmCompletionRecord | null>(null);
   const [loggingMoment, setLoggingMoment] = useState(false);

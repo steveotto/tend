@@ -24,6 +24,7 @@ type EditorState = {
 
 export function PersonPrayerPanel({
   personId,
+  enabled = true,
   people,
   peopleGroups,
   requests,
@@ -35,6 +36,7 @@ export function PersonPrayerPanel({
   onRemove
 }: {
   personId: PersonId;
+  enabled?: boolean;
   people: readonly PersonPreview[];
   peopleGroups: readonly PersonPickerGroup[];
   requests: readonly PersonPrayerRequest[];
@@ -74,11 +76,11 @@ export function PersonPrayerPanel({
   ];
 
   useEffect(() => {
-    if (!targetRequestId) return;
+    if (!enabled || !targetRequestId) return;
     const target = document.getElementById(`person-prayer-request-${targetRequestId}`);
     target?.focus({ preventScroll: true });
     target?.scrollIntoView?.({ block: 'center' });
-  }, [targetRequestId, personId, requests]);
+  }, [enabled, targetRequestId, personId, requests]);
 
   useEffect(() => {
     const isOpen = editor !== null || confirmRequest !== null;
@@ -117,7 +119,7 @@ export function PersonPrayerPanel({
 
   function saveEditor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editor) return;
+    if (!enabled || !editor) return;
     const result = editor.request
       ? onUpdate(editor.request.id, editor.request.updatedAt, personId, editor.draft)
       : onCreate(personId, editor.draft);
@@ -129,15 +131,17 @@ export function PersonPrayerPanel({
   }
 
   function changeStatus(request: PersonPrayerRequest, transition: PrayerRequestTransition) {
+    if (!enabled) return;
     setActionError(onTransition(request.id, request.updatedAt, personId, transition) ?? '');
   }
 
   function pray(request: PersonPrayerRequest) {
+    if (!enabled) return;
     setActionError(onPray(request.id, request.updatedAt, personId) ?? '');
   }
 
   function removeRequest() {
-    if (!confirmRequest) return;
+    if (!enabled || !confirmRequest) return;
     const error = onRemove(confirmRequest.id, confirmRequest.updatedAt, personId);
     if (error) {
       setActionError(error);
@@ -151,7 +155,7 @@ export function PersonPrayerPanel({
   const confirmTitleId = `person-prayer-delete-title-${personId}`;
 
   return (
-    <section className="person-prayer-panel" aria-labelledby={`person-prayer-heading-${personId}`}>
+    <section className="person-prayer-panel" aria-labelledby={`person-prayer-heading-${personId}`} hidden={!enabled}>
       <header className="person-profile__section-heading">
         <div>
           <h3 id={`person-prayer-heading-${personId}`}>Prayer</h3>
@@ -244,7 +248,7 @@ export function PersonPrayerPanel({
         </>
       )}
 
-      {editor && pickerOpen ? (
+      {enabled && editor && pickerOpen ? (
         <MoneyGoalDialog
           titleId={editorTitleId}
           labelledBy={editorTitleId}
@@ -278,7 +282,7 @@ export function PersonPrayerPanel({
             onCancel={() => setPickerOpen(false)}
           />
         </MoneyGoalDialog>
-      ) : editor ? (
+      ) : enabled && editor ? (
         <MoneyGoalDialog
           titleId={editorTitleId}
           labelledBy={editorTitleId}
@@ -329,7 +333,7 @@ export function PersonPrayerPanel({
           </form>
         </MoneyGoalDialog>
       ) : null}
-      {confirmRequest && (
+      {enabled && confirmRequest && (
         <MoneyGoalDialog
           titleId={confirmTitleId}
           labelledBy={confirmTitleId}

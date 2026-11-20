@@ -97,6 +97,31 @@ describe('Today Prayer module', () => {
     expect(onPray).not.toHaveBeenCalled();
   });
 
+  it('suspends an open session while Prayer is disabled without losing it or logging activity', async () => {
+    const user = userEvent.setup();
+    const onPray = vi.fn(() => null);
+    const props = {
+      requests: syntheticPrayerRequests,
+      evaluationInstant: new Date('2026-11-11T13:30:00.000Z'),
+      timeZone: 'UTC',
+      onPray
+    };
+    const view = render(<TodayPrayerModule {...props} />);
+    await user.click(screen.getByRole('button', { name: 'Start focused prayer for 2 requests' }));
+    expect(screen.getByRole('dialog', { name: 'One request at a time' })).toBeTruthy();
+
+    view.rerender(<TodayPrayerModule {...props} enabled={false} />);
+    expect(document.querySelector('.today-prayer-section')?.hasAttribute('hidden')).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onPray).not.toHaveBeenCalled();
+
+    view.rerender(<TodayPrayerModule {...props} enabled />);
+    const resumedSession = screen.getByRole('dialog', { name: 'One request at a time' });
+    expect(within(resumedSession).getByText('Request 1 of 2')).toBeTruthy();
+    await user.click(within(resumedSession).getByRole('button', { name: 'Prayed' }));
+    expect(onPray).toHaveBeenCalledWith('sample-prayer-request-family');
+  });
+
   it('disables Back and Skip at the first and last request without wrapping', async () => {
     const user = userEvent.setup();
     const onPray = vi.fn(() => null);

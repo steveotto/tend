@@ -1,7 +1,9 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TendedRhythmList } from '../src/components/TendedRhythmList.tsx';
+import { TendedRhythmItems } from '../src/components/TendedRhythmItems.tsx';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 
 const rhythms: readonly RhythmPreview[] = [
@@ -69,6 +71,205 @@ describe('Show tended list', () => {
 
     expect(screen.getByText('0 of 0 tended')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
+  });
+
+  function DoneRowsHarness({
+    rhythms: displayRhythms,
+    tendedRhythmIds: initialTendedRhythmIds,
+    todayDate = '2026-03-10',
+    resetKey = 'today'
+  }: {
+    rhythms: readonly RhythmPreview[];
+    tendedRhythmIds: ReadonlySet<string>;
+    todayDate?: string;
+    resetKey?: string;
+  }) {
+    const [tendedRhythmIds, setTendedRhythmIds] = useState(initialTendedRhythmIds);
+    return (
+      <TendedRhythmList
+        rhythms={displayRhythms}
+        tendedRhythmIds={tendedRhythmIds}
+        satisfiedRhythmIds={tendedRhythmIds}
+        undoableRhythmIds={new Set(displayRhythms.map(rhythm => rhythm.id))}
+        displayMode="done-rows"
+        todayDate={todayDate}
+        onUndo={rhythmId => setTendedRhythmIds(current => {
+          const next = new Set(current);
+          next.delete(rhythmId);
+          return next;
+        })}
+        resetKey={resetKey}
+      >
+        {({
+            tendedRhythmIds: displayedTendedIds,
+            tendedDisplayItems,
+            expandedTendedRhythmIds,
+            onToggleTendedRhythm,
+            onUndoTendedRhythm,
+            itemProps
+          }) => (
+          <TendedRhythmItems
+              className="test-rhythm-list"
+              rhythms={displayRhythms}
+              tendedRhythmIds={displayedTendedIds}
+              displayItems={tendedDisplayItems}
+              expandedRhythmIds={expandedTendedRhythmIds}
+              onToggleRhythm={onToggleTendedRhythm}
+              itemProps={itemProps}
+              renderRhythmCard={rhythm => (
+                <article data-testid="full-card" aria-label={rhythm.title}>
+                  <span>{`Full card: ${rhythm.title}`}</span>
+                  <button
+                    type="button"
+                    data-rhythm-tend-button={rhythm.id}
+                    aria-label={`Tend ${rhythm.title}`}
+                    onClick={() => setTendedRhythmIds(current => new Set(current).add(rhythm.id))}
+                  >
+                    Tend
+                  </button>
+                </article>
+              )}
+              renderExpandedRhythm={item => (
+                <article data-testid="expanded-card">
+                  Full card: {item.rhythm.title}
+                  <button
+                    type="button"
+                    aria-label={`Undo tending ${item.rhythm.title}`}
+                    onClick={() => onUndoTendedRhythm(item.rhythm.id)}
+                  >
+                    Undo
+                  </button>
+                </article>
+              )}
+          />
+        )}
+      </TendedRhythmList>
+    );
+  }
+
+  describe('Tended Rhythm done rows', () => {
+    const displayRhythms: readonly RhythmPreview[] = [
+      { id: 'late', title: 'Evening walk', automation: 'manual', status: 'Due today', completionHistory: [{
+        id: 'late-completion',
+        effectiveDate: '2026-03-10',
+        localTime: '17:30',
+        completedAt: '2026-03-10T21:30:00.000Z'
+      }] },
+      { id: 'active', title: 'Read together', automation: 'manual', status: 'Due today' },
+      { id: 'yesterday', title: 'Morning prayer', automation: 'manual', status: 'Due today', completionHistory: [{
+        id: 'yesterday-completion',
+        effectiveDate: '2026-03-09',
+        localTime: '07:12',
+        completedAt: '2026-03-09T11:12:00.000Z'
+      }] },
+      { id: 'early', title: 'Midday walk', automation: 'manual', status: 'Due today', completionHistory: [{
+        id: 'early-completion',
+        effectiveDate: '2026-03-10',
+        localTime: '12:05',
+        completedAt: '2026-03-10T16:05:00.000Z'
+      }] }
+    ];
+
+    it('keeps compact rows in their original order and time group without a separate section', () => {
+      const { container } = render(<DoneRowsHarness rhythms={displayRhythms} tendedRhythmIds={new Set([
+        'late',
+        'yesterday',
+        'early'
+      ])} />);
+
+      const items = [...container.querySelectorAll<HTMLElement>('[data-tended-rhythm-item]')];
+      expect(items.map(item => item.dataset.tendedRhythmItem)).toEqual([
+        'late',
+        'active',
+        'yesterday',
+        'early'
+      ]);
+      const doneRows = screen.getAllByRole('button').filter(button =>
+        button.classList.contains('tended-rhythm-done-row')
+      );
+      expect(doneRows.map(button => button.getAttribute('aria-label'))).toEqual([
+        'Evening walk, Tended 5:30 pm',
+        'Morning prayer, Tended yesterday',
+        'Midday walk, Tended 12:05 pm'
+      ]);
+      expect(doneRows.every(button => button.getAttribute('aria-expanded') === 'false')).toBe(true);
+      expect(screen.queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
+      expect(screen.queryByTestId('expanded-card')).toBeNull();
+      expect(doneRows[0]?.querySelector('button')).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Tended today' })).toBeNull();
+      expect(screen.getByTestId('full-card').textContent).toContain('Read together');
+      expect(doneRows[1]?.classList.contains('tended-rhythm-done-row--carry-over')).toBe(true);
+    });
+
+    it('replaces a focused card with a compact row at the same position and announces the change', async () => {
+      const user = userEvent.setup();
+      const { container } = render(<DoneRowsHarness
+        rhythms={displayRhythms}
+        tendedRhythmIds={new Set(['late'])}
+      />);
+      await user.click(screen.getByRole('button', { name: 'Tend Read together' }));
+
+      const row = screen.getByRole('button', { name: 'Read together, Tended today' });
+      expect([...container.querySelectorAll<HTMLElement>('[data-tended-rhythm-item]')]
+        .map(item => item.dataset.tendedRhythmItem)).toEqual([
+          'late',
+          'active',
+          'yesterday',
+          'early'
+        ]);
+      expect(row.closest('.test-rhythm-list')).toBeTruthy();
+      expect(document.activeElement).toBe(row);
+      expect(screen.getByRole('status').textContent)
+        .toContain('It collapsed to a compact row in its original position.');
+    });
+
+    it('expands and collapses in place, then restores the card in that slot on Undo', async () => {
+      const user = userEvent.setup();
+      const { container } = render(<DoneRowsHarness rhythms={displayRhythms} tendedRhythmIds={new Set(['late'])} />);
+
+      const row = screen.getByRole('button', { name: 'Evening walk, Tended 5:30 pm' });
+      const lateItem = row.closest('[data-tended-rhythm-item]')!;
+      const initialOrder = [...container.querySelectorAll<HTMLElement>('[data-tended-rhythm-item]')]
+        .map(item => item.dataset.tendedRhythmItem);
+      expect(initialOrder).toEqual(['late', 'active', 'yesterday', 'early']);
+      expect(row.getAttribute('aria-expanded')).toBe('false');
+      await user.click(row);
+      expect(row.getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByTestId('expanded-card').textContent).toContain('Full card: Evening walk');
+      expect(row.closest('[data-tended-rhythm-item]')).toBe(lateItem);
+      expect([...container.querySelectorAll<HTMLElement>('[data-tended-rhythm-item]')]
+        .map(item => item.dataset.tendedRhythmItem)).toEqual(initialOrder);
+
+      await user.click(row);
+      expect(row.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('expanded-card')).toBeNull();
+
+      await user.click(row);
+      await user.click(screen.getByRole('button', { name: 'Undo tending Evening walk' }));
+      expect(screen.queryByRole('button', { name: 'Evening walk, Tended 5:30 pm' })).toBeNull();
+      expect(screen.getByRole('article', { name: 'Evening walk' })).toBeTruthy();
+      expect([...container.querySelectorAll<HTMLElement>('[data-tended-rhythm-item]')]
+        .map(item => item.dataset.tendedRhythmItem)).toEqual(initialOrder);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Tend Evening walk' }));
+    });
+
+    it('resets expanded state when the displayed Today list changes', () => {
+      const { rerender } = render(<DoneRowsHarness
+        rhythms={displayRhythms}
+        tendedRhythmIds={new Set(['late'])}
+      />);
+      const row = screen.getByRole('button', { name: 'Evening walk, Tended 5:30 pm' });
+      fireEvent.click(row);
+      expect(row.getAttribute('aria-expanded')).toBe('true');
+
+      rerender(<DoneRowsHarness
+        rhythms={displayRhythms}
+        tendedRhythmIds={new Set(['late'])}
+        resetKey="tomorrow"
+      />);
+      expect(screen.getByRole('button', { name: 'Evening walk, Tended 5:30 pm' })
+        .getAttribute('aria-expanded')).toBe('false');
+    });
   });
 
   it('omits empty-list controls outside Today while preserving Today empty-filter controls', () => {

@@ -5,8 +5,10 @@ import { FitnessRhythmCompletionPicker } from './FitnessRhythmCompletionPicker.t
 type Props = {
   options: readonly StrengthWorkoutRhythmOption[];
   selectedRhythmId?: string;
+  workoutOnlySelected?: boolean;
   selectionNotice?: string;
   onSelect: (rhythmId?: string) => void;
+  onWorkoutOnlyChange?: (selected: boolean) => void;
   onCreateRhythm?: (event: MouseEvent<HTMLButtonElement>) => void;
   presentation?: 'manual' | 'guided';
   selectionRef?: RefObject<HTMLDivElement | null>;
@@ -16,8 +18,10 @@ type Props = {
 export function StrengthRhythmCompletionPicker({
   options,
   selectedRhythmId,
+  workoutOnlySelected,
   selectionNotice,
   onSelect,
+  onWorkoutOnlyChange,
   onCreateRhythm,
   presentation = 'manual',
   selectionRef,
@@ -38,7 +42,13 @@ export function StrengthRhythmCompletionPicker({
     );
   }
 
-  const eligibleCount = options.filter(option => option.eligible).length;
+  const eligibleOptions = options.filter(option => option.eligible);
+  const selectedOption = options.find(option => option.rhythm.id === selectedRhythmId);
+  const noEligibleRhythms = eligibleOptions.length === 0;
+  const workoutOnlyChecked = noEligibleRhythms || workoutOnlySelected === true;
+  if (!onWorkoutOnlyChange) {
+    throw new Error('Guided workout Rhythm selection requires a Workout only change handler.');
+  }
 
   return (
     <fieldset
@@ -46,53 +56,58 @@ export function StrengthRhythmCompletionPicker({
       id="strength-workout-rhythm-selection"
       className="strength-rhythm-completion"
       tabIndex={-1}
+      aria-label="Count toward a Rhythm"
     >
-      <legend>Count toward a Rhythm</legend>
-      {options.length === 0
-        ? <p className="strength-rhythm-completion__empty">No eligible workout Rhythms for this date.</p>
-        : (
-          <div className="strength-rhythm-completion__options">
-            {options.map(option => (
-              <label
-                key={option.rhythm.id}
-                className="strength-rhythm-completion__option"
-              >
-                <input
-                  type="radio"
-                  name="strength-workout-rhythm"
-                  value={option.rhythm.id}
-                  checked={selectedRhythmId === option.rhythm.id}
-                  disabled={!option.eligible}
-                  onChange={() => onSelect(option.rhythm.id)}
-                />
-                <span className="strength-rhythm-completion__copy">
-                  <span>{option.rhythm.title}</span>
-                  {option.reason && <small>{option.reason}</small>}
-                  {!option.reason && option.explicit && <small>From this Rhythm</small>}
-                  {!option.reason && !option.explicit && option.suggested && <small>Suggested for this workout</small>}
-                </span>
-              </label>
+      <legend className="sr-only">Workout completion</legend>
+      {!noEligibleRhythms && (
+        <label className="strength-form-field strength-rhythm-completion__field" htmlFor="strength-guided-rhythm">
+          <span>Count toward a Rhythm</span>
+          <select
+            id="strength-guided-rhythm"
+            name="strengthGuidedRhythm"
+            value={eligibleOptions.some(option => option.rhythm.id === selectedRhythmId) ? selectedRhythmId : ''}
+            disabled={workoutOnlyChecked}
+            onChange={event => onSelect(event.currentTarget.value || undefined)}
+          >
+            <option value="">Choose a Rhythm</option>
+            {eligibleOptions.map(option => (
+              <option key={option.rhythm.id} value={option.rhythm.id}>
+                {option.rhythm.title}
+              </option>
             ))}
-          </div>
-        )}
-      <label className="strength-rhythm-completion__option">
+          </select>
+        </label>
+      )}
+      {selectedOption && !selectedOption.eligible && (
+        <p className="strength-rhythm-completion__context" role="status">
+          {selectedOption.rhythm.title} cannot be linked: {selectedOption.reason ?? 'it is unavailable for this date'}.
+          {workoutOnlyChecked ? ' Saving Workout only will remove this unavailable link.' : ''}
+        </p>
+      )}
+      {selectedRhythmId && !selectedOption && (
+        <p className="strength-rhythm-completion__context" role="status">
+          The selected Rhythm is unavailable. Saving Workout only will remove this unavailable link.
+        </p>
+      )}
+      <label className={`checkbox-tile-options__tile strength-rhythm-completion__workout-only${workoutOnlyChecked ? ' is-selected' : ''}`}>
         <input
-          type="radio"
-          name="strength-workout-rhythm"
-          value="workout-only"
-          checked={selectedRhythmId === undefined}
-          onChange={() => onSelect(undefined)}
+          type="checkbox"
+          checked={workoutOnlyChecked}
+          disabled={noEligibleRhythms}
+          onChange={event => onWorkoutOnlyChange(event.currentTarget.checked)}
         />
-        <span>Workout only</span>
+        <span className="strength-rhythm-completion__workout-only-copy">
+          <span>Workout only</span>
+          <small>Save without completing a Rhythm.</small>
+        </span>
       </label>
-      {eligibleCount === 0 && onCreateRhythm && (
-        <button
-          type="button"
-          className="btn mini ghost strength-rhythm-completion__create--guided"
-          onClick={onCreateRhythm}
-        >
-          Create a workout Rhythm
-        </button>
+      {noEligibleRhythms && (
+        <p className="strength-rhythm-completion__empty">
+          No workout Rhythms are available for this date. Your workout will still be saved.
+        </p>
+      )}
+      {selectionNotice && (
+        <p className="strength-rhythm-completion__context" role="status">{selectionNotice}</p>
       )}
     </fieldset>
   );

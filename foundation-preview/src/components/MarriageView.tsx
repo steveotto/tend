@@ -11,7 +11,6 @@ import {
   type FoundationTerminology,
   type FoundationPreview,
   type PersonId,
-  type PersonPickerGroup,
   type PersonPreview,
   type RhythmPreview,
   rhythmsSupportingFoundation
@@ -27,6 +26,7 @@ import {
 } from '../domain/foundation-rhythm-associations.ts';
 import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
 import { selectCategoryScore } from '../domain/category-scoring.ts';
+import { selectAvailableFoundationLinkedItems } from '../domain/category-availability.ts';
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
@@ -34,8 +34,8 @@ import type { FoundationScoreSelection } from '../domain/foundation-scoring.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { FoundationCard } from './Cards.tsx';
+import { useAreaAvailability, useAvailableFoundations } from './CategoryAvailabilityContext.tsx';
 import { FoundationDetailHeader } from './FoundationDetailHeader.tsx';
-import { BackButton } from './BackButton.tsx';
 import { HealthScoreBreakdown, HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
 import type { HealthScoreMetric } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
@@ -58,11 +58,10 @@ import type { RhythmSuggestionPickerGroup } from './RhythmSuggestionPicker.tsx';
 import type { CategoryTabNavigationRequest, Destination } from './AppNavigation.tsx';
 import type { RhythmCategoryId } from '../domain/rhythm-editor.ts';
 import type { RhythmFrequencyRecommendation } from '../domain/rhythm-schedule.ts';
-import { resolvePersonCategoryGroups } from '../domain/person-categories.ts';
-import { PersonBadgeVisual } from './PersonBadge.tsx';
 import { AreaIcon } from './AreaIcon.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
+import { TendedRhythmItems } from './TendedRhythmItems.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 
 export type MarriageTab = 'today' | 'rhythms' | 'foundations';
@@ -129,7 +128,6 @@ export function createMarriageSuggestionCatalogue(
 
 type MarriageViewProps = {
   people?: readonly PersonPreview[];
-  peopleGroups?: readonly PersonPickerGroup[];
   categoryConfig?: {
     categoryId: RhythmCategoryId;
     label: string;
@@ -140,7 +138,7 @@ type MarriageViewProps = {
     scoreInterpretationNote?: string;
     scoreExplanationIntro?: string;
     suggestionCatalogue?: CategoryRhythmSuggestionCatalogue;
-    headerTrailing?: ReactNode;
+    categoryAction?: ReactNode;
   };
   todayDate: string;
   onHome: () => void;
@@ -152,7 +150,6 @@ type MarriageViewProps = {
     returnToSuggestions: (saved: boolean) => void
   ) => void;
   onPersonSelect: (personId: PersonId) => void;
-  onOpenPeople: () => void;
   onOpenCategory: (categoryId: Destination, openerId: string) => void;
   onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>, returnTab?: MarriageTab) => void;
   onEditRhythm: (
@@ -173,8 +170,6 @@ type MarriageViewProps = {
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds?: ReadonlySet<string>;
   tendedRhythmIds?: ReadonlySet<string>;
-  showTended?: boolean;
-  onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
   onTend: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndo: (id: string) => void;
@@ -199,7 +194,6 @@ const tabs: readonly SegmentedTab<MarriageTab>[] = [
 
 export function MarriageView({
   people = [],
-  peopleGroups = [],
   categoryConfig,
   todayDate,
   onHome,
@@ -207,7 +201,6 @@ export function MarriageView({
   onAddLinkedRhythm,
   onAddSuggestion,
   onPersonSelect,
-  onOpenPeople,
   onOpenCategory,
   onRhythmHistory,
   onEditRhythm,
@@ -224,8 +217,6 @@ export function MarriageView({
   undoableRhythms,
   satisfiedRhythmIds = new Set(),
   tendedRhythmIds: savedTendedRhythmIds,
-  showTended = false,
-  onShowTendedChange = () => undefined,
   initializing = false,
   onTend,
   onUndo,
@@ -257,8 +248,9 @@ export function MarriageView({
   const categoryToken = categoryId;
   const foundationTerm = categoryConfig?.foundationTerm ?? foundationTerminologyForCategory(categoryId);
   const foundationDetailOpen = activeTab === 'foundations' && selectedFoundationId !== null;
-  const categoryFoundations = categoryConfig?.foundations
-    ?? foundationCatalogue.filter(foundation => foundation.categoryId === categoryId);
+  const availability = useAreaAvailability();
+  const categoryFoundations = useAvailableFoundations(categoryConfig?.foundations
+    ?? foundationCatalogue.filter(foundation => foundation.categoryId === categoryId));
   const associationFoundation = categoryFoundations.find(item => item.id === associationFoundationId);
 
   useEffect(() => {
@@ -304,6 +296,13 @@ export function MarriageView({
       foundationOpener.current = null;
     }
   }, [selectedFoundationId, activeTab]);
+
+  useEffect(() => {
+    if (!selectedFoundationId || categoryFoundations.some(foundation => foundation.id === selectedFoundationId)) return;
+    foundationOpener.current = null;
+    setSelectedFoundationId(null);
+    setActiveTab('foundations');
+  }, [selectedFoundationId, categoryFoundations]);
 
   useEffect(() => {
     const request = foundationNavigationRequest;
@@ -406,13 +405,6 @@ export function MarriageView({
       categoryFoundations
     ).includes(categoryId)
   );
-  const resolvedPeople = resolvePersonCategoryGroups(peopleGroups).groups;
-  const marriagePersonIds = new Set(
-    resolvedPeople.find(group => group.id === 'marriage')?.memberIds ?? []
-  );
-  const marriagePeople = categoryId === 'marriage'
-    ? people.filter(person => marriagePersonIds.has(person.id))
-    : [];
   const todayRhythms = userRhythms.filter(rhythm => isRhythmRelevantOnDate(rhythm, todayDate));
   function browseSuggestions(event: MouseEvent<HTMLButtonElement>) {
     suggestionsOpener.current = event.currentTarget;
@@ -444,7 +436,21 @@ export function MarriageView({
   const defaultSuggestionCatalogue = createMarriageSuggestionCatalogue(suggestionRhythms);
   const suggestionCatalogue = categoryConfig?.suggestionCatalogue
     ?? (!categoryConfig ? defaultSuggestionCatalogue : undefined);
-  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = (suggestionCatalogue?.groups ?? []).map(group => ({
+  const availableSuggestionCatalogue = suggestionCatalogue
+    ? {
+        ...suggestionCatalogue,
+        groups: suggestionCatalogue.groups.map(group => ({
+          ...group,
+          suggestions: selectAvailableFoundationLinkedItems(
+            availability,
+            group.suggestions,
+            suggestion => foundationRhythmIds(suggestion.rhythm)
+          )
+        })).filter(group => group.suggestions.length > 0)
+      }
+    : undefined;
+  const hasAvailableSuggestions = (availableSuggestionCatalogue?.groups.length ?? 0) > 0;
+  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = (availableSuggestionCatalogue?.groups ?? []).map(group => ({
     id: group.id,
     title: group.title,
     subtitle: group.subtitle,
@@ -505,34 +511,10 @@ export function MarriageView({
             icon={<AreaIcon id={categoryId} />}
             onHome={onHome}
             subtitle={categoryDescription}
-            trailing={categoryConfig?.headerTrailing ?? (categoryId === 'marriage' ? (
-              marriagePeople.length > 0
-                ? (
-                  <div className="marriage-people-shortcuts" role="group" aria-label="People classified in Marriage">
-                    {marriagePeople.map(person => (
-                      <button
-                        key={person.id}
-                        type="button"
-                        className="marriage-person-shortcut"
-                        aria-label={`Open profile for ${person.displayName}`}
-                        onClick={() => onPersonSelect(person.id)}
-                      >
-                        <PersonBadgeVisual person={person} displayNameMode="full" />
-                        <span className="marriage-person-shortcut__chevron" aria-hidden="true">›</span>
-                      </button>
-                    ))}
-                  </div>
-                )
-                : (
-                  <div className="marriage-people-empty">
-                    <p>No People are classified in Marriage.</p>
-                    <button type="button" className="btn mini ghost" onClick={onOpenPeople}>
-                      Add or classify a Person
-                    </button>
-                  </div>
-                )
-            ) : undefined)}
           />
+          {categoryConfig?.categoryAction && (
+            <div className="category-page-header-action">{categoryConfig.categoryAction}</div>
+          )}
 
           <CategoryHealthSummary
             key={categoryConfig?.categoryId ?? 'marriage'}
@@ -579,8 +561,6 @@ export function MarriageView({
           undoableRhythms={undoableRhythms}
           satisfiedRhythmIds={satisfiedRhythmIds}
           tendedRhythmIds={tendedRhythmIds}
-          showTended={showTended}
-          onShowTendedChange={onShowTendedChange}
           initializing={initializing}
           resetKey={`${activeTab}:${todayDate}`}
           onTend={onTend}
@@ -619,7 +599,9 @@ export function MarriageView({
           onOpenCategory={onOpenCategory}
           todayDate={todayDate}
           onAddRhythm={onAddRhythm}
-          {...(suggestionCatalogue ? { onBrowseSuggestions: browseSuggestions } : {})}
+          {...(hasAvailableSuggestions
+            ? { onBrowseSuggestions: browseSuggestions }
+            : { suggestionsUnavailableReason: 'Suggestions for turned-off Foundations are hidden.' })}
           archivedRhythms={archivedRhythms}
           archivedRhythmsOpenerRef={archivedRhythmsOpener}
           showArchivedRhythms={showArchivedRhythms}
@@ -697,8 +679,8 @@ export function MarriageView({
           onClose={() => setShowArchivedRhythms(false)}
         />
       )}
-      {suggestionCatalogue && <RhythmSuggestionPicker
-        title={suggestionCatalogue.title}
+      {availableSuggestionCatalogue && hasAvailableSuggestions && <RhythmSuggestionPicker
+        title={availableSuggestionCatalogue.title}
         open={showSuggestions}
         groups={suggestionPickerGroups}
         onClose={() => setShowSuggestions(false)}
@@ -716,8 +698,6 @@ function TodayTogether({
   undoableRhythms,
   satisfiedRhythmIds,
   tendedRhythmIds,
-  showTended,
-  onShowTendedChange,
   initializing,
   resetKey,
   onTend,
@@ -738,8 +718,6 @@ function TodayTogether({
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds: ReadonlySet<string>;
   tendedRhythmIds: ReadonlySet<string>;
-  showTended: boolean;
-  onShowTendedChange: (show: boolean) => void;
   initializing: boolean;
   resetKey: string;
   onTend: MarriageViewProps['onTend'];
@@ -767,19 +745,21 @@ function TodayTogether({
         tendedRhythmIds={tendedRhythmIds}
         satisfiedRhythmIds={satisfiedRhythmIds}
         undoableRhythmIds={undoableRhythms}
-        showTended={showTended}
-        onShowTendedChange={onShowTendedChange}
+        displayMode="done-rows"
+        todayDate={todayDate}
         onUndo={onUndo}
         resetKey={resetKey}
         initializing={initializing}
       >
-        {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, itemProps }) => {
-          const visibleRhythms = rhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
-          return visibleRhythms.length > 0
-            ? (
-              <div className="marriage-rhythm-list current-plan-item-group">
-                {visibleRhythms.map(rhythm => (
-                  <div key={rhythm.id} {...itemProps(rhythm.id)}>
+        {({
+            tendedRhythmIds: displayedTendedIds,
+            tendedDisplayItems,
+            expandedTendedRhythmIds,
+            onToggleTendedRhythm,
+            onUndoTendedRhythm,
+            itemProps
+          }) => {
+          const renderRhythmCard = (rhythm: RhythmPreview) => (
                     <RhythmDetailsDialog
                       rhythm={rhythm}
                       inline
@@ -800,23 +780,33 @@ function TodayTogether({
                             onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
                             onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
                             ...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
-                              ? { onUndo: () => onUndo(rhythm.id) }
+                              ? { onUndo: () => onUndoTendedRhythm(rhythm.id) }
                               : {})
                           }
                         : {})}
                       onClose={() => undefined}
                     />
-                  </div>
-                ))}
-              </div>
-            )
-            : rhythms.length > 0
-              ? <div className="marriage-empty-state" role="status"><p>You’ve tended everything here.</p></div>
-              : (
+          );
+          return (
+            <>
+              <TendedRhythmItems
+                className="marriage-rhythm-list current-plan-item-group"
+                rhythms={rhythms}
+                tendedRhythmIds={displayedTendedIds}
+                displayItems={tendedDisplayItems}
+                expandedRhythmIds={expandedTendedRhythmIds}
+                onToggleRhythm={onToggleTendedRhythm}
+                itemProps={itemProps}
+                renderRhythmCard={renderRhythmCard}
+                renderExpandedRhythm={item => renderRhythmCard(item.rhythm)}
+              />
+              {rhythms.length === 0 && (
                 <div className="marriage-empty-state">
                   <p>{hasActiveRhythms ? 'All caught up. Nothing to tend to.' : 'No active Rhythms.'}</p>
                 </div>
-              );
+              )}
+            </>
+          );
         }}
       </TendedRhythmList>
     </section>
@@ -1013,10 +1003,11 @@ function FoundationList({
             aria-labelledby={`${categoryToken}-foundation-detail-title`}
             tabIndex={-1}
           >
-            <BackButton onClick={onBack} variant="plain">All {foundationTerm.plural}</BackButton>
             <FoundationDetailHeader
               foundation={selectedFoundation}
               headingId={`${categoryToken}-foundation-detail-title`}
+              backLabel={`All ${foundationTerm.plural}`}
+              onBack={onBack}
             />
             <HealthScoreBreakdown
               className="rhythm-history-view__score-card foundation-health-card"

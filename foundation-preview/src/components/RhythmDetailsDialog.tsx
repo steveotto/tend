@@ -172,6 +172,7 @@ export function RhythmDetailsDialog({
   const completionAction = ((inline && onTend) || (!inline && (onSaveCompletion || onTend))) && !archived
     ? (
       <RhythmCompletionActions
+        rhythmId={rhythm.id}
         rhythmTitle={rhythm.title}
         completed={completed}
         actionLabel={completionActionLabel}

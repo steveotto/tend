@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, FocusEvent } from 'react';
 import type { RhythmPreview } from '../domain/preview-data.ts';
+import {
+  selectTendedRhythmDisplayItems,
+  type TendedRhythmDisplayItem
+} from '../domain/category-rhythms.ts';
 
 type TendedNotice = {
   key: number;
@@ -12,12 +16,17 @@ type TendedNotice = {
 type TendedRhythmListRenderState = {
   visibleRhythmIds: ReadonlySet<string>;
   tendedRhythmIds: ReadonlySet<string>;
+  tendedDisplayItems: readonly TendedRhythmDisplayItem[];
+  expandedTendedRhythmIds: ReadonlySet<string>;
+  onToggleTendedRhythm: (rhythmId: string) => void;
+  onUndoTendedRhythm: (rhythmId: string) => void;
   controls: ReactNode;
   itemProps: (rhythmId: string) => {
     className: string;
     'data-tended-rhythm-item': string;
     inert: boolean;
     onFocusCapture: (event: FocusEvent<HTMLDivElement>) => void;
+    onBlurCapture: (event: FocusEvent<HTMLDivElement>) => void;
   };
 };
 
@@ -26,13 +35,15 @@ type Props = {
   tendedRhythmIds: ReadonlySet<string>;
   satisfiedRhythmIds: ReadonlySet<string>;
   undoableRhythmIds: ReadonlySet<string>;
-  showTended: boolean;
-  onShowTendedChange: (show: boolean) => void;
+  showTended?: boolean;
+  onShowTendedChange?: (show: boolean) => void;
   onUndo: (rhythmId: string) => void;
   resetKey: string;
   showProgress?: boolean;
   progressDisclosure?: boolean;
   keepToggleWhenEmpty?: boolean;
+  displayMode?: 'toggle' | 'done-rows';
+  todayDate?: string;
   renderControls?: boolean;
   initializing?: boolean;
   children: (state: TendedRhythmListRenderState) => ReactNode;
@@ -48,13 +59,15 @@ export function TendedRhythmList({
   tendedRhythmIds,
   satisfiedRhythmIds,
   undoableRhythmIds,
-  showTended,
-  onShowTendedChange,
+  showTended = false,
+  onShowTendedChange = () => undefined,
   onUndo,
   resetKey,
   showProgress = false,
   progressDisclosure = false,
   keepToggleWhenEmpty = false,
+  displayMode = 'toggle',
+  todayDate = '',
   renderControls = true,
   initializing = false,
   children
@@ -74,17 +87,30 @@ export function TendedRhythmList({
   const wasInitializing = useRef(initializing);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const lastFocusedRhythmId = useRef<string | null>(null);
+  const focusedRhythmId = useRef<string | null>(null);
+  const pendingUndoFocusId = useRef<string | null>(null);
   const itemIdsKey = rhythms.map(rhythm => rhythm.id).join('\u001f');
+  const displayResetKey = `${resetKey}\u001f${itemIdsKey}`;
+  const previousDisplayResetKey = useRef(displayResetKey);
+  const [expandedTendedRhythmIds, setExpandedTendedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const rhythmIds = useMemo(
     () => new Set(itemIdsKey ? itemIdsKey.split('\u001f') : []),
     [itemIdsKey]
   );
   const satisfactionKey = [...satisfiedRhythmIds].sort().join('\u001f');
+  const tendedKey = [...tendedRhythmIds].sort().join('\u001f');
   const undoableKey = [...undoableRhythmIds].sort().join('\u001f');
   const tendedCount = rhythms.filter(rhythm => tendedRhythmIds.has(rhythm.id)).length;
-  const hasToggle = rhythms.length > 0 || keepToggleWhenEmpty;
+  const hasToggle = displayMode === 'toggle' && (rhythms.length > 0 || keepToggleWhenEmpty);
+  const tendedDisplayItems = useMemo(
+    () => displayMode === 'done-rows'
+      ? selectTendedRhythmDisplayItems(rhythms, tendedRhythmIds, todayDate)
+      : [],
+    [displayMode, rhythms, tendedRhythmIds, todayDate]
+  );
   const visibleRhythmIds = useMemo(
     () => {
+      if (displayMode === 'done-rows') return new Set(rhythms.map(rhythm => rhythm.id));
       const previousSatisfied = previousSatisfiedIds.current;
       return new Set(rhythms
         .filter(rhythm => showTended
@@ -93,7 +119,7 @@ export function TendedRhythmList({
           || previousSatisfied !== null && !previousSatisfied.has(rhythm.id))
         .map(rhythm => rhythm.id));
     },
-    [rhythms, showTended, satisfiedRhythmIds, pendingRemovalIds]
+    [displayMode, rhythms, showTended, satisfiedRhythmIds, pendingRemovalIds]
   );
 
   function clearTimers() {
@@ -101,6 +127,14 @@ export function TendedRhythmList({
     for (const timer of noticeTimers.current.values()) window.clearTimeout(timer);
     removeTimers.current.clear();
     noticeTimers.current.clear();
+  }
+
+  function focusDoneRow(rhythmId: string) {
+    const button = [...document.querySelectorAll<HTMLButtonElement>('[data-tended-rhythm-done-button]')]
+      .find(candidate => candidate.dataset.tendedRhythmDoneButton === rhythmId);
+    if (!button) return;
+    button.focus({ preventScroll: true });
+    focusedRhythmId.current = rhythmId;
   }
 
   function clearRemovalTimers() {
@@ -154,9 +188,30 @@ export function TendedRhythmList({
     }
   }
 
+  function toggleTendedRhythm(rhythmId: string) {
+    setExpandedTendedRhythmIds(current => {
+      const next = new Set(current);
+      if (next.has(rhythmId)) next.delete(rhythmId);
+      else next.add(rhythmId);
+      return next;
+    });
+  }
+
+  function undoTendedRhythm(rhythmId: string) {
+    pendingUndoFocusId.current = rhythmId;
+    clearForRhythm(rhythmId);
+    onUndo(rhythmId);
+  }
+
+  useLayoutEffect(() => {
+    if (previousDisplayResetKey.current === displayResetKey) return;
+    previousDisplayResetKey.current = displayResetKey;
+    setExpandedTendedRhythmIds(new Set());
+  }, [displayResetKey]);
+
   useLayoutEffect(() => {
     const currentSatisfied = new Set(satisfiedRhythmIds);
-    const showTendedEnabled = !previousShowTended.current && showTended;
+    const showTendedEnabled = displayMode === 'toggle' && !previousShowTended.current && showTended;
     previousShowTended.current = showTended;
     showTendedRef.current = showTended;
 
@@ -212,7 +267,11 @@ export function TendedRhythmList({
       }, NOTICE_DURATION_MS);
       noticeTimers.current.set(noticeKey, noticeTimer);
 
-      if (!showTended) {
+      if (displayMode === 'done-rows' && focusedRhythmId.current === rhythm.id) {
+        focusDoneRow(rhythm.id);
+      }
+
+      if (displayMode === 'toggle' && !showTended) {
         setPendingRemovalIds(current => new Set(current).add(rhythm.id));
         const graceTimer = window.setTimeout(() => {
           if (showTendedRef.current) return;
@@ -262,6 +321,7 @@ export function TendedRhythmList({
   }, [
     satisfactionKey,
     undoableKey,
+    displayMode,
     itemIdsKey,
     resetKey,
     initializing,
@@ -272,6 +332,15 @@ export function TendedRhythmList({
     rhythmIds
   ]);
 
+  useLayoutEffect(() => {
+    const rhythmId = pendingUndoFocusId.current;
+    if (!rhythmId || tendedRhythmIds.has(rhythmId)) return;
+    const button = [...document.querySelectorAll<HTMLButtonElement>('[data-rhythm-tend-button]')]
+      .find(candidate => candidate.dataset.rhythmTendButton === rhythmId);
+    button?.focus({ preventScroll: true });
+    pendingUndoFocusId.current = null;
+  }, [tendedKey, tendedRhythmIds]);
+
   useEffect(() => () => clearTimers(), []);
 
   function itemProps(rhythmId: string) {
@@ -281,6 +350,14 @@ export function TendedRhythmList({
       inert: collapsingIds.has(rhythmId),
       onFocusCapture: () => {
         lastFocusedRhythmId.current = rhythmId;
+        focusedRhythmId.current = rhythmId;
+      },
+      onBlurCapture: (event: FocusEvent<HTMLDivElement>) => {
+        const nextFocused = event.relatedTarget;
+        if (nextFocused && !event.currentTarget.contains(nextFocused as Node)
+          && focusedRhythmId.current === rhythmId) {
+          focusedRhythmId.current = null;
+        }
       }
     };
   }
@@ -339,7 +416,9 @@ export function TendedRhythmList({
           <span className="visually-hidden">
             Tended {notice.title}. {showTended
               ? 'The completed Rhythm remains visible.'
-              : 'It will be removed from the active list shortly.'}
+              : displayMode === 'done-rows'
+                ? 'It collapsed to a compact row in its original position.'
+                : 'It will be removed from the active list shortly.'}
           </span>
           <span aria-hidden="true">Tended{notice.undoable ? ' · ' : ''}</span>
           {notice.undoable && (
@@ -348,8 +427,7 @@ export function TendedRhythmList({
               className="show-tended-list__undo"
               aria-label={`Undo tending ${notice.title}`}
               onClick={() => {
-                clearForRhythm(notice.rhythmId);
-                onUndo(notice.rhythmId);
+                undoTendedRhythm(notice.rhythmId);
               }}
             >
               Undo
@@ -363,7 +441,25 @@ export function TendedRhythmList({
   return renderControls ? (
     <>
       {controls}
-      {children({ visibleRhythmIds, tendedRhythmIds, controls, itemProps })}
+      {children({
+        visibleRhythmIds,
+        tendedRhythmIds,
+        tendedDisplayItems,
+        expandedTendedRhythmIds,
+        onToggleTendedRhythm: toggleTendedRhythm,
+        onUndoTendedRhythm: undoTendedRhythm,
+        controls,
+        itemProps
+      })}
     </>
-  ) : children({ visibleRhythmIds, tendedRhythmIds, controls, itemProps });
+  ) : children({
+    visibleRhythmIds,
+    tendedRhythmIds,
+    tendedDisplayItems,
+    expandedTendedRhythmIds,
+    onToggleTendedRhythm: toggleTendedRhythm,
+    onUndoTendedRhythm: undoTendedRhythm,
+    controls,
+    itemProps
+  });
 }

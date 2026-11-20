@@ -140,11 +140,14 @@ export function selectPersonHealth(
 }
 
 export function selectPersonOverallHealth(
-  rhythms: Pick<PersonRhythmHealthSelection, 'consistency' | 'onTrack'>
+  rhythms: Pick<PersonRhythmHealthSelection, 'consistency' | 'onTrack'>,
+  prayerEnabled = true
 ): PersonHealthSelection {
   return selectPersonHealth([
     { id: 'rhythms', consistency: rhythms.consistency, onTrack: rhythms.onTrack },
     { id: 'connection', consistency: null, onTrack: null, scoringStatus: 'unavailable' },
-    { id: 'prayer', consistency: null, onTrack: null, scoringStatus: 'unavailable' }
+    ...(prayerEnabled
+      ? [{ id: 'prayer', consistency: null, onTrack: null, scoringStatus: 'unavailable' as const }]
+      : [])
   ]);
 }

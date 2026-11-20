@@ -127,10 +127,10 @@ export function PersonHealthComponentScores({
   areaDetails
 }: {
   values: readonly PersonHealthComponentScore[];
-  areaDetails?: Readonly<Record<'rhythms' | 'connections' | 'prayer', {
+  areaDetails?: Partial<Readonly<Record<'rhythms' | 'connections' | 'prayer', {
     title: string;
     content: ReactNode;
-  }>>;
+  }>>>;
 }) {
   const [dialogArea, setDialogArea] = useState<PersonHealthComponentScore['id'] | null>(null);
   const scoreButtonRefs = useRef<Partial<Record<NonNullable<PersonHealthComponentScore['id']>, HTMLButtonElement | null>>>({});
@@ -139,7 +139,12 @@ export function PersonHealthComponentScores({
   const dialogAreaDetails = dialogArea ? areaDetails?.[dialogArea] : undefined;
 
   return (
-    <div className="person-health-component-scores" role="group" aria-label="Health by area">
+    <div
+      className="person-health-component-scores"
+      role="group"
+      aria-label="Health by area"
+      data-count={values.length}
+    >
       {values.map(({ id, label, score }) => {
         const value = score !== null && Number.isFinite(score) ? score : null;
         const available = value !== null;
@@ -232,10 +237,10 @@ export function PersonOverallHealthDetails({
   person: PersonPreview;
   overallScore: number | null;
   areas: readonly PersonOverallHealthArea[];
-  areaDetails: Readonly<Record<PersonOverallHealthArea['id'], {
+  areaDetails: Partial<Readonly<Record<PersonOverallHealthArea['id'], {
     title: string;
     content: ReactNode;
-  }>>;
+  }>>>;
 }) {
   const eligibleAreas = areas.filter(area => area.score !== null && Number.isFinite(area.score));
   const noScoresAvailable = eligibleAreas.length === 0;

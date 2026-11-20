@@ -9,7 +9,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import type { Page } from 'playwright';
-import { createEmptyPreviewData, createPreviewEnvelope } from '../src/domain/preview-state.ts';
+import { createEmptyPreviewData, createPreviewEnvelope, parsePreviewBackup } from '../src/domain/preview-state.ts';
+import { localDateString } from '../src/domain/money-goals.ts';
+import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
 import { PREVIEW_ACCOUNT_STORAGE_PREFIX } from '../src/storage/preview-storage.ts';
 
 const previewDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,6 +51,44 @@ async function waitForPreview(url: string, server: ReturnType<typeof spawn>): Pr
 }
 
 type PreviewTextSize = 'small' | 'medium' | 'large';
+
+async function measureHeroHeader(page: Page, selector: string) {
+  const header = page.locator(selector).last();
+  await header.waitFor({ state: 'visible' });
+  return header.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const text = [...element.querySelectorAll<HTMLElement>('h2, p')];
+    const copy = element.querySelector<HTMLElement>('.page-hero-header__copy');
+    const icon = element.querySelector<HTMLElement>('.page-hero-header__icon');
+    const copyRect = copy?.getBoundingClientRect();
+    const iconRect = icon?.getBoundingClientRect();
+    const contentBounds = [
+      ...text.map(item => item.getBoundingClientRect()),
+      ...(iconRect ? [iconRect] : [])
+    ];
+    return {
+      left: rect.left + window.scrollX,
+      top: rect.top + window.scrollY,
+      width: rect.width,
+      height: rect.height,
+      contentFits: contentBounds.every(bounds =>
+        bounds.left >= rect.left - 1
+        && bounds.right <= rect.right + 1
+        && bounds.top >= rect.top - 1
+        && bounds.bottom <= rect.bottom + 1
+      ) && text.every(item => item.scrollWidth <= item.clientWidth + 1),
+      iconBesideCopy: Boolean(
+        copyRect && iconRect
+        && iconRect.left >= copyRect.right - 1
+        && iconRect.right <= rect.right + 1
+        && iconRect.top < copyRect.bottom
+        && iconRect.bottom > copyRect.top
+      ),
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth
+    };
+  });
+}
 
 function contrastRatio(foreground: string, background: string): number {
   const luminance = (color: string) => {
@@ -105,6 +145,598 @@ async function setPreviewTextSize(page: Page, target: PreviewTextSize): Promise<
       expected => document.querySelector('.mobile-display-toggle')?.getAttribute('data-text-size') === expected,
       sizes[(currentIndex + index + 1) % sizes.length]
     );
+  }
+}
+
+async function verifyStrengthReviewResponsiveLayout(page: Page): Promise<void> {
+  const originalViewport = page.viewportSize() ?? { width: 375, height: 812 };
+  const sizeToggle = page.locator('.mobile-display-toggle');
+  const initialTextSizeValue = await sizeToggle.getAttribute('data-text-size');
+  if (initialTextSizeValue !== 'small' && initialTextSizeValue !== 'medium' && initialTextSizeValue !== 'large') {
+    throw new Error('The preview text-size control is unavailable.');
+  }
+  const initialTextSize: PreviewTextSize = initialTextSizeValue;
+
+  await page.evaluate(() => {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'money-goal-dialog strength-guided-dialog dialog--phone-fullscreen';
+    dialog.open = true;
+    dialog.dataset.strengthReviewLayoutFixture = 'true';
+    dialog.style.visibility = 'hidden';
+    dialog.style.pointerEvents = 'none';
+
+    const surface = document.createElement('div');
+    surface.className = 'money-goal-dialog__surface';
+    const body = document.createElement('div');
+    body.className = 'strength-dialog-body strength-guided';
+    const review = document.createElement('div');
+    review.className = 'strength-guided__review';
+
+    const metadata = document.createElement('div');
+    metadata.className = 'strength-guided__metadata strength-guided__review-metadata';
+    const fields: Array<[string, 'date' | 'time', string]> = [
+      ['Workout date', 'date', '2026-11-20'],
+      ['Start time', 'time', '23:59']
+    ];
+    for (const [labelText, type, value] of fields) {
+      const label = document.createElement('label');
+      label.className = 'strength-form-field';
+      label.append(labelText);
+      const input = document.createElement('input');
+      input.type = type;
+      input.value = value;
+      label.append(input);
+      metadata.append(label);
+    }
+
+    const results = document.createElement('section');
+    results.className = 'strength-exercise-results';
+    const heading = document.createElement('h3');
+    heading.textContent = 'Dumbbell press with a deliberately long result title';
+    const sets = document.createElement('ol');
+    sets.className = 'strength-exercise-results__sets';
+    const set = document.createElement('li');
+    set.className = 'strength-exercise-results__set strength-exercise-results__set--performed';
+    const setNumber = document.createElement('span');
+    setNumber.className = 'strength-exercise-results__set-number';
+    setNumber.textContent = 'Set 1';
+    const setValue = document.createElement('span');
+    setValue.className = 'strength-exercise-results__set-value';
+    setValue.setAttribute('aria-label', '1,000,000 kg per dumbbell × 100 reps');
+    setValue.textContent = '1,000,000 kg × 100 reps';
+    const setDelta = document.createElement('span');
+    setDelta.className = 'strength-exercise-results__set-delta';
+    setDelta.textContent = '▲ +5 kg';
+    set.append(setNumber, setValue, setDelta);
+    sets.append(set);
+    const volume = document.createElement('div');
+    volume.className = 'strength-exercise-results__volume';
+    const volumeHeading = document.createElement('strong');
+    volumeHeading.className = 'strength-exercise-results__volume-heading';
+    volumeHeading.textContent = 'Volume (per dumbbell)';
+    const grid = document.createElement('div');
+    grid.className = 'strength-exercise-results__volume-grid';
+    const volumeValues: Array<[string, string, boolean]> = [
+      ['Last session', '870,000 lb', false],
+      ['This session', '880,000 lb', true]
+    ];
+    for (const [labelText, valueText, current] of volumeValues) {
+      const group = document.createElement('div');
+      group.className = `strength-exercise-results__volume-group${current
+        ? ' strength-exercise-results__volume-group--current'
+        : ''}`;
+      const label = document.createElement('span');
+      label.className = 'strength-exercise-results__volume-label';
+      label.textContent = labelText;
+      const value = document.createElement('span');
+      value.className = 'strength-exercise-results__volume-value';
+      value.textContent = valueText;
+      group.append(label);
+      if (current) {
+        const currentValue = document.createElement('span');
+        currentValue.className = 'strength-exercise-results__volume-current';
+        currentValue.append(value);
+        const delta = document.createElement('span');
+        delta.className = 'strength-exercise-results__set-delta';
+        delta.textContent = '▲ +10,000 lb';
+        currentValue.append(delta);
+        group.append(currentValue);
+      } else {
+        group.append(value);
+      }
+      grid.append(group);
+    }
+    volume.append(volumeHeading, grid);
+    results.append(heading, sets, volume);
+    review.append(metadata, results);
+    body.append(review);
+    surface.append(body);
+    dialog.append(surface);
+    document.body.append(dialog);
+  });
+
+  try {
+    for (const textSize of ['small', 'medium', 'large'] as const) {
+      await setPreviewTextSize(page, textSize);
+      for (const width of [375, 390, 430] as const) {
+        await page.setViewportSize({ width, height: 844 });
+        const layout = await page.evaluate(() => {
+          const dialog = document.querySelector<HTMLDialogElement>('[data-strength-review-layout-fixture]');
+          const metadata = dialog?.querySelector<HTMLElement>('.strength-guided__review-metadata');
+          const date = metadata?.querySelector<HTMLElement>('.strength-form-field:nth-child(1)');
+          const time = metadata?.querySelector<HTMLElement>('.strength-form-field:nth-child(2)');
+          const dateInput = date?.querySelector<HTMLInputElement>('input');
+          const timeInput = time?.querySelector<HTMLInputElement>('input');
+          const card = dialog?.querySelector<HTMLElement>('.strength-exercise-results');
+          const setRow = card?.querySelector<HTMLElement>('.strength-exercise-results__set');
+          const setValue = card?.querySelector<HTMLElement>('.strength-exercise-results__set-value');
+          const setDelta = card?.querySelector<HTMLElement>('.strength-exercise-results__set-delta');
+          const grid = card?.querySelector<HTMLElement>('.strength-exercise-results__volume-grid');
+          const previous = grid?.querySelector<HTMLElement>('.strength-exercise-results__volume-group');
+          const current = grid?.querySelector<HTMLElement>('.strength-exercise-results__volume-group--current');
+          const delta = current?.querySelector<HTMLElement>('.strength-exercise-results__set-delta');
+          if (!metadata || !date || !time || !dateInput || !timeInput || !card || !setRow || !setValue
+            || !setDelta || !grid || !previous || !current || !delta) {
+            throw new Error('Strength review responsive fixture is incomplete.');
+          }
+          const dateRect = date.getBoundingClientRect();
+          const timeRect = time.getBoundingClientRect();
+          const dateInputRect = dateInput.getBoundingClientRect();
+          const timeInputRect = timeInput.getBoundingClientRect();
+          const setRowRect = setRow.getBoundingClientRect();
+          const setValueRect = setValue.getBoundingClientRect();
+          const setDeltaRect = setDelta.getBoundingClientRect();
+          const gridRect = grid.getBoundingClientRect();
+          const previousRect = previous.getBoundingClientRect();
+          const currentRect = current.getBoundingClientRect();
+          const deltaRect = delta.getBoundingClientRect();
+          return {
+            textSize: document.querySelector('.mobile-display-toggle')?.getAttribute('data-text-size'),
+            dateAndTimeSideBySide: Math.abs(dateRect.top - timeRect.top) <= 1
+              && dateRect.right <= timeRect.left + 1,
+            inputsFit: dateInputRect.left >= dateRect.left - 1
+              && dateInputRect.right <= dateRect.right + 1
+              && timeInputRect.left >= timeRect.left - 1
+              && timeInputRect.right <= timeRect.right + 1
+              && dateInput.scrollWidth <= dateInput.clientWidth + 1
+              && timeInput.scrollWidth <= timeInput.clientWidth + 1,
+            setRowFits: setRow.scrollWidth <= setRow.clientWidth + 1
+              && setValue.scrollWidth <= setValue.clientWidth + 1
+              && setValue.textContent === '1,000,000 kg × 100 reps'
+              && setValue.getAttribute('aria-label') === '1,000,000 kg per dumbbell × 100 reps'
+              && setValueRect.left >= setRowRect.left - 1
+              && setValueRect.right <= setRowRect.right + 1
+              && setDeltaRect.right <= setRowRect.right + 1,
+            volumeFits: card.scrollWidth <= card.clientWidth + 1
+              && previousRect.left >= gridRect.left - 1
+              && previousRect.right <= gridRect.right + 1
+              && currentRect.left > previousRect.left
+              && currentRect.right <= gridRect.right + 1
+              && deltaRect.left >= currentRect.left - 1
+              && deltaRect.right <= currentRect.right + 1,
+            documentWidth: document.documentElement.scrollWidth,
+            viewportWidth: document.documentElement.clientWidth
+          };
+        });
+        assert.equal(layout.textSize, textSize);
+        assert.equal(layout.dateAndTimeSideBySide, true,
+          `Workout date and start time should share a row at ${width}px / ${textSize}.`);
+        assert.equal(layout.inputsFit, true,
+          `Native date/time fields must fit at ${width}px / ${textSize}.`);
+        assert.equal(layout.setRowFits, true,
+          `Per-dumbbell set rows must remain legible without horizontal overflow at ${width}px / ${textSize}.`);
+        assert.equal(layout.volumeFits, true,
+          `Long volume values and deltas must wrap within the card at ${width}px / ${textSize}.`);
+        assert.equal(layout.documentWidth, width);
+        assert.equal(layout.viewportWidth, width);
+      }
+    }
+
+    await setPreviewTextSize(page, 'large');
+    await page.setViewportSize({ width: 320, height: 844 });
+    const narrowLayout = await page.locator('[data-strength-review-layout-fixture] .strength-guided__review-metadata')
+      .evaluate(metadata => {
+        const date = metadata.querySelector<HTMLElement>('.strength-form-field:nth-child(1)');
+        const time = metadata.querySelector<HTMLElement>('.strength-form-field:nth-child(2)');
+        return Boolean(date && time && time.getBoundingClientRect().top > date.getBoundingClientRect().top);
+      });
+    assert.equal(narrowLayout, true, 'Date and time should stack at a genuinely narrow width.');
+  } finally {
+    await page.locator('[data-strength-review-layout-fixture]').evaluate(dialog => dialog.remove());
+    await setPreviewTextSize(page, initialTextSize);
+    await page.setViewportSize(originalViewport);
+  }
+}
+
+async function verifyFitnessSessionResumeBannerLayout(page: Page, viewSelector: string): Promise<void> {
+  const originalViewport = page.viewportSize() ?? { width: 375, height: 844 };
+  const sizeToggle = page.locator('.mobile-display-toggle');
+  const initialTextSize = await sizeToggle.getAttribute('data-text-size') as PreviewTextSize | null;
+  assert.ok(initialTextSize === 'small' || initialTextSize === 'medium' || initialTextSize === 'large');
+  const fixtureId = `fitness-session-resume-layout-${viewSelector.replace(/[^a-z]+/gi, '-')}`;
+
+  await page.evaluate(({ selector, id }) => {
+    const view = document.querySelector<HTMLElement>(selector);
+    const summary = view?.querySelector<HTMLElement>('.fitness-score-summary');
+    if (!view || !summary) throw new Error(`Could not find a Fitness summary in ${selector}.`);
+
+    const banner = document.createElement('aside');
+    banner.id = id;
+    banner.className = 'strength-guided-banner fitness-session-resume-banner';
+    banner.setAttribute('aria-label', 'Workout in progress');
+    banner.innerHTML = `
+      <div class="fitness-session-resume-banner__copy">
+        <strong class="fitness-session-resume-banner__title">
+          A long guided workout title that wraps naturally on narrow mobile screens
+        </strong>
+        <span class="fitness-session-resume-banner__status">Workout in progress</span>
+        <span class="fitness-session-resume-banner__support">Pick up where you left off.</span>
+      </div>
+      <button type="button" class="btn mini fitness-session-resume-banner__action">Resume</button>
+    `;
+    summary.insertAdjacentElement('afterend', banner);
+  }, { selector: viewSelector, id: fixtureId });
+
+  const banner = page.locator(`#${fixtureId}`);
+  const measure = () => banner.evaluate(element => {
+    const copy = element.querySelector<HTMLElement>('.fitness-session-resume-banner__copy');
+    const title = element.querySelector<HTMLElement>('.fitness-session-resume-banner__title');
+    const action = element.querySelector<HTMLElement>('.fitness-session-resume-banner__action');
+    if (!copy || !title || !action) throw new Error('The Fitness resume banner fixture is incomplete.');
+    const bannerRect = element.getBoundingClientRect();
+    const copyRect = copy.getBoundingClientRect();
+    const actionRect = action.getBoundingClientRect();
+    const lineHeight = Number.parseFloat(getComputedStyle(title).lineHeight);
+    return {
+      bannerRight: bannerRect.right,
+      copyRight: copyRect.right,
+      copyWidth: copyRect.width,
+      copyBottom: copyRect.bottom,
+      actionLeft: actionRect.left,
+      actionTop: actionRect.top,
+      actionBottom: actionRect.bottom,
+      actionRight: actionRect.right,
+      actionCenter: (actionRect.top + actionRect.bottom) / 2,
+      copyCenter: (copyRect.top + copyRect.bottom) / 2,
+      titleWraps: title.getBoundingClientRect().height > lineHeight + 1,
+      textFits: [...copy.children].every(child => {
+        const text = child as HTMLElement;
+        return text.scrollWidth <= text.clientWidth + 1;
+      }),
+      viewportWidth: document.documentElement.clientWidth,
+      documentWidth: document.documentElement.scrollWidth
+    };
+  });
+
+  try {
+    for (const textSize of ['small', 'medium', 'large'] as const) {
+      await setPreviewTextSize(page, textSize);
+      for (const viewportWidth of [375, 390, 430]) {
+        await page.setViewportSize({ width: viewportWidth, height: 844 });
+        const layout = await measure();
+        assert.ok(layout.titleWraps,
+          `The long session title should wrap at ${viewportWidth}px / ${textSize}.`);
+        assert.ok(layout.textFits,
+          `Banner copy must fit its column at ${viewportWidth}px / ${textSize}.`);
+        assert.ok(layout.actionLeft >= layout.copyRight + 8,
+          `Resume should stay to the right of the copy at ${viewportWidth}px / ${textSize}.`);
+        assert.ok(Math.abs(layout.actionCenter - layout.copyCenter) < 1,
+          `Resume should be vertically centered at ${viewportWidth}px / ${textSize}.`);
+        assert.ok(layout.actionRight <= layout.bannerRight - 8);
+        assert.equal(layout.viewportWidth, viewportWidth);
+        assert.equal(layout.documentWidth, viewportWidth);
+      }
+    }
+
+    await setPreviewTextSize(page, 'large');
+    await page.setViewportSize({ width: 280, height: 844 });
+    const narrowLayout = await measure();
+    assert.ok(narrowLayout.actionTop >= narrowLayout.copyBottom,
+      'At very narrow widths, Resume may stack beneath the text.');
+    assert.ok(narrowLayout.actionRight <= narrowLayout.bannerRight - 8);
+    assert.equal(narrowLayout.viewportWidth, 280);
+  } finally {
+    await banner.evaluate(element => element.remove());
+    await setPreviewTextSize(page, initialTextSize);
+    await page.setViewportSize(originalViewport);
+  }
+}
+
+async function verifyGuidedSetActionSpacing(page: Page, textSize: PreviewTextSize): Promise<void> {
+  const originalViewport = page.viewportSize() ?? { width: 375, height: 844 };
+  const fixtureId = `guided-set-spacing-${textSize}`;
+  assert.equal(await page.locator('.mobile-display-toggle').getAttribute('data-text-size'), textSize);
+  await page.evaluate(id => {
+    const dialog = document.createElement('dialog');
+    dialog.id = id;
+    dialog.className = 'money-goal-dialog strength-guided-dialog';
+    dialog.setAttribute('aria-label', 'Guided set spacing verification');
+    dialog.innerHTML = `
+      <div class="money-goal-dialog__surface">
+        <h2>Guided set spacing verification</h2>
+        <div class="strength-dialog-body strength-guided">
+          <section class="strength-guided__entry" aria-label="Set 1 entry">
+            <div class="strength-guided__performance-references">
+              <button type="button" class="strength-guided__performance"
+                aria-label="Copy values from this workout's last set, Bench Press, to the current set">
+                <span>This workout · Last set</span><strong>45 lb × 8</strong>
+              </button>
+              <div class="strength-guided__performance"><span>Last workout · Set 1</span><strong>40 lb × 8</strong></div>
+            </div>
+            <div class="strength-guided__inputs" role="group" aria-label="Current set values">
+              <div class="strength-guided__input-module">
+                <label for="${id}-weight">Weight (lb)</label>
+                <input id="${id}-weight" type="number" value="45">
+                <div class="strength-guided__steppers">
+                  <button type="button" aria-label="Decrease weight by 5 lb">−</button>
+                  <button type="button" aria-label="Increase weight by 5 lb">+</button>
+                </div>
+              </div>
+              <div class="strength-guided__input-module">
+                <label for="${id}-reps">Reps</label>
+                <input id="${id}-reps" type="number" aria-label="Reps" value="8">
+                <div class="strength-guided__steppers">
+                  <button type="button" aria-label="Decrease reps by 1">−</button>
+                  <button type="button" aria-label="Increase reps by 1">+</button>
+                </div>
+              </div>
+            </div>
+            <div class="strength-guided__actions">
+              <button type="button" class="btn mini strength-guided__confirm">Log set 1</button>
+              <div class="strength-guided__secondary-actions">
+                <button type="button" class="btn mini ghost">Skip set</button>
+                <div>
+                  <button type="button" class="btn mini ghost">Next exercise</button>
+                  <p class="strength-guided__up-next">Up next · Row</p>
+                </div>
+              </div>
+            </div>
+          </section>
+          <div class="strength-guided__footer">
+            <div class="strength-guided__footer-actions">
+              <button type="button" class="btn mini ghost strength-guided__notes-button">Notes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.append(dialog);
+    dialog.showModal();
+  }, fixtureId);
+
+  try {
+    const dialog = page.locator(`#${fixtureId}`);
+    for (const width of [375, 390, 430] as const) {
+      await page.setViewportSize({ width, height: 390 });
+      const layout = await dialog.evaluate(element => {
+        const inputs = element.querySelector<HTMLElement>('.strength-guided__inputs');
+        const actions = element.querySelector<HTMLElement>('.strength-guided__actions');
+        const confirm = element.querySelector<HTMLButtonElement>('.strength-guided__confirm');
+        const scrollRegion = element.querySelector<HTMLElement>('.strength-dialog-body.strength-guided');
+        const activeReference = element.querySelector<HTMLButtonElement>('button.strength-guided__performance');
+        const inactiveReference = element.querySelector<HTMLElement>('div.strength-guided__performance');
+        if (!inputs || !actions || !confirm || !scrollRegion || !activeReference || !inactiveReference) {
+          throw new Error('Guided set spacing fixture is missing its input, action, or scroll region.');
+        }
+        const visualStyle = (reference: HTMLElement) => {
+          const style = getComputedStyle(reference);
+          const rect = reference.getBoundingClientRect();
+          return {
+            display: style.display,
+            width: rect.width,
+            height: rect.height,
+            padding: style.padding,
+            border: style.border,
+            borderRadius: style.borderRadius,
+            backgroundColor: style.backgroundColor,
+            color: style.color,
+            fontFamily: style.fontFamily,
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+            lineHeight: style.lineHeight
+          };
+        };
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          inputBottom: inputs.getBoundingClientRect().bottom,
+          actionTop: actions.getBoundingClientRect().top,
+          buttonHeight: confirm.getBoundingClientRect().height,
+          targetGap: (() => {
+            const buttonHeight = Number.parseFloat(getComputedStyle(confirm).minHeight);
+            const textScale = Number.parseFloat(
+              getComputedStyle(document.documentElement).getPropertyValue('--app-text-scale')
+            );
+            return Math.max(buttonHeight, Math.min(buttonHeight * textScale, buttonHeight + 8));
+          })(),
+          scrollHeight: scrollRegion.scrollHeight,
+          clientHeight: scrollRegion.clientHeight,
+          overflowY: getComputedStyle(scrollRegion).overflowY,
+          actionableReference: visualStyle(activeReference),
+          inactiveReference: visualStyle(inactiveReference)
+        };
+      });
+      const gap = layout.actionTop - layout.inputBottom;
+      assert.equal(layout.viewportWidth, width);
+      assert.equal(layout.documentWidth, width,
+        `Guided set controls must not overflow at ${width}px / ${textSize} text.`);
+      assert.ok(Math.abs(gap - layout.targetGap) < 0.5,
+        `Guided action gap should scale with text size at ${width}px / ${textSize} text: ${JSON.stringify({ ...layout, gap })}.`);
+      assert.ok(Math.abs(gap - layout.buttonHeight) <= 10,
+        `Guided action gap should remain close to the Log set button height at ${width}px / ${textSize} text: ${JSON.stringify({ ...layout, gap })}.`);
+      assert.ok(layout.scrollHeight > layout.clientHeight,
+        `Guided actions should remain in a scrollable document at ${width}px / ${textSize} text.`);
+      assert.equal(layout.overflowY, 'auto');
+      assert.deepEqual(layout.actionableReference, layout.inactiveReference,
+        `Actionable and inactive performance references must retain the same appearance at ${width}px / ${textSize} text.`);
+      const referenceButton = dialog.getByRole('button', {
+        name: "Copy values from this workout's last set, Bench Press, to the current set"
+      });
+      await referenceButton.focus();
+      await page.keyboard.press('Enter');
+      const referenceFocus = await referenceButton.evaluate(button => {
+        const style = getComputedStyle(button);
+        return {
+          focused: document.activeElement === button,
+          visible: button.matches(':focus-visible'),
+          outlineStyle: style.outlineStyle,
+          outlineWidth: style.outlineWidth
+        };
+      });
+      assert.deepEqual(referenceFocus, {
+        focused: true,
+        visible: true,
+        outlineStyle: 'solid',
+        outlineWidth: '2px'
+      });
+
+      await dialog.getByRole('button', { name: 'Decrease weight by 5 lb' }).focus();
+      for (const actionName of [
+        'Increase weight by 5 lb',
+        'Reps',
+        'Decrease reps by 1',
+        'Increase reps by 1',
+        'Log set 1',
+        'Skip set',
+        'Next exercise',
+        'Notes'
+      ]) {
+        await page.keyboard.press('Tab');
+        const focusedAction = await dialog.evaluate(element => {
+          const active = document.activeElement as HTMLElement | null;
+          const region = element.querySelector<HTMLElement>('.strength-dialog-body.strength-guided');
+          if (!active || !region) throw new Error('Guided action focus escaped its scroll region.');
+          const activeRect = active.getBoundingClientRect();
+          const regionRect = region.getBoundingClientRect();
+          return {
+            name: active.getAttribute('aria-label') ?? active.textContent?.trim(),
+            visible: activeRect.top >= regionRect.top - 1 && activeRect.bottom <= regionRect.bottom + 1,
+            scrollTop: region.scrollTop
+          };
+        });
+        assert.equal(focusedAction.name, actionName,
+          `Keyboard order should reach ${actionName} at ${width}px / ${textSize} text.`);
+        assert.equal(focusedAction.visible, true,
+          `${actionName} should scroll into view at ${width}px / ${textSize} text.`);
+      }
+    }
+  } finally {
+    await page.locator(`#${fixtureId}`).evaluate(element => {
+      const dialog = element as HTMLDialogElement;
+      if (dialog.open) dialog.close();
+      dialog.remove();
+    });
+    await page.setViewportSize(originalViewport);
+  }
+}
+
+async function verifyGuidedRhythmChoiceLayout(page: Page, textSize: PreviewTextSize): Promise<void> {
+  const originalViewport = page.viewportSize() ?? { width: 375, height: 844 };
+  const fixtureId = `guided-rhythm-choice-${textSize}`;
+  assert.equal(await page.locator('.mobile-display-toggle').getAttribute('data-text-size'), textSize);
+  await page.evaluate(id => {
+    const dialog = document.createElement('dialog');
+    dialog.id = id;
+    dialog.className = 'money-goal-dialog strength-guided-dialog';
+    dialog.setAttribute('aria-label', 'Guided Rhythm choice verification');
+    dialog.innerHTML = `
+      <div class="money-goal-dialog__surface">
+        <h2>Finish &amp; review</h2>
+        <div class="strength-dialog-body strength-guided">
+          <div class="strength-guided__review">
+            <fieldset class="strength-rhythm-completion" aria-label="Count toward a Rhythm">
+              <legend class="sr-only">Workout completion</legend>
+              <label class="strength-form-field strength-rhythm-completion__field" for="${id}-rhythm">
+                <span>Count toward a Rhythm</span>
+                <select id="${id}-rhythm">
+                  <option value="">Choose a Rhythm</option>
+                  <option value="strength">Strength training</option>
+                </select>
+              </label>
+              <label class="checkbox-tile-options__tile strength-rhythm-completion__workout-only">
+                <input type="checkbox">
+                <span class="strength-rhythm-completion__workout-only-copy">
+                  <span>Workout only</span>
+                  <small>Save without completing a Rhythm.</small>
+                </span>
+              </label>
+            </fieldset>
+            <div class="money-goal-dialog__actions">
+              <button type="button" class="btn mini ghost">Return to workout</button>
+              <button type="button" class="btn mini">Finish &amp; save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.append(dialog);
+    dialog.showModal();
+  }, fixtureId);
+
+  try {
+    const dialog = page.locator(`#${fixtureId}`);
+    const rhythmSelect = dialog.locator('select');
+    const workoutOnly = dialog.locator('.strength-rhythm-completion__workout-only');
+    for (const width of [375, 390, 430] as const) {
+      await page.setViewportSize({ width, height: 390 });
+      const layout = await dialog.evaluate(element => {
+        const group = element.querySelector<HTMLElement>('.strength-rhythm-completion');
+        const field = element.querySelector<HTMLElement>('.strength-rhythm-completion__field');
+        const select = element.querySelector<HTMLSelectElement>('select');
+        const tile = element.querySelector<HTMLElement>('.strength-rhythm-completion__workout-only');
+        const tileCopy = element.querySelector<HTMLElement>('.strength-rhythm-completion__workout-only-copy');
+        if (!group || !field || !select || !tile || !tileCopy) {
+          throw new Error('Guided Rhythm choice fixture is missing its controls.');
+        }
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          groupWidth: group.clientWidth,
+          groupScrollWidth: group.scrollWidth,
+          fieldWidth: field.getBoundingClientRect().width,
+          selectWidth: select.getBoundingClientRect().width,
+          tileWidth: tile.getBoundingClientRect().width,
+          tileScrollWidth: tile.scrollWidth,
+          copyWidth: tileCopy.getBoundingClientRect().width,
+          selectedFontSize: getComputedStyle(select).fontSize,
+          tileTextSize: getComputedStyle(tileCopy).fontSize
+        };
+      });
+      assert.equal(layout.viewportWidth, width);
+      assert.equal(layout.documentWidth, width,
+        `Guided Rhythm choices must not create horizontal page overflow at ${width}px / ${textSize} text.`);
+      assert.ok(layout.groupWidth > 0 && layout.groupScrollWidth <= layout.groupWidth,
+        `The Rhythm choice group must fit at ${width}px / ${textSize} text.`);
+      assert.equal(layout.fieldWidth, layout.groupWidth);
+      assert.equal(layout.selectWidth, layout.fieldWidth);
+      assert.equal(layout.tileWidth, layout.groupWidth);
+      assert.ok(layout.tileScrollWidth <= layout.tileWidth,
+        `Workout-only copy must wrap inside its tile at ${width}px / ${textSize} text.`);
+      assert.ok(layout.copyWidth > 0);
+      assert.ok(Number.parseFloat(layout.selectedFontSize) > 0);
+      assert.ok(Number.parseFloat(layout.tileTextSize) > 0);
+
+      await rhythmSelect.focus();
+      assert.deepEqual(await rhythmSelect.evaluate(select => ({
+        active: document.activeElement === select,
+        visible: select.matches(':focus-visible'),
+        outlineStyle: getComputedStyle(select).outlineStyle
+      })), { active: true, visible: true, outlineStyle: 'solid' },
+      `The Rhythm dropdown must retain its visible focus indicator at ${width}px / ${textSize} text.`);
+      const checkbox = workoutOnly.locator('input');
+      await checkbox.focus();
+      assert.equal(await checkbox.evaluate(input => document.activeElement === input), true,
+        `Workout only must be keyboard-focusable at ${width}px / ${textSize} text.`);
+      assert.equal(await workoutOnly.evaluate(tile => getComputedStyle(tile).outlineStyle), 'solid',
+        `Workout only must have a visible keyboard focus ring at ${width}px / ${textSize} text.`);
+    }
+  } finally {
+    await page.locator(`#${fixtureId}`).evaluate(element => {
+      const dialog = element as HTMLDialogElement;
+      if (dialog.open) dialog.close();
+      dialog.remove();
+    });
+    await page.setViewportSize(originalViewport);
   }
 }
 
@@ -919,6 +1551,8 @@ async function main() {
         await page.getByRole('tab', { name: 'Foundations' }).click();
         await page.getByRole('button', { name: /Open Strength foundation details/ }).click();
         await page.getByRole('region', { name: 'Body insights' }).waitFor({ state: 'visible' });
+        await verifyStrengthReviewResponsiveLayout(page);
+        await verifyFitnessSessionResumeBannerLayout(page, '.strength-page');
         await verifyToolZoneResponsiveLayout(page, 'Body insights');
         await verifyBodyToolPalette(page, {
           settingsButtonName: 'Strength settings',
@@ -939,6 +1573,7 @@ async function main() {
         await page.getByRole('button', { name: 'All Foundations' }).click();
         await page.getByRole('button', { name: /Open Flexibility foundation details/ }).click();
         await page.getByRole('region', { name: 'Body insights' }).waitFor({ state: 'visible' });
+        await verifyFitnessSessionResumeBannerLayout(page, '.flexibility-view');
         await verifyToolZoneResponsiveLayout(page, 'Body insights');
         await verifyBodyToolPalette(page, {
           settingsButtonName: 'Stretch interval settings',
@@ -1086,14 +1721,19 @@ async function main() {
             await page.waitForTimeout(180);
             const phoneStyles = await page.evaluate(() => {
               const headerActions = document.querySelector<HTMLElement>('.mobile-head-actions');
+              const appHeader = document.querySelector<HTMLElement>('.apphead');
               const mobileSearch = document.querySelector<HTMLButtonElement>('.mobile-head-button:not(.mobile-display-toggle)');
               const sizeToggle = document.querySelector<HTMLButtonElement>('.mobile-display-toggle');
               const brandTagline = document.querySelector<HTMLElement>('.brand-tagline');
+              const homeDashboard = document.querySelector<HTMLElement>('.home-dashboard');
+              const dashboardGreeting = homeDashboard?.querySelector<HTMLElement>(':scope > .sectiontitle.dashboard-greeting');
+              const greetingHeading = dashboardGreeting?.querySelector<HTMLElement>('h2');
+              const overallHealthCard = homeDashboard?.querySelector<HTMLElement>(':scope > .overall-card');
               const stickyNav = document.querySelector<HTMLElement>('.sticky-nav');
               const areaNavigation = document.querySelector<HTMLElement>('.nav-row-areas');
               const utilitySearch = document.querySelector<HTMLElement>('.utility-search');
-              const menuGrid = document.querySelector<HTMLElement>('.home-dashboard .overall-card .menu-grid');
-              const firstMenuArea = document.querySelector<HTMLElement>('.home-dashboard .overall-card .menu-area');
+              const menuGrid = document.querySelector<HTMLElement>('.home-dashboard .today-category-menu');
+              const firstMenuArea = document.querySelector<HTMLElement>('.home-dashboard .today-category-menu .menu-area');
               const calendarSection = document.querySelector<HTMLElement>('.today-calendar-section');
               const calendarHeadingRow = document.querySelector<HTMLElement>('.calendar-heading-row');
               const calendarHeading = document.querySelector<HTMLElement>('.calendar-heading-row h2');
@@ -1137,7 +1777,8 @@ async function main() {
                 calendarRangeLabel.textContent = 'Synthetic week range';
                 calendarSection.querySelector('.calendar-section-title')?.append(calendarRangeLabel);
               }
-              if (!headerActions || !mobileSearch || !sizeToggle || !brandTagline || !stickyNav
+              if (!headerActions || !appHeader || !mobileSearch || !sizeToggle || !brandTagline
+                || !homeDashboard || !dashboardGreeting || !greetingHeading || !overallHealthCard || !stickyNav
                 || !areaNavigation || !utilitySearch || !menuGrid || !firstMenuArea || !currentTool
                 || !calendarSection || !calendarHeadingRow || !calendarHeading || !prayerHeading
                 || !calendarRange || !calendarRangeLabel || !todayTitleRow || !todayTitleMain
@@ -1145,9 +1786,20 @@ async function main() {
                 || !todayWeatherIcon || !todayProgress) {
                 throw new Error('Dashboard is missing an expected mobile shell or Health category element.');
               }
+              if (dashboardGreeting.nextElementSibling !== overallHealthCard) {
+                throw new Error('Overall Health must follow the plain greeting in normal page flow.');
+              }
               const searchStyle = getComputedStyle(mobileSearch);
               const toggleStyle = getComputedStyle(sizeToggle);
               const toolStyle = getComputedStyle(currentTool);
+              const appHeaderRect = appHeader.getBoundingClientRect();
+              const homeRect = homeDashboard.getBoundingClientRect();
+              const greetingRect = dashboardGreeting.getBoundingClientRect();
+              const headingStyle = getComputedStyle(greetingHeading);
+              const greetingStyle = getComputedStyle(dashboardGreeting);
+              const healthCardRect = overallHealthCard.getBoundingClientRect();
+              const healthCardStyle = getComputedStyle(overallHealthCard);
+              const pageStyle = getComputedStyle(document.body);
               const gridStyle = getComputedStyle(menuGrid);
               const gridRect = menuGrid.getBoundingClientRect();
               const areaRect = firstMenuArea.getBoundingClientRect();
@@ -1234,6 +1886,37 @@ async function main() {
               return {
                 viewportWidth: document.documentElement.clientWidth,
                 documentWidth: document.documentElement.scrollWidth,
+                homeLayout: {
+                  heroAbsent: document.querySelector('.today-dawn-hero') === null,
+                  supportingSentenceAbsent: dashboardGreeting.querySelector('.dashboard-greeting__subline') === null,
+                  left: homeRect.left,
+                  right: homeRect.right,
+                  greetingLeft: greetingRect.left,
+                  greetingRight: greetingRect.right,
+                  greetingText: greetingHeading.textContent?.trim() ?? '',
+                  greetingTopGap: greetingRect.top - appHeaderRect.bottom,
+                  greetingMargin: greetingStyle.margin,
+                  greetingPadding: greetingStyle.padding,
+                  headingFontWeight: headingStyle.fontWeight,
+                  headingHorizontalOverflow: greetingHeading.scrollWidth - greetingHeading.clientWidth,
+                  headingVerticalOverflow: greetingHeading.scrollHeight - greetingHeading.clientHeight,
+                  cardTopGap: healthCardRect.top - greetingRect.bottom,
+                  cardPadding: healthCardStyle.padding,
+                  cardRadius: [
+                    healthCardStyle.borderTopLeftRadius,
+                    healthCardStyle.borderTopRightRadius,
+                    healthCardStyle.borderBottomRightRadius,
+                    healthCardStyle.borderBottomLeftRadius
+                  ],
+                  cardBackground: healthCardStyle.backgroundColor,
+                  cardBackdropFilter: healthCardStyle.backdropFilter,
+                  scoreMeter: overallHealthCard.querySelector('[role="meter"]') !== null,
+                  pageBackground: pageStyle.backgroundColor,
+                  pageBackgroundImage: pageStyle.backgroundImage,
+                  mainBackgroundImage: getComputedStyle(homeDashboard).backgroundImage,
+                  categoryMenuContained: overallHealthCard.contains(menuGrid),
+                  separateCategoryShellAbsent: document.querySelector('.today-category-menu-shell') === null
+                },
                 brandTagline: {
                   whiteSpace: getComputedStyle(brandTagline).whiteSpace,
                   height: brandTagline.getBoundingClientRect().height,
@@ -1369,6 +2052,33 @@ async function main() {
             });
             assert.equal(phoneStyles.viewportWidth, viewportWidth);
             assert.equal(phoneStyles.documentWidth, viewportWidth, `Phone shell controls must not cause page-level horizontal overflow at ${viewportWidth}px / ${expected.size}: ${JSON.stringify(phoneStyles.overflowingElements)}`);
+            assert.equal(phoneStyles.homeLayout.heroAbsent, true);
+            assert.equal(phoneStyles.homeLayout.supportingSentenceAbsent, true);
+            assert.ok(phoneStyles.homeLayout.left >= 12);
+            assert.ok(phoneStyles.homeLayout.right <= viewportWidth - 12);
+            assert.equal(phoneStyles.homeLayout.greetingLeft, phoneStyles.homeLayout.left);
+            assert.equal(phoneStyles.homeLayout.greetingRight, phoneStyles.homeLayout.right);
+            assert.match(phoneStyles.homeLayout.greetingText, /^Good (morning|afternoon|evening)$/);
+            assert.ok(phoneStyles.homeLayout.greetingTopGap >= 24);
+            assert.equal(phoneStyles.homeLayout.greetingMargin, '32px 0px 12px');
+            assert.equal(phoneStyles.homeLayout.greetingPadding, '0px');
+            assert.equal(phoneStyles.homeLayout.headingFontWeight, '600');
+            assert.ok(phoneStyles.homeLayout.headingHorizontalOverflow <= 1,
+              `Greeting must fit the normal page width at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(phoneStyles.homeLayout.headingVerticalOverflow <= 1,
+              `Greeting must not be clipped at ${viewportWidth}px / ${expected.size}.`);
+            assert.ok(phoneStyles.homeLayout.cardTopGap >= 8 && phoneStyles.homeLayout.cardTopGap <= 16,
+              `Overall Health must follow the greeting with normal spacing at ${viewportWidth}px / ${expected.size}.`);
+            assert.equal(phoneStyles.homeLayout.cardPadding, '24px');
+            assert.deepEqual(phoneStyles.homeLayout.cardRadius, ['20px', '20px', '20px', '20px']);
+            assert.equal(phoneStyles.homeLayout.cardBackground, 'rgb(255, 255, 255)');
+            assert.equal(phoneStyles.homeLayout.cardBackdropFilter, 'none');
+            assert.equal(phoneStyles.homeLayout.scoreMeter, true);
+            assert.equal(phoneStyles.homeLayout.pageBackground, 'rgb(247, 249, 247)');
+            assert.equal(phoneStyles.homeLayout.pageBackgroundImage, 'none');
+            assert.equal(phoneStyles.homeLayout.mainBackgroundImage, 'none');
+            assert.equal(phoneStyles.homeLayout.categoryMenuContained, true);
+            assert.equal(phoneStyles.homeLayout.separateCategoryShellAbsent, true);
             assert.equal(phoneStyles.brandTagline.whiteSpace, 'nowrap');
             assert.ok(phoneStyles.brandTagline.height < 25);
             assert.equal(phoneStyles.brandTagline.scrollWidth, phoneStyles.brandTagline.clientWidth);
@@ -2157,7 +2867,7 @@ async function main() {
         assert.equal(selectedToolBackground, 'rgb(229, 242, 235)');
 
         await page.locator('.utility-primary-button').filter({ hasText: 'Today' }).click();
-        await page.locator('.home-dashboard .overall-card .menu-area')
+        await page.locator('.home-dashboard .today-category-menu .menu-area')
           .filter({ hasText: 'Health & Fitness' })
           .click();
         await page.getByRole('tablist', { name: 'Health and Fitness' }).waitFor();
@@ -3173,6 +3883,7 @@ async function main() {
         await page.getByRole('button', { name: /^Settings/ }).click();
         await page.getByRole('button', { name: 'Categories', exact: true }).click();
         await page.getByRole('heading', { name: 'Categories' }).waitFor();
+        await page.getByRole('button', { name: /Health & Fitness.*Show Foundations/ }).click();
         const categorySizeToggle = page.locator('.mobile-display-toggle');
         for (const textSize of ['small', 'medium', 'large'] as const) {
           for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -3187,8 +3898,14 @@ async function main() {
               const settingsSection = settings?.closest<HTMLElement>('.settings-section');
               const list = settings?.querySelector<HTMLElement>('.category-settings__list');
               const rows = [...(settings?.querySelectorAll<HTMLElement>('.category-settings__item') ?? [])];
+              const childRows = [...(settings?.querySelectorAll<HTMLElement>(
+                '.category-settings__children:not([hidden]) .category-settings__child'
+              ) ?? [])];
               if (!settings || !list || rows.length !== 6) {
                 throw new Error('Category Settings must show all six availability switches.');
+              }
+              if (childRows.length !== 4) {
+                throw new Error('Expanding Health & Fitness must reveal all four child-area switches.');
               }
               const rowBounds = rows.map(row => {
                 const identity = row.querySelector<HTMLElement>('.category-settings__identity');
@@ -3206,12 +3923,28 @@ async function main() {
                 };
               });
               const description = settings.querySelector<HTMLElement>(':scope > p');
+              const childBounds = childRows.map(row => {
+                const identity = row.querySelector<HTMLElement>('.category-settings__child-identity');
+                const toggle = row.querySelector<HTMLInputElement>('input[role="switch"]');
+                const rowRect = row.getBoundingClientRect();
+                const identityRect = identity?.getBoundingClientRect();
+                const toggleRect = toggle?.getBoundingClientRect();
+                if (!identityRect || !toggleRect) throw new Error('A child-area row is missing its label or switch.');
+                return {
+                  right: rowRect.right,
+                  identityRight: identityRect.right,
+                  toggleLeft: toggleRect.left,
+                  toggleWidth: toggleRect.width,
+                  toggleHeight: toggleRect.height
+                };
+              });
               return {
                 documentWidth: document.documentElement.scrollWidth,
                 viewportWidth: document.documentElement.clientWidth,
                 headingVisible: settingsSection?.querySelector('h3')?.textContent?.trim() === 'Categories',
                 descriptionFits: Boolean(description && description.scrollWidth <= description.clientWidth),
-                rowBounds
+                rowBounds,
+                childBounds
               };
             });
             assert.equal(categorySettingsLayout.documentWidth, viewportWidth,
@@ -3225,8 +3958,102 @@ async function main() {
               && row.toggleWidth === 44
               && row.toggleHeight === 26
             ), `Category labels and switches must remain separated at ${viewportWidth}px / ${textSize}.`);
+            assert.ok(categorySettingsLayout.childBounds.every(row =>
+              row.right <= viewportWidth
+              && row.identityRight < row.toggleLeft
+              && row.toggleWidth === 44
+              && row.toggleHeight === 26
+            ), `Child-area labels and switches must remain separated at ${viewportWidth}px / ${textSize}.`);
           }
         }
+
+        await page.getByRole('button', { name: '‹ Settings' }).click();
+        await page.getByRole('button', { name: 'Prayer', exact: true }).click();
+        await page.getByRole('heading', { name: 'Prayer', exact: true }).waitFor();
+        const prayerSwitch = page.getByRole('switch', { name: 'Prayer' });
+        assert.equal(await prayerSwitch.isChecked(), true, 'Prayer must be enabled by default for an existing account.');
+        assert.equal(
+          await page.locator('.prayer-settings__description').textContent(),
+          'Show prayer features and include Prayer in Person Health.'
+        );
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            if (await categorySizeToggle.getAttribute('data-text-size') === textSize) break;
+            await categorySizeToggle.click();
+          }
+          assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
+          for (const viewportWidth of [375, 390, 430]) {
+            await page.setViewportSize({ width: viewportWidth, height: 844 });
+            const prayerSettingsLayout = await page.evaluate(() => {
+              const settings = document.querySelector<HTMLElement>('.prayer-settings');
+              const row = settings?.querySelector<HTMLElement>('.prayer-settings__row');
+              const copy = settings?.querySelector<HTMLElement>('.prayer-settings__copy');
+              const description = settings?.querySelector<HTMLElement>('.prayer-settings__description');
+              const toggle = settings?.querySelector<HTMLInputElement>('input[role="switch"]');
+              if (!settings || !row || !copy || !description || !toggle) {
+                throw new Error('Prayer Settings must render its description and accessible switch.');
+              }
+              const rowBounds = row.getBoundingClientRect();
+              const copyBounds = copy.getBoundingClientRect();
+              const descriptionBounds = description.getBoundingClientRect();
+              const toggleBounds = toggle.getBoundingClientRect();
+              return {
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth,
+                rowRight: rowBounds.right,
+                copyRight: copyBounds.right,
+                toggleLeft: toggleBounds.left,
+                toggleWidth: toggleBounds.width,
+                toggleHeight: toggleBounds.height,
+                descriptionFits: description.scrollWidth <= description.clientWidth,
+                descriptionVisible: descriptionBounds.width > 0 && descriptionBounds.height > 0
+              };
+            });
+            const personHealthLayout = await page.evaluate(() => {
+              const settings = document.querySelector<HTMLElement>('.prayer-settings');
+              if (!settings) throw new Error('Prayer Settings is missing its responsive layout host.');
+              const fixture = document.createElement('div');
+              fixture.className = 'person-health-component-scores';
+              fixture.dataset.count = '2';
+              fixture.setAttribute('aria-hidden', 'true');
+              fixture.style.width = '100%';
+              for (const label of ['Rhythms', 'Connections']) {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'person-health-component-score';
+                item.textContent = label;
+                fixture.append(item);
+              }
+              settings.append(fixture);
+              const tracks = getComputedStyle(fixture).gridTemplateColumns.match(/[\d.]+px/g) ?? [];
+              const dividers = [...fixture.children].map(element => getComputedStyle(element).borderLeftWidth);
+              const result = {
+                tracks: tracks.map(Number.parseFloat),
+                dividers,
+                width: fixture.getBoundingClientRect().width
+              };
+              fixture.remove();
+              return result;
+            });
+            assert.equal(prayerSettingsLayout.documentWidth, viewportWidth,
+              `Prayer Settings must not overflow at ${viewportWidth}px / ${textSize}.`);
+            assert.equal(prayerSettingsLayout.viewportWidth, viewportWidth);
+            assert.ok(prayerSettingsLayout.rowRight <= viewportWidth);
+            assert.ok(prayerSettingsLayout.copyRight < prayerSettingsLayout.toggleLeft);
+            assert.equal(prayerSettingsLayout.toggleWidth, 44);
+            assert.equal(prayerSettingsLayout.toggleHeight, 26);
+            assert.equal(prayerSettingsLayout.descriptionFits, true);
+            assert.equal(prayerSettingsLayout.descriptionVisible, true);
+            assert.equal(personHealthLayout.tracks.length, 2);
+            assert.ok(Math.abs(personHealthLayout.tracks[0]! - personHealthLayout.tracks[1]!) < 1,
+              'Prayer-off Person Health must keep Rhythms and Connections evenly spaced.');
+            assert.deepEqual(personHealthLayout.dividers, ['0px', '1px']);
+            assert.ok(personHealthLayout.width <= viewportWidth);
+          }
+        }
+        await page.getByRole('button', { name: '‹ Settings' }).click();
+        await page.getByRole('button', { name: 'Categories', exact: true }).click();
+        await page.getByRole('heading', { name: 'Categories', exact: true }).waitFor();
 
         await page.setViewportSize({ width: 375, height: 844 });
         const areaNavigation = page.getByRole('navigation', { name: 'Areas' });
@@ -3663,6 +4490,9 @@ async function main() {
                 const title = element.querySelector<HTMLElement>('.strength-section-heading__title-row');
                 const actions = element.querySelector<HTMLElement>('.strength-section-heading__actions');
                 const titleRect = title?.getBoundingClientRect();
+                const insights = element.closest<HTMLElement>('#strength-panel-body')
+                  ?.querySelector<HTMLElement>('.strength-map-card');
+                const insightsRect = insights?.getBoundingClientRect();
                 const subtitle = element.querySelector<HTMLElement>('.strength-section-heading__subtitle');
                 const action = actions?.querySelector<HTMLElement>('.btn');
                 const actionRect = action?.getBoundingClientRect();
@@ -3673,7 +4503,9 @@ async function main() {
                   left: rect.left,
                   offset: rect.top - tabsRect.bottom,
                   height: rect.height,
+                  titleHeight: titleRect?.height ?? null,
                   titleTop: titleRect ? titleRect.top - rect.top : null,
+                  headingToInsightsGap: titleRect && insightsRect ? insightsRect.top - titleRect.bottom : null,
                   subtitleTop: subtitle ? subtitle.getBoundingClientRect().top - rect.top : null,
                   actionTop: titleRect && actionRect ? actionRect.top - titleRect.top : null,
                   actionSharesTitleRow,
@@ -3684,8 +4516,13 @@ async function main() {
                     && actionRect.right > titleRect.left)
                 };
               });
-              assert.ok(position.height >= 44,
-                `${headingName} heading row must retain a 44px minimum at ${viewportWidth}px / ${textSize} text.`);
+              if (headingName === 'Body overview') {
+                assert.equal(position.height, position.titleHeight,
+                  `Body overview should not reserve the removed Training status row at ${viewportWidth}px / ${textSize} text.`);
+              } else {
+                assert.ok(position.height >= 44,
+                  `${headingName} heading row must retain a 44px minimum at ${viewportWidth}px / ${textSize} text.`);
+              }
               assert.equal(position.overlap, false,
                 `${headingName} heading and action must not overlap at ${viewportWidth}px / ${textSize} text.`);
               assert.equal(position.titleTop, 0,
@@ -3695,8 +4532,12 @@ async function main() {
                   `${headingName} action should align with its title when sharing the row.`);
               }
               if (headingName === 'Body overview') {
-                assert.ok(position.subtitleTop !== null && position.subtitleTop > 0,
-                  `Training status should be a subtitle below Body overview at ${viewportWidth}px / ${textSize} text.`);
+                assert.equal(position.subtitleTop, null,
+                  `Body overview should not reserve space for a Training status subtitle at ${viewportWidth}px / ${textSize} text.`);
+                assert.ok(position.headingToInsightsGap !== null
+                  && position.headingToInsightsGap >= 16
+                  && position.headingToInsightsGap <= 24,
+                `Body insights should follow the Body overview title by 16–24px at ${viewportWidth}px / ${textSize} text.`);
               }
               firstHeadingPositions.push(position);
             }
@@ -4038,6 +4879,8 @@ async function main() {
           }));
           assert.deepEqual(restoredBodyStyles, originalBodyStyles,
             'Closing the workout editor should restore background scroll styles.');
+          await verifyGuidedSetActionSpacing(page, textSize);
+          await verifyGuidedRhythmChoiceLayout(page, textSize);
           await workoutsTab.focus();
           await page.keyboard.press('Home');
           await page.waitForFunction(() => {
@@ -5052,9 +5895,151 @@ async function main() {
             }
           }
         }
+
+        const categoryHeaderGeometry = new Map<string, { left: number; top: number; width: number; height: number }>();
+        const verifyHeaderPair = async ({
+          area,
+          openDetail,
+          backLabel,
+          prepare
+        }: {
+          area: string;
+          openDetail: string;
+          backLabel: string;
+          prepare?: () => Promise<void>;
+        }) => {
+          await page.setViewportSize({ width: 1280, height: 900 });
+          await areaNavigation.getByRole('button', { name: area, exact: true }).click();
+          const categoryHeader = '.category-header--hero:visible';
+          for (const textSize of ['small', 'medium', 'large'] as const) {
+            await setPreviewTextSize(page, textSize);
+            for (const width of [375, 390, 430, 1280] as const) {
+              await page.setViewportSize({ width, height: 900 });
+              await page.locator(categoryHeader).waitFor({ state: 'visible' });
+              await prepare?.();
+              const categoryGeometry = await measureHeroHeader(page, categoryHeader);
+              const geometryKey = `${width}/${textSize}`;
+              const referenceCategory = categoryHeaderGeometry.get(geometryKey);
+              if (referenceCategory) {
+                for (const key of ['left', 'top', 'width', 'height'] as const) {
+                  assert.ok(
+                    Math.abs(referenceCategory[key] - categoryGeometry[key]) <= 1,
+                    `Category headers must match ${key} across ${area} at ${width}px / ${textSize}.`
+                  );
+                }
+              } else {
+                categoryHeaderGeometry.set(geometryKey, {
+                  left: categoryGeometry.left,
+                  top: categoryGeometry.top,
+                  width: categoryGeometry.width,
+                  height: categoryGeometry.height
+                });
+              }
+              const openDetailButton = page.getByRole('button', { name: openDetail });
+              await openDetailButton.evaluate(button =>
+                button.scrollIntoView({ block: 'center', behavior: 'instant' })
+              );
+              await openDetailButton.click();
+              const foundationGeometry = await measureHeroHeader(page, '.foundation-detail-header--hero:visible');
+              for (const key of ['left', 'top', 'width', 'height'] as const) {
+                assert.ok(
+                  Math.abs(categoryGeometry[key] - foundationGeometry[key]) <= 1,
+                  `${area} category and detail headers must match ${key} at ${width}px / ${textSize}: `
+                    + `${categoryGeometry[key]} vs ${foundationGeometry[key]}.`
+                );
+              }
+              for (const geometry of [categoryGeometry, foundationGeometry]) {
+                assert.equal(geometry.documentWidth, width);
+                assert.equal(geometry.viewportWidth, width);
+                assert.equal(geometry.contentFits, true,
+                  `${area} header text and icon must fit at ${width}px / ${textSize}.`);
+                assert.equal(geometry.iconBesideCopy, true,
+                  `${area} icon must sit beside its header copy at ${width}px / ${textSize}.`);
+                const compactHeightLimit = width <= 640
+                  ? textSize === 'large' ? 220 : 180
+                  : textSize === 'large' ? 150 : 132;
+                assert.ok(
+                  geometry.height <= compactHeightLimit,
+                  `${area} header should stay compact at ${width}px / ${textSize}: `
+                    + `${geometry.height}px > ${compactHeightLimit}px.`
+                );
+              }
+              await page.getByRole('button', { name: backLabel, exact: true }).click();
+              await page.locator(categoryHeader).waitFor({ state: 'visible' });
+            }
+          }
+        };
+
+        const verifyCategoryOnly = async (area: string) => {
+          await page.setViewportSize({ width: 1280, height: 900 });
+          await areaNavigation.getByRole('button', { name: area, exact: true }).click();
+          for (const textSize of ['small', 'medium', 'large'] as const) {
+            await setPreviewTextSize(page, textSize);
+            for (const width of [375, 390, 430, 1280] as const) {
+              await page.setViewportSize({ width, height: 900 });
+              const geometry = await measureHeroHeader(page, '.category-header--hero:visible');
+              const reference = categoryHeaderGeometry.get(`${width}/${textSize}`);
+              assert.ok(reference, `A Category header reference is needed for ${width}px / ${textSize}.`);
+              for (const key of ['left', 'top', 'width', 'height'] as const) {
+                assert.ok(
+                  Math.abs(reference[key] - geometry[key]) <= 1,
+                  `${area} Category header must match ${key} at ${width}px / ${textSize}.`
+                );
+              }
+              assert.equal(geometry.documentWidth, width);
+              assert.equal(geometry.contentFits, true);
+              assert.equal(geometry.iconBesideCopy, true);
+              const compactHeightLimit = width <= 640
+                ? textSize === 'large' ? 220 : 180
+                : textSize === 'large' ? 150 : 132;
+              assert.ok(
+                geometry.height <= compactHeightLimit,
+                `${area} Category header should stay compact at ${width}px / ${textSize}: `
+                  + `${geometry.height}px > ${compactHeightLimit}px.`
+              );
+            }
+          }
+        };
+
+        const activeFoundationBack = page.getByRole('button', { name: 'All Foundations', exact: true });
+        if (await activeFoundationBack.count()) await activeFoundationBack.click();
+        await verifyHeaderPair({
+          area: 'Health & Fitness',
+          openDetail: 'Open Strength foundation details',
+          backLabel: 'All Foundations',
+          prepare: async () => {
+            await page.getByRole('tab', { name: 'Foundations', exact: true }).click();
+          }
+        });
+        await verifyHeaderPair({
+          area: 'Marriage',
+          openDetail: 'Open Partnership foundation details',
+          backLabel: 'All Foundations',
+          prepare: async () => {
+            await page.getByRole('tab', { name: 'Foundations', exact: true }).click();
+          }
+        });
+        await verifyHeaderPair({
+          area: 'Faith',
+          openDetail: 'Open Sabbath practice details',
+          backLabel: 'All Practices',
+          prepare: async () => {
+            await page.getByRole('tab', { name: 'Practices', exact: true }).click();
+          }
+        });
+        await verifyHeaderPair({
+          area: 'Finances',
+          openDetail: 'Open Saving & Reserves',
+          backLabel: 'Back to Finance Foundations',
+          prepare: async () => {
+            await page.getByRole('tab', { name: 'Foundations', exact: true }).click();
+          }
+        });
+        await verifyCategoryOnly('Friendships');
       }
 
       if (identity === 'dashboard') {
+        await page.setViewportSize({ width: 375, height: 812 });
         const categorySizeToggle = page.locator('.mobile-display-toggle');
         for (let attempt = 0; attempt < 3; attempt += 1) {
           if (await categorySizeToggle.getAttribute('data-text-size') === 'small') break;
@@ -5064,7 +6049,7 @@ async function main() {
         const areaNavigation = page.getByRole('navigation', { name: 'Areas' });
         await page.setViewportSize({ width: 1280, height: 900 });
         await areaNavigation.getByRole('button', { name: 'Marriage', exact: true }).click();
-        const categoryHero = page.locator('.category-header--hero');
+        const categoryHero = page.locator('.marriage-page .category-header--hero:visible').last();
         await categoryHero.waitFor();
         const categoryHome = page.getByRole('button', { name: 'Home', exact: true });
         await categoryHome.waitFor();
@@ -5099,12 +6084,12 @@ async function main() {
         });
         assert.match(categoryHeroStyle.background, /linear-gradient/);
         assert.equal(categoryHeroStyle.borderRadius, '20px');
-        assert.equal(categoryHeroStyle.padding, '24px 22px');
+        assert.equal(categoryHeroStyle.padding, '20px 22px');
         assert.equal(categoryHeroStyle.titleFontSize, '26px');
         assert.equal(categoryHeroStyle.titleFontWeight, '800');
         assert.equal(categoryHeroStyle.titleColor, 'rgb(255, 255, 255)');
         assert.equal(categoryHeroStyle.subtitleColor, 'rgb(216, 230, 222)');
-        assert.equal(categoryHeroStyle.subtitleMaxWidth, '90%');
+        assert.equal(categoryHeroStyle.subtitleMaxWidth, '100%');
         assert.equal(categoryHeroStyle.iconColor, 'rgb(255, 255, 255)');
         assert.equal(categoryHeroStyle.iconWidth, '44px');
         assert.equal(categoryHeroStyle.iconHeight, '44px');
@@ -5166,7 +6151,14 @@ async function main() {
         await page.setViewportSize({ width: 359, height: 844 });
         assert.equal(await categoryHero.locator('.page-hero-header__icon').evaluate(
           element => getComputedStyle(element).display
-        ), 'none');
+        ), 'grid');
+        const narrowCategoryGeometry = await measureHeroHeader(
+          page,
+          '.marriage-page .category-header--hero:visible'
+        );
+        assert.equal(narrowCategoryGeometry.contentFits, true);
+        assert.equal(narrowCategoryGeometry.iconBesideCopy, true);
+        assert.equal(narrowCategoryGeometry.documentWidth, 359);
 
         await page.setViewportSize({ width: 1280, height: 900 });
         await areaNavigation.getByRole('button', { name: 'Health & Fitness', exact: true }).click();
@@ -5221,7 +6213,7 @@ async function main() {
         assert.ok(foundationHeroStyle.background.includes('rgb(207, 224, 212)'));
         assert.equal(foundationHeroStyle.borderColor, 'rgb(220, 228, 222)');
         assert.equal(foundationHeroStyle.borderRadius, '20px');
-        assert.equal(foundationHeroStyle.padding, '24px 22px');
+        assert.equal(foundationHeroStyle.padding, '20px 22px');
         assert.ok(Math.abs(Number.parseFloat(foundationHeroStyle.titleFontSize) - 26 * foundationHeroStyle.textScale) < 0.1);
         assert.equal(foundationHeroStyle.titleFontWeight, '800');
         assert.equal(foundationHeroStyle.titleColor, 'rgb(36, 107, 82)');
@@ -5289,6 +6281,7 @@ async function main() {
             gap: style.gap,
             minHeight: style.minHeight,
             marginBottom: style.marginBottom,
+            stackGap: button.parentElement ? getComputedStyle(button.parentElement).gap : null,
             iconWidth: iconStyle.width,
             iconHeight: iconStyle.height,
             iconStroke: iconStyle.stroke
@@ -5299,14 +6292,15 @@ async function main() {
         assert.ok(Math.abs(Number.parseFloat(foundationBackStyle.fontSize) - 14 * foundationBackStyle.textScale) < 0.1);
         assert.equal(foundationBackStyle.gap, '10px');
         assert.equal(foundationBackStyle.minHeight, '44px');
-        assert.equal(foundationBackStyle.marginBottom, '10px');
+        assert.equal(foundationBackStyle.marginBottom, '0px');
+        assert.equal(foundationBackStyle.stackGap, '10px');
         assert.equal(foundationBackStyle.iconWidth, '12px');
         assert.equal(foundationBackStyle.iconHeight, '12px');
         assert.equal(foundationBackStyle.iconStroke, 'rgb(36, 107, 82)');
         await page.setViewportSize({ width: 359, height: 844 });
         assert.equal(await foundationHero.locator('.page-hero-header__icon').evaluate(
           element => getComputedStyle(element).display
-        ), 'none');
+        ), 'grid');
         const foundationSizeToggle = page.locator('.mobile-display-toggle');
         for (const textSize of ['small', 'medium', 'large'] as const) {
           await page.setViewportSize({ width: 375, height: 844 });
@@ -5333,15 +6327,16 @@ async function main() {
               };
             });
             assert.equal(heroLayout.viewportWidth, viewportWidth);
-            assert.equal(heroLayout.documentWidth, viewportWidth);
+            if (viewportWidth >= 375) assert.equal(heroLayout.documentWidth, viewportWidth);
             assert.ok(heroLayout.heroRight <= viewportWidth);
-            if (viewportWidth < 360) {
-              assert.equal(heroLayout.iconDisplay, 'none');
-              assert.equal(heroLayout.copyPaddingRight, '0px');
-            } else {
-              assert.ok(heroLayout.copyContentRight < heroLayout.iconLeft,
-                `Foundation hero copy must not overlap its icon at ${viewportWidth}px / ${textSize}.`);
-            }
+            assert.equal(heroLayout.iconDisplay, 'grid');
+            assert.equal(heroLayout.copyPaddingRight, '0px');
+            assert.ok(heroLayout.copyContentRight < heroLayout.iconLeft,
+              `Foundation hero copy must not overlap its icon at ${viewportWidth}px / ${textSize}.`);
+            const geometry = await measureHeroHeader(page, '.foundation-detail-header--hero:visible');
+            assert.equal(geometry.contentFits, true);
+            assert.equal(geometry.iconBesideCopy, true);
+            if (viewportWidth >= 375) assert.equal(geometry.documentWidth, viewportWidth);
           }
         }
       }
@@ -5351,9 +6346,7 @@ async function main() {
         await page.getByRole('button', { name: 'More, settings' }).click();
         await page.getByRole('button', { name: /^Settings/ }).click();
         await page.getByRole('button', { name: 'Categories', exact: true }).click();
-        const financeSwitch = page.locator('.category-settings__item')
-          .filter({ hasText: 'Finances' })
-          .locator('input[role="switch"]');
+        const financeSwitch = page.getByRole('switch', { name: 'Finances', exact: true });
         if (!(await financeSwitch.isChecked())) await financeSwitch.click();
         const financePage = page.locator('main.finance-page');
         const financeTabs = financePage.getByRole('tablist', { name: 'Finances' });
@@ -6016,6 +7009,352 @@ async function main() {
       await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
       assert.deepEqual(profileClassicCssRequests, [], 'Person profile React pages must not request tend.css.');
       await profileContext.close();
+
+      const doneRowsFixture = createEmptyPreviewData();
+      const today = localDateString(new Date());
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const localNow = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+      }).formatToParts(new Date()).map(part => [part.type, part.value]));
+      const localTime = `${localNow.hour}:${localNow.minute}`;
+      const completedAt = localDateTimeInZone(today, localTime, timeZone).toISOString();
+      const doneRhythms = [
+        {
+          id: 'user-rhythm-00000000-0000-4000-8000-000000000101',
+          title: 'Midday walk',
+          completedAt,
+          localTime
+        },
+        {
+          id: 'user-rhythm-00000000-0000-4000-8000-000000000102',
+          title: 'Synthetic evening check-in with a deliberately long title',
+          completedAt,
+          localTime
+        }
+      ] as const;
+      doneRowsFixture.todayView = 'all-today';
+      doneRowsFixture.savedRhythms = doneRhythms.map(({ id, title }) => ({
+        id,
+        title,
+        cadence: 'Daily',
+        timeLabel: 'Anytime',
+        automation: 'manual' as const,
+        status: 'Due today' as const,
+        personIds: [],
+        categoryIds: ['faith'],
+        primaryFoundationId: 'faith-prayer',
+        schedule: { frequency: 'daily' as const }
+      }));
+      doneRowsFixture.completedRhythmIds = doneRhythms.map(rhythm => rhythm.id);
+      doneRowsFixture.rhythmHistoryIds = doneRhythms.map(rhythm => rhythm.id);
+      doneRowsFixture.datedRhythmCompletions = doneRhythms.map(rhythm => ({
+        id: `${rhythm.id}-completion`,
+        rhythmId: rhythm.id,
+        effectiveDate: today,
+        localTime: rhythm.localTime,
+        timeZone,
+        completedAt: rhythm.completedAt,
+        recordedAt: rhythm.completedAt
+      }));
+      doneRowsFixture.activeRhythmCompletions = doneRhythms.map(rhythm => ({
+        rhythmId: rhythm.id,
+        completionId: `${rhythm.id}-completion`
+      }));
+      const doneRowsEnvelope = createPreviewEnvelope(doneRowsFixture);
+      const doneRowsValidation = parsePreviewBackup(JSON.stringify(doneRowsEnvelope), today);
+      if (!doneRowsValidation.valid) {
+        throw new Error(`Synthetic done-row fixture is invalid: ${doneRowsValidation.message}`);
+      }
+      const doneRowsStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:c0000000-0000-4000-8000-000000000003`;
+      const doneContext = await browser.newContext({ viewport: { width: 375, height: 844 } });
+      await doneContext.addInitScript(({ key, value }) => {
+        const session = {
+          user: {
+            id: 'c0000000-0000-4000-8000-000000000003',
+            email: 'browser-test@example.test'
+          }
+        };
+        Object.assign(window, {
+          supabase: {
+            createClient: () => ({
+              auth: {
+                onAuthStateChange(callback: (event: string, value: typeof session) => void) {
+                  callback('INITIAL_SESSION', session);
+                  return { data: { subscription: { unsubscribe() {} } } };
+                },
+                async signInWithPassword() { return { error: null, data: { session } }; },
+                async resetPasswordForEmail() { return { error: null }; },
+                async updateUser() { return { error: null }; },
+                async signOut() { return { error: null }; }
+              }
+            })
+          }
+        });
+        window.localStorage.setItem(key, value);
+      }, {
+        key: doneRowsStorageKey,
+        value: JSON.stringify(doneRowsEnvelope)
+      });
+      const donePage = await doneContext.newPage();
+      const doneRowsClassicRequests: string[] = [];
+      await donePage.route('**/tend.css', async route => {
+        doneRowsClassicRequests.push(route.request().url());
+        await route.abort();
+      });
+      await donePage.route('https://cdn.jsdelivr.net/**', route => route.abort());
+      await donePage.route('https://fonts.googleapis.com/**', route => route.abort());
+      await donePage.route('https://fonts.gstatic.com/**', route => route.abort());
+      await donePage.goto(`${baseUrl}/app-preview.html?identity=dashboard`);
+      await donePage.locator('.home-dashboard').waitFor();
+      const doneRows = donePage.locator('.tended-rhythm-done-row');
+      await donePage.waitForTimeout(500);
+      if (await doneRows.count() !== 2) {
+        const fixtureState = await donePage.evaluate(key => ({
+          bodyText: document.body.innerText.slice(0, 1600),
+          storedFixture: window.localStorage.getItem(key) !== null,
+          todayText: document.querySelector('.today-plan-section')?.textContent?.slice(0, 500) ?? null,
+          savedText: document.querySelector('.preview-footer')?.textContent ?? null
+        }), doneRowsStorageKey);
+        throw new Error(`Synthetic done-row fixture did not render two rows: ${JSON.stringify(fixtureState)}`);
+      }
+      const collapsedTimeframeGroups = donePage.locator(
+        '.today-plan-section .today-timeframe-header__disclosure[aria-expanded="false"]'
+      );
+      while (await collapsedTimeframeGroups.count() > 0) {
+        await collapsedTimeframeGroups.first().click();
+      }
+
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await setPreviewTextSize(donePage, textSize);
+        for (const viewportWidth of [375, 390, 430] as const) {
+          await donePage.setViewportSize({ width: viewportWidth, height: 844 });
+          const layout = await donePage.evaluate(() => {
+            const rows = [...document.querySelectorAll<HTMLElement>('.tended-rhythm-done-row')];
+            const first = rows[0];
+            const second = rows[1];
+            const firstItem = first?.closest<HTMLElement>('[data-tended-rhythm-item]');
+            const secondItem = second?.closest<HTMLElement>('[data-tended-rhythm-item]');
+            const itemGroup = firstItem?.parentElement;
+            const check = first?.querySelector<HTMLElement>('.tended-rhythm-done-row__check');
+            const title = second?.querySelector<HTMLElement>('.tended-rhythm-done-row__title');
+            const time = second?.querySelector<HTMLElement>('.tended-rhythm-done-row__time');
+            if (!first || !second || !firstItem || !secondItem || !itemGroup
+              || itemGroup !== secondItem.parentElement || !check || !title || !time) {
+              throw new Error('The synthetic Today fixture must render two compact tended rows.');
+            }
+            const bounds = (element: HTMLElement) => {
+              const rect = element.getBoundingClientRect();
+              return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height };
+            };
+            const firstBounds = bounds(first);
+            const rowStyle = getComputedStyle(first);
+            const titleStyle = getComputedStyle(title);
+            const timeStyle = getComputedStyle(time);
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              rowCount: rows.length,
+              row: {
+                ...firstBounds,
+                padding: rowStyle.padding,
+                borderTopWidth: rowStyle.borderTopWidth,
+                borderTopStyle: rowStyle.borderTopStyle,
+                borderTopColor: rowStyle.borderTopColor,
+                borderRadius: rowStyle.borderTopLeftRadius,
+                background: rowStyle.backgroundColor,
+                gap: getComputedStyle(itemGroup).rowGap
+              },
+              check: bounds(check),
+              title: {
+                ...bounds(title),
+                fontSize: titleStyle.fontSize,
+                fontWeight: titleStyle.fontWeight,
+                whiteSpace: titleStyle.whiteSpace,
+                textOverflow: titleStyle.textOverflow
+              },
+              time: {
+                ...bounds(time),
+                fontSize: timeStyle.fontSize,
+                whiteSpace: timeStyle.whiteSpace
+              },
+              hasSeparateDoneRowsSection: Boolean(document.querySelector('.tended-rhythm-done-rows')),
+              hasSeparateDoneRowsHeading: [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+                .some(heading => heading.textContent?.trim() === 'Tended today')
+            };
+          });
+          assert.equal(layout.viewportWidth, viewportWidth);
+          assert.equal(layout.documentWidth, viewportWidth,
+            `Tended rows must not create horizontal overflow at ${viewportWidth}px / ${textSize}.`);
+          assert.equal(layout.rowCount, 2);
+          assert.equal(layout.row.left >= 0 && layout.row.right <= viewportWidth, true);
+          assert.equal(layout.row.padding, '11px 14px');
+          assert.equal(layout.row.borderTopWidth, '1px');
+          assert.equal(layout.row.borderTopStyle, 'solid');
+          assert.equal(layout.row.borderRadius, '14px');
+          assert.equal(layout.row.background, 'rgb(255, 255, 255)');
+          assert.equal(layout.row.gap, '16px');
+          assert.equal(layout.check.width, 24);
+          assert.equal(layout.check.height, 24);
+          assert.equal(layout.title.whiteSpace, 'nowrap');
+          assert.equal(layout.title.textOverflow, 'ellipsis');
+          assert.equal(layout.time.whiteSpace, 'nowrap');
+          assert.equal(layout.hasSeparateDoneRowsSection, false);
+          assert.equal(layout.hasSeparateDoneRowsHeading, false);
+        }
+      }
+      assert.deepEqual(doneRowsClassicRequests, [], 'Done-row React pages must not request tend.css.');
+      await doneContext.close();
+
+      const rotationFixture = createEmptyPreviewData();
+      rotationFixture.strength.savedWorkouts = [
+        {
+          id: 'rotation-monday',
+          name: 'Strength workout for Monday training',
+          muscleIds: ['abs'],
+          sharedWith: []
+        },
+        {
+          id: 'rotation-wednesday',
+          name: 'Strength workout for Wednesday training',
+          muscleIds: ['abs'],
+          sharedWith: []
+        },
+        {
+          id: 'rotation-friday',
+          name: 'Strength workout for Friday training',
+          muscleIds: ['abs'],
+          sharedWith: []
+        }
+      ];
+      const rotationEnvelope = createPreviewEnvelope(rotationFixture);
+      const rotationValidation = parsePreviewBackup(JSON.stringify(rotationEnvelope), today);
+      if (!rotationValidation.valid) {
+        throw new Error(`Synthetic workout rotation fixture is invalid: ${rotationValidation.message}`);
+      }
+      const rotationStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:c0000000-0000-4000-8000-000000000003`;
+      const rotationContext = await browser.newContext({
+        viewport: { width: 375, height: 844 },
+        hasTouch: true
+      });
+      await rotationContext.addInitScript(({ key, value }) => {
+        const session = {
+          user: {
+            id: 'c0000000-0000-4000-8000-000000000003',
+            email: 'browser-test@example.test'
+          }
+        };
+        Object.assign(window, {
+          supabase: {
+            createClient: () => ({
+              auth: {
+                onAuthStateChange(callback: (event: string, value: typeof session) => void) {
+                  callback('INITIAL_SESSION', session);
+                  return { data: { subscription: { unsubscribe() {} } } };
+                },
+                async signInWithPassword() { return { error: null, data: { session } }; },
+                async resetPasswordForEmail() { return { error: null }; },
+                async updateUser() { return { error: null }; },
+                async signOut() { return { error: null }; }
+              }
+            })
+          }
+        });
+        window.localStorage.setItem(key, value);
+      }, {
+        key: rotationStorageKey,
+        value: JSON.stringify(rotationEnvelope)
+      });
+      const rotationPage = await rotationContext.newPage();
+      await rotationPage.route('https://cdn.jsdelivr.net/**', route => route.abort());
+      await rotationPage.route('https://fonts.googleapis.com/**', route => route.abort());
+      await rotationPage.route('https://fonts.gstatic.com/**', route => route.abort());
+      await rotationPage.goto(`${baseUrl}/app-preview.html?identity=dashboard`);
+      await rotationPage.locator('.home-dashboard').waitFor();
+      await rotationPage.locator('button.menu-area')
+        .filter({ hasText: 'Health & Fitness' })
+        .click();
+      await rotationPage.getByRole('tab', { name: 'Rhythms' }).click();
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await setPreviewTextSize(rotationPage, textSize);
+        await rotationPage.getByRole('button', { name: 'Add Rhythm' }).click();
+        await rotationPage.getByRole('combobox', { name: 'Recommended Workout' }).click();
+        await rotationPage.getByRole('option', { name: 'Workout rotation' }).click();
+        for (const name of [
+          'Strength workout for Monday training',
+          'Strength workout for Wednesday training',
+          'Strength workout for Friday training'
+        ]) {
+          await rotationPage.getByRole('checkbox', { name }).click();
+        }
+        await rotationPage.getByRole('button', {
+          name: 'Move Strength workout for Friday training up'
+        }).click();
+        assert.deepEqual(
+          await rotationPage.locator('.rhythm-editor__rotation-order li > span:first-child').allTextContents(),
+          [
+            'Strength workout for Monday training',
+            'Strength workout for Friday training',
+            'Strength workout for Wednesday training'
+          ]
+        );
+        for (const viewportWidth of [375, 390, 430] as const) {
+          await rotationPage.setViewportSize({ width: viewportWidth, height: 844 });
+          const layout = await rotationPage.locator('.rhythm-editor__rotation-setup').evaluate(element => {
+            const setup = element.getBoundingClientRect();
+            const rows = [...element.querySelectorAll<HTMLElement>('.rhythm-editor__rotation-order li')];
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              textSize: document.querySelector('.tend-app-preview')?.getAttribute('data-text-size'),
+              setup: {
+                left: setup.left,
+                right: setup.right,
+                width: element.clientWidth,
+                scrollWidth: element.scrollWidth
+              },
+              rows: rows.map(row => {
+                const bounds = row.getBoundingClientRect();
+                const name = row.querySelector<HTMLElement>('span:first-child')!.getBoundingClientRect();
+                const actions = row.querySelector<HTMLElement>('.rhythm-editor__rotation-order-actions')!.getBoundingClientRect();
+                const buttons = [...row.querySelectorAll<HTMLButtonElement>('button')].map(button => {
+                  const rect = button.getBoundingClientRect();
+                  return { left: rect.left, right: rect.right };
+                });
+                return {
+                  left: bounds.left,
+                  right: bounds.right,
+                  name: { left: name.left, right: name.right, bottom: name.bottom },
+                  actions: { left: actions.left, right: actions.right, top: actions.top },
+                  buttons
+                };
+              })
+            };
+          });
+          assert.equal(layout.viewportWidth, viewportWidth);
+          assert.equal(layout.documentWidth, viewportWidth,
+            `Workout rotation must not create horizontal page overflow at ${viewportWidth}px / ${textSize}.`);
+          assert.equal(layout.textSize, textSize);
+          assert.ok(layout.setup.scrollWidth <= layout.setup.width + 1,
+            `Workout rotation setup must fit at ${viewportWidth}px / ${textSize}.`);
+          for (const row of layout.rows) {
+            assert.ok(row.left >= layout.setup.left - 1 && row.right <= layout.setup.right + 1);
+            assert.ok(row.actions.right <= row.right + 1);
+            for (const button of row.buttons) {
+              assert.ok(button.left >= row.actions.left - 1 && button.right <= row.actions.right + 1);
+            }
+            if (row.actions.top >= row.name.bottom - 1) {
+              assert.ok(row.name.bottom <= row.actions.top + 2);
+            } else {
+              assert.ok(row.name.right <= row.actions.left + 2);
+            }
+          }
+        }
+        await rotationPage.getByRole('button', { name: 'Cancel' }).click();
+      }
+      await rotationContext.close();
 
       assert.deepEqual(classicCssRequests, [], 'React pages must not request tend.css.');
       await context.close();

@@ -53,6 +53,7 @@ import {
   cloneStrengthGuidedSessionDraft,
   cloneStrengthWorkoutLog,
   createStrengthData,
+  migrateStrengthDataToV29,
   migrateStrengthDataToV28,
   migrateStrengthDataToV27,
   migrateStrengthDataToV26,
@@ -91,13 +92,15 @@ import type { CalendarSource } from './calendar-sources.ts';
 import { migrateTodayViewSelection } from './today-plan.ts';
 import type { TodayViewId } from './today-plan.ts';
 import {
+  defaultFoundationPreferences,
   defaultCategoryPreferences,
+  isFoundationPreferences,
   isCategoryPreferences
 } from './category-availability.ts';
-import type { CategoryPreferences } from './category-availability.ts';
+import type { CategoryPreferences, FoundationPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 46;
+export const PREVIEW_SCHEMA_VERSION = 49;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -124,6 +127,8 @@ export type PreviewData = {
   showTended: boolean;
   showCalendarOnToday: boolean;
   categoryPreferences: CategoryPreferences;
+  foundationPreferences: FoundationPreferences;
+  prayerEnabled: boolean;
   todayView: TodayViewId;
   textSize: PreviewTextSize;
   calendarSources: CalendarSource[];
@@ -158,7 +163,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49; resolvedPersonCategories: number }
   | {
       valid: false;
       kind: 'invalid' | 'unsupported';
@@ -408,6 +413,8 @@ const dataKeysV43 = [...dataKeysV42, 'categoryPreferences'];
 const dataKeysV44 = dataKeysV43;
 const dataKeysV45 = dataKeysV44;
 const dataKeysV46 = dataKeysV45;
+const dataKeysV47 = [...dataKeysV46, 'foundationPreferences'];
+const dataKeysV48 = [...dataKeysV47, 'prayerEnabled'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -447,6 +454,8 @@ export function createSamplePreviewData(): PreviewData {
     showTended: false,
     showCalendarOnToday: true,
     categoryPreferences: { ...defaultCategoryPreferences },
+    foundationPreferences: { ...defaultFoundationPreferences },
+    prayerEnabled: true,
     todayView: 'now',
     textSize: 'small',
     calendarSources: []
@@ -495,6 +504,7 @@ function firstKeyWithoutCompatibleDefault(
   allowed: readonly string[]
 ): string | undefined {
   return Object.keys(record).find(key => !(allowed.includes(key)
+    || key === 'prayerEnabled' && record[key] === true
     || key === 'prayerRequests'
       && Array.isArray(record[key])
       && record[key].length === 0
@@ -517,6 +527,9 @@ function firstKeyWithoutCompatibleDefault(
     || key === 'categoryPreferences'
       && isCategoryPreferences(record[key])
       && areas.every(area => (record[key] as CategoryPreferences)[area.id])
+    || key === 'foundationPreferences'
+      && isFoundationPreferences(record[key])
+      && Object.values(record[key] as FoundationPreferences).every(enabled => enabled)
     || key === 'flexibility'
       && isEmptyFlexibilityDefault(record[key])));
 }
@@ -632,9 +645,9 @@ function validateGoal(
 }
 
 export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
-  const currentStrength = migrateStrengthDataToV28(migrateStrengthDataToV27(
+  const currentStrength = migrateStrengthDataToV29(migrateStrengthDataToV28(migrateStrengthDataToV27(
     migrateStrengthDataToV26(migrateStrengthDataToV25(data.strength))
-  ));
+  )));
   const currentCardio = migrateCardioDataToV28(data.cardio);
   return {
     format: PREVIEW_BACKUP_FORMAT,
@@ -642,6 +655,8 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
     data: {
       ...data,
       categoryPreferences: data.categoryPreferences ?? { ...defaultCategoryPreferences },
+      foundationPreferences: data.foundationPreferences ?? { ...defaultFoundationPreferences },
+      prayerEnabled: data.prayerEnabled ?? true,
       goals: data.goals.map(goal => {
         const checkIns = goal.checkIns.map(checkIn => ({
           id: checkIn.id,
@@ -738,7 +753,16 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
         })),
         savedWorkouts: currentStrength.savedWorkouts.map(cloneStrengthSavedWorkout),
         workouts: currentStrength.workouts.map(cloneStrengthWorkoutLog),
-        rhythmModes: currentStrength.rhythmModes.map(mode => ({ ...mode })),
+        rhythmModes: currentStrength.rhythmModes.map(mode => ({
+          ...mode,
+          ...(mode.rotationHistory === undefined
+            ? {}
+            : { rotationHistory: mode.rotationHistory.map(version => ({
+                ...version,
+                workoutIds: [...version.workoutIds],
+                workoutNames: [...version.workoutNames]
+              })) })
+        })),
         ...(currentStrength.guidedSessionDraft === undefined
           ? {}
           : { guidedSessionDraft: cloneStrengthGuidedSessionDraft(currentStrength.guidedSessionDraft) })
@@ -851,6 +875,9 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       && value.schemaVersion !== 41 && value.schemaVersion !== 42 && value.schemaVersion !== 43
       && value.schemaVersion !== 44
       && value.schemaVersion !== 45
+      && value.schemaVersion !== 46
+      && value.schemaVersion !== 47
+      && value.schemaVersion !== 48
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -885,7 +912,10 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV46 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV49 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV48 = value.schemaVersion === 48 || isV49;
+  const isV47 = value.schemaVersion === 47 || isV48;
+  const isV46 = value.schemaVersion === 46 || isV47;
   const isV45 = value.schemaVersion === 45 || isV46;
   const isV44 = value.schemaVersion === 44 || isV45;
   const isV43 = value.schemaVersion === 43 || isV44;
@@ -917,7 +947,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV46 ? dataKeysV46 : isV45 ? dataKeysV45 : value.schemaVersion === 44 ? dataKeysV44 : isV43 && value.schemaVersion === 43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV48 ? dataKeysV48 : isV47 && value.schemaVersion === 47 ? dataKeysV47 : isV46 && value.schemaVersion === 46 ? dataKeysV46 : isV45 && value.schemaVersion === 45 ? dataKeysV45 : value.schemaVersion === 44 ? dataKeysV44 : isV43 && value.schemaVersion === 43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   const incompatibleDataKey = isRecord(value.data) && !isV19 && !isV20
@@ -972,6 +1002,12 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   }
   if (isV43 && !isCategoryPreferences(value.data.categoryPreferences)) {
     return { valid: false, kind: 'invalid', message: 'Category preferences must contain one enabled or disabled value for every category.' };
+  }
+  if (isV47 && !isFoundationPreferences(value.data.foundationPreferences)) {
+    return { valid: false, kind: 'invalid', message: 'Foundation preferences must contain one enabled or disabled value for every Foundation, Principle, or Practice.' };
+  }
+  if (isV48 && typeof value.data.prayerEnabled !== 'boolean') {
+    return { valid: false, kind: 'invalid', message: 'The Prayer preference must be a boolean.' };
   }
   const calendarSourcesResult = validateCalendarSources(isV36 ? value.data.calendarSources : []);
   if (!calendarSourcesResult.valid) {
@@ -1289,16 +1325,24 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
     isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32,
     isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32,
     isV28 || isV29 || isV30 || isV31 || isV32,
-    people.map(person => person.id)
+    people.map(person => person.id),
+    isV49
   )) {
     return { valid: false, kind: 'invalid', message: 'Strength settings, workouts, or workout history are invalid.' };
   }
-  const strength = isV28 || isV29 || isV30 || isV31 || isV32
-    ? strengthWithUnit
-    : isV27
+  const strengthV28 = isV28 || isV29 || isV30 || isV31 || isV32 || isV49
     ? strengthWithUnit
     : migrateStrengthDataToV28(migrateStrengthDataToV27(migrateStrengthDataToV26(migrateStrengthDataToV25(strengthWithUnit))));
-  if (!strength || !validateStrengthData(strength, true, true, true, undefined, people.map(person => person.id))) {
+  const strength = strengthV28 ? migrateStrengthDataToV29(strengthV28) : null;
+  if (!strength || !validateStrengthData(
+    strength,
+    true,
+    true,
+    true,
+    true,
+    people.map(person => person.id),
+    true
+  )) {
     return { valid: false, kind: 'invalid', message: 'Strength settings, workouts, or workout history are invalid.' };
   }
   const strengthCompletionLinks = summarizeStrengthCompletionLinks(
@@ -1435,6 +1479,10 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
     categoryPreferences: isV43
       ? value.data.categoryPreferences as CategoryPreferences
       : { ...defaultCategoryPreferences },
+    foundationPreferences: isV47
+      ? value.data.foundationPreferences as FoundationPreferences
+      : { ...defaultFoundationPreferences },
+    prayerEnabled: isV48 ? value.data.prayerEnabled as boolean : true,
     todayView: migrateTodayViewSelection(value.data.todayView),
     textSize: isPreviewTextSize(value.data.textSize) ? value.data.textSize : 'small',
     calendarSources: calendarSourcesResult.sources
@@ -1464,7 +1512,9 @@ const validationDiagnosticRules: Array<{
   { matches: message => message.startsWith('The Show tended preference'), code: 'preview.show-tended.invalid', path: 'data.showTended' },
   { matches: message => message.startsWith('The text-size preference'), code: 'preview.text-size.invalid', path: 'data.textSize' },
   { matches: message => message.startsWith('The Show calendar on Today preference'), code: 'preview.calendar-visibility.invalid', path: 'data.showCalendarOnToday' },
+  { matches: message => message.startsWith('The Prayer preference'), code: 'preview.prayer-preference.invalid', path: 'data.prayerEnabled' },
   { matches: message => message.startsWith('Category preferences'), code: 'preview.category-preferences.invalid', path: 'data.categoryPreferences' },
+  { matches: message => message.startsWith('Foundation preferences'), code: 'preview.foundation-preferences.invalid', path: 'data.foundationPreferences' },
   { matches: message => message.startsWith('Calendar sources'), code: 'preview.calendar-sources.invalid', path: 'data.calendarSources' },
   { matches: message => message.startsWith('Time block settings'), code: 'preview.time-blocks.invalid', path: 'data.timeBlocks' },
   { matches: message => message.startsWith('Saved Rhythms'), code: 'preview.saved-rhythms.invalid', path: 'data.savedRhythms[*]' },

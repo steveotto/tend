@@ -17,7 +17,16 @@ export const strengthMuscles = [
 
 export type StrengthMuscleId = (typeof strengthMuscles)[number]['id'];
 export type StrengthHistoryState = 'trained' | 'never-trained' | 'invalid';
-export type StrengthMode = 'recommended' | 'specific' | 'custom';
+export type StrengthMode = 'recommended' | 'specific' | 'custom' | 'rotation';
+export type StrengthRotationAdvanceMode = 'after-completion' | 'each-scheduled-occurrence';
+export type StrengthRotationVersion = {
+  effectiveFrom: string;
+  effectiveUntil?: string;
+  workoutIds: string[];
+  workoutNames: string[];
+  advanceMode: StrengthRotationAdvanceMode;
+  startIndex: number;
+};
 export type StrengthLoadMeaning = 'total' | 'per-dumbbell' | 'per-side' | 'bodyweight';
 export type StrengthWorkoutSuggestionSet =
   | { targetReps: number; label?: string }
@@ -430,6 +439,7 @@ export type StrengthVolumeReference = {
 export type StrengthExerciseVolumeComparison = {
   workout: StrengthWorkoutLog;
   volume: StrengthExerciseVolume;
+  changeValue?: number;
   changePercent?: number;
 };
 
@@ -457,6 +467,7 @@ export type StrengthRhythmMode = {
   rhythmId: string;
   mode: StrengthMode;
   workoutId?: string;
+  rotationHistory?: StrengthRotationVersion[];
 };
 
 export type StrengthData = {
@@ -603,13 +614,63 @@ export function migrateStrengthDataToV28(value: StrengthData): StrengthData {
   };
 }
 
+export function migrateStrengthDataToV29(value: StrengthData): StrengthData {
+  return {
+    ...value,
+    rhythmModes: value.rhythmModes.map(setting => ({
+      ...setting,
+      ...(setting.rotationHistory === undefined
+        ? {}
+        : { rotationHistory: setting.rotationHistory.map(version => ({
+            ...version,
+            workoutIds: [...version.workoutIds],
+            workoutNames: [...version.workoutNames]
+          })) })
+    }))
+  };
+}
+
+function validateStrengthRotationHistory(
+  value: unknown,
+  mode: StrengthMode
+): value is StrengthRotationVersion[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  let previous: StrengthRotationVersion | undefined;
+  for (const candidate of value) {
+    if (!isRecord(candidate) || !hasOnlyKeys(candidate, [
+      'effectiveFrom', 'effectiveUntil', 'workoutIds', 'workoutNames', 'advanceMode', 'startIndex'
+    ]) || typeof candidate.effectiveFrom !== 'string' || !isValidDate(candidate.effectiveFrom)
+      || candidate.effectiveUntil !== undefined
+        && (typeof candidate.effectiveUntil !== 'string'
+          || !isValidDate(candidate.effectiveUntil)
+          || candidate.effectiveUntil <= candidate.effectiveFrom)
+      || !Array.isArray(candidate.workoutIds) || candidate.workoutIds.length < 2
+      || !candidate.workoutIds.every(id => isNonEmptyText(id, 160))
+      || new Set(candidate.workoutIds).size !== candidate.workoutIds.length
+      || !Array.isArray(candidate.workoutNames) || candidate.workoutNames.length !== candidate.workoutIds.length
+      || !candidate.workoutNames.every(name => isNonEmptyText(name, 120))
+      || candidate.advanceMode !== 'after-completion'
+        && candidate.advanceMode !== 'each-scheduled-occurrence'
+      || !Number.isInteger(candidate.startIndex) || Number(candidate.startIndex) < 0
+      || Number(candidate.startIndex) >= candidate.workoutIds.length) return false;
+    const version = candidate as unknown as StrengthRotationVersion;
+    if (previous && (previous.effectiveUntil === undefined
+      || previous.effectiveUntil > version.effectiveFrom)) return false;
+    previous = version;
+  }
+  return mode === 'rotation'
+    ? previous?.effectiveUntil === undefined
+    : previous?.effectiveUntil !== undefined;
+}
+
 export function validateStrengthData(
   value: unknown,
   allowGuidedSessionDraft = true,
   requireV25 = false,
   requireV26 = false,
   requireV28 = false,
-  knownPersonIds?: readonly PersonId[]
+  knownPersonIds?: readonly PersonId[],
+  requireV29 = false
 ): value is StrengthData {
   if (!isRecord(value) || !hasOnlyKeys(value, [
     'settings', 'trackingStartDate', 'scoringSettingsHistory',
@@ -714,10 +775,16 @@ export function validateStrengthData(
 
   const rhythmIds = new Set<string>();
   for (const setting of value.rhythmModes) {
-    if (!isRecord(setting) || !hasOnlyKeys(setting, ['rhythmId', 'mode', 'workoutId'])
+    if (!isRecord(setting) || !hasOnlyKeys(setting, requireV29
+      ? ['rhythmId', 'mode', 'workoutId', 'rotationHistory']
+      : ['rhythmId', 'mode', 'workoutId'])
       || !isNonEmptyText(setting.rhythmId, 160) || rhythmIds.has(setting.rhythmId)
-      || !['recommended', 'specific', 'custom'].includes(String(setting.mode))
-      || setting.workoutId !== undefined && !isNonEmptyText(setting.workoutId, 160)) return false;
+      || !['recommended', 'specific', 'custom', ...(requireV29 ? ['rotation'] : [])]
+        .includes(String(setting.mode))
+      || setting.workoutId !== undefined && !isNonEmptyText(setting.workoutId, 160)
+      || setting.rotationHistory !== undefined
+        && (!requireV29 || !validateStrengthRotationHistory(setting.rotationHistory, setting.mode as StrengthMode))
+      || setting.mode === 'rotation' && setting.rotationHistory === undefined) return false;
     rhythmIds.add(setting.rhythmId);
   }
   if (value.guidedSessionDraft !== undefined
@@ -1226,6 +1293,9 @@ export function selectStrengthExerciseVolumeComparison(
   return {
     workout: previous.workout,
     volume: previous.volume,
+    ...(canCompare && currentVolume !== null
+      ? { changeValue: currentVolume.value - previous.volume.value }
+      : {}),
     ...(canCompare && previous.volume.value > 0
       ? { changePercent: (currentVolume.value - previous.volume.value) / previous.volume.value * 100 }
       : {})
@@ -1250,8 +1320,8 @@ export function selectStrengthExerciseProgress(
   const previousExercise = previous?.exercise ?? null;
   return {
     previousExercise,
-    currentBest: selectBestStrengthOneRepMax(exercise),
-    previousBest: previousExercise ? selectBestStrengthOneRepMax(previousExercise) : null,
+    currentBest: selectBestStrengthOneRepMax(exercise, displayUnit),
+    previousBest: previousExercise ? selectBestStrengthOneRepMax(previousExercise, displayUnit) : null,
     sets: exercise.sets.map((set, index) => {
       if (set.status !== 'performed') {
         return { kind: 'not-performed', status: set.status } as const;
@@ -1306,14 +1376,15 @@ function isEarlierStrengthWorkout(
 }
 
 function selectBestStrengthOneRepMax(
-  exercise: StrengthWorkoutExerciseSnapshot
+  exercise: StrengthWorkoutExerciseSnapshot,
+  displayUnit: 'lb' | 'kg'
 ): StrengthOneRepMaxEstimate | null {
   let best: { rawValue: number; reps: number; meaning: StrengthOneRepMaxEstimate['meaning'] } | null = null;
   for (const set of exercise.sets) {
     const reps = getStrengthSetReps(set);
     if (set.status !== 'performed' || set.measurement?.kind === 'duration'
       || reps === null || set.actualLoad?.kind !== 'external' || !validateStrengthLoad(set.actualLoad)) continue;
-    const load = convertStrengthLoad(set.actualLoad, 'lb');
+    const load = convertStrengthLoad(set.actualLoad, displayUnit);
     if (load.kind !== 'external') continue;
     const rawValue = load.value * (1 + reps / 30);
     if (best === null || rawValue > best.rawValue) {

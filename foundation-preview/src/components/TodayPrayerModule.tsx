@@ -26,6 +26,7 @@ type SelectionDraft = {
 
 type TodayPrayerModuleProps = {
   requests: readonly PrayerRequestPreview[];
+  enabled?: boolean;
   evaluationInstant?: Date;
   timeZone?: string;
   onPray: (requestId: string) => string | null;
@@ -33,6 +34,7 @@ type TodayPrayerModuleProps = {
 
 export function TodayPrayerModule({
   requests,
+  enabled = true,
   evaluationInstant = new Date(),
   timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   onPray
@@ -81,7 +83,7 @@ export function TodayPrayerModule({
     : undefined;
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || !enabled) return;
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target;
       if (event.altKey || event.ctrlKey || event.metaKey
@@ -105,16 +107,16 @@ export function TodayPrayerModule({
     }
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [session !== null]);
+  }, [session !== null, enabled]);
 
   useLayoutEffect(() => {
-    if (!session) return;
+    if (!session || !enabled) return;
     if (sessionComplete) {
       document.getElementById('today-prayer-session-title')?.focus({ preventScroll: true });
     } else {
       sessionCardRef.current?.focus({ preventScroll: true });
     }
-  }, [session?.index, session?.ended, sessionComplete]);
+  }, [session?.index, session?.ended, sessionComplete, enabled]);
 
   function openSelection() {
     setSelection({ people: [...selectedPeople], timeframe, showingTimeframes: false });
@@ -131,6 +133,7 @@ export function TodayPrayerModule({
   }
 
   function startSession(draft: SelectionDraft) {
+    if (!enabled) return;
     const nextSession = createPrayerSession(selectedRequests(draft));
     if (!nextSession) return;
     setSelectedPeople([...draft.people]);
@@ -167,7 +170,7 @@ export function TodayPrayerModule({
   }
 
   function markCurrentPrayed() {
-    if (!session || !currentRequest || session.prayedIds.includes(currentRequest.id)) return;
+    if (!enabled || !session || !currentRequest || session.prayedIds.includes(currentRequest.id)) return;
     const error = onPray(currentRequest.id);
     if (error) {
       setSessionError(error);
@@ -190,7 +193,7 @@ export function TodayPrayerModule({
 
   return (
     <>
-      <section className="today-prayer-section" aria-labelledby="today-prayer-title">
+      <section className="today-prayer-section" aria-labelledby="today-prayer-title" hidden={!enabled}>
         <div className="sectiontitle"><h2 id="today-prayer-title">Prayer</h2></div>
         <section className="prayer-entry-module" aria-label="Focused Prayer">
           <div className="prayer-entry-summary">
@@ -229,14 +232,15 @@ export function TodayPrayerModule({
         </section>
       </section>
 
-      <PrayerDialog
-        open={selection !== null}
-        className="prayer-selection-dialog"
-        titleId="today-prayer-selection-title"
-        onDismiss={() => setSelection(null)}
-      >
-        {selection && (
-          <>
+      {enabled && (
+        <PrayerDialog
+          open={selection !== null}
+          className="prayer-selection-dialog"
+          titleId="today-prayer-selection-title"
+          onDismiss={() => setSelection(null)}
+        >
+          {selection && (
+            <>
             <header className="prayer-selection-header">
               <h3 id="today-prayer-selection-title" tabIndex={-1}>
                 {selection.showingTimeframes ? 'Prayer timeframe' : 'Prayer selection'}
@@ -413,17 +417,19 @@ export function TodayPrayerModule({
                 </button>
               </div>
             </footer>
-          </>
-        )}
-      </PrayerDialog>
+            </>
+          )}
+        </PrayerDialog>
+      )}
 
-      <PrayerDialog
-        open={session !== null}
-        className="faith-page faith-prayer-session"
-        titleId="today-prayer-session-title"
-        onDismiss={() => setSession(null)}
-      >
-        {session && (sessionComplete ? (
+      {enabled && (
+        <PrayerDialog
+          open={session !== null}
+          className="faith-page faith-prayer-session"
+          titleId="today-prayer-session-title"
+          onDismiss={() => setSession(null)}
+        >
+          {session && (sessionComplete ? (
           <section className="faith-session-complete">
             <span className="faith-eyebrow">PRAYER TIME</span>
             <div className="faith-session-complete__card">
@@ -526,8 +532,9 @@ export function TodayPrayerModule({
               Only Prayed records a prayer. <span className="faith-session-keyboard-help">Use ← / → to move between requests.</span>
             </p>
           </>
-        ))}
-      </PrayerDialog>
+        )          )}
+        </PrayerDialog>
+      )}
     </>
   );
 }
