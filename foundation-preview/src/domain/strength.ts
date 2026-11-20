@@ -433,6 +433,26 @@ export type StrengthExerciseVolumeComparison = {
   changePercent?: number;
 };
 
+export type StrengthOneRepMaxEstimate = {
+  value: number;
+  reps: number;
+  meaning: Exclude<StrengthLoadMeaning, 'bodyweight'>;
+};
+
+export type StrengthExerciseSetProgress =
+  | { kind: 'first-log' }
+  | { kind: 'not-performed'; status: 'pending' | 'skipped' }
+  | { kind: 'unavailable' }
+  | { kind: 'same' }
+  | { kind: 'change'; weightDelta: number | null; repsDelta: number | null };
+
+export type StrengthExerciseProgress = {
+  previousExercise: StrengthWorkoutExerciseSnapshot | null;
+  currentBest: StrengthOneRepMaxEstimate | null;
+  previousBest: StrengthOneRepMaxEstimate | null;
+  sets: StrengthExerciseSetProgress[];
+};
+
 export type StrengthRhythmMode = {
   rhythmId: string;
   mode: StrengthMode;
@@ -1187,11 +1207,7 @@ export function selectStrengthExerciseVolumeComparison(
       : undefined);
   if (!expectedMeaning) return null;
   const previous = workouts
-    .filter(workout => workout.id !== reference.id
-      && (workout.date < reference.date
-        || workout.date === reference.date && reference.startedAt !== undefined
-          && workout.finishedAt !== undefined
-          && Date.parse(workout.finishedAt) <= Date.parse(reference.startedAt))
+    .filter(workout => isEarlierStrengthWorkout(workout, reference)
       && workout.exercises?.some(candidate => candidate.id === exercise.id
         && candidate.equipment.trim().toLocaleLowerCase() === exercise.equipment.trim().toLocaleLowerCase()))
     .map(workout => ({
@@ -1214,6 +1230,107 @@ export function selectStrengthExerciseVolumeComparison(
       ? { changePercent: (currentVolume.value - previous.volume.value) / previous.volume.value * 100 }
       : {})
   };
+}
+
+export function selectStrengthExerciseProgress(
+  workouts: readonly StrengthWorkoutLog[],
+  reference: StrengthVolumeReference,
+  exercise: StrengthWorkoutExerciseSnapshot,
+  displayUnit: 'lb' | 'kg' = 'lb'
+): StrengthExerciseProgress {
+  const previous = workouts
+    .filter(workout => isEarlierStrengthWorkout(workout, reference))
+    .flatMap(workout => {
+      const previousExercise = workout.exercises?.find(candidate => candidate.id === exercise.id);
+      return previousExercise ? [{ workout, exercise: previousExercise }] : [];
+    })
+    .sort((left, right) => right.workout.date.localeCompare(left.workout.date)
+      || (right.workout.finishedAt ?? right.workout.startedAt ?? '')
+        .localeCompare(left.workout.finishedAt ?? left.workout.startedAt ?? ''))[0] ?? null;
+  const previousExercise = previous?.exercise ?? null;
+  return {
+    previousExercise,
+    currentBest: selectBestStrengthOneRepMax(exercise),
+    previousBest: previousExercise ? selectBestStrengthOneRepMax(previousExercise) : null,
+    sets: exercise.sets.map((set, index) => {
+      if (set.status !== 'performed') {
+        return { kind: 'not-performed', status: set.status } as const;
+      }
+      if (!previousExercise) return { kind: 'first-log' } as const;
+      const previousSet = previousExercise.sets[index];
+      if (!previousSet || previousSet.status !== 'performed') return { kind: 'first-log' } as const;
+
+      const currentReps = getStrengthSetReps(set);
+      const previousReps = getStrengthSetReps(previousSet);
+      const repsDelta = currentReps !== null && previousReps !== null
+        ? currentReps - previousReps
+        : null;
+      const currentLoad = set.actualLoad;
+      const previousLoad = previousSet.actualLoad;
+      const bodyweightComparable = currentLoad?.kind === 'bodyweight'
+        && previousLoad?.kind === 'bodyweight';
+      const currentWeight = currentLoad?.kind === 'external'
+        ? convertStrengthLoad(currentLoad, displayUnit)
+        : null;
+      const previousWeight = previousLoad?.kind === 'external'
+        ? convertStrengthLoad(previousLoad, displayUnit)
+        : null;
+      const weightDelta = currentWeight?.kind === 'external'
+        && previousWeight?.kind === 'external'
+        && currentLoad?.kind === 'external'
+        && previousLoad?.kind === 'external'
+        && validateStrengthLoad(currentLoad)
+        && validateStrengthLoad(previousLoad)
+        && currentLoad.meaning === previousLoad.meaning
+        ? currentWeight.value - previousWeight.value
+        : null;
+      if (repsDelta === null && weightDelta === null) return { kind: 'unavailable' } as const;
+      if (repsDelta === 0 && (weightDelta === 0 || bodyweightComparable)) return { kind: 'same' } as const;
+      if (repsDelta === 0 && weightDelta === null && !bodyweightComparable) {
+        return { kind: 'unavailable' } as const;
+      }
+      return { kind: 'change', weightDelta, repsDelta } as const;
+    })
+  };
+}
+
+function isEarlierStrengthWorkout(
+  workout: StrengthWorkoutLog,
+  reference: StrengthVolumeReference
+): boolean {
+  return workout.id !== reference.id
+    && (workout.date < reference.date
+      || workout.date === reference.date && reference.startedAt !== undefined
+        && workout.finishedAt !== undefined
+        && Date.parse(workout.finishedAt) <= Date.parse(reference.startedAt));
+}
+
+function selectBestStrengthOneRepMax(
+  exercise: StrengthWorkoutExerciseSnapshot
+): StrengthOneRepMaxEstimate | null {
+  let best: { rawValue: number; reps: number; meaning: StrengthOneRepMaxEstimate['meaning'] } | null = null;
+  for (const set of exercise.sets) {
+    const reps = getStrengthSetReps(set);
+    if (set.status !== 'performed' || set.measurement?.kind === 'duration'
+      || reps === null || set.actualLoad?.kind !== 'external' || !validateStrengthLoad(set.actualLoad)) continue;
+    const load = convertStrengthLoad(set.actualLoad, 'lb');
+    if (load.kind !== 'external') continue;
+    const rawValue = load.value * (1 + reps / 30);
+    if (best === null || rawValue > best.rawValue) {
+      best = { rawValue, reps, meaning: load.meaning };
+    }
+  }
+  return best ? { value: Math.round(best.rawValue), reps: best.reps, meaning: best.meaning } : null;
+}
+
+function getStrengthSetReps(set: StrengthWorkoutSetSnapshot): number | null {
+  return set.status === 'performed'
+    && set.measurement?.kind !== 'duration'
+    && Number.isInteger(set.actualReps)
+    && set.actualReps! >= 1
+    && set.actualReps! <= 1000
+    ? set.actualReps!
+    : null;
 }
 
 export function formatStrengthVolumeChangePercent(changePercent: number): string {
