@@ -73,7 +73,9 @@ export function StrengthExerciseResults({
           </span>
           <span className="strength-exercise-results__headline-value">
             {progress.currentBest ? formatNumber(progress.currentBest.value) : '—'}
-            <span>lb</span>
+            <span>
+              lb{progress.currentBest ? formatMeaning(progress.currentBest.meaning) : ''}
+            </span>
           </span>
         </div>
         <span className={`strength-exercise-results__headline-delta strength-exercise-results__headline-delta--${headline.tone}`}
@@ -93,8 +95,6 @@ export function StrengthExerciseResults({
               <span className="strength-exercise-results__set-value">
                 {value ?? (set.status === 'skipped' ? 'Skipped' : 'Unfinished')}
                 {set.label && <span className="strength-exercise-results__set-label"> · {set.label}</span>}
-                {presentation === 'history' && set.status === 'performed'
-                  && <time dateTime={set.confirmedAt}> · {formatConfirmedAt(set.confirmedAt)}</time>}
               </span>
               <span className={`strength-exercise-results__set-delta strength-exercise-results__set-delta--${setProgress.tone}`}
                 aria-label={setProgress.accessibleName}>
@@ -125,7 +125,7 @@ function formatPerformedSet(
     const seconds = set.actualDurationSeconds ?? 0;
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   }
-  const reps = set.actualReps === undefined ? 'Reps unavailable' : String(set.actualReps);
+  const reps = set.actualReps === undefined ? 'Reps unavailable' : `${set.actualReps} reps`;
   if (set.actualLoad?.kind === 'bodyweight') return `Bodyweight × ${reps}`;
   if (set.actualLoad?.kind !== 'external') return reps;
   const load = set.actualLoad.unit === preferredWeightUnit
@@ -157,7 +157,7 @@ function formatHeadlineDelta(
   if (!current) {
     return { text: 'Unavailable', accessibleName: 'Estimated 1RM unavailable', tone: 'unavailable' };
   }
-  const currentLabel = `Est. 1RM ${formatNumber(current.value)} pounds`;
+  const currentLabel = `Est. 1RM ${formatNumber(current.value)} pounds${formatMeaning(current.meaning)}`;
   if (!hasPreviousSession) {
     return {
       text: 'Baseline',
@@ -261,11 +261,4 @@ function formatNumber(value: number, maximumFractionDigits = 0): string {
 
 function formatMeaning(meaning: 'total' | 'per-dumbbell' | 'per-side'): string {
   return meaning === 'total' ? '' : meaning === 'per-dumbbell' ? ' per dumbbell' : ' per side';
-}
-
-function formatConfirmedAt(value: string): string {
-  const date = new Date(value);
-  return Number.isFinite(date.getTime())
-    ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(date)
-    : 'Time unavailable';
 }

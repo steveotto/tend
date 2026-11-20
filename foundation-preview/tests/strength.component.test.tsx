@@ -126,21 +126,23 @@ function confirmedWorkoutLog(
 function progressExercise(
   id: string,
   sets: Array<{ weight: number; reps: number; unit?: 'lb' | 'kg' }>,
-  name = 'Bench Press'
+  name = 'Bench Press',
+  equipment = 'Barbell',
+  loadMeaning: 'total' | 'per-dumbbell' | 'per-side' = 'total'
 ): StrengthWorkoutExerciseSnapshot {
   return {
     id,
     name,
     muscleIds: ['chest'],
-    equipment: 'Barbell',
-    loadMeaning: 'total',
+    equipment,
+    loadMeaning,
     restDurationSeconds: 180,
     sets: sets.map((set, index) => ({
       id: `${id}-set-${index + 1}`,
       targetReps: set.reps,
       status: 'performed',
       actualReps: set.reps,
-      actualLoad: { kind: 'external', meaning: 'total', value: set.weight, unit: set.unit ?? 'lb' },
+      actualLoad: { kind: 'external', meaning: loadMeaning, value: set.weight, unit: set.unit ?? 'lb' },
       confirmedAt: `2026-10-20T10:${String(index + 1).padStart(2, '0')}:00.000Z`
     }))
   };
@@ -162,7 +164,8 @@ function progressLog(
 
 function renderExerciseProgress(
   exercise: StrengthWorkoutExerciseSnapshot,
-  previousSets: Array<{ weight: number; reps: number; unit?: 'lb' | 'kg' }> | null
+  previousSets: Array<{ weight: number; reps: number; unit?: 'lb' | 'kg' }> | null,
+  presentation: 'history' | 'review' = 'history'
 ) {
   const workouts = previousSets
     ? [progressLog('progress-previous', '2026-10-20', progressExercise(exercise.id, previousSets))]
@@ -173,7 +176,7 @@ function renderExerciseProgress(
       workouts={workouts}
       reference={{ id: 'progress-current', date: '2026-10-22', startedAt: '2026-10-22T11:00:00.000Z' }}
       preferredWeightUnit="lb"
-      presentation="history"
+      presentation={presentation}
     />
   );
 }
@@ -406,6 +409,81 @@ describe('Strength preview presentation', () => {
     expect(screen.getByText('First log')).toBeTruthy();
     expect(screen.getByText('Volume 1,400 lb')).toBeTruthy();
     expect(screen.queryByText(/last session/)).toBeNull();
+  });
+
+  it('renders the same two-session progress card in Finish & review and logged-workout details', async () => {
+    const user = userEvent.setup();
+    const exerciseId = 'incline-dumbbell-press';
+    const exerciseName = 'Incline Dumbbell Press';
+    const previousLog = progressLog(
+      'incline-previous-session',
+      '2026-10-20',
+      progressExercise(exerciseId, [{ weight: 135, reps: 10 }], exerciseName, 'Dumbbells', 'per-dumbbell')
+    );
+    const data = createStrengthData();
+    data.workouts = [previousLog];
+    data.savedWorkouts = [{
+      id: 'incline-progress-template',
+      name: 'Incline Press Progress',
+      muscleIds: ['chest'],
+      sharedWith: [],
+      exercises: [{
+        id: exerciseId,
+        name: exerciseName,
+        muscleIds: ['chest'],
+        equipment: 'Dumbbells',
+        loadMeaning: 'per-dumbbell',
+        restDurationSeconds: 60,
+        sets: [{
+          id: 'incline-progress-set',
+          targetReps: 10,
+          targetLoad: { kind: 'external', meaning: 'per-dumbbell', value: 135, unit: 'lb' }
+        }]
+      }]
+    }];
+    const { changes } = renderStatefulStrength(data);
+    startGuidedWorkoutFromChoice();
+
+    let session = screen.getByRole('dialog', { name: 'Incline Press Progress' });
+    const weight = within(session).getByRole('spinbutton', { name: 'Weight (lb)' });
+    await user.clear(weight);
+    await user.type(weight, '140');
+    await user.click(within(session).getByRole('button', { name: 'Log set 1' }));
+    await user.click(within(session).getByRole('button', { name: 'Finish & review' }));
+
+    const expectProgressCard = (results: HTMLElement) => {
+      expect(within(results).getByText('EST. 1RM')).toBeTruthy();
+      expect(within(results).getByText('187')).toBeTruthy();
+      expect(within(results).getByText('lb per dumbbell')).toBeTruthy();
+      expect(within(results).getByText('▲ +7 vs. last')).toBeTruthy();
+      expect(within(results).getByText('140 lb per dumbbell × 10 reps')).toBeTruthy();
+      expect(within(results).getByText('▲ +5 lb')).toBeTruthy();
+      expect(within(results).getByText(
+        'Volume 1,400 lb per dumbbell · last session 1,350 lb per dumbbell'
+      )).toBeTruthy();
+      expect(within(results).queryByText('Performed')).toBeNull();
+      expect(results.querySelector('.strength-exercise-results__set-value time')).toBeNull();
+    };
+
+    const reviewResults = within(session).getByRole('region', {
+      name: 'Incline Dumbbell Press set summary'
+    });
+    expect(reviewResults.querySelector('.strength-exercise-results__headline')).toBeTruthy();
+    expectProgressCard(reviewResults);
+    expect(within(session).getByRole('heading', { name: 'Session summary' })).toBeTruthy();
+
+    await user.click(within(session).getByRole('button', { name: 'Finish & save' }));
+    await acknowledgeWorkoutOnly(user);
+    expect(changes.at(-1)?.workouts).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: /View Incline Press Progress/ }));
+
+    const details = screen.getByRole('dialog', { name: 'Incline Press Progress' });
+    const historyResults = within(details).getByRole('region', {
+      name: 'Incline Dumbbell Press results'
+    });
+    expect(historyResults.querySelector('.strength-exercise-results__headline')).toBeTruthy();
+    expectProgressCard(historyResults);
+    expect(within(details).getByRole('heading', { name: 'Muscles trained' })).toBeTruthy();
   });
 
   it('keeps per-set changes positional while the headline uses the best set', () => {

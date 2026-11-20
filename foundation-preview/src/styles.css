@@ -14639,7 +14639,7 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   min-width: 0;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 14px;
   padding: 10px 14px;
   border-radius: 12px;
   background: #e2efe6;
@@ -14671,7 +14671,8 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 
 .strength-exercise-results__headline-value > span {
   font-size: calc(.8125rem * var(--app-text-scale, 1));
-  font-weight: 700;
+  color: var(--tend-ink-soft, var(--tend-secondary));
+  font-weight: 600;
 }
 
 .strength-exercise-results__headline-delta {
@@ -14709,7 +14710,7 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   padding: 11px 2px;
   border-bottom: 1px solid var(--tend-line);
 }
@@ -14721,7 +14722,7 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
 .strength-exercise-results__set-number {
   flex: 0 0 44px;
   width: 44px;
-  color: var(--tend-secondary);
+  color: var(--tend-ink-soft, var(--tend-secondary));
   font-size: calc(.84375rem * var(--app-text-scale, 1));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -14740,12 +14741,6 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   color: var(--tend-ink-soft, var(--tend-secondary));
   font-size: calc(.78rem * var(--app-text-scale, 1));
   font-weight: 500;
-}
-
-.strength-exercise-results__set-value time {
-  color: var(--tend-secondary);
-  font-size: calc(.74rem * var(--app-text-scale, 1));
-  font-weight: 450;
 }
 
 .strength-exercise-results__set-delta {
@@ -14781,17 +14776,12 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   align-items: baseline;
   flex-wrap: wrap;
   gap: 4px 12px;
-  margin-top: 2px;
+  margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--tend-line);
   color: var(--tend-ink-soft, var(--tend-secondary));
   font-size: calc(.78125rem * var(--app-text-scale, 1));
   font-variant-numeric: tabular-nums;
-}
-
-.strength-exercise-results__volume > span:first-child {
-  color: var(--tend-ink);
-  font-weight: 500;
 }
 
 .strength-exercise-results__footnote {
