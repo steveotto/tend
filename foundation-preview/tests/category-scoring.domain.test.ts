@@ -431,6 +431,71 @@ describe('selecting equal-weight Marriage Category scores', () => {
     });
   });
 
+  it('scores only enabled Health & Fitness Foundations and leaves an all-disabled Category unscored', () => {
+    const cardio = {
+      foundationIds: ['health-cardio'],
+      eligibleFoundationIds: ['health-cardio'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 100,
+      onTrack: 60,
+      health: 90
+    };
+    const weight = {
+      foundationIds: ['health-weight'],
+      eligibleFoundationIds: ['health-weight'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 60,
+      onTrack: 100,
+      health: 70
+    };
+    const strength = {
+      foundationIds: ['health-strength'],
+      eligibleFoundationIds: ['health-strength'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 0,
+      onTrack: 80,
+      health: 20
+    };
+    const flexibility = {
+      foundationIds: ['health-flexibility'],
+      eligibleFoundationIds: ['health-flexibility'],
+      excludedFoundationIds: [],
+      unresolvedFoundationIds: [],
+      consistency: 100,
+      onTrack: 100,
+      health: 100
+    };
+
+    expect(selectHealthFitnessCategoryScore(
+      cardio,
+      weight,
+      strength,
+      flexibility,
+      new Set(['health-cardio', 'health-weight'])
+    )).toMatchObject({
+      foundationIds: ['health-cardio', 'health-weight'],
+      consistency: 80,
+      onTrack: 80,
+      health: 80
+    });
+    expect(selectHealthFitnessCategoryScore(
+      cardio,
+      weight,
+      strength,
+      flexibility,
+      new Set()
+    )).toMatchObject({
+      foundationIds: [],
+      eligibleFoundationIds: [],
+      consistency: null,
+      onTrack: null,
+      health: null
+    });
+  });
+
   it('scores Flexibility from linked stretch Rhythms and identifies unlinked ones without changing links', () => {
     const linked = weightRhythm('stretch-linked', {
       healthLogCapability: 'flexibility',

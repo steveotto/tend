@@ -7,7 +7,6 @@ import type { WeightViewProps } from './WeightView.tsx';
 import { CardioView } from './CardioView.tsx';
 import { FlexibilityView } from './FlexibilityView.tsx';
 import type { FlexibilityViewProps } from './FlexibilityView.tsx';
-import { BackButton } from './BackButton.tsx';
 import type { CardioViewProps } from './CardioView.tsx';
 import { CategoryHealthSummary } from './CategoryHealthSummary.tsx';
 import { CategoryHeader } from './CategoryHeader.tsx';
@@ -26,6 +25,8 @@ import type { CategoryRhythmSuggestion, CategoryRhythmSuggestionCatalogue } from
 import type { CategoryScoreSelection } from '../domain/category-scoring.ts';
 import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
 import { selectUnlinkedFlexibilityRhythms } from '../domain/category-scoring.ts';
+import { selectAvailableFoundationLinkedItems, selectAvailableFoundationIds } from '../domain/category-availability.ts';
+import { foundationRhythmIds } from '../domain/foundation-rhythm-associations.ts';
 import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { CategoryTabNavigationRequest, Destination } from './AppNavigation.tsx';
 import { healthFoundationDefinitions, syntheticPeople } from '../domain/preview-data.ts';
@@ -37,14 +38,20 @@ import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
+import { TendedRhythmItems } from './TendedRhythmItems.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { createHealthFitnessHealthContribution, createHealthFitnessRollup } from './HealthRollupDiagram.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { noLinkedRhythmHealthMessage } from './health-summary-copy.ts';
+import { useAreaAvailability, useAvailableFoundations } from './CategoryAvailabilityContext.tsx';
 
 type HealthFitnessTab = 'today' | 'rhythms' | 'progress';
 type ProgressTab = (typeof healthFoundationDefinitions)[number]['progressId'];
+type HealthFitnessMeasureId = 'strength' | 'cardio' | 'weight' | 'flexibility';
+type HealthFitnessMeasureRow = HealthAggregateEvidence['rows'][number] & {
+  id: HealthFitnessMeasureId;
+};
 
 type HealthFitnessViewProps = {
   people?: readonly PersonPreview[];
@@ -65,8 +72,6 @@ type HealthFitnessViewProps = {
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds?: ReadonlySet<string>;
   tendedRhythmIds?: ReadonlySet<string>;
-  showTended?: boolean;
-  onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
   foundations: readonly FoundationPreview[];
   suggestionCatalogue: CategoryRhythmSuggestionCatalogue;
@@ -189,10 +194,8 @@ export function HealthFitnessView({
   undoableRhythms,
   satisfiedRhythmIds = new Set(),
   tendedRhythmIds: savedTendedRhythmIds,
-  showTended = false,
-  onShowTendedChange = () => undefined,
   initializing = false,
-  foundations,
+  foundations: allFoundations,
   categoryTabNavigationRequest = null,
   foundationNavigationRequest = null,
   onFoundationNavigationHandled,
@@ -215,6 +218,14 @@ export function HealthFitnessView({
   flexibilityHealthScore,
   overallHealthScore = null
 }: HealthFitnessViewProps) {
+  const availability = useAreaAvailability();
+  const foundations = useAvailableFoundations(allFoundations);
+  const enabledFoundationIds = selectAvailableFoundationIds(availability, allFoundations);
+  const enabledHealthFoundationIds = new Set(
+    allFoundations
+      .filter(foundation => foundation.categoryId === 'health' && enabledFoundationIds.has(foundation.id))
+      .map(foundation => foundation.id)
+  );
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const [selected, setSelected] = useState<HealthFitnessTab>('today');
@@ -222,7 +233,7 @@ export function HealthFitnessView({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showArchivedRhythms, setShowArchivedRhythms] = useState(false);
   const archivedRhythmIds = new Set(archivedRhythms.map(rhythm => rhythm.id));
-  const fitnessMeasureRows = [
+  const fitnessMeasureRows = ([
     {
       id: 'strength',
       label: 'Strength',
@@ -247,10 +258,19 @@ export function HealthFitnessView({
       consistency: flexibilityHealthScore.consistency,
       onTrack: flexibilityHealthScore.onTrack
     }
-  ] satisfies HealthAggregateEvidence['rows'];
+  ] satisfies HealthFitnessMeasureRow[])
+    .filter(row => enabledHealthFoundationIds.has(`health-${row.id}`));
+  const fitnessMeasureExplanations: Readonly<Record<HealthFitnessMeasureId, string>> = {
+    strength: 'Averages active linked Strength Rhythms that have both Consistency and On Track scores.',
+    cardio: 'Consistency averages completed weeks in the four-week lookback with a tracking start and trustworthy targets. On Track is the lower of weekly run-count and mileage progress (max 100%).',
+    weight: 'Averages available scores from active linked Weight Rhythms separately for each measure.',
+    flexibility: 'Averages active linked stretch Rhythms equally for Consistency and On Track, then blends the averages 75/25. Region history is diagnostic only.'
+  };
   const fitnessMeasureEvidence: HealthAggregateEvidence = {
     heading: 'Health & Fitness measure scores',
-    description: 'Available scores are averaged separately.',
+    description: fitnessMeasureRows.length > 0
+      ? 'Scores from enabled Foundations are averaged separately.'
+      : 'No Health & Fitness Foundations are enabled, so this Category is unscored.',
     itemLabel: 'Measure',
     rows: fitnessMeasureRows,
     consistencyAverage: healthScore.consistency,
@@ -267,24 +287,10 @@ export function HealthFitnessView({
     emptyState: 'No scores available yet.',
     showEmptyStateWhenNoAverages: true,
     weightSummary: null,
-    areaExplanations: [
-      {
-        label: 'Strength',
-        explanation: 'Averages active linked Strength Rhythms that have both Consistency and On Track scores.'
-      },
-      {
-        label: 'Cardio',
-        explanation: 'Consistency averages completed weeks in the four-week lookback with a tracking start and trustworthy targets. On Track is the lower of weekly run-count and mileage progress (max 100%).'
-      },
-      {
-        label: 'Weight',
-        explanation: 'Averages available scores from active linked Weight Rhythms separately for each measure.'
-      },
-      {
-        label: 'Flexibility',
-        explanation: 'Averages active linked stretch Rhythms equally for Consistency and On Track, then blends the averages 75/25. Region history is diagnostic only.'
-      }
-    ]
+    areaExplanations: fitnessMeasureRows.map(row => ({
+      label: row.label,
+      explanation: fitnessMeasureExplanations[row.id]
+    }))
   };
   const strengthScoringEvidence = linkedRhythmEvidence('health-strength', rhythms, archivedRhythms, rhythmScores);
   const weightScoringEvidence = linkedRhythmEvidence('health-weight', rhythms, archivedRhythms, rhythmScores);
@@ -310,6 +316,21 @@ export function HealthFitnessView({
   const timeOptions = useRhythmTimeOptions();
   const foundationDetailOpen = selected === 'progress' && progressSelected !== null;
   const todayRhythms = rhythms.filter(rhythm => isRhythmRelevantOnDate(rhythm, todayDate));
+  const availableSuggestionCatalogue = {
+    ...suggestionCatalogue,
+    groups: suggestionCatalogue.groups.map(group => ({
+      ...group,
+      suggestions: selectAvailableFoundationLinkedItems(
+        availability,
+        group.suggestions,
+        suggestion => foundationRhythmIds(suggestion.rhythm)
+      )
+    })).filter(group => group.suggestions.length > 0)
+  };
+  const hasAvailableSuggestions = availableSuggestionCatalogue.groups.length > 0;
+  useEffect(() => {
+    if (!hasAvailableSuggestions) setShowSuggestions(false);
+  }, [hasAvailableSuggestions]);
   useEffect(() => {
     if (categoryTabNavigationRequest?.categoryId !== 'health') return;
     setProgressSelected(null);
@@ -320,12 +341,23 @@ export function HealthFitnessView({
     const request = foundationNavigationRequest;
     if (!request) return;
     const foundation = progressDetails.find(item => item.foundationId === request.foundationId);
-    if (foundation) {
+    if (foundation && enabledHealthFoundationIds.has(request.foundationId)) {
       setSelected('progress');
       setProgressSelected(foundation.id);
-      onFoundationNavigationHandled?.(request.requestId);
+    } else {
+      setProgressSelected(null);
+      setSelected('progress');
     }
-  }, [foundationNavigationRequest?.requestId]);
+    onFoundationNavigationHandled?.(request.requestId);
+  }, [foundationNavigationRequest?.requestId, enabledHealthFoundationIds]);
+
+  useEffect(() => {
+    if (progressSelected === null) return;
+    const foundation = progressDetails.find(detail => detail.id === progressSelected);
+    if (!foundation || enabledHealthFoundationIds.has(foundation.foundationId)) return;
+    setProgressSelected(null);
+    setSelected('progress');
+  }, [progressSelected, enabledHealthFoundationIds]);
 
   useLayoutEffect(() => {
     if (progressSelected !== null || !restoreProgressOverviewRef.current) return;
@@ -392,7 +424,7 @@ export function HealthFitnessView({
     onEditRhythm(rhythm, event, returnToPicker);
   }
 
-  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = suggestionCatalogue.groups.map(group => ({
+  const suggestionPickerGroups: RhythmSuggestionPickerGroup[] = availableSuggestionCatalogue.groups.map(group => ({
     id: group.id,
     title: group.title,
     subtitle: group.subtitle,
@@ -516,12 +548,6 @@ export function HealthFitnessView({
     setProgressSelected(null);
   }
 
-  function renderProgressOverviewLink() {
-    return (
-      <BackButton onClick={returnToProgressOverview} variant="plain">All Foundations</BackButton>
-    );
-  }
-
   function renderFoundationHeading(foundationId: string) {
     const foundation = foundations.find(item => item.id === foundationId);
     if (!foundation) return null;
@@ -529,6 +555,8 @@ export function HealthFitnessView({
       <FoundationDetailHeader
         foundation={foundation}
         headingId={`health-foundation-${foundation.id}-title`}
+        backLabel="All Foundations"
+        onBack={returnToProgressOverview}
       />
     );
   }
@@ -555,7 +583,9 @@ export function HealthFitnessView({
             contextTitle="Health & Fitness Health"
             score={healthScore}
             itemTerm={{ singular: 'measure', plural: 'measures' }}
-            explanation="Health & Fitness Health averages available Strength, Cardio, Weight, and Flexibility measures; each measure uses its own eligible evidence."
+            explanation={fitnessMeasureRows.length > 0
+              ? `Health & Fitness Health averages available ${fitnessMeasureRows.map(row => row.label).join(', ')} measures; each measure uses its own eligible evidence.`
+              : 'No Health & Fitness Foundations are enabled, so this Category is unscored.'}
             scoringEvidence={fitnessMeasureEvidence}
             describeRollup={false}
             coverageLabel={healthScore.consistency !== null && healthScore.onTrack !== null
@@ -564,18 +594,21 @@ export function HealthFitnessView({
                 ? 'Health & Fitness Consistency is scored; On Track is unavailable.'
                 : healthScore.onTrack !== null
                   ? 'Health & Fitness On Track is scored; Consistency is unavailable.'
-                  : 'Health & Fitness Consistency and On Track are unavailable.'}
-            consistencyDescription="The equal-weight average of available Strength, Cardio, Weight, and Flexibility Consistency measures."
-            onTrackDescription="The equal-weight average of available Strength, Cardio, and Weight On Track measures."
+                  : fitnessMeasureRows.length === 0
+                    ? 'No enabled Health & Fitness Foundations contribute to this score.'
+                    : 'Health & Fitness Consistency and On Track are unavailable.'}
+            consistencyDescription="The equal-weight average of available Consistency scores from enabled Health & Fitness Foundations."
+            onTrackDescription="The equal-weight average of available On Track scores from enabled Health & Fitness Foundations."
             rollup={{
-              ...createHealthFitnessRollup('category', 'health-fitness'),
+                  ...createHealthFitnessRollup('category', 'health-fitness', enabledHealthFoundationIds),
               healthContribution: createHealthFitnessHealthContribution({
                 overallHealthScore,
                 categoryHealthScore: healthScore.health,
                 strengthHealthScore: strength.healthScore?.health ?? null,
                 cardioHealthScore: cardioHealthScore.health,
                 weightHealthScore: weightHealthScore.health,
-                flexibilityHealthScore: flexibilityHealthScore.health
+                    flexibilityHealthScore: flexibilityHealthScore.health,
+                    enabledFoundationIds: enabledHealthFoundationIds
               })
             }}
           />
@@ -603,19 +636,21 @@ export function HealthFitnessView({
               tendedRhythmIds={tendedRhythmIds}
               satisfiedRhythmIds={satisfiedRhythmIds}
               undoableRhythmIds={undoableRhythms}
-              showTended={showTended}
-              onShowTendedChange={onShowTendedChange}
+              displayMode="done-rows"
+              todayDate={todayDate}
               onUndo={onUndoRhythm}
               resetKey={`${selected}:${todayDate}`}
               initializing={initializing}
             >
-              {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, itemProps }) => {
-                const visibleRhythms = todayRhythms.filter(rhythm => visibleRhythmIds.has(rhythm.id));
-                return visibleRhythms.length > 0
-                  ? (
-                    <div className="marriage-rhythm-list current-plan-item-group">
-                      {visibleRhythms.map(rhythm => (
-                        <div key={rhythm.id} {...itemProps(rhythm.id)}>
+              {({
+                  tendedRhythmIds: displayedTendedIds,
+                  tendedDisplayItems,
+                  expandedTendedRhythmIds,
+                  onToggleTendedRhythm,
+                  onUndoTendedRhythm,
+                  itemProps
+                }) => {
+                const renderRhythmCard = (rhythm: RhythmPreview) => (
                           <RhythmDetailsDialog
                             rhythm={rhythm}
                             inline
@@ -636,7 +671,7 @@ export function HealthFitnessView({
                                   onTend: (event: MouseEvent<HTMLButtonElement>) => openRhythmLog(rhythm.id, event),
                                   onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
                                   ...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
-                                    ? { onUndo: () => onUndoRhythm(rhythm.id) }
+                                    ? { onUndo: () => onUndoTendedRhythm(rhythm.id) }
                                     : {}),
                                   completionActionLabel: 'Log',
                                   completionActionAccessibleLabel: rhythm.healthLogCapability === 'cardio'
@@ -651,17 +686,27 @@ export function HealthFitnessView({
                               : {})}
                             onClose={() => undefined}
                           />
-                        </div>
-                      ))}
-                    </div>
-                  )
-                  : todayRhythms.length > 0
-                    ? <div className="marriage-empty-state" role="status"><p>You’ve tended everything here.</p></div>
-                    : (
+                );
+                return (
+                  <>
+                    <TendedRhythmItems
+                      className="marriage-rhythm-list current-plan-item-group"
+                      rhythms={todayRhythms}
+                      tendedRhythmIds={displayedTendedIds}
+                      displayItems={tendedDisplayItems}
+                      expandedRhythmIds={expandedTendedRhythmIds}
+                      onToggleRhythm={onToggleTendedRhythm}
+                      itemProps={itemProps}
+                      renderRhythmCard={renderRhythmCard}
+                      renderExpandedRhythm={item => renderRhythmCard(item.rhythm)}
+                    />
+                    {todayRhythms.length === 0 && (
                       <div className="marriage-empty-state">
                         <p>{rhythms.length > 0 ? 'All caught up. Nothing to tend to.' : 'No active Rhythms.'}</p>
                       </div>
-                    );
+                    )}
+                  </>
+                );
               }}
             </TendedRhythmList>
           </section>
@@ -683,7 +728,9 @@ export function HealthFitnessView({
           archivedRhythmsOpenerRef={archiveOpenerRef}
           showArchivedRhythms={showArchivedRhythms}
           onAddRhythm={onAddRhythm}
-          onBrowseSuggestions={browseSuggestions}
+          {...(hasAvailableSuggestions
+            ? { onBrowseSuggestions: browseSuggestions }
+            : { suggestionsUnavailableReason: 'Suggestions for turned-off Foundations are hidden.' })}
           onShowArchivedRhythms={() => setShowArchivedRhythms(true)}
           onPersonSelect={onPersonSelect}
           onOpenFoundation={(id, openerId) => onOpenFoundation(id, openerId, 'rhythms')}
@@ -741,7 +788,6 @@ export function HealthFitnessView({
             </div>
           </section>
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Strength Foundation" hidden={progressSelected !== 'strength'}>
-            {renderProgressOverviewLink()}
             {renderFoundationHeading('health-strength')}
             <StrengthView
               {...strength}
@@ -767,7 +813,6 @@ export function HealthFitnessView({
             />
           </section>
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Cardio Foundation" hidden={progressSelected !== 'cardio'}>
-            {renderProgressOverviewLink()}
             {renderFoundationHeading('health-cardio')}
             <CardioView
               {...cardio}
@@ -794,7 +839,6 @@ export function HealthFitnessView({
             />
           </section>
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Weight Foundation" hidden={progressSelected !== 'weight'}>
-            {renderProgressOverviewLink()}
             {renderFoundationHeading('health-weight')}
             <WeightView
               {...weight}
@@ -823,7 +867,6 @@ export function HealthFitnessView({
             />
           </section>
           <section className="health-fitness-progress__detail tend-back-stack" aria-label="Flexibility Foundation" hidden={progressSelected !== 'flexibility'}>
-            {renderProgressOverviewLink()}
             {renderFoundationHeading('health-flexibility')}
             <FlexibilityView
               {...flexibility}
@@ -877,13 +920,13 @@ export function HealthFitnessView({
           onClose={() => setShowArchivedRhythms(false)}
         />
       )}
-      <RhythmSuggestionPicker
-        title={suggestionCatalogue.title}
+      {hasAvailableSuggestions && <RhythmSuggestionPicker
+        title={availableSuggestionCatalogue.title}
         open={showSuggestions}
         groups={suggestionPickerGroups}
         onClose={() => setShowSuggestions(false)}
         onReopen={returnToSuggestions}
-      />
+      />}
     </main>
   );
 }

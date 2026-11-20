@@ -2,6 +2,7 @@ import {
   convertStrengthLoad,
   isStrengthAddedLoadExercise,
   selectStrengthExerciseVolume,
+  selectStrengthExerciseVolumeComparison,
   selectStrengthExerciseProgress
 } from '../domain/strength.ts';
 import type {
@@ -40,13 +41,15 @@ export function StrengthExerciseResults({
   const progress = selectStrengthExerciseProgress(
     workouts, reference, exercise, preferredWeightUnit
   );
-  const previousVolume = progress.previousExercise
-    ? selectStrengthExerciseVolume(progress.previousExercise, preferredWeightUnit)
-    : null;
+  const volumeComparison = selectStrengthExerciseVolumeComparison(
+    workouts, reference, exercise, preferredWeightUnit
+  );
+  const previousVolume = volumeComparison?.volume ?? null;
   const headline = formatHeadlineDelta(
     progress.currentBest,
     progress.previousBest,
-    Boolean(progress.previousExercise)
+    Boolean(progress.previousExercise),
+    preferredWeightUnit
   );
   const roughEstimate = (progress.currentBest?.reps ?? 0) > 15;
   const loadMeaning = isStrengthAddedLoadExercise(exercise)
@@ -74,7 +77,7 @@ export function StrengthExerciseResults({
           <span className="strength-exercise-results__headline-value">
             {progress.currentBest ? formatNumber(progress.currentBest.value) : '—'}
             <span>
-              lb{progress.currentBest ? formatMeaning(progress.currentBest.meaning) : ''}
+              {preferredWeightUnit}{progress.currentBest ? formatMeaning(progress.currentBest.meaning) : ''}
             </span>
           </span>
         </div>
@@ -88,11 +91,19 @@ export function StrengthExerciseResults({
           const value = set.status === 'performed'
             ? formatPerformedSet(set, preferredWeightUnit, exercise)
             : null;
+          const accessibleValue = set.status === 'performed'
+            && set.actualLoad?.kind === 'external'
+            && set.actualLoad.meaning === 'per-dumbbell'
+            ? `${formatPerformedSet(set, preferredWeightUnit, exercise, true)}${set.label ? ` · ${set.label}` : ''}`
+            : null;
           const setProgress = formatSetProgress(progress.sets[index]!, index + 1, preferredWeightUnit);
           return (
             <li key={set.id} className={`strength-exercise-results__set strength-exercise-results__set--${set.status}`}>
               <span className="strength-exercise-results__set-number">Set {index + 1}</span>
-              <span className="strength-exercise-results__set-value">
+              <span
+                className="strength-exercise-results__set-value"
+                aria-label={accessibleValue ?? undefined}
+              >
                 {value ?? (set.status === 'skipped' ? 'Skipped' : 'Unfinished')}
                 {set.label && <span className="strength-exercise-results__set-label"> · {set.label}</span>}
               </span>
@@ -104,11 +115,44 @@ export function StrengthExerciseResults({
           );
         })}
       </ol>
-      <div className="strength-exercise-results__volume" aria-label="Exercise volume">
-        <span>
-          Volume {formatVolumeSummary(volume)}
-          {progress.previousExercise && ` · last session ${formatVolumeSummary(previousVolume)}`}
-        </span>
+      <div className="strength-exercise-results__volume" role="group" aria-label="Exercise volume comparison">
+        <strong className="strength-exercise-results__volume-heading">
+          {formatVolumeHeading(exercise, volume)}
+        </strong>
+        <div className="strength-exercise-results__volume-grid">
+          <div className="strength-exercise-results__volume-group">
+            <span className="strength-exercise-results__volume-label">Last session</span>
+            <span className="strength-exercise-results__volume-value">
+              {previousVolume
+                ? formatVolumeValue(previousVolume)
+                : progress.previousExercise
+                  ? 'No comparable previous session'
+                  : 'No previous session'}
+            </span>
+          </div>
+          <div className="strength-exercise-results__volume-group strength-exercise-results__volume-group--current">
+            <span className="strength-exercise-results__volume-label">This session</span>
+            <span className="strength-exercise-results__volume-current">
+              <span className="strength-exercise-results__volume-value">
+                {volume ? formatVolumeValue(volume) : 'Unavailable'}
+              </span>
+              {volumeComparison?.changeValue !== undefined && (
+                <span
+                  className={`strength-exercise-results__set-delta${volumeComparison.changeValue <= 0
+                    ? ' strength-exercise-results__set-delta--muted'
+                    : ''}`}
+                  aria-label={formatVolumeDeltaDescription(
+                    volumeComparison.changeValue,
+                    preferredWeightUnit,
+                    volume?.meaning ?? previousVolume?.meaning
+                  )}
+                >
+                  {formatVolumeDelta(volumeComparison.changeValue, preferredWeightUnit)}
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
         {roughEstimate && <span className="strength-exercise-results__footnote">* rough estimate at high rep ranges</span>}
       </div>
       {exercise.notes && <p className="strength-exercise-results__notes">Exercise notes: {exercise.notes}</p>}
@@ -119,7 +163,8 @@ export function StrengthExerciseResults({
 function formatPerformedSet(
   set: Extract<StrengthWorkoutExerciseSnapshot['sets'][number], { status: 'performed' }>,
   preferredWeightUnit: 'lb' | 'kg',
-  exercise: StrengthWorkoutExerciseSnapshot
+  exercise: StrengthWorkoutExerciseSnapshot,
+  includeDumbbellMeaning = false
 ): string {
   if (set.measurement?.kind === 'duration') {
     const seconds = set.actualDurationSeconds ?? 0;
@@ -132,15 +177,46 @@ function formatPerformedSet(
     ? set.actualLoad
     : convertStrengthLoad(set.actualLoad, preferredWeightUnit);
   if (load.kind !== 'external') return reps;
-  const loadLabel = `${formatVolume(load.value, load.unit)}${isStrengthAddedLoadExercise(exercise) ? ' added' : formatMeaning(load.meaning)}`;
+  const meaning = load.meaning === 'per-dumbbell' && !includeDumbbellMeaning
+    ? ''
+    : formatMeaning(load.meaning);
+  const loadLabel = `${formatVolume(load.value, load.unit)}${isStrengthAddedLoadExercise(exercise) ? ' added' : meaning}`;
   return `${loadLabel} × ${reps}`;
 }
 
 type ExerciseVolume = NonNullable<ReturnType<typeof selectStrengthExerciseVolume>>;
 
-function formatVolumeSummary(volume: ExerciseVolume | null): string {
-  if (!volume) return 'unavailable';
-  return `${formatVolume(volume.value, volume.unit)}${formatMeaning(volume.meaning)}${volume.status === 'partial' ? ' · partial' : ''}`;
+function formatVolumeHeading(
+  exercise: StrengthWorkoutExerciseSnapshot,
+  volume: ExerciseVolume | null
+): string {
+  const base = volume?.label ?? (isStrengthAddedLoadExercise(exercise) ? 'Added-load volume' : 'Volume');
+  const meaning = volume?.meaning ?? (
+    exercise.loadMeaning === 'total' || exercise.loadMeaning === 'per-dumbbell' || exercise.loadMeaning === 'per-side'
+      ? exercise.loadMeaning
+      : undefined
+  );
+  return `${base}${meaning === 'per-dumbbell' ? ' (per dumbbell)' : meaning === 'per-side' ? ' (per side)' : ''}`;
+}
+
+function formatVolumeValue(volume: ExerciseVolume): string {
+  return `${formatVolume(volume.value, volume.unit)}${volume.status === 'partial' ? ' · partial' : ''}`;
+}
+
+function formatVolumeDelta(changeValue: number, unit: 'lb' | 'kg'): string {
+  if (changeValue === 0) return 'Same';
+  return `${changeValue > 0 ? '▲ +' : '▼ -'}${formatNumber(Math.abs(changeValue))} ${unit}`;
+}
+
+function formatVolumeDeltaDescription(
+  changeValue: number,
+  unit: 'lb' | 'kg',
+  meaning: ExerciseVolume['meaning'] | undefined
+): string {
+  if (changeValue === 0) return 'Exercise volume is the same as the previous session.';
+  const unitName = unit === 'lb' ? 'pounds' : 'kilograms';
+  const direction = changeValue > 0 ? 'higher' : 'lower';
+  return `Exercise volume is ${formatNumber(Math.abs(changeValue))} ${unitName}${formatMeaning(meaning ?? 'total')} ${direction} than the previous session.`;
 }
 
 type HeadlineDelta = {
@@ -152,44 +228,48 @@ type HeadlineDelta = {
 function formatHeadlineDelta(
   current: StrengthOneRepMaxEstimate | null,
   previous: StrengthOneRepMaxEstimate | null,
-  hasPreviousSession: boolean
+  hasPreviousSession: boolean,
+  unit: 'lb' | 'kg'
 ): HeadlineDelta {
   if (!current) {
     return { text: 'Unavailable', accessibleName: 'Estimated 1RM unavailable', tone: 'unavailable' };
   }
-  const currentLabel = `Est. 1RM ${formatNumber(current.value)} pounds${formatMeaning(current.meaning)}`;
+  const unitName = unit === 'lb' ? 'pounds' : 'kilograms';
+  const currentDescription = `Estimated one-rep maximum is ${formatNumber(current.value)} ${unitName}${formatMeaning(current.meaning)}`;
+  const deltaDescription = (magnitude: number, direction: 'higher' | 'lower') =>
+    `Estimated one-rep maximum is ${formatNumber(magnitude)} ${unitName}${formatMeaning(current.meaning)} ${direction} than the previous session.`;
   if (!hasPreviousSession) {
     return {
       text: 'Baseline',
-      accessibleName: `${currentLabel}, baseline with no previous session`,
+      accessibleName: `${currentDescription}; baseline with no previous session.`,
       tone: 'baseline'
     };
   }
   if (!previous || current.meaning !== previous.meaning) {
     return {
       text: 'No comparison',
-      accessibleName: `${currentLabel}, no comparable previous estimate`,
+      accessibleName: `${currentDescription}; no comparable previous estimate.`,
       tone: 'unavailable'
     };
   }
   const delta = current.value - previous.value;
   if (delta > 0) {
     return {
-      text: `▲ +${formatNumber(delta)} vs. last`,
-      accessibleName: `${currentLabel}, up ${formatNumber(delta)} pounds from last session`,
+      text: `▲ +${formatNumber(delta)} ${unit} vs. last`,
+      accessibleName: deltaDescription(delta, 'higher'),
       tone: 'positive'
     };
   }
   if (delta < 0) {
     return {
-      text: `▼ ${formatNumber(delta)} vs. last`,
-      accessibleName: `${currentLabel}, down ${formatNumber(Math.abs(delta))} pounds from last session`,
+      text: `▼ −${formatNumber(Math.abs(delta))} ${unit} vs. last`,
+      accessibleName: deltaDescription(Math.abs(delta), 'lower'),
       tone: 'muted'
     };
   }
   return {
     text: 'Same as last',
-    accessibleName: `${currentLabel}, same as last session`,
+    accessibleName: `${currentDescription}, same as the previous session.`,
     tone: 'muted'
   };
 }

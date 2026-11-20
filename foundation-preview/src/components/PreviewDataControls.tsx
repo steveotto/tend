@@ -119,6 +119,9 @@ type PreviewDataControlsProps = {
   v43RecoveryCopy?: string | null;
   v44RecoveryCopy?: string | null;
   v45RecoveryCopy?: string | null;
+  v46RecoveryCopy?: string | null;
+  v47RecoveryCopy?: string | null;
+  v48RecoveryCopy?: string | null;
 };
 
 export function PreviewDataControls({
@@ -216,7 +219,10 @@ export function PreviewDataControls({
   v42RecoveryCopy = null,
   v43RecoveryCopy = null,
   v44RecoveryCopy = null,
-  v45RecoveryCopy = null
+  v45RecoveryCopy = null,
+  v46RecoveryCopy = null,
+  v47RecoveryCopy = null,
+  v48RecoveryCopy = null
 }: PreviewDataControlsProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
@@ -828,6 +834,36 @@ export function PreviewDataControls({
               'application/json'
             ) ?? 'Original v45 recovery backup downloaded.')}>
             Download original v45 recovery backup
+          </button>
+        )}
+        {v46RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v46-recovery.json',
+              v46RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v46 recovery backup downloaded.')}>
+            Download original v46 recovery backup
+          </button>
+        )}
+        {v47RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v47-recovery.json',
+              v47RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v47 recovery backup downloaded.')}>
+            Download original v47 recovery backup
+          </button>
+        )}
+        {v48RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v48-recovery.json',
+              v48RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v48 recovery backup downloaded.')}>
+            Download original v48 recovery backup
           </button>
         )}
         {showImportControls && (

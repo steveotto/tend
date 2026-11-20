@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,7 @@ import {
   moveStrengthSessionToSet,
   saveStrengthScoringSetup,
   selectStrengthMuscleScores,
+  skipStrengthSessionSet,
   strengthMuscleName,
   strengthWorkoutSuggestions
 } from '../src/domain/strength.ts';
@@ -27,8 +28,10 @@ import type { StrengthRhythmSetting } from '../src/domain/strength-rhythm-linkin
 import { todayRhythms } from '../src/domain/preview-data.ts';
 import type { CategoryId } from '../src/domain/preview-data.ts';
 import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
+import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 
 const testRestorers: Array<() => void> = [];
+type StrengthWorkoutSets = NonNullable<StrengthWorkoutLog['exercises']>[number]['sets'];
 
 afterEach(() => {
   cleanup();
@@ -165,23 +168,40 @@ function progressLog(
 function renderExerciseProgress(
   exercise: StrengthWorkoutExerciseSnapshot,
   previousSets: Array<{ weight: number; reps: number; unit?: 'lb' | 'kg' }> | null,
-  presentation: 'history' | 'review' = 'history'
+  presentation: 'history' | 'review' = 'history',
+  preferredWeightUnit: 'lb' | 'kg' = 'lb'
 ) {
   const workouts = previousSets
-    ? [progressLog('progress-previous', '2026-10-20', progressExercise(exercise.id, previousSets))]
+    ? [progressLog(
+      'progress-previous',
+      '2026-10-20',
+      progressExercise(
+        exercise.id,
+        previousSets,
+        exercise.name,
+        exercise.equipment,
+        exercise.loadMeaning === 'per-dumbbell' || exercise.loadMeaning === 'per-side'
+          ? exercise.loadMeaning
+          : 'total'
+      )
+    )]
     : [];
   return render(
     <StrengthExerciseResults
       exercise={exercise}
       workouts={workouts}
       reference={{ id: 'progress-current', date: '2026-10-22', startedAt: '2026-10-22T11:00:00.000Z' }}
-      preferredWeightUnit="lb"
+      preferredWeightUnit={preferredWeightUnit}
       presentation={presentation}
     />
   );
 }
 
-function renderStatefulStrength(initialData = createStrengthData()) {
+function renderStatefulStrength(
+  initialData = createStrengthData(),
+  rhythmSettings?: readonly StrengthRhythmSetting[],
+  datedRhythmCompletions: readonly DatedRhythmCompletion[] = []
+) {
   const changes: StrengthData[] = [];
   const rhythm = {
     ...todayRhythms[0]!,
@@ -197,7 +217,8 @@ function renderStatefulStrength(initialData = createStrengthData()) {
     return (
       <StrengthView
         data={data}
-        rhythms={[{ rhythm, mode: 'recommended' }]}
+        rhythms={rhythmSettings ?? [{ rhythm, mode: 'recommended' }]}
+        datedRhythmCompletions={datedRhythmCompletions}
         evaluationDate="2026-10-22"
         onChange={next => {
           changes.push(next);
@@ -208,6 +229,47 @@ function renderStatefulStrength(initialData = createStrengthData()) {
     );
   }
   return { ...render(<StatefulStrength />), changes };
+}
+
+function guidedCopyFixtureData(previousSets?: StrengthWorkoutSets) {
+  const data = createStrengthData();
+  data.savedWorkouts = [{
+    id: 'guided-copy-template',
+    name: 'Copy test workout',
+    muscleIds: ['chest'],
+    sharedWith: [],
+    exercises: [{
+      id: 'guided-copy-bench',
+      name: 'Bench Press',
+      muscleIds: ['chest'],
+      equipment: 'Barbell',
+      loadMeaning: 'total',
+      restDurationSeconds: 60,
+      sets: [
+        { id: 'guided-copy-set-1', targetReps: 8, targetLoad: { kind: 'external', meaning: 'total', value: 100, unit: 'lb' } },
+        { id: 'guided-copy-set-2', targetReps: 10, targetLoad: { kind: 'external', meaning: 'total', value: 110, unit: 'lb' } }
+      ]
+    }]
+  }];
+  data.workouts = previousSets ? [{
+    id: 'guided-copy-history',
+    date: '2026-10-20',
+    muscleIds: ['chest'],
+    savedWorkoutId: 'guided-copy-template',
+    workoutName: 'Copy test workout',
+    startedAt: '2026-10-20T10:00:00.000Z',
+    finishedAt: '2026-10-20T10:30:00.000Z',
+    timeZone: 'UTC',
+    exercises: [{
+      id: 'guided-copy-bench',
+      name: 'Bench Press',
+      muscleIds: ['chest'],
+      equipment: 'Barbell',
+      restDurationSeconds: 60,
+      sets: previousSets
+    }]
+  }] : [];
+  return data;
 }
 
 function renderFoundationStrength(
@@ -261,7 +323,8 @@ function startGuidedWorkoutFromChoice(button = screen.getByRole('button', { name
 }
 
 async function acknowledgeWorkoutOnly(user: ReturnType<typeof userEvent.setup>) {
-  const confirmation = screen.getByRole('dialog', { name: 'Save without a Rhythm?' });
+  const confirmation = screen.queryByRole('dialog', { name: 'Save without a Rhythm?' });
+  if (!confirmation) return;
   await user.click(within(confirmation).getByRole('button', { name: 'Save workout only' }));
 }
 
@@ -316,6 +379,63 @@ function guidedReplacementData(): StrengthData {
   return data;
 }
 
+function guidedReviewSummaryData(sharedWith: string[] = []): StrengthData {
+  const workout: StrengthSavedWorkout = {
+    id: 'review-summary-workout',
+    name: 'Review summary workout',
+    muscleIds: ['chest'],
+    sharedWith,
+    exercises: Array.from({ length: 3 }, (_, exerciseIndex) => ({
+      id: `review-summary-exercise-${exerciseIndex + 1}`,
+      name: `Review exercise ${exerciseIndex + 1}`,
+      muscleIds: ['chest'],
+      equipment: 'Barbell',
+      loadMeaning: 'total',
+      restDurationSeconds: 60,
+      sets: Array.from({ length: 4 }, (_, setIndex) => ({
+        id: `review-summary-set-${exerciseIndex + 1}-${setIndex + 1}`,
+        targetReps: 8,
+        targetLoad: { kind: 'external' as const, meaning: 'total' as const, value: 100, unit: 'lb' as const }
+      }))
+    }))
+  };
+  const created = createStrengthGuidedSession(workout, {
+    id: 'review-summary-session',
+    date: '2026-10-22',
+    startedAt: '2026-10-22T10:00:00.000Z',
+    timeZone: 'UTC'
+  });
+  if (!created.valid) throw new Error(created.error);
+
+  let session = created.session;
+  const setReferences = session.exercises.flatMap(exercise =>
+    exercise.sets.map(set => ({ exerciseId: exercise.id, setId: set.id }))
+  );
+  for (const [index, reference] of setReferences.entries()) {
+    if (index < 9) {
+      const result = confirmStrengthSessionSet(
+        session,
+        reference.exerciseId,
+        reference.setId,
+        8,
+        `2026-10-22T10:${String(index + 1).padStart(2, '0')}:00.000Z`,
+        { kind: 'external', meaning: 'total', value: 100, unit: 'lb' }
+      );
+      if (!result.valid) throw new Error(result.error);
+      session = result.session;
+    } else if (index === 9) {
+      const result = skipStrengthSessionSet(session, reference.exerciseId, reference.setId);
+      if (!result.valid) throw new Error(result.error);
+      session = result.session;
+    }
+  }
+
+  const data = createStrengthData();
+  data.savedWorkouts = [workout];
+  data.guidedSessionDraft = session;
+  return data;
+}
+
 async function openSavedWorkoutMenu(
   user: ReturnType<typeof userEvent.setup>,
   workoutName: string
@@ -357,17 +477,21 @@ describe('Strength preview presentation', () => {
       { weight: 130, reps: 8 }
     ]);
 
-    expect(screen.getByLabelText('Est. 1RM 191 pounds, up 4 pounds from last session')).toBeTruthy();
+    expect(screen.getByLabelText('Estimated one-rep maximum is 4 pounds higher than the previous session.')).toBeTruthy();
     expect(screen.getAllByText('▲ +1 rep')).toHaveLength(2);
     expect(screen.getAllByLabelText(/up 1 rep$/)).toHaveLength(2);
-    expect(screen.getByText('Volume 2,710 lb · last session 2,440 lb')).toBeTruthy();
+    const volume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+    expect(within(volume).getByText('2,440 lb')).toBeTruthy();
+    expect(within(volume).getByText('2,710 lb')).toBeTruthy();
+    expect(within(volume).getByText('▲ +270 lb')).toBeTruthy();
   });
 
   it('shows weight-only gains against the previous session', () => {
     const exercise = progressExercise('bench-weight-up', [{ weight: 145, reps: 10 }]);
     renderExerciseProgress(exercise, [{ weight: 140, reps: 10 }]);
 
-    expect(screen.getByLabelText('Est. 1RM 193 pounds, up 6 pounds from last session')).toBeTruthy();
+    expect(screen.getByText('▲ +6 lb vs. last')).toBeTruthy();
+    expect(screen.getByLabelText('Estimated one-rep maximum is 6 pounds higher than the previous session.')).toBeTruthy();
     expect(screen.getByText('▲ +5 lb')).toBeTruthy();
     expect(screen.getByLabelText('Set 1: up 5 pounds')).toBeTruthy();
   });
@@ -376,7 +500,8 @@ describe('Strength preview presentation', () => {
     const exercise = progressExercise('bench-weight-reps-up', [{ weight: 145, reps: 12 }]);
     renderExerciseProgress(exercise, [{ weight: 140, reps: 10 }]);
 
-    expect(screen.getByLabelText('Est. 1RM 203 pounds, up 16 pounds from last session')).toBeTruthy();
+    expect(screen.getByText('▲ +16 lb vs. last')).toBeTruthy();
+    expect(screen.getByLabelText('Estimated one-rep maximum is 16 pounds higher than the previous session.')).toBeTruthy();
     expect(screen.getByText('▲ +5 lb · +2 rep')).toBeTruthy();
     expect(screen.getByLabelText('Set 1: up 5 pounds and up 2 reps')).toBeTruthy();
   });
@@ -386,7 +511,11 @@ describe('Strength preview presentation', () => {
     renderExerciseProgress(exercise, [{ weight: 140, reps: 10 }]);
 
     expect(screen.getByText('Same as last')).toBeTruthy();
-    expect(screen.getByText('Same')).toBeTruthy();
+    expect(screen.getByLabelText(
+      'Estimated one-rep maximum is 187 pounds, same as the previous session.'
+    )).toBeTruthy();
+    const volume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+    expect(within(volume).getByText('Same')).toBeTruthy();
     expect(screen.getByLabelText('Set 1: same as last session')).toBeTruthy();
   });
 
@@ -394,7 +523,10 @@ describe('Strength preview presentation', () => {
     const exercise = progressExercise('bench-regression', [{ weight: 130, reps: 8 }]);
     renderExerciseProgress(exercise, [{ weight: 140, reps: 10 }]);
 
-    const headline = screen.getByLabelText('Est. 1RM 165 pounds, down 22 pounds from last session');
+    const headline = screen.getByLabelText(
+      'Estimated one-rep maximum is 22 pounds lower than the previous session.'
+    );
+    expect(screen.getByText('▼ −22 lb vs. last')).toBeTruthy();
     const chip = screen.getByText('▼ -10 lb · -2 rep');
     expect(headline.classList.contains('strength-exercise-results__headline-delta--muted')).toBe(true);
     expect(chip.classList.contains('strength-exercise-results__set-delta--muted')).toBe(true);
@@ -406,9 +538,168 @@ describe('Strength preview presentation', () => {
     renderExerciseProgress(exercise, null);
 
     expect(screen.getByText('Baseline')).toBeTruthy();
+    expect(screen.getByLabelText(
+      'Estimated one-rep maximum is 187 pounds; baseline with no previous session.'
+    )).toBeTruthy();
     expect(screen.getByText('First log')).toBeTruthy();
-    expect(screen.getByText('Volume 1,400 lb')).toBeTruthy();
-    expect(screen.queryByText(/last session/)).toBeNull();
+    const volume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+    expect(within(volume).getByText('Volume')).toBeTruthy();
+    expect(within(volume).getByText('No previous session')).toBeTruthy();
+    expect(within(volume).getByText('1,400 lb')).toBeTruthy();
+    expect(within(volume).queryByText(/▲|▼|Same/)).toBeNull();
+  });
+
+  it('counts performed, unfinished, and skipped sets separately and omits empty participants', async () => {
+    const user = userEvent.setup();
+    renderStatefulStrength(guidedReviewSummaryData());
+
+    await user.click(screen.getByRole('button', { name: 'Resume' }));
+    const workout = screen.getByRole('dialog', { name: 'Review summary workout' });
+    await user.click(within(workout).getByRole('button', { name: '1 of 3' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Finish & review' }));
+    const review = screen.getByRole('dialog', { name: 'Finish & review' });
+    const summary = within(review).getByRole('group', { name: 'Workout summary' });
+    const dateTimeFields = review.querySelector('.strength-guided__review-metadata');
+    expect(dateTimeFields?.querySelector('input[type="date"]')).toBeTruthy();
+    expect(dateTimeFields?.querySelector('input[type="time"]')).toBeTruthy();
+    const metrics = [...summary.querySelectorAll('.strength-guided__summary-metric')]
+      .map(metric =>
+        `${metric.querySelector('.strength-guided__summary-count')?.textContent} `
+        + `${metric.querySelector('.strength-guided__summary-label')?.textContent}`
+      );
+
+    expect(metrics).toEqual([
+      '3 exercises',
+      '9 sets',
+      '2 sets unfinished',
+      '1 set skipped'
+    ]);
+    expect(within(summary).getByText(
+      'Sets counts include performed sets only; unfinished and skipped sets are counted separately.'
+    )).toBeTruthy();
+    expect(within(review).queryByText('Participants:')).toBeNull();
+    expect(within(review).queryByText('None')).toBeNull();
+  });
+
+  it('preserves participant badges in Finish & review when participants are present', async () => {
+    const user = userEvent.setup();
+    renderStatefulStrength(guidedReviewSummaryData(['sample-person-avery']));
+
+    await user.click(screen.getByRole('button', { name: 'Resume' }));
+    const workout = screen.getByRole('dialog', { name: 'Review summary workout' });
+    await user.click(within(workout).getByRole('button', { name: '1 of 3' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Finish & review' }));
+    const review = screen.getByRole('dialog', { name: 'Finish & review' });
+
+    expect(within(review).getByText('Participants:')).toBeTruthy();
+    expect(within(review).getByRole('img', { name: 'Avery Brooks' })).toBeTruthy();
+  });
+
+  it('shows a structured volume increase with a per-dumbbell convention', () => {
+    const exercise = progressExercise(
+      'volume-dumbbell-up',
+      [{ weight: 88, reps: 10 }],
+      'Dumbbell Press',
+      'Dumbbells',
+      'per-dumbbell'
+    );
+    renderExerciseProgress(exercise, [{ weight: 87, reps: 10 }]);
+    const volume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+
+    expect(within(volume).getByText('Volume (per dumbbell)')).toBeTruthy();
+    expect(within(volume).getByText('Last session')).toBeTruthy();
+    expect(within(volume).getByText('This session')).toBeTruthy();
+    expect(within(volume).getByText('870 lb')).toBeTruthy();
+    expect(within(volume).getByText('880 lb')).toBeTruthy();
+    expect(within(volume).getByText('▲ +10 lb')).toBeTruthy();
+    expect(within(volume).getByLabelText(
+      'Exercise volume is 10 pounds per dumbbell higher than the previous session.'
+    )).toBeTruthy();
+  });
+
+  it('shows volume decreases and unchanged values with the shared muted chip style', () => {
+    const exercise = progressExercise('volume-down', [{ weight: 87, reps: 10 }]);
+    renderExerciseProgress(exercise, [{ weight: 88, reps: 10 }]);
+    const downVolume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+    const down = within(downVolume).getByText('▼ -10 lb');
+    expect(down.classList.contains('strength-exercise-results__set-delta--muted')).toBe(true);
+
+    cleanup();
+    const sameExercise = progressExercise('volume-same', [{ weight: 87, reps: 10 }]);
+    renderExerciseProgress(sameExercise, [{ weight: 87, reps: 10 }]);
+    const sameVolume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+    const same = within(sameVolume).getByText('Same');
+    expect(same.classList.contains('strength-exercise-results__set-delta--muted')).toBe(true);
+  });
+
+  it('shows kilogram volume comparisons and retains the per-side convention', () => {
+    const exercise = progressExercise(
+      'volume-kg-up',
+      [{ weight: 88, reps: 10, unit: 'kg' }],
+      'Barbell Squat',
+      'Barbell',
+      'per-side'
+    );
+    renderExerciseProgress(
+      exercise,
+      [{ weight: 87, reps: 10, unit: 'kg' }],
+      'history',
+      'kg'
+    );
+    const volume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+
+    expect(within(volume).getByText('Volume (per side)')).toBeTruthy();
+    expect(within(volume).getByText('870 kg')).toBeTruthy();
+    expect(within(volume).getByText('880 kg')).toBeTruthy();
+    expect(within(volume).getByText('▲ +10 kg')).toBeTruthy();
+  });
+
+  it('keeps unavailable bodyweight volume distinct from a missing previous session', () => {
+    const externalExercise = progressExercise('volume-bodyweight', [{ weight: 0, reps: 10 }]);
+    const exercise: StrengthWorkoutExerciseSnapshot = {
+      ...externalExercise,
+      loadMeaning: 'bodyweight',
+      sets: externalExercise.sets.map(set => ({
+        ...set,
+        actualLoad: { kind: 'bodyweight' }
+      }))
+    };
+    renderExerciseProgress(exercise, null);
+    const volume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+
+    expect(within(volume).getByText('Unavailable')).toBeTruthy();
+    expect(within(volume).getByText('No previous session')).toBeTruthy();
+    expect(within(volume).queryByText(/▲|▼|Same/)).toBeNull();
+  });
+
+  it('reports an earlier but non-comparable volume without claiming there is no history', () => {
+    const externalExercise = progressExercise('volume-non-comparable', [{ weight: 140, reps: 10 }]);
+    const bodyweightExercise: StrengthWorkoutExerciseSnapshot = {
+      ...externalExercise,
+      loadMeaning: 'bodyweight',
+      sets: externalExercise.sets.map(set => ({
+        ...set,
+        actualLoad: { kind: 'bodyweight' }
+      }))
+    };
+    const previous = progressLog(
+      'volume-non-comparable-previous',
+      '2026-10-20',
+      externalExercise
+    );
+    render(
+      <StrengthExerciseResults
+        exercise={bodyweightExercise}
+        workouts={[previous]}
+        reference={{ id: 'volume-non-comparable-current', date: '2026-10-22' }}
+        preferredWeightUnit="lb"
+        presentation="history"
+      />
+    );
+    const volume = screen.getByRole('group', { name: 'Exercise volume comparison' });
+
+    expect(within(volume).getByText('No comparable previous session')).toBeTruthy();
+    expect(within(volume).getByText('Unavailable')).toBeTruthy();
   });
 
   it('renders the same two-session progress card in Finish & review and logged-workout details', async () => {
@@ -455,12 +746,20 @@ describe('Strength preview presentation', () => {
       expect(within(results).getByText('EST. 1RM')).toBeTruthy();
       expect(within(results).getByText('187')).toBeTruthy();
       expect(within(results).getByText('lb per dumbbell')).toBeTruthy();
-      expect(within(results).getByText('▲ +7 vs. last')).toBeTruthy();
-      expect(within(results).getByText('140 lb per dumbbell × 10 reps')).toBeTruthy();
-      expect(within(results).getByText('▲ +5 lb')).toBeTruthy();
-      expect(within(results).getByText(
-        'Volume 1,400 lb per dumbbell · last session 1,350 lb per dumbbell'
+      expect(within(results).getByText('▲ +7 lb vs. last')).toBeTruthy();
+      expect(within(results).getByLabelText(
+        'Estimated one-rep maximum is 7 pounds per dumbbell higher than the previous session.'
       )).toBeTruthy();
+      expect(within(results).getByText('Dumbbells · per dumbbell')).toBeTruthy();
+      const setValue = results.querySelector('.strength-exercise-results__set-value');
+      expect(setValue?.textContent).toBe('140 lb × 10 reps');
+      expect(setValue?.getAttribute('aria-label')).toBe('140 lb per dumbbell × 10 reps');
+      expect(within(results).getByText('▲ +5 lb')).toBeTruthy();
+      const volume = within(results).getByRole('group', { name: 'Exercise volume comparison' });
+      expect(within(volume).getByText('Volume (per dumbbell)')).toBeTruthy();
+      expect(within(volume).getByText('1,350 lb')).toBeTruthy();
+      expect(within(volume).getByText('1,400 lb')).toBeTruthy();
+      expect(within(volume).getByText('▲ +50 lb')).toBeTruthy();
       expect(within(results).queryByText('Performed')).toBeNull();
       expect(results.querySelector('.strength-exercise-results__set-value time')).toBeNull();
     };
@@ -498,13 +797,61 @@ describe('Strength preview presentation', () => {
       { weight: 120, reps: 6 }
     ]);
 
-    expect(screen.getByLabelText('Est. 1RM 193 pounds, up 6 pounds from last session')).toBeTruthy();
+    expect(screen.getByText('▲ +6 lb vs. last')).toBeTruthy();
+    expect(screen.getByLabelText('Estimated one-rep maximum is 6 pounds higher than the previous session.')).toBeTruthy();
     expect(screen.getByText('▲ +5 lb')).toBeTruthy();
     expect(screen.getByText('Same')).toBeTruthy();
     expect(screen.getByText('▼ -5 lb')).toBeTruthy();
     expect(screen.getByLabelText('Set 1: up 5 pounds')).toBeTruthy();
     expect(screen.getByLabelText('Set 2: same as last session')).toBeTruthy();
     expect(screen.getByLabelText('Set 3: down 5 pounds')).toBeTruthy();
+  });
+
+  it('shows positive kilogram estimates and comparisons per dumbbell', () => {
+    const exercise = progressExercise(
+      'bench-kg-up',
+      [{ weight: 70, reps: 10, unit: 'kg' }],
+      'Dumbbell Press',
+      'Dumbbells',
+      'per-dumbbell'
+    );
+    renderExerciseProgress(
+      exercise,
+      [{ weight: 65, reps: 10, unit: 'kg' }],
+      'history',
+      'kg'
+    );
+
+    expect(screen.getByText('93')).toBeTruthy();
+    expect(screen.getByText('kg per dumbbell')).toBeTruthy();
+    expect(screen.getByText('▲ +6 kg vs. last')).toBeTruthy();
+    expect(screen.getByLabelText(
+      'Estimated one-rep maximum is 6 kilograms per dumbbell higher than the previous session.'
+    )).toBeTruthy();
+    const setValue = document.querySelector('.strength-exercise-results__set-value');
+    expect(setValue?.textContent).toBe('70 kg × 10 reps');
+    expect(setValue?.getAttribute('aria-label')).toBe('70 kg per dumbbell × 10 reps');
+  });
+
+  it('shows negative kilogram estimates with an explicit unit', () => {
+    const exercise = progressExercise(
+      'bench-kg-down',
+      [{ weight: 65, reps: 10, unit: 'kg' }],
+      'Bench Press',
+      'Barbell',
+      'total'
+    );
+    renderExerciseProgress(
+      exercise,
+      [{ weight: 70, reps: 10, unit: 'kg' }],
+      'history',
+      'kg'
+    );
+
+    expect(screen.getByText('▼ −6 kg vs. last')).toBeTruthy();
+    expect(screen.getByLabelText(
+      'Estimated one-rep maximum is 6 kilograms lower than the previous session.'
+    )).toBeTruthy();
   });
 
   it('marks high-rep estimates and additional sets as rough first logs', () => {
@@ -1107,16 +1454,34 @@ describe('Strength preview presentation', () => {
     const session = screen.getByRole('dialog', { name: 'Guided linking' });
     await user.click(within(session).getByRole('button', { name: 'Log set 1' }));
     await user.click(within(session).getByRole('button', { name: 'Finish & review' }));
+    const rhythmGroup = within(session).getByRole('group', { name: 'Count toward a Rhythm' });
+    const workoutOnly = within(rhythmGroup).getByRole('checkbox', { name: /Workout only/ });
+    const rhythmSelect = within(rhythmGroup).getByRole('combobox', { name: 'Count toward a Rhythm' });
+    expect(workoutOnly).toHaveProperty('checked', true);
+    expect(rhythmSelect).toHaveProperty('disabled', true);
+    await user.click(workoutOnly);
+    workoutOnly.focus();
+    await user.keyboard(' ');
+    expect(workoutOnly).toHaveProperty('checked', true);
+    expect(rhythmSelect).toHaveProperty('disabled', true);
+    workoutOnly.focus();
+    await user.keyboard(' ');
+    expect(workoutOnly).toHaveProperty('checked', false);
+    expect(rhythmSelect).toHaveProperty('disabled', false);
     await user.click(within(session).getByRole('button', { name: 'Finish & save' }));
-
-    const warning = screen.getByRole('dialog', { name: 'Save without a Rhythm?' });
+    expect(within(session).getByRole('alert').textContent)
+      .toBe('Choose a Rhythm or select Workout only before saving.');
     expect(state.changes.at(-1)?.workouts).toHaveLength(0);
-    await user.click(within(warning).getByRole('button', { name: 'Choose a Rhythm' }));
-    await waitFor(() => expect(document.activeElement)
-      .toBe(within(session).getByRole('group', { name: 'Count toward a Rhythm' })));
-    await user.click(within(session).getByRole('radio', { name: /Strength training/ }));
+    await user.selectOptions(rhythmSelect, 'health-strength-rhythm');
+    expect(workoutOnly).toHaveProperty('checked', false);
     expect(state.changes.at(-1)?.guidedSessionDraft?.rhythmId).toBe('health-strength-rhythm');
     expect(state.changes.at(-1)?.guidedSessionDraft?.exercises[0]?.sets[0]?.status).toBe('performed');
+    await user.click(within(session).getByRole('button', { name: 'Return to workout' }));
+    await user.click(within(session).getByRole('button', { name: 'Finish & review' }));
+    expect(within(session).getByRole('combobox', { name: 'Count toward a Rhythm' }))
+      .toHaveProperty('value', 'health-strength-rhythm');
+    expect(within(session).getByRole('checkbox', { name: /Workout only/ }))
+      .toHaveProperty('checked', false);
     await user.click(within(session).getByRole('button', { name: 'Finish & save' }));
 
     expect(state.changes.at(-1)?.workouts).toHaveLength(1);
@@ -1128,6 +1493,64 @@ describe('Strength preview presentation', () => {
     });
     expect(state.changes.at(-1)?.workouts[0]?.completionId).toBeTruthy();
     expect(state.changes.at(-1)?.guidedSessionDraft).toBeUndefined();
+  });
+
+  it('saves guided workouts directly when no Rhythms are eligible for the date', async () => {
+    const user = userEvent.setup();
+    const data = createStrengthData();
+    data.savedWorkouts = [{
+      id: 'guided-workout-only-template',
+      name: 'Workout only',
+      muscleIds: ['chest'],
+      sharedWith: [],
+      exercises: [{
+        id: 'guided-workout-only-bench',
+        name: 'Bench Press',
+        muscleIds: ['chest'],
+        equipment: 'Barbell',
+        loadMeaning: 'total',
+        restDurationSeconds: 60,
+        sets: [{
+          id: 'guided-workout-only-set',
+          targetReps: 8,
+          targetLoad: { kind: 'external', meaning: 'total', value: 100, unit: 'lb' }
+        }]
+      }]
+    }];
+    const alreadyCompletedRhythm = strengthWorkoutRhythm(
+      'already-completed-workout-rhythm',
+      'Already completed today',
+      { frequency: 'daily' }
+    );
+    const existingCompletion: DatedRhythmCompletion = {
+      id: 'existing-guided-workout-completion',
+      rhythmId: alreadyCompletedRhythm.rhythm.id,
+      effectiveDate: '2026-10-22',
+      localTime: '12:00',
+      timeZone: 'UTC',
+      completedAt: '2026-10-22T12:00:00.000Z',
+      recordedAt: '2026-10-22T12:00:00.000Z'
+    };
+    const state = renderStatefulStrength(data, [alreadyCompletedRhythm], [existingCompletion]);
+    startGuidedWorkoutFromChoice();
+    const session = screen.getByRole('dialog', { name: 'Workout only' });
+    await user.click(within(session).getByRole('button', { name: 'Log set 1' }));
+    await user.click(within(session).getByRole('button', { name: 'Finish & review' }));
+
+    const rhythmGroup = within(session).getByRole('group', { name: 'Count toward a Rhythm' });
+    expect(within(rhythmGroup).queryByRole('combobox')).toBeNull();
+    expect(within(rhythmGroup).getByText(
+      'No workout Rhythms are available for this date. Your workout will still be saved.'
+    )).toBeTruthy();
+    expect(within(rhythmGroup).getByRole('checkbox', { name: /Workout only/ }))
+      .toHaveProperty('checked', true);
+    await user.click(within(session).getByRole('button', { name: 'Finish & save' }));
+
+    const finished = state.changes.at(-1)!;
+    expect(finished.workouts).toHaveLength(1);
+    expect(finished.workouts[0]?.rhythmId).toBeUndefined();
+    expect(finished.workouts[0]?.completionId).toBeUndefined();
+    expect(screen.queryByRole('dialog', { name: 'Save without a Rhythm?' })).toBeNull();
   });
 
   it('keeps Saved Workout cards on full-width rows with one Workout action and template management', async () => {
@@ -1595,7 +2018,7 @@ describe('Strength preview presentation', () => {
       .getByText('Oct 22, 2026')).toBeTruthy();
   });
 
-  it('keeps legacy training status separate from unavailable Fitness Health', async () => {
+  it('keeps muscle training statuses separate from unavailable Fitness Health', async () => {
     const user = userEvent.setup();
     const data = createStrengthData();
     data.settings.muscleIntervals.chest = 1;
@@ -1603,7 +2026,7 @@ describe('Strength preview presentation', () => {
     renderStrength(data);
     await user.click(screen.getByRole('tab', { name: /^Body$/ }));
 
-    expect(screen.getByRole('meter', { name: 'Strength training status score' }).getAttribute('aria-valuenow')).toBe('0');
+    expect(screen.queryByRole('meter', { name: 'Strength training status score' })).toBeNull();
     const muscleList = screen.getByRole('group', { name: 'Muscle training status' });
     expect(within(muscleList).getByRole('button', { name: /Chest\. Training status: Overdue by 20 days/ })).toBeTruthy();
     expect(within(muscleList).getByRole('button', { name: /Abs\. Training status: No log/ })).toBeTruthy();
@@ -2088,10 +2511,7 @@ describe('Strength preview presentation', () => {
     expect(within(bodyInsights).getByRole('group', { name: 'Body map view' })).toBeTruthy();
     expect(within(bodyInsights).getByRole('group', { name: 'Muscle training status' })).toBeTruthy();
     expect(within(bodyInsights).queryByRole('heading', { name: 'Your body, at a glance' })).toBeNull();
-    const trainingStatus = screen.getByRole('meter', { name: 'Strength training status score' });
-    expect(trainingStatus.closest('.strength-section-heading__subtitle')).toBeTruthy();
-    expect(trainingStatus.textContent).toContain('Training status');
-    expect(trainingStatus.querySelector('strong')?.textContent).toBe('—');
+    expect(screen.queryByRole('meter', { name: 'Strength training status score' })).toBeNull();
     await user.keyboard('{End}');
     expect(document.activeElement).toBe(rhythmsSection);
     expect(rhythmsSection.getAttribute('aria-selected')).toBe('true');
@@ -2633,6 +3053,22 @@ describe('Strength preview presentation', () => {
     expect(screen.getByRole('heading', { name: 'Shoulders & Squats' })).toBeTruthy();
   });
 
+  it('uses the exact Start time label in Finish & review without exposing the timezone', async () => {
+    const user = userEvent.setup();
+    renderStatefulStrength(guidedCopyFixtureData());
+    startGuidedWorkoutFromChoice();
+    const workout = screen.getByRole('dialog', { name: 'Copy test workout' });
+    await user.click(within(workout).getByRole('button', { name: '1 of 1' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Finish & review' }));
+
+    const review = screen.getByRole('dialog', { name: 'Finish & review' });
+    const startTime = within(review).getByLabelText('Start time') as HTMLInputElement;
+    expect(startTime.type).toBe('time');
+    expect(startTime.value).toMatch(/^\d{2}:\d{2}$/);
+    expect(within(review).queryByText(/Start time \(/)).toBeNull();
+    expect(review.textContent).not.toContain('America/New_York');
+  });
+
   it('previews, customizes, and guides the labeled P90X Ab Ripper sets', async () => {
     const user = userEvent.setup();
     const { changes } = renderStatefulStrength();
@@ -2815,7 +3251,9 @@ describe('Strength preview presentation', () => {
     expect(within(plankResults).getByText('Set 1')).toBeTruthy();
     expect(within(plankResults).getByText('0:40')).toBeTruthy();
     expect(within(plankResults).getByText('First log')).toBeTruthy();
-    expect(within(plankResults).getByText('Volume unavailable')).toBeTruthy();
+    const plankVolume = within(plankResults).getByRole('group', { name: 'Exercise volume comparison' });
+    expect(within(plankVolume).getByText('Volume')).toBeTruthy();
+    expect(within(plankVolume).getByText('Unavailable')).toBeTruthy();
     expect(within(plankResults).queryByText('Performed')).toBeNull();
     await user.click(within(session).getByRole('button', { name: 'Finish & save' }));
     await acknowledgeWorkoutOnly(user);
@@ -3241,6 +3679,119 @@ describe('Strength preview presentation', () => {
     expect(next.workouts[0]?.workoutName).toBe('Legacy Bench');
   });
 
+  it('copies the current workout last set into the current inputs without logging or advancing', async () => {
+    const user = userEvent.setup();
+    const data = guidedCopyFixtureData();
+    const { changes } = renderStatefulStrength(data);
+    startGuidedWorkoutFromChoice();
+    const dialog = screen.getByRole('dialog', { name: 'Copy test workout' });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Log set 1' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Set 2, pending' }));
+    const changeCount = changes.length;
+    const historyBefore = structuredClone(data.workouts);
+    const restTimer = within(dialog).getByRole('region', { name: 'Rest timer' });
+    const restActionName = within(restTimer).getByRole('button', { name: /Start rest timer|Pause rest timer/ }).getAttribute('aria-label')
+      ?? within(restTimer).getByRole('button', { name: /Start rest timer|Pause rest timer/ }).textContent
+      ?? '';
+
+    await user.click(within(dialog).getByRole('button', {
+      name: "Copy values from this workout's last set, Bench Press, to the current set"
+    }));
+
+    expect((within(dialog).getByRole('spinbutton', { name: 'Weight (lb)' }) as HTMLInputElement).value).toBe('100');
+    expect((within(dialog).getByRole('spinbutton', { name: 'Reps' }) as HTMLInputElement).value).toBe('8');
+    expect(changes).toHaveLength(changeCount);
+    expect(changes.at(-1)?.guidedSessionDraft?.exercises[0]?.sets.map(set => set.status))
+      .toEqual(['performed', 'pending']);
+    expect(within(dialog).getByRole('heading', { name: 'Bench Press' })).toBeTruthy();
+    expect(data.workouts).toEqual(historyBefore);
+    expect(within(restTimer).getByRole('button', { name: restActionName })).toBeTruthy();
+  });
+
+  it('copies the exact previous workout set and preserves a valid zero load', async () => {
+    const user = userEvent.setup();
+    const data = guidedCopyFixtureData([
+      {
+        id: 'guided-copy-history-set-1',
+        targetReps: 8,
+        targetLoad: { kind: 'external', meaning: 'total', value: 100, unit: 'lb' },
+        status: 'performed',
+        actualReps: 5,
+        actualLoad: { kind: 'external', meaning: 'total', value: 77, unit: 'lb' },
+        confirmedAt: '2026-10-20T10:10:00.000Z'
+      },
+      {
+        id: 'guided-copy-history-set-2',
+        targetReps: 10,
+        targetLoad: { kind: 'external', meaning: 'total', value: 110, unit: 'lb' },
+        status: 'performed',
+        actualReps: 9,
+        actualLoad: { kind: 'external', meaning: 'total', value: 0, unit: 'lb' },
+        confirmedAt: '2026-10-20T10:20:00.000Z'
+      }
+    ]);
+    const { changes } = renderStatefulStrength(data);
+    startGuidedWorkoutFromChoice();
+    const dialog = screen.getByRole('dialog', { name: 'Copy test workout' });
+    await user.click(within(dialog).getByRole('button', { name: 'Set 2, pending' }));
+    const changeCount = changes.length;
+    const historyBefore = structuredClone(data.workouts);
+
+    const copyButton = within(dialog).getByRole('button', {
+      name: 'Copy values from last workout, set 2 for Bench Press, to the current set'
+    });
+    copyButton.focus();
+    await user.keyboard('{Enter}');
+
+    expect((within(dialog).getByRole('spinbutton', { name: 'Weight (lb)' }) as HTMLInputElement).value).toBe('0');
+    expect((within(dialog).getByRole('spinbutton', { name: 'Reps' }) as HTMLInputElement).value).toBe('9');
+    expect(changes).toHaveLength(changeCount);
+    expect(changes.at(-1)?.guidedSessionDraft?.exercises[0]?.sets[1]?.status).toBe('pending');
+    expect(data.workouts).toEqual(historyBefore);
+  });
+
+  it('copies usable reps without replacing weight with an incompatible or missing load', async () => {
+    const user = userEvent.setup();
+    const data = guidedCopyFixtureData([{
+      id: 'guided-copy-history-set-1',
+      targetReps: 8,
+      targetLoad: { kind: 'external', meaning: 'total', value: 100, unit: 'lb' },
+      status: 'performed',
+      actualReps: 7,
+      actualLoad: { kind: 'external', meaning: 'per-dumbbell', value: 25, unit: 'lb' },
+      confirmedAt: '2026-10-20T10:10:00.000Z'
+    }, {
+      id: 'guided-copy-history-set-2',
+      targetReps: 10,
+      targetLoad: { kind: 'external', meaning: 'total', value: 110, unit: 'lb' },
+      status: 'performed',
+      actualReps: 6,
+      confirmedAt: '2026-10-20T10:20:00.000Z'
+    }]);
+    renderStatefulStrength(data);
+    startGuidedWorkoutFromChoice();
+    const dialog = screen.getByRole('dialog', { name: 'Copy test workout' });
+    await user.click(within(dialog).getByRole('button', { name: 'Set 2, pending' }));
+    await user.click(within(dialog).getByRole('button', {
+      name: 'Copy values from last workout, set 2 for Bench Press, to the current set'
+    }));
+
+    expect((within(dialog).getByRole('spinbutton', { name: 'Weight (lb)' }) as HTMLInputElement).value).toBe('110');
+    expect((within(dialog).getByRole('spinbutton', { name: 'Reps' }) as HTMLInputElement).value).toBe('6');
+  });
+
+  it('keeps reference tiles inactive when no usable performance is available', async () => {
+    renderStatefulStrength(guidedCopyFixtureData());
+    startGuidedWorkoutFromChoice();
+    const dialog = screen.getByRole('dialog', { name: 'Copy test workout' });
+
+    expect(within(dialog).getByText('No previous set')).toBeTruthy();
+    expect(within(dialog).getByText('No previous performance')).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: /Copy values from this workout/ })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /Copy values from last workout/ })).toBeNull();
+  });
+
   it('starts, resumes, skips, adds an extra set, reviews, and saves one immutable guided workout', async () => {
     const user = userEvent.setup();
     const data = createStrengthData();
@@ -3393,7 +3944,13 @@ describe('Strength preview presentation', () => {
     await user.click(within(dialog).getByRole('button', { name: '2 of 2' }));
     await user.click(screen.getByRole('menuitem', { name: 'Finish & review' }));
     expect(within(dialog).getByRole('heading', { name: 'Session summary' })).toBeTruthy();
-    expect(within(dialog).getByText(/1 performed · 1 skipped · 7 unfinished/)).toBeTruthy();
+    const summary = within(dialog).getByRole('group', { name: 'Workout summary' });
+    expect([...summary.querySelectorAll('.strength-guided__summary-metric')]
+      .map(metric =>
+        `${metric.querySelector('.strength-guided__summary-count')?.textContent} `
+        + `${metric.querySelector('.strength-guided__summary-label')?.textContent}`
+      ))
+      .toEqual(['2 exercises', '1 set', '7 sets unfinished', '1 set skipped']);
     expect(within(dialog).getByRole('group', { name: 'Workout participants' }).textContent).toContain('Avery');
     await user.click(within(dialog).getByRole('button', { name: 'Finish & save' }));
     await acknowledgeWorkoutOnly(user);
@@ -3629,8 +4186,9 @@ describe('Strength preview presentation', () => {
       expect.stringContaining('Set 2'),
       expect.stringContaining('Set 3')
     ]);
-    expect(within(results).getByText('Volume 4,310 lb')).toBeTruthy();
-    expect(within(results).queryByText(/last session/)).toBeNull();
+    const volume = within(results).getByRole('group', { name: 'Exercise volume comparison' });
+    expect(within(volume).getByText('No previous session')).toBeTruthy();
+    expect(within(volume).getByText('4,310 lb')).toBeTruthy();
     expect(changes.at(-1)?.guidedSessionDraft?.exercises[0]?.sets.map(set =>
       set.status === 'performed' && set.actualLoad?.kind === 'external' ? set.actualLoad.value : null
     ))
@@ -3640,7 +4198,7 @@ describe('Strength preview presentation', () => {
     await user.click(screen.getByRole('button', { name: /View Volume review/ }));
     const historyDialog = screen.getByRole('dialog', { name: 'Volume review' });
     const historyResults = within(historyDialog).getByRole('region', { name: 'Bench Press results' });
-    expect(within(historyResults).getByText('Volume 4,310 lb')).toBeTruthy();
+    expect(within(historyResults).getByText('4,310 lb')).toBeTruthy();
     expect(within(historyResults).getAllByRole('listitem')).toHaveLength(3);
     expect(within(historyDialog).queryByText('Exercise and set results')).toBeNull();
   });
@@ -4324,9 +4882,9 @@ describe('Strength preview presentation', () => {
     await click(within(finishSettings).getByRole('button', { name: 'Apply' }));
     await click(within(finishDialog).getByRole('button', { name: 'Log set 1' }));
     await click(within(finishDialog).getByRole('button', { name: 'Finish & review' }));
+    expect(within(finishDialog).getByRole('checkbox', { name: /Workout only/ }))
+      .toHaveProperty('checked', true);
     await click(within(finishDialog).getByRole('button', { name: 'Finish & save' }));
-    const finishWarning = screen.getByRole('dialog', { name: 'Save without a Rhythm?' });
-    await click(within(finishWarning).getByRole('button', { name: 'Save workout only' }));
     expect(screen.queryByRole('dialog', { name: 'Finish & review' })).toBeNull();
     expect(audioContexts[1]?.close).toHaveBeenCalledOnce();
     expect(finishChanges.at(-1)?.guidedSessionDraft).toBeUndefined();

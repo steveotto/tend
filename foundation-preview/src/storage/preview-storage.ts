@@ -54,6 +54,9 @@ import {
   PREVIEW_V43_RECOVERY_KEY,
   PREVIEW_V44_RECOVERY_KEY,
   PREVIEW_V45_RECOVERY_KEY,
+  PREVIEW_V46_RECOVERY_KEY,
+  PREVIEW_V47_RECOVERY_KEY,
+  PREVIEW_V48_RECOVERY_KEY,
   preserveProposedV4SourceRecovery,
   proposedV4RecoveryKeyForRaw,
   proposedV4SourceVersionForRaw
@@ -106,7 +109,10 @@ export {
   PREVIEW_V42_RECOVERY_KEY,
   PREVIEW_V43_RECOVERY_KEY,
   PREVIEW_V44_RECOVERY_KEY,
-  PREVIEW_V45_RECOVERY_KEY
+  PREVIEW_V45_RECOVERY_KEY,
+  PREVIEW_V46_RECOVERY_KEY,
+  PREVIEW_V47_RECOVERY_KEY,
+  PREVIEW_V48_RECOVERY_KEY
 };
 
 export const PREVIEW_CATEGORY_RECOVERY_KEY = `${PREVIEW_STORAGE_KEY}:v32-category-recovery`;
@@ -1443,6 +1449,30 @@ export function loadV44RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadRe
 export function loadV45RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
   try {
     return { kind: 'loaded', raw: storage.getItem(PREVIEW_V45_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV46RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V46_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV47RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V47_RECOVERY_KEY) };
+  } catch (error) {
+    return { kind: 'error', message: errorMessage(error) };
+  }
+}
+
+export function loadV48RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
+  try {
+    return { kind: 'loaded', raw: storage.getItem(PREVIEW_V48_RECOVERY_KEY) };
   } catch (error) {
     return { kind: 'error', message: errorMessage(error) };
   }

@@ -7,6 +7,7 @@ import {
   parseCalendarFeedForUpcoming,
   selectCalendarEventsForRange
 } from '../src/domain/calendar-events.ts';
+import { formatCalendarEventPresentation } from '../src/domain/calendar-event-presentation.ts';
 
 const source = { id: 'calendar-source-test', name: 'Synthetic calendar' };
 
@@ -796,6 +797,192 @@ describe('calendar feed reader', () => {
     );
     expect(springBoundary.valid && springBoundary.events.map(event => event.title)).toEqual(['Inside spring day']);
     expect(fallBoundary.valid && fallBoundary.events.map(event => event.title)).toEqual(['Inside fall day']);
+  });
+
+  it('resolves UTC, TZID, and floating times independently of the Pages host timezone', () => {
+    const raw = calendar([
+      'BEGIN:VEVENT',
+      'UID:synthetic-new-york',
+      'DTSTART;TZID=America/New_York:20261118T090000',
+      'DTEND;TZID=America/New_York:20261118T093000',
+      'SUMMARY:New York appointment',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-floating',
+      'DTSTART:20261118T090000',
+      'DTEND:20261118T093000',
+      'SUMMARY:Floating appointment',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-utc',
+      'DTSTART:20261118T140000Z',
+      'DTEND:20261118T143000Z',
+      'SUMMARY:UTC appointment',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-kolkata',
+      'DTSTART;TZID=Asia/Kolkata:20261118T090000',
+      'DTEND;TZID=Asia/Kolkata:20261118T093000',
+      'SUMMARY:Kolkata appointment',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-all-day',
+      'DTSTART;VALUE=DATE:20261118',
+      'DTEND;VALUE=DATE:20261119',
+      'SUMMARY:All-day appointment',
+      'END:VEVENT'
+    ].join('\r\n'));
+    const result = parseCalendarFeedForRange(
+      raw,
+      source,
+      Date.parse('2026-11-18T00:00:00Z'),
+      Date.parse('2026-11-19T00:00:00Z'),
+      'America/Los_Angeles'
+    );
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    const startsByTitle = Object.fromEntries(result.events.map(event => [
+      event.title,
+      event.startsAt
+    ]));
+    expect(startsByTitle).toEqual({
+      'All-day appointment': Date.parse('2026-11-18T08:00:00Z'),
+      'Kolkata appointment': Date.parse('2026-11-18T03:30:00Z'),
+      'New York appointment': Date.parse('2026-11-18T14:00:00Z'),
+      'UTC appointment': Date.parse('2026-11-18T14:00:00Z'),
+      'Floating appointment': Date.parse('2026-11-18T17:00:00Z')
+    });
+
+    const newYorkWithoutVtimezone = calendar([
+      'BEGIN:VEVENT',
+      'UID:synthetic-iana-zone',
+      'DTSTART;TZID=America/New_York:20261118T090000',
+      'DTEND;TZID=America/New_York:20261118T093000',
+      'SUMMARY:New York without VTIMEZONE',
+      'END:VEVENT'
+    ].join('\r\n'));
+    const ianaResult = parseCalendarFeedForRange(
+      newYorkWithoutVtimezone,
+      source,
+      Date.parse('2026-11-18T00:00:00Z'),
+      Date.parse('2026-11-19T00:00:00Z'),
+      'Asia/Kolkata'
+    );
+    expect(ianaResult.valid && ianaResult.events.map(event => event.startsAt)).toEqual([
+      Date.parse('2026-11-18T14:00:00Z')
+    ]);
+
+    const appointment = result.events.find(event => event.title === 'New York appointment')!;
+    expect(formatCalendarEventPresentation(
+      appointment,
+      Date.parse('2026-11-18T12:00:00Z'),
+      'America/New_York'
+    ).dateTime).toBe('Wed, Nov 18 · 9:00 AM–9:30 AM');
+  });
+
+  it('keeps TZID recurrence and moved exceptions on their wall times across DST', () => {
+    const raw = calendar([
+      'BEGIN:VEVENT',
+      'UID:synthetic-dst-series',
+      'DTSTART;TZID=America/New_York:20260307T090000',
+      'DTEND;TZID=America/New_York:20260307T100000',
+      'RRULE:FREQ=DAILY;COUNT=3',
+      'SUMMARY:Daily check-in',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:synthetic-dst-series',
+      'RECURRENCE-ID;TZID=America/New_York:20260308T090000',
+      'DTSTART;TZID=America/New_York:20260308T110000',
+      'DTEND;TZID=America/New_York:20260308T120000',
+      'SUMMARY:Moved check-in',
+      'END:VEVENT'
+    ].join('\r\n'));
+    const result = parseCalendarFeedForRange(
+      raw,
+      source,
+      Date.parse('2026-03-07T00:00:00Z'),
+      Date.parse('2026-03-10T00:00:00Z'),
+      'Asia/Kolkata'
+    );
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.events.map(event => [event.title, event.startsAt, event.endsAt])).toEqual([
+      [
+        'Daily check-in',
+        Date.parse('2026-03-07T14:00:00Z'),
+        Date.parse('2026-03-07T15:00:00Z')
+      ],
+      [
+        'Moved check-in',
+        Date.parse('2026-03-08T15:00:00Z'),
+        Date.parse('2026-03-08T16:00:00Z')
+      ],
+      [
+        'Daily check-in',
+        Date.parse('2026-03-09T13:00:00Z'),
+        Date.parse('2026-03-09T14:00:00Z')
+      ]
+    ]);
+  });
+
+  it('seeks an old IANA-TZID recurrence to the requested range without changing its local time', () => {
+    const raw = calendar([
+      'BEGIN:VEVENT',
+      'UID:synthetic-old-new-york-series',
+      'DTSTART;TZID=America/New_York:20000101T090000',
+      'DTEND;TZID=America/New_York:20000101T093000',
+      'RRULE:FREQ=DAILY',
+      'SUMMARY:Daily check-in',
+      'END:VEVENT'
+    ].join('\r\n'));
+    const result = parseCalendarFeedForRange(
+      raw,
+      source,
+      Date.parse('2026-11-14T00:00:00Z'),
+      Date.parse('2026-11-15T00:00:00Z'),
+      'Asia/Kolkata'
+    );
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.events.map(event => [event.startsAt, event.endsAt])).toEqual([
+      [Date.parse('2026-11-14T14:00:00Z'), Date.parse('2026-11-14T14:30:00Z')]
+    ]);
+  });
+
+  it('keeps parsed New York event times identical in Today, Week, and Month ranges', () => {
+    const raw = calendar([
+      'BEGIN:VEVENT',
+      'UID:synthetic-range-consistency',
+      'DTSTART;TZID=America/New_York:20261118T090000',
+      'DTEND;TZID=America/New_York:20261118T093000',
+      'SUMMARY:Range-consistent appointment',
+      'END:VEVENT'
+    ].join('\r\n'), newYorkTimeZone);
+    const now = Date.parse('2026-11-18T17:00:00Z');
+
+    for (const range of ['today', 'week', 'month'] as const) {
+      const window = getCalendarRangeWindow(range, now, 'America/New_York');
+      const result = parseCalendarFeedForRange(
+        raw,
+        source,
+        window.start,
+        window.end,
+        'America/New_York'
+      );
+      expect(result.valid && result.events.map(event => event.startsAt)).toEqual([
+        Date.parse('2026-11-18T14:00:00Z')
+      ]);
+      if (result.valid) {
+        expect(formatCalendarEventPresentation(
+          result.events[0]!,
+          now,
+          'America/New_York'
+        ).dateTime).toBe('Wed, Nov 18 · 9:00 AM–9:30 AM');
+      }
+    }
   });
 
   it('reports invalid feeds and unresolved exceptions without exposing feed text', () => {

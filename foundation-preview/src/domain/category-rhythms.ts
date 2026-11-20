@@ -197,3 +197,96 @@ export function selectTendedRhythmDisplayIds(
 ): ReadonlySet<string> {
   return new Set([...completedTodayRhythmIds, ...satisfiedRhythmIds]);
 }
+
+export type TendedRhythmDisplayItem = {
+  rhythm: RhythmPreview;
+  timeLabel: string;
+  carriesOver: boolean;
+  dateTime?: string;
+};
+
+function dateOnlyTimestamp(value: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value
+    ? timestamp
+    : null;
+}
+
+function completionTimestamp(record: NonNullable<RhythmPreview['completionHistory']>[number]): number | null {
+  if (record.completedAt) {
+    const timestamp = Date.parse(record.completedAt);
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  const match = record.localTime?.match(/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/);
+  const date = dateOnlyTimestamp(record.effectiveDate);
+  if (match && date !== null) {
+    return date + Number(match[1]) * 60 * 60 * 1000 + Number(match[2]) * 60 * 1000;
+  }
+  if (record.recordedAt) {
+    const timestamp = Date.parse(record.recordedAt);
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return null;
+}
+
+function formattedLocalTime(value?: string): string | null {
+  const match = value?.match(/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? 'am' : 'pm'}`;
+}
+
+export function selectTendedRhythmDisplayItems(
+  rhythms: readonly RhythmPreview[],
+  tendedRhythmIds: ReadonlySet<string>,
+  todayDate: string
+): readonly TendedRhythmDisplayItem[] {
+  return rhythms
+    .map(rhythm => {
+      if (!tendedRhythmIds.has(rhythm.id)) return null;
+      const completion = [...(rhythm.completionHistory ?? [])]
+        .filter(record => record.effectiveDate <= todayDate)
+        .map((record, completionIndex) => ({
+          record,
+          completionIndex,
+          timestamp: completionTimestamp(record)
+        }))
+        .sort((left, right) => {
+          if (left.timestamp === null) return right.timestamp === null
+            ? left.completionIndex - right.completionIndex
+            : -1;
+          if (right.timestamp === null) return 1;
+          return left.timestamp - right.timestamp
+            || left.completionIndex - right.completionIndex;
+        })
+        .at(-1)?.record;
+      const age = completion
+        ? (() => {
+            const today = dateOnlyTimestamp(todayDate);
+            const completed = dateOnlyTimestamp(completion.effectiveDate);
+            return today === null || completed === null
+              ? null
+              : Math.floor((today - completed) / 86_400_000);
+          })()
+        : null;
+      const localTime = formattedLocalTime(completion?.localTime);
+      const timeLabel = age !== null && age > 0
+        ? age === 1 ? 'Tended yesterday' : `Tended ${age} days ago`
+        : localTime ? `Tended ${localTime}` : 'Tended today';
+      return {
+        rhythm,
+        timeLabel,
+        carriesOver: age !== null && age > 0,
+        ...(completion
+          ? {
+              dateTime: completion.completedAt
+                ?? (completion.localTime
+                  ? `${completion.effectiveDate}T${completion.localTime}`
+                  : completion.effectiveDate)
+            }
+          : {}),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+}

@@ -40,9 +40,10 @@ export type HealthRollupConfig = {
 
 export function createHealthFitnessRollup(
   initialGroupId: string,
-  initialItemId: string
+  initialItemId: string,
+  enabledFoundationIds?: ReadonlySet<string>
 ): HealthRollupConfig {
-  const foundationItems = [
+  const allFoundationItems = [
     {
       id: 'strength',
       label: 'Strength',
@@ -72,45 +73,55 @@ export function createHealthFitnessRollup(
       relatedItemIds: { 'rhythms-logs': ['stretch-logs'], category: ['health-fitness'] }
     }
   ] satisfies readonly HealthRollupItem[];
+  const foundationItems = enabledFoundationIds
+    ? allFoundationItems.filter(item => enabledFoundationIds.has(`health-${item.id}`))
+    : allFoundationItems;
+  const enabledProgressIds = new Set(foundationItems.map(item => item.id));
+  const logItems = [
+    {
+      foundationId: 'strength',
+      id: 'strength-logs',
+      label: 'Workouts → Strength',
+      summary: 'Saved workouts inform Strength measures; eligible linked Rhythms determine Health.',
+      usesStandardWeights: false,
+      explanation: 'Saved workouts feed Strength training measures. Eligible linked Rhythm scores determine Strength Health.',
+      relatedItemIds: { foundations: ['strength'], category: ['health-fitness'] }
+    },
+    {
+      foundationId: 'weight',
+      id: 'weight-logs',
+      label: 'Weigh-ins → Weight',
+      summary: 'Scheduled linked weigh-in Rhythms determine Weight Health.',
+      usesStandardWeights: false,
+      explanation: 'Scheduled Weight-linked weigh-in Rhythms determine Weight Health; recorded weight and Goal Progress do not.',
+      relatedItemIds: { foundations: ['weight'], category: ['health-fitness'] }
+    },
+    {
+      foundationId: 'cardio',
+      id: 'cardio-logs',
+      label: 'Runs → Cardio',
+      summary: 'Cardio uses saved run logs against weekly run and distance goals.',
+      usesStandardWeights: false,
+      explanation: 'Cardio Health uses saved run logs to calculate weekly run and distance goal progress.',
+      relatedItemIds: { foundations: ['cardio'], category: ['health-fitness'] }
+    },
+    {
+      foundationId: 'flexibility',
+      id: 'stretch-logs',
+      label: 'Stretch sessions → Flexibility',
+      summary: 'Stretch history is diagnostic; linked Rhythms determine Flexibility Health.',
+      usesStandardWeights: false,
+      explanation: 'Per-region intervals and last-stretched dates drive the body map and recommendations only; stretch sessions do not contribute to Health scores.',
+      relatedItemIds: { foundations: ['flexibility'], category: ['health-fitness'] }
+    }
+  ].filter(item => enabledProgressIds.has(item.foundationId));
+  const includedNames = foundationItems.map(item => item.label);
   return {
     groups: [
       {
         id: 'rhythms-logs',
         label: 'Rhythms & logs',
-        items: [
-          {
-            id: 'strength-logs',
-            label: 'Workouts → Strength',
-            summary: 'Saved workouts inform Strength measures; eligible linked Rhythms determine Health.',
-            usesStandardWeights: false,
-            explanation: 'Saved workouts feed Strength training measures. Eligible linked Rhythm scores determine Strength Health.',
-            relatedItemIds: { foundations: ['strength'], category: ['health-fitness'] }
-          },
-          {
-            id: 'weight-logs',
-            label: 'Weigh-ins → Weight',
-            summary: 'Scheduled linked weigh-in Rhythms determine Weight Health.',
-            usesStandardWeights: false,
-            explanation: 'Scheduled Weight-linked weigh-in Rhythms determine Weight Health; recorded weight and Goal Progress do not.',
-            relatedItemIds: { foundations: ['weight'], category: ['health-fitness'] }
-          },
-          {
-            id: 'cardio-logs',
-            label: 'Runs → Cardio',
-            summary: 'Cardio uses saved run logs against weekly run and distance goals.',
-            usesStandardWeights: false,
-            explanation: 'Cardio Health uses saved run logs to calculate weekly run and distance goal progress.',
-            relatedItemIds: { foundations: ['cardio'], category: ['health-fitness'] }
-          },
-          {
-            id: 'stretch-logs',
-            label: 'Stretch sessions → Flexibility',
-            summary: 'Stretch history is diagnostic; linked Rhythms determine Flexibility Health.',
-            usesStandardWeights: false,
-            explanation: 'Per-region intervals and last-stretched dates drive the body map and recommendations only; stretch sessions do not contribute to Health scores.',
-            relatedItemIds: { category: ['health-fitness'] }
-          }
-        ]
+        items: logItems
       },
       {
         id: 'foundations',
@@ -124,7 +135,9 @@ export function createHealthFitnessRollup(
           id: 'health-fitness',
           label: 'Health & Fitness',
           categoryIconId: 'health',
-          explanation: 'Available Strength, Cardio, Weight, and Flexibility scores contribute equally to Consistency and On Track, then the two averages are blended 75/25.',
+          explanation: includedNames.length > 0
+            ? `Available ${includedNames.join(', ')} scores contribute equally to Consistency and On Track, then the two averages are blended 75/25.`
+            : 'No Health & Fitness Foundations are enabled, so this Category is unscored.',
           relatedItemIds: { foundations: foundationItems.map(item => item.id) }
         }]
       }
@@ -179,7 +192,8 @@ export function createHealthFitnessHealthContribution({
   strengthHealthScore,
   cardioHealthScore,
   weightHealthScore,
-  flexibilityHealthScore = null
+  flexibilityHealthScore = null,
+  enabledFoundationIds
 }: {
   overallHealthScore: number | null;
   categoryHealthScore: number | null;
@@ -187,7 +201,14 @@ export function createHealthFitnessHealthContribution({
   cardioHealthScore: number | null;
   weightHealthScore: number | null;
   flexibilityHealthScore?: number | null;
+  enabledFoundationIds?: ReadonlySet<string>;
 }): HealthContributionDiagram {
+  const foundations = [
+    { id: 'health-strength', label: 'Strength', score: strengthHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-strength' },
+    { id: 'health-cardio', label: 'Cardio', score: cardioHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-cardio' },
+    { id: 'health-weight', label: 'Weight', score: weightHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-weight' },
+    { id: 'health-flexibility', label: 'Flexibility', score: flexibilityHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-flexibility' }
+  ].filter(foundation => !enabledFoundationIds || enabledFoundationIds.has(foundation.id));
   return {
     heading: 'How this Category contributes',
     highlightedGroup: 'categories',
@@ -199,12 +220,7 @@ export function createHealthFitnessHealthContribution({
       score: categoryHealthScore,
       categoryIconId: 'health'
     }],
-    foundations: [
-      { id: 'health-strength', label: 'Strength', score: strengthHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-strength' },
-      { id: 'health-cardio', label: 'Cardio', score: cardioHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-cardio' },
-      { id: 'health-weight', label: 'Weight', score: weightHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-weight' },
-      { id: 'health-flexibility', label: 'Flexibility', score: flexibilityHealthScore, categoryLabel: 'Health & Fitness', foundationIconId: 'health-flexibility' }
-    ],
+    foundations,
     bottomGroupLabel: 'Rhythms & logs',
     bottomItem: {
       id: 'health-inputs',

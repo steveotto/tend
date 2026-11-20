@@ -74,6 +74,89 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
+  it('configures a saved-workout rotation with accessible ordering and advancement choices', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    const savedWorkouts = [
+      { id: 'abs-1', name: 'Abs 1', muscleIds: ['abs' as const], sharedWith: [] },
+      { id: 'abs-2', name: 'Abs 2', muscleIds: ['abs' as const], sharedWith: [] },
+      { id: 'abs-3', name: 'Abs 3', muscleIds: ['abs' as const], sharedWith: [] }
+    ];
+    render(
+      <RhythmEditor
+        initialDraft={{
+          title: 'Pray Together',
+          description: '',
+          cadence: 'Daily',
+          timeLabel: 'Anytime',
+          personIds: [],
+          categoryIds: ['health'],
+          schedule: { frequency: 'daily' },
+          scheduleEditing: true,
+          personal: false,
+          primaryFoundationId: 'health-strength',
+          healthLogCapability: 'workout'
+        }}
+        savedWorkouts={savedWorkouts}
+        onSave={onSave}
+        onClose={vi.fn()}
+      />
+    );
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+
+    await choose(user, 'Workout', 'Workout rotation');
+    expect(within(editor).getByText('Each time this Rhythm is due, use the next workout in your rotation.')).toBeTruthy();
+    for (const workout of savedWorkouts) {
+      await user.click(within(editor).getByRole('checkbox', { name: workout.name }));
+    }
+    await user.click(within(editor).getByRole('button', { name: 'Move Abs 3 up' }));
+    await choose(user, 'Advance rotation', 'Each scheduled occurrence');
+    expect(within(editor).getByText(
+      'Move to the next workout whenever this Rhythm is due, even if the previous one was missed.'
+    )).toBeTruthy();
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      healthWorkoutMode: 'rotation',
+      healthWorkoutRotationWorkoutIds: ['abs-1', 'abs-3', 'abs-2'],
+      healthWorkoutRotationAdvanceMode: 'each-scheduled-occurrence'
+    }));
+  });
+
+  it('reopens the saved rotation order and keeps unavailable selected workouts visible for repair', () => {
+    const rhythm = {
+      ...todayRhythms[0]!,
+      id: 'rotation-rhythm',
+      title: 'Abs rotation',
+      categoryIds: ['health'] as const,
+      primaryFoundationId: 'health-strength',
+      healthLogCapability: 'workout' as const
+    };
+    render(
+      <RhythmEditor
+        rhythm={rhythm}
+        healthWorkoutSetting={{
+          mode: 'rotation',
+          rotationHistory: [{
+            effectiveFrom: '2026-06-01',
+            workoutIds: ['abs-2', 'missing-workout'],
+            workoutNames: ['Abs 2', 'Abs 1'],
+            advanceMode: 'after-completion',
+            startIndex: 0
+          }]
+        }}
+        savedWorkouts={[{ id: 'abs-2', name: 'Abs 2', muscleIds: ['abs' as const], sharedWith: [] }]}
+        onSave={vi.fn(() => ({}))}
+        onClose={vi.fn()}
+      />
+    );
+
+    const editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByRole('checkbox', { name: 'Abs 2' })).toHaveProperty('checked', true);
+    expect(within(editor).getByRole('checkbox', { name: 'Abs 1 (unavailable)' })).toHaveProperty('checked', true);
+    expect(within(editor).getByRole('button', { name: 'Move Abs 1 up' })).toBeTruthy();
+  });
+
   it('uses one Category sheet for category and Practice/Foundations selection while preserving the Rhythm draft flow', async () => {
     const user = userEvent.setup();
     const faithPractice = foundationCatalogue.find(foundation =>

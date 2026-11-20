@@ -12,8 +12,11 @@ import type { Destination } from './AppNavigation.tsx';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
-import { useAvailableCategories, useCategoryAvailability } from './CategoryAvailabilityContext.tsx';
-import { selectAvailableCategoryIds } from '../domain/category-availability.ts';
+import { useAvailableCategories, useAreaAvailability } from './CategoryAvailabilityContext.tsx';
+import {
+  selectAvailableCategoryIds,
+  selectAvailableFoundationIds
+} from '../domain/category-availability.ts';
 
 type RhythmAssociationRowsProps = {
   rhythm: RhythmPreview;
@@ -34,24 +37,28 @@ export function RhythmAssociationRows({
   onOpenFoundation,
   showFoundationLinks = true
 }: RhythmAssociationRowsProps) {
-  const categoryPreferences = useCategoryAvailability();
+  const availability = useAreaAvailability();
   const availableCategories = useAvailableCategories();
-  const availableCategoryIds = selectAvailableCategoryIds(categoryPreferences);
+  const availableCategoryIds = selectAvailableCategoryIds(availability.categoryPreferences);
+  const availableFoundationIds = selectAvailableFoundationIds(availability, foundations ?? []);
   const categories = availableCategories.filter(area => rhythm.categoryIds?.includes(area.id) === true);
   const resolvedLinks = foundations
     ? resolveRhythmFoundationLinks(rhythm, foundations)
     : undefined;
+  const linkedFoundations = resolvedLinks?.foundations.filter(foundation =>
+    availableFoundationIds.has(foundation.id)
+  ) ?? [];
   const assignedCategoryIds = new Set(categories.map(category => category.id));
   const categoryGroups = categories.map(category => ({
     category,
-    linkedFoundations: resolvedLinks?.foundations.filter(foundation =>
-      foundation.categoryId === category.id
-      && availableCategoryIds.has(foundation.categoryId)
-    ) ?? []
+    linkedFoundations: linkedFoundations.filter(foundation =>
+      foundation.categoryId === category.id && availableCategoryIds.has(foundation.categoryId)
+    )
   }));
   const unmatchedFoundations = resolvedLinks?.foundations.filter(foundation =>
     !assignedCategoryIds.has(foundation.categoryId)
     && availableCategoryIds.has(foundation.categoryId)
+    && availableFoundationIds.has(foundation.id)
   ) ?? [];
   const hasVisibleFoundationLinks = showFoundationLinks
     && (categoryGroups.some(group => group.linkedFoundations.length > 0) || unmatchedFoundations.length > 0);

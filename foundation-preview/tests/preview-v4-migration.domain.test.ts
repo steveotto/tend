@@ -5,6 +5,7 @@ import { migratePreviewToProposedV4, PROPOSED_PREVIEW_SCHEMA_VERSION } from '../
 import { loadPreview, PREVIEW_STORAGE_KEY, writePreview } from '../src/storage/preview-storage.ts';
 import { createValidatedPreviewAccountDocument } from '../src/storage/preview-account-backup.ts';
 import {
+  PREVIEW_V48_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
   PREVIEW_V37_RECOVERY_KEY,
   PREVIEW_V38_RECOVERY_KEY,
@@ -141,6 +142,77 @@ function strengthAtV24(data: StrengthData): StrengthData {
 }
 
 describe('v4 migration and recovery domain', () => {
+  it('migrates schema v48 without losing Strength history and preserves its immutable recovery source', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope(data);
+    const raw = JSON.stringify({ ...current, schemaVersion: 48 });
+    const migrated = parsePreviewBackup(raw, currentDate);
+
+    expect(migrated.valid).toBe(true);
+    if (!migrated.valid) return;
+    expect(migrated.sourceSchemaVersion).toBe(48);
+    expect(migrated.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(migrated.envelope.data.strength.savedWorkouts).toEqual(data.strength.savedWorkouts);
+    expect(migrated.envelope.data.strength.workouts).toEqual(data.strength.workouts);
+    expect(proposedV4RecoveryKeyForRaw(raw)).toBe(PREVIEW_V48_RECOVERY_KEY);
+    expect(migratePreviewToProposedV4(raw, currentDate)).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 48
+    });
+  });
+
+  it('round-trips an ordered rotation and its completed workout history', () => {
+    const data = createSamplePreviewData();
+    const savedWorkouts: StrengthSavedWorkout[] = [
+      { id: 'rotation-a', name: 'Abs 1', muscleIds: ['abs'], sharedWith: [] },
+      { id: 'rotation-b', name: 'Abs 2', muscleIds: ['abs'], sharedWith: [] }
+    ];
+    const version = {
+      effectiveFrom: '2026-06-01',
+      workoutIds: ['rotation-b', 'rotation-a'],
+      workoutNames: ['Abs 2', 'Abs 1'],
+      advanceMode: 'after-completion' as const,
+      startIndex: 1
+    };
+    const withRotation: PreviewData = {
+      ...data,
+      strength: {
+        ...data.strength,
+        savedWorkouts,
+        workouts: [{
+          id: 'rotation-log',
+          date: '2026-06-01',
+          muscleIds: ['abs'],
+          savedWorkoutId: 'rotation-a'
+        }],
+        rhythmModes: [{ rhythmId: 'rotation-rhythm', mode: 'rotation', rotationHistory: [version] }]
+      }
+    };
+    const encoded = createPreviewEnvelope(withRotation);
+    const decoded = parsePreviewBackup(JSON.stringify(encoded), currentDate);
+
+    expect(decoded.valid).toBe(true);
+    if (!decoded.valid) return;
+    expect(decoded.envelope.data.strength.rhythmModes[0]).toEqual({
+      rhythmId: 'rotation-rhythm',
+      mode: 'rotation',
+      rotationHistory: [version]
+    });
+    expect(decoded.envelope.data.strength.workouts).toEqual([{
+      ...withRotation.strength.workouts[0]!,
+      supersetGroups: []
+    }]);
+    const migrated = migratePreviewToProposedV4(JSON.stringify(encoded), currentDate);
+    expect(migrated).toMatchObject({ valid: true, sourceSchemaVersion: 49 });
+    if (migrated.valid) {
+      expect(migrated.envelope.data.strength.rhythmModes[0]).toEqual({
+        rhythmId: 'rotation-rhythm',
+        mode: 'rotation',
+        rotationHistory: [version]
+      });
+    }
+  });
+
   it('round-trips completed superset and timed-set history through the current backup envelope', () => {
     const data = createSamplePreviewData();
     const powerSuggestion = strengthWorkoutSuggestions.find(item => item.sourceId === 'strength.power-abs')!;

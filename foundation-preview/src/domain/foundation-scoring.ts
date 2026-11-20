@@ -8,6 +8,7 @@ import {
 } from './rhythm-scoring.ts';
 import type {
   RhythmScoreResult,
+  SelectRhythmScoreInput,
   ScoredConsistencyMetric,
   ScoredOnTrackMetric
 } from './rhythm-scoring.ts';
@@ -38,6 +39,64 @@ export type FoundationScoreSelection = {
   health: number | null;
 };
 
+export function createRhythmScoreInput({
+  rhythm,
+  records,
+  recordsAvailable,
+  archived = false,
+  evaluationInstant,
+  localTimeZone,
+  timeBlockSettings = DEFAULT_TIME_BLOCK_SETTINGS
+}: {
+  rhythm: RhythmPreview;
+  records: SelectRhythmScoreInput['records'];
+  recordsAvailable: boolean;
+  archived?: boolean;
+  evaluationInstant: Date;
+  localTimeZone: string;
+  timeBlockSettings?: TimeBlockSettings;
+}): SelectRhythmScoreInput {
+  const timeZone = rhythm.scoring?.timeZone
+    ?? rhythm.createdTimeZone
+    ?? localTimeZone;
+  const dateTimeZone = isValidTimeZone(timeZone) ? timeZone : localTimeZone;
+  const asOfDate = localDateInTimeZone(evaluationInstant, dateTimeZone);
+  const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+  const activeTimeSegment = rhythm.scoring?.scheduleHistory
+    .filter(segment => segment.startDate <= asOfDate)
+    .at(-1);
+  const rhythmTimeValue = activeTimeSegment?.kind === 'unknown'
+    ? undefined
+    : activeTimeSegment?.kind === 'scheduled' && activeTimeSegment.timeOfDay !== undefined
+      ? activeTimeSegment.timeOfDay
+      : rhythm.timeOfDay ?? rhythmTimeValueFromLabel(rhythm.timeLabel ?? '');
+  const timeBlockId = rhythmTimeValue
+    ? timeBlockIdFromRhythmValue(rhythmTimeValue)
+    : undefined;
+  const dueTime = timeBlockSettings.blocks.find(block => block.id === timeBlockId)?.start;
+  const asOfTime = dueTime === undefined
+    ? undefined
+    : localTimeInTimeZone(evaluationInstant, dateTimeZone);
+
+  return {
+    rhythmId: rhythm.id,
+    ...(rhythm.cadence ? { cadence: rhythm.cadence } : {}),
+    ...(schedule ? { schedule } : {}),
+    ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
+    ...(rhythm.createdLocalDate ? { createdLocalDate: rhythm.createdLocalDate } : {}),
+    ...(rhythm.createdLocalTime ? { createdLocalTime: rhythm.createdLocalTime } : {}),
+    ...(rhythm.createdDueTime ? { createdDueTime: rhythm.createdDueTime } : {}),
+    ...(rhythm.createdTimeZone ? { createdTimeZone: rhythm.createdTimeZone } : {}),
+    ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
+    records,
+    recordsAvailable,
+    archived,
+    asOfDate,
+    ...(asOfTime && dueTime ? { asOfTime, dueTime } : {}),
+    timeZone
+  };
+}
+
 export function selectFoundationRhythmScores(
   rhythms: readonly RhythmPreview[],
   archivedRhythmIds: readonly string[],
@@ -48,50 +107,22 @@ export function selectFoundationRhythmScores(
 ): ReadonlyMap<string, RhythmScoreResult> {
   const archived = new Set(archivedRhythmIds);
   return new Map(rhythms.map(rhythm => {
-    const timeZone = rhythm.scoring?.timeZone
-      ?? rhythm.createdTimeZone
-      ?? localTimeZone;
-    const dateTimeZone = isValidTimeZone(timeZone) ? timeZone : localTimeZone;
-    const asOfDate = localDateInTimeZone(evaluationInstant, dateTimeZone);
-    const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
-    const activeTimeSegment = rhythm.scoring?.scheduleHistory
-      .filter(segment => segment.startDate <= asOfDate)
-      .at(-1);
-    const rhythmTimeValue = activeTimeSegment?.kind === 'unknown'
-      ? undefined
-      : activeTimeSegment?.kind === 'scheduled' && activeTimeSegment.timeOfDay !== undefined
-        ? activeTimeSegment.timeOfDay
-        : rhythm.timeOfDay ?? rhythmTimeValueFromLabel(rhythm.timeLabel ?? '');
-    const timeBlockId = rhythmTimeValue
-      ? timeBlockIdFromRhythmValue(rhythmTimeValue)
-      : undefined;
-    const dueTime = timeBlockSettings.blocks.find(block => block.id === timeBlockId)?.start;
-    const asOfTime = dueTime === undefined
-      ? undefined
-      : localTimeInTimeZone(evaluationInstant, dateTimeZone);
     const records = (rhythm.completionHistory ?? []).map(record => ({
       ...record,
       rhythmId: rhythm.id
     }));
+    const scoreInput = createRhythmScoreInput({
+      rhythm,
+      records,
+      recordsAvailable: rhythm.completionHistory !== undefined || historyAvailableRhythmIds.has(rhythm.id),
+      archived: archived.has(rhythm.id),
+      evaluationInstant,
+      localTimeZone,
+      timeBlockSettings
+    });
     return [
       rhythm.id,
-      selectSharedEngineRhythmScore({
-        rhythmId: rhythm.id,
-        ...(rhythm.cadence ? { cadence: rhythm.cadence } : {}),
-        ...(schedule ? { schedule } : {}),
-        ...(rhythm.scoring ? { scoring: rhythm.scoring } : {}),
-        ...(rhythm.createdLocalDate ? { createdLocalDate: rhythm.createdLocalDate } : {}),
-        ...(rhythm.createdLocalTime ? { createdLocalTime: rhythm.createdLocalTime } : {}),
-        ...(rhythm.createdDueTime ? { createdDueTime: rhythm.createdDueTime } : {}),
-        ...(rhythm.createdTimeZone ? { createdTimeZone: rhythm.createdTimeZone } : {}),
-        ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
-        records,
-        recordsAvailable: rhythm.completionHistory !== undefined || historyAvailableRhythmIds.has(rhythm.id),
-        archived: archived.has(rhythm.id),
-        asOfDate,
-        ...(asOfTime && dueTime ? { asOfTime, dueTime } : {}),
-        timeZone
-      })
+      selectSharedEngineRhythmScore(scoreInput)
     ] as const;
   }));
 }

@@ -8,6 +8,7 @@ import {
   type MoneyGoal
 } from '../domain/money-goals.ts';
 import type { FoundationPreview } from '../domain/preview-data.ts';
+import { useAvailableFoundations } from './CategoryAvailabilityContext.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
 type GoalEditorProps = {
@@ -44,12 +45,13 @@ export function GoalEditor({
     : { ...emptyDraft, ...initialDraft });
   const [errors, setErrors] = useState<GoalDraftErrors>({});
   const selectedFoundationId = draft.foundationId ?? '';
-  const availableFoundations = foundations.filter(foundation =>
+  const availableFoundations = useAvailableFoundations(foundations).filter(foundation =>
     foundation.categoryId === 'finances' && foundation.lifecycle === 'active'
   );
   const selectedFoundationAvailable = availableFoundations.some(
     foundation => foundation.id === selectedFoundationId
   );
+  const selectedFoundationKnown = foundations.some(foundation => foundation.id === selectedFoundationId);
 
   function update(field: keyof GoalDraft, value: string) {
     setDraft(previous => ({ ...previous, [field]: value }));
@@ -131,14 +133,17 @@ export function GoalEditor({
               ))}
               {selectedFoundationId && !selectedFoundationAvailable && (
                 <option value={selectedFoundationId}>
-                  {foundations.find(foundation => foundation.id === selectedFoundationId)?.name
-                    ?? `Unavailable Foundation (${selectedFoundationId})`} · saved reference
+                  {selectedFoundationKnown
+                    ? 'Hidden Foundation · saved association'
+                    : `Unavailable Foundation (${selectedFoundationId}) · saved reference`}
                 </option>
               )}
             </select>
             {selectedFoundationId && !selectedFoundationAvailable && (
               <span className="goal-field-error" role="status">
-                This Foundation is unavailable. Its saved reference will be retained until resolved.
+                {selectedFoundationKnown
+                  ? 'This Foundation is turned off. Its saved association will be retained.'
+                  : 'This Foundation reference is unavailable. Its saved association will be retained until resolved.'}
               </span>
             )}
           </div>

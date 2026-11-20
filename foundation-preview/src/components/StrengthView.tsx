@@ -33,6 +33,10 @@ import {
   selectStrengthWorkoutRhythmOptions,
   type StrengthRhythmSetting
 } from '../domain/strength-rhythm-linking.ts';
+import {
+  selectStrengthRotationAssignment,
+  updateStrengthRhythmMode
+} from '../domain/strength-rotation.ts';
 import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
 import type { FoundationRhythmAssociationChange } from '../domain/foundation-rhythm-associations.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
@@ -56,7 +60,6 @@ import {
   selectStrengthWorkoutHistory,
   selectStrengthMuscleScores,
   saveStrengthScoringSetup,
-  selectStrengthScore,
   strengthMuscleName as muscleName,
   strengthMuscles,
   updateStrengthSavedWorkoutRestOverride,
@@ -295,7 +298,6 @@ export function StrengthView({
   const draftWorkoutIdRef = useRef<string | null>(null);
   const draftLogIdRef = useRef<string | null>(null);
   const scores = useMemo(() => selectStrengthMuscleScores(data, evaluationDate), [data, evaluationDate]);
-  const trainingStatusScore = selectStrengthScore(scores);
   const recommendations = useMemo(() => rankStrengthWorkouts(scores, data.savedWorkouts), [data.savedWorkouts, scores]);
   const selected = scores.find(item => item.id === selectedMuscleId)!;
   const visibleMuscles = visibleStrengthMuscles(bodyView);
@@ -331,9 +333,11 @@ export function StrengthView({
       datedRhythmCompletions,
       logDate,
       (dialog.templateId ?? dialog.log?.savedWorkoutId ?? logTemplateSelection) || undefined,
-      dialog.rhythm?.rhythm.id ?? dialog.log?.rhythmId
+      dialog.rhythm?.rhythm.id ?? dialog.log?.rhythmId,
+      data.workouts,
+      data.savedWorkouts
     );
-  }, [archivedRhythms, datedRhythmCompletions, dialog, logDate, logTemplateSelection, rhythms]);
+  }, [archivedRhythms, data.savedWorkouts, data.workouts, datedRhythmCompletions, dialog, logDate, logTemplateSelection, rhythms]);
   const contextualTemplate = dialog?.kind === 'log' && dialog.templateId
     ? data.savedWorkouts.find(workout => workout.id === dialog.templateId)
     : undefined;
@@ -422,7 +426,7 @@ export function StrengthView({
       ?.querySelector<HTMLButtonElement>('button[aria-label^="Log workout"]') ?? null;
     guidedSessionOpenerRef.current = openerRef.current;
     const rhythmSetting: StrengthRhythm = {
-      rhythm: rhythmEntry.rhythm,
+      ...rhythmEntry,
       mode: pendingRhythmLog.mode,
       ...(pendingRhythmLog.workoutId ? { workoutId: pendingRhythmLog.workoutId } : {})
     };
@@ -438,11 +442,32 @@ export function StrengthView({
   }, [pendingRhythmLog?.requestId]);
 
   function startRhythmWorkout(rhythm: StrengthRhythm, workoutId?: string) {
-    const configuredWorkout = data.savedWorkouts.find(workout => workout.id === workoutId);
+    let selectedWorkoutId = workoutId;
+    if (rhythm.mode === 'rotation') {
+      const assignment = selectStrengthRotationAssignment({
+        rhythm: rhythm.rhythm,
+        setting: {
+          rhythmId: rhythm.rhythm.id,
+          mode: rhythm.mode,
+          ...(rhythm.rotationHistory === undefined ? {} : { rotationHistory: rhythm.rotationHistory })
+        },
+        date: evaluationDate,
+        workouts: data.workouts,
+        savedWorkouts: data.savedWorkouts,
+        completions: datedRhythmCompletions
+      });
+      if (assignment.kind !== 'assigned') {
+        setDialog({ kind: 'mode', setting: rhythm });
+        setError(assignment.reason);
+        return;
+      }
+      selectedWorkoutId = assignment.workoutId;
+    }
+    const configuredWorkout = data.savedWorkouts.find(workout => workout.id === selectedWorkoutId);
     const selectedRhythm: StrengthRhythm = {
       ...rhythm,
-      mode: workoutId ? 'specific' : 'custom',
-      ...(workoutId ? { workoutId } : {})
+      mode: rhythm.mode === 'rotation' ? 'rotation' : selectedWorkoutId ? 'specific' : 'custom',
+      ...(selectedWorkoutId ? { workoutId: selectedWorkoutId } : {})
     };
     if (configuredWorkout?.exercises?.length) {
       const request: PendingGuidedStart = {
@@ -458,7 +483,7 @@ export function StrengthView({
       return;
     }
     setError('');
-    setLogTemplateSelection(workoutId ?? '');
+    setLogTemplateSelection(selectedWorkoutId ?? '');
     setLogMuscleIds(configuredWorkout?.muscleIds ?? []);
     setLogDate(evaluationDate);
     draftLogIdRef.current = `strength-log-${globalThis.crypto.randomUUID()}`;
@@ -467,8 +492,10 @@ export function StrengthView({
       archivedRhythms,
       datedRhythmCompletions,
       evaluationDate,
-      workoutId,
-      selectedRhythm.rhythm.id
+      selectedWorkoutId,
+      selectedRhythm.rhythm.id,
+      data.workouts,
+      data.savedWorkouts
     );
     const selectedOption = rhythmOptions.find(option => option.rhythm.id === selectedRhythm.rhythm.id);
     setSelectedWorkoutRhythmId(selectedOption?.eligible ? selectedRhythm.rhythm.id : undefined);
@@ -482,7 +509,7 @@ export function StrengthView({
     setDialog({
       kind: 'log',
       rhythm: selectedRhythm,
-      ...(workoutId ? { templateId: workoutId } : {})
+      ...(selectedWorkoutId ? { templateId: selectedWorkoutId } : {})
     });
   }
 
@@ -655,7 +682,9 @@ export function StrengthView({
       datedRhythmCompletions,
       nextDate,
       (dialog.templateId ?? logTemplateSelection) || undefined,
-      dialog.rhythm?.rhythm.id
+      dialog.rhythm?.rhythm.id,
+      data.workouts,
+      data.savedWorkouts
     );
     const selectedOption = options.find(option => option.rhythm.id === selectedWorkoutRhythmId);
     if (selectedOption?.eligible) return;
@@ -772,7 +801,9 @@ export function StrengthView({
         datedRhythmCompletions,
         next.log?.date ?? evaluationDate,
         next.templateId ?? next.log?.savedWorkoutId ?? undefined,
-        explicitRhythmId
+        explicitRhythmId,
+        data.workouts,
+        data.savedWorkouts
       );
       setSelectedWorkoutRhythmId(
         next.log
@@ -852,7 +883,7 @@ export function StrengthView({
     const form = new FormData(formEvent.currentTarget);
     const mode = String(form.get('mode')) as StrengthMode;
     const workoutId = String(form.get('workoutId') ?? '');
-    if (!['recommended', 'specific', 'custom'].includes(mode)) {
+    if (!['recommended', 'specific', 'custom', 'rotation'].includes(mode)) {
       setError('Choose a supported workout mode.');
       return;
     }
@@ -861,9 +892,28 @@ export function StrengthView({
       return;
     }
     const rhythmId = dialog.setting.rhythm.id;
+    const priorSetting = data.rhythmModes.find(setting => setting.rhythmId === rhythmId);
+    const savedRotationVersion = dialog.setting.rotationHistory?.at(-1);
+    const modeUpdate = updateStrengthRhythmMode({
+      ...(priorSetting ? { prior: priorSetting } : {}),
+      rhythm: dialog.setting.rhythm,
+      mode,
+      ...(mode === 'specific' ? { workoutId } : {}),
+      rotationWorkoutIds: savedRotationVersion?.workoutIds ?? [],
+      advanceMode: savedRotationVersion?.advanceMode ?? 'after-completion',
+      savedWorkouts: data.savedWorkouts,
+      workouts: data.workouts,
+      completions: datedRhythmCompletions,
+      ...(data.guidedSessionDraft ? { activeDraft: data.guidedSessionDraft } : {}),
+      asOfDate: evaluationDate
+    });
+    if (!modeUpdate.valid) {
+      setError(modeUpdate.error);
+      return;
+    }
     const rhythmModes = [
       ...data.rhythmModes.filter(setting => setting.rhythmId !== rhythmId),
-      { rhythmId, mode, ...(mode === 'specific' ? { workoutId } : {}) }
+      modeUpdate.setting
     ];
     const saveError = onChange({ ...data, rhythmModes });
     if (saveError) setError(saveError);
@@ -1368,22 +1418,7 @@ export function StrengthView({
           aria-labelledby="strength-tab-body"
           hidden={strengthTab !== 'body'}
         >
-          <FoundationSectionHeading
-            title="Body overview"
-            subtitle={
-              <span
-                className="strength-legacy-status"
-                role="meter"
-                aria-label="Strength training status score"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={trainingStatusScore ?? undefined}
-                aria-valuetext={trainingStatusScore === null ? 'Score unavailable' : `${trainingStatusScore} out of 100`}
-              >
-                <span>Training status</span><strong>{trainingStatusScore ?? '—'}</strong>
-              </span>
-            }
-          />
+          <FoundationSectionHeading title="Body overview" />
           <ToolZone
             className="strength-map-card"
             icon={<RhythmMetadataIcon kind="history" />}
@@ -1829,6 +1864,7 @@ export function StrengthView({
                 <option value="recommended">Recommended Workout</option>
                 <option value="specific">Specific Workout</option>
                 <option value="custom">Custom Workout</option>
+                <option value="rotation">Workout rotation</option>
               </select>
             </label>
             <label className="strength-form-field">Saved workout
@@ -1840,8 +1876,27 @@ export function StrengthView({
                 {data.savedWorkouts.map(workout => <option key={workout.id} value={workout.id}>{workout.name} · {workout.muscleIds.map(muscleName).join(', ')}</option>)}
               </select>
             </label>
+            {dialog.setting.mode === 'rotation' && (
+              <p className="strength-rhythm-mode__hint">
+                Edit this Rhythm to repair its workout rotation. Rotation selections stay with the Rhythm’s history.
+              </p>
+            )}
             {error && <p className="strength-form-error" role="alert">{error}</p>}
-            <div className="money-goal-dialog__actions"><button type="submit" className="btn mini">Save mode</button><button type="button" className="btn mini ghost" onClick={closeDialog}>Cancel</button></div>
+            <div className="money-goal-dialog__actions">
+              {dialog.setting.mode === 'rotation' && onEditRhythm && (
+                <button
+                  type="button"
+                  className="btn mini ghost"
+                  onClick={event => {
+                    const rhythm = dialog.setting.rhythm;
+                    closeDialog();
+                    onEditRhythm(rhythm, event);
+                  }}
+                >Edit Rhythm rotation</button>
+              )}
+              <button type="submit" className="btn mini">Save mode</button>
+              <button type="button" className="btn mini ghost" onClick={closeDialog}>Cancel</button>
+            </div>
           </form>
         </MoneyGoalDialog>
       )}
@@ -2573,7 +2628,7 @@ export function StrengthView({
           rhythms={rhythms}
           archivedRhythms={archivedRhythms}
           datedRhythmCompletions={datedRhythmCompletions}
-          {...(onAddLinkedRhythm ? { onAddLinkedRhythm } : {})}
+          savedWorkouts={data.savedWorkouts}
           session={data.guidedSessionDraft}
           workouts={data.workouts}
           preferredWeightUnit={data.settings.weightUnit}

@@ -28,6 +28,7 @@ import { TodayWeather } from './TodayWeather.tsx';
 import type { TodayWeatherController } from './useTodayWeather.ts';
 import { useTimeBlockSettings } from './TimeBlocksContext.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
+import { TendedRhythmItems } from './TendedRhythmItems.tsx';
 import { TodayTimeframeHeader } from './TodayTimeframeHeader.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { formatScore } from '../domain/score-display.ts';
@@ -35,7 +36,7 @@ import { aggregateCategoryHealthScores } from '../domain/category-scoring.ts';
 import { TodayPrayerModule } from './TodayPrayerModule.tsx';
 import type { CalendarSource } from '../domain/calendar-sources.ts';
 import { CalendarAgendaSection } from './CalendarAgendaSection.tsx';
-import { useAvailableCategories } from './CategoryAvailabilityContext.tsx';
+import { useAvailableCategories, usePrayerEnabled } from './CategoryAvailabilityContext.tsx';
 
 const planTypes: { id: TodayViewId; label: string }[] = [
   { id: 'now', label: 'Now' },
@@ -112,8 +113,6 @@ type TodayViewProps = {
   undoableRhythms: ReadonlySet<string>;
   satisfiedRhythmIds?: ReadonlySet<string>;
   tendedRhythmIds?: ReadonlySet<string>;
-  showTended?: boolean;
-  onShowTendedChange?: (show: boolean) => void;
   initializing?: boolean;
   rhythms: readonly RhythmPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
@@ -147,8 +146,6 @@ export function TodayView({
   undoableRhythms,
   satisfiedRhythmIds = new Set(),
   tendedRhythmIds: savedTendedRhythmIds,
-  showTended = false,
-  onShowTendedChange = () => undefined,
   initializing = false,
   rhythms,
   rhythmScores,
@@ -172,6 +169,7 @@ export function TodayView({
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const availableCategories = useAvailableCategories();
+  const prayerEnabled = usePrayerEnabled();
   const timeBlocks = useTimeBlockSettings();
   const [expandedSectionIds, setExpandedSectionIds] = useState<ReadonlySet<string>>(() => new Set());
   const lastAutoExpandedContext = useRef<string | null>(null);
@@ -263,7 +261,7 @@ export function TodayView({
           score={overallHealth.health}
           markerPlacement="below"
         />
-        <div className="menu-grid">
+        <nav className="menu-grid today-category-menu" aria-label="Today categories">
           {availableCategories.length === 0
             ? (
               <div className="category-empty-state">
@@ -274,26 +272,26 @@ export function TodayView({
               </div>
             )
             : availableCategories.map(area => {
-            const score = categoryHealthScores.get(area.id) ?? null;
-            return (
-              <button
-                className="menu-area"
-                key={area.id}
-                type="button"
-                aria-description={score === null
-                  ? `${area.label} health score unavailable`
-                  : `${area.label} health score ${formatScore(score)} out of 100`}
-                onClick={() => onNavigate(area.id)}
-              >
-                <span className="menu-area-icon" aria-hidden="true">
-                  <AreaIcon id={area.id} variant="today-summary" />
-                </span>
-                <span className="ma-name">{area.label}</span>
-                <CategoryHealthBadge score={score} appearance="rounded" />
-              </button>
-            );
-          })}
-        </div>
+              const score = categoryHealthScores.get(area.id) ?? null;
+              return (
+                <button
+                  className="menu-area"
+                  key={area.id}
+                  type="button"
+                  aria-description={score === null
+                    ? `${area.label} health score unavailable`
+                    : `${area.label} health score ${formatScore(score)} out of 100`}
+                  onClick={() => onNavigate(area.id)}
+                >
+                  <span className="menu-area-icon" aria-hidden="true">
+                    <AreaIcon id={area.id} variant="today-summary" />
+                  </span>
+                  <span className="ma-name">{area.label}</span>
+                  <CategoryHealthBadge score={score} appearance="rounded" />
+                </button>
+              );
+            })}
+        </nav>
       </section>
 
       <section className="today-plan-section" aria-label="Today's plan">
@@ -302,19 +300,24 @@ export function TodayView({
           tendedRhythmIds={tendedRhythmIds}
           satisfiedRhythmIds={satisfiedRhythmIds}
           undoableRhythmIds={undoableRhythms}
-          showTended={showTended}
-          onShowTendedChange={onShowTendedChange}
           showProgress
-          progressDisclosure
-          keepToggleWhenEmpty
+          displayMode="done-rows"
+          todayDate={localDate}
           renderControls={false}
           onUndo={onUndo}
           resetKey={planRhythms.map(rhythm => rhythm.id).join('\u001f')}
           initializing={initializing}
         >
-          {({ visibleRhythmIds, tendedRhythmIds: displayedTendedIds, controls, itemProps }) => {
-              const allMatchingHidden = planRhythms.length > 0
-                && planRhythms.every(rhythm => !visibleRhythmIds.has(rhythm.id));
+          {({
+              visibleRhythmIds,
+              tendedRhythmIds: displayedTendedIds,
+              tendedDisplayItems,
+              expandedTendedRhythmIds,
+              onToggleTendedRhythm,
+              onUndoTendedRhythm,
+              controls,
+              itemProps
+            }) => {
               const weather = weatherController.city
                 && weatherController.weather.status === 'ready'
                 && (
@@ -326,12 +329,8 @@ export function TodayView({
                     compact
                   />
                 );
-              const renderRhythms = (sectionRhythms: readonly RhythmPreview[]) =>
-                sectionRhythms
-                  .filter(rhythm => visibleRhythmIds.has(rhythm.id))
-                  .map(rhythm => (
-                    <div key={rhythm.id} {...itemProps(rhythm.id)}>
-                      <RhythmDetailsDialog
+              const renderRhythmCard = (rhythm: RhythmPreview) => (
+                <RhythmDetailsDialog
                         rhythm={rhythm}
                         inline
                         headingId={`today-rhythm-${rhythm.id}-title`}
@@ -358,20 +357,33 @@ export function TodayView({
                           ? { onEdit: event => onEditRhythm(rhythm, event) }
                           : {})}
                         {...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
-                          ? { onUndo: () => onUndo(rhythm.id) }
+                          ? { onUndo: () => onUndoTendedRhythm(rhythm.id) }
                           : {})}
                         onClose={() => undefined}
                       />
-                    </div>
-                  ));
+              );
+              const renderRhythms = (sectionRhythms: readonly RhythmPreview[]) => {
+                const visibleRhythms = sectionRhythms
+                  .filter(rhythm => visibleRhythmIds.has(rhythm.id));
+                return visibleRhythms.length > 0
+                  ? (
+                    <TendedRhythmItems
+                      className="current-plan-item-group"
+                      rhythms={visibleRhythms}
+                      tendedRhythmIds={displayedTendedIds}
+                      displayItems={tendedDisplayItems}
+                      expandedRhythmIds={expandedTendedRhythmIds}
+                      onToggleRhythm={onToggleTendedRhythm}
+                      itemProps={itemProps}
+                      renderRhythmCard={renderRhythmCard}
+                      renderExpandedRhythm={item => renderRhythmCard(item.rhythm)}
+                    />
+                  )
+                  : null;
+              };
               const emptyMessage = view === 'now'
                 ? 'No active Rhythms right now.'
                 : view === 'flexible' ? 'No flexible Rhythms due today.' : 'No Rhythms due today.';
-              const renderHiddenStatus = allMatchingHidden && (
-                <div className="dashed-empty-state" role="status">
-                  <p>You’ve tended everything here.</p>
-                </div>
-              );
               return (
                 <>
                   <div className="today-plan__title-row">
@@ -415,9 +427,8 @@ export function TodayView({
                               agendaState="expanded"
                               progress={timeframeProgress(planSections[0]?.rhythms ?? [])}
                             />
-                            {renderHiddenStatus}
                             {planSections.length > 0
-                              ? <div className="current-plan-item-group">{renderRhythms(planSections[0]!.rhythms)}</div>
+                              ? renderRhythms(planSections[0]!.rhythms)
                               : (
                                 <div className="today-plan__empty-rhythms" role="status">
                                   <p>{emptyMessage}</p>
@@ -447,11 +458,10 @@ export function TodayView({
                                         agendaState="expanded"
                                         progress={timeframeProgress(section.rhythms)}
                                       />
-                                      <div className="current-plan-item-group">{renderRhythms(section.rhythms)}</div>
+                                      {renderRhythms(section.rhythms)}
                                     </section>
                                   ))}
                                 </TodayAgendaRail>
-                                {renderHiddenStatus}
                               </>
                             )
                             : (
@@ -501,7 +511,7 @@ export function TodayView({
                                         aria-labelledby={headingId}
                                         hidden={!expanded}
                                       >
-                                        <div className="today-plan__accordion-panel-content current-plan-item-group">
+                                        <div className="today-plan__accordion-panel-content">
                                           {renderRhythms(section.rhythms)}
                                         </div>
                                       </div>
@@ -509,7 +519,6 @@ export function TodayView({
                                   );
                                 })}
                               </TodayAgendaRail>
-                              {renderHiddenStatus}
                             </>
                           )
                           : (
@@ -528,6 +537,7 @@ export function TodayView({
 
       <TodayPrayerModule
         requests={prayerRequests}
+        enabled={prayerEnabled}
         onPray={onPrayForRequest}
       />
 

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RhythmFoundationBadges } from '../src/components/RhythmFoundationBadges.tsx';
 import { resolveRhythmFoundationLinks } from '../src/domain/foundation-rhythm-associations.ts';
-import { faithPractices, marriageFoundations, marriageRhythms } from '../src/domain/preview-data.ts';
+import { faithPractices, financeFoundations, marriageFoundations, marriageRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 
 afterEach(cleanup);
@@ -119,8 +119,7 @@ describe('shared Rhythm Foundation badges', () => {
     const overflowFoundations = [
       ...marriageFoundations,
       {
-        ...marriageFoundations[0]!,
-        id: 'synthetic-long-name',
+        ...faithPractices[0]!,
         name: 'An exceptionally long Foundation name that wraps naturally at narrow widths'
       }
     ];
@@ -145,19 +144,20 @@ describe('shared Rhythm Foundation badges', () => {
     );
     expect(screen.queryByRole('dialog')).toBeNull();
 
-    const overflow = screen.getByRole('button', { name: 'Open 5 more linked Foundations' });
+    const overflow = screen.getByRole('button', { name: 'Open 5 more linked Practices and Foundations' });
     await user.click(overflow);
-    let popover = screen.getByRole('dialog', { name: '5 more linked Foundations' });
+    let popover = screen.getByRole('dialog', { name: '5 more linked Practices and Foundations' });
     const items = within(popover).getAllByRole('button');
     expect(items.map(button => button.getAttribute('aria-label'))).toEqual([
       'Marriage: Fun & Adventure',
       'Marriage: Spiritual Growth',
       'Marriage: Partnership',
       'Marriage: Intimacy',
-      'Marriage: An exceptionally long Foundation name that wraps naturally at narrow widths'
+      'Faith Practice: An exceptionally long Foundation name that wraps naturally at narrow widths'
     ]);
     expect(within(popover).getByRole('heading', { name: 'Marriage Foundations' })).toBeTruthy();
-    expect(within(popover).getAllByRole('heading')).toHaveLength(1);
+    expect(within(popover).getByRole('heading', { name: 'Faith Practices' })).toBeTruthy();
+    expect(within(popover).getAllByRole('heading')).toHaveLength(2);
     expect(items.map(button => button.querySelector('.rhythm-foundation-popover__name')?.textContent)).toEqual([
       'Fun & Adventure',
       'Spiritual Growth',
@@ -176,22 +176,22 @@ describe('shared Rhythm Foundation badges', () => {
     expect(document.activeElement).toBe(items[0]);
 
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: '5 more linked Foundations' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '5 more linked Practices and Foundations' })).toBeNull();
     expect(document.activeElement).toBe(overflow);
 
     await user.click(overflow);
-    popover = screen.getByRole('dialog', { name: '5 more linked Foundations' });
+    popover = screen.getByRole('dialog', { name: '5 more linked Practices and Foundations' });
     await user.click(within(popover).getByRole('button', { name: 'Marriage: Fun & Adventure' }));
     expect(onOpenFoundation).toHaveBeenCalledWith(
       'fun-adventure',
       'rhythm-foundation-badge-sample-marriage-connection-overflow'
     );
-    expect(screen.queryByRole('dialog', { name: '5 more linked Foundations' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '5 more linked Practices and Foundations' })).toBeNull();
 
     await user.click(overflow);
-    expect(screen.getByRole('dialog', { name: '5 more linked Foundations' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: '5 more linked Practices and Foundations' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Outside' }));
-    expect(screen.queryByRole('dialog', { name: '5 more linked Foundations' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: '5 more linked Practices and Foundations' })).toBeNull();
   });
 
   it('reports unresolved references without rendering a fabricated Foundation badge', () => {
@@ -211,13 +211,12 @@ describe('shared Rhythm Foundation badges', () => {
   it('keeps a valid linked Foundation visible when its approved icon is unavailable', () => {
     const foundation = {
       ...marriageFoundations[0]!,
-      id: 'known-foundation-without-icon',
       name: 'Unknown visual Foundation',
       iconId: 'unmapped-icon'
     };
     const { container } = render(
       <RhythmFoundationBadges
-        rhythm={rhythmWithFoundationIds([foundation.id])}
+        rhythm={rhythmWithFoundationIds([marriageFoundations[0]!.id])}
         foundations={[foundation]}
       />
     );
@@ -228,15 +227,15 @@ describe('shared Rhythm Foundation badges', () => {
   });
 
   it('resolves cross-category records in catalogue order without repeating a stable Foundation ID', async () => {
-    const financeFoundation = { ...marriageFoundations[0]!, id: 'finance-foundation', category: 'Finances' as const };
+    const financeFoundation = financeFoundations[0]!;
     const catalogue = [financeFoundation, ...marriageFoundations];
     const result = resolveRhythmFoundationLinks(
-      rhythmWithFoundationIds(['intimacy', 'finance-foundation', 'connection', 'connection']),
+      rhythmWithFoundationIds(['intimacy', financeFoundation.id, 'connection', 'connection']),
       catalogue
     );
 
     expect(result.foundations.map(foundation => foundation.id)).toEqual([
-      'finance-foundation',
+      financeFoundation.id,
       'connection',
       'intimacy'
     ]);
@@ -249,7 +248,7 @@ describe('shared Rhythm Foundation badges', () => {
     };
     const { container } = render(
       <RhythmFoundationBadges
-        rhythm={rhythmWithFoundationIds(['intimacy', 'finance-foundation', 'connection'])}
+        rhythm={rhythmWithFoundationIds(['intimacy', financeFoundation.id, 'connection'])}
         foundations={[accessibleFinance, ...marriageFoundations]}
         onOpenFoundation={vi.fn()}
       />
@@ -264,31 +263,30 @@ describe('shared Rhythm Foundation badges', () => {
   });
 
   it('groups mixed-category overflow items under one heading per Category', async () => {
-    const financeFoundations = [
+    const financeFixtureFoundations = [
       {
-        ...marriageFoundations[0]!,
-        id: 'finance-first',
-        category: 'Finances' as const,
-        categoryId: 'finances' as const,
+        ...financeFoundations[0]!,
         name: 'Budgeting'
       },
       {
-        ...marriageFoundations[1]!,
-        id: 'finance-second',
-        category: 'Finances' as const,
-        categoryId: 'finances' as const,
+        ...financeFoundations[1]!,
         name: 'Planning'
       }
     ];
     const catalogue = [
-      financeFoundations[0]!,
+      financeFixtureFoundations[0]!,
       marriageFoundations[0]!,
       marriageFoundations[1]!,
-      financeFoundations[1]!
+      financeFixtureFoundations[1]!
     ];
     render(
       <RhythmFoundationBadges
-        rhythm={rhythmWithFoundationIds(['finance-first', 'connection', 'communication', 'finance-second'])}
+        rhythm={rhythmWithFoundationIds([
+          financeFixtureFoundations[0]!.id,
+          marriageFoundations[0]!.id,
+          marriageFoundations[1]!.id,
+          financeFixtureFoundations[1]!.id
+        ])}
         foundations={catalogue}
         onOpenFoundation={vi.fn()}
       />
