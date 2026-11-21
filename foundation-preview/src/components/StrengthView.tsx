@@ -321,6 +321,10 @@ export function StrengthView({
   );
   const strengthFoundation = foundations.find(foundation => foundation.id === 'health-strength');
   const detailLog = dialog?.kind === 'history' ? dialog.log : undefined;
+  const topRecommendation = recommendations[0];
+  const recommendedWorkout = topRecommendation
+    ? data.savedWorkouts.find(workout => workout.id === topRecommendation.id)
+    : undefined;
   const detailRhythm = detailLog?.rhythmId
     ? rhythms.find(item => item.rhythm.id === detailLog.rhythmId)?.rhythm
       ?? archivedRhythms.find(item => item.id === detailLog.rhythmId)
@@ -1419,6 +1423,24 @@ export function StrengthView({
           hidden={strengthTab !== 'body'}
         >
           <FoundationSectionHeading title="Body overview" />
+          {recommendedWorkout && topRecommendation && (
+            <section className="card strength-recommended-workout" aria-labelledby="strength-recommended-workout-title">
+              <FoundationRoutineSummary
+                title={recommendedWorkout.name}
+                titleId="strength-recommended-workout-title"
+                description={topRecommendation.reason}
+                metadata={topRecommendation.muscles.map(muscle => muscle.name).join(' · ')}
+                className="strength-recommended-workout__summary"
+              />
+              <button
+                type="button"
+                className="btn mini strength-recommended-workout__action"
+                onClick={event => openWorkoutChoice(recommendedWorkout, event)}
+              >
+                Workout
+              </button>
+            </section>
+          )}
           <ToolZone
             className="strength-map-card"
             icon={<RhythmMetadataIcon kind="history" />}
@@ -2003,7 +2025,6 @@ export function StrengthView({
               required
               value={draftWorkoutName}
               onChange={event => setDraftWorkoutName(event.currentTarget.value)}
-              autoFocus
             /></label>
             <StrengthMuscleGroupsDisclosure
               selectedMuscleIds={draftWorkoutMuscles}
@@ -2154,6 +2175,8 @@ export function StrengthView({
           titleId="strength-history-detail-title"
           closeLabel="Close workout details"
           bodyClassName="strength-dialog-body"
+          phoneFullScreen
+          scrollableBody
           onClose={closeDialog}
         >
           <div className="strength-history-detail">
@@ -2706,13 +2729,12 @@ function StrengthWorkoutHistory({
                   }}
                   type="button"
                   className="strength-history-row"
-                  aria-label={`View ${log.workoutName ?? 'Custom workout'}, ${formatFitnessDate(log.date)}, ${log.muscleIds.map(muscleName).join(', ') || 'muscle selection unavailable'}`}
+                  aria-label={`View ${log.workoutName ?? 'Custom workout'}, ${formatFitnessDate(log.date)}`}
                   onClick={event => onOpen(log, event)}
                 >
                   <span className="strength-history-row__content">
                     <strong>{log.workoutName ?? 'Custom workout'}</strong>
                     <span>{formatFitnessDate(log.date)}</span>
-                    <span>{log.muscleIds.map(muscleName).join(' · ') || 'Muscle selection unavailable'}</span>
                   </span>
                   <span className="strength-history-row__chevron" aria-hidden="true">›</span>
                 </button>

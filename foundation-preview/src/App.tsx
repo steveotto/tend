@@ -3511,6 +3511,13 @@ function PreviewWorkspace({
     }
   }
 
+  function signOut() {
+    if (!onSignOut) return;
+    if ((persistenceStatus.kind === 'error' || persistenceStatus.kind === 'conflict')
+      && !window.confirm('Preview changes are not saved. Sign out anyway? The current tab draft will not be transferred.')) return;
+    void onSignOut();
+  }
+
   const isPreviewSettings = destination === 'more' && moreSettingsOpen;
   const storageNeedsAttention = ['unavailable', 'error', 'corrupt', 'unsupported', 'conflict']
     .includes(persistenceStatus.kind);
@@ -3912,6 +3919,24 @@ function PreviewWorkspace({
                           </section>
                         ))}
                       </div>
+                      {settingsDetail === null && (
+                        <section
+                          className="settings-section settings-page__account-actions"
+                          aria-labelledby="settings-account-actions-title"
+                        >
+                          <h3 id="settings-account-actions-title">Account</h3>
+                          <a className="settings-link" href="https://steveotto.github.io/tend/">
+                            <span>Open Tend Classic</span>
+                            <span className="settings-link__chevron" aria-hidden="true">›</span>
+                          </a>
+                          {onSignOut && (
+                            <button type="button" className="settings-link" onClick={signOut}>
+                              <span>Sign out</span>
+                              <span className="settings-link__chevron" aria-hidden="true">›</span>
+                            </button>
+                          )}
+                        </section>
+                      )}
                       <section className="settings-section" aria-labelledby="category-settings-title" hidden={settingsDetail !== 'categories'}>
                         <h3 id="category-settings-title">Categories</h3>
                         <CategorySettings
@@ -4460,24 +4485,11 @@ function PreviewWorkspace({
               : 'Preview data needs attention. Open More → Settings → Save & sync to review recovery and storage options.'}
         </p>
       )}
-      <footer className="preview-footer">
-        <span>
-          {import.meta.env.MODE === 'pages'
-            ? 'Preview data saves on this device first; when signed in, changes sync to your account while connected.'
-            : 'Synthetic preview data stays separate from Tend accounts.'}
-        </span>
-        {import.meta.env.MODE !== 'pages' && <a href="/preview.html">Component catalogue</a>}
-        <a href="https://steveotto.github.io/tend/">Open Tend Classic</a>
-        {onSignOut && (
-          <button type="button" className="preview-sign-out" onClick={() => {
-            if ((persistenceStatus.kind === 'error' || persistenceStatus.kind === 'conflict')
-              && !window.confirm('Preview changes are not saved. Sign out anyway? The current tab draft will not be transferred.')) return;
-            void onSignOut();
-          }}>
-            Sign out
-          </button>
-        )}
-      </footer>
+      {import.meta.env.MODE !== 'pages' && (
+        <footer className="preview-footer">
+          <a href="/preview.html">Component catalogue</a>
+        </footer>
+      )}
       {activeRhythm && (
         <RhythmDetailsDialog
           key={activeRhythm.id}

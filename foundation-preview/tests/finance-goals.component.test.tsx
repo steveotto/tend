@@ -313,8 +313,14 @@ describe('Finance goals view', () => {
 
     const checkIn = within(card).getByRole('button', { name: 'Check in' });
     await user.click(checkIn);
-    expect(screen.getByRole('dialog', { name: 'Record balance check-in' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    const checkInDialog = screen.getByRole('dialog', { name: 'Record balance check-in' });
+    expect(checkInDialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
+    expect(within(checkInDialog).getByRole('region', { name: 'Balance progress' })).toBeTruthy();
+    expect(within(checkInDialog).getByRole('button', { name: 'Close balance check-in' })).toBeTruthy();
+    const checkInHeading = within(checkInDialog).getByRole('heading', { name: 'Record balance check-in' });
+    expect(document.activeElement).toBe(checkInHeading);
+    expect(document.activeElement).not.toBe(within(checkInDialog).getByLabelText('Effective date'));
+    await user.click(within(checkInDialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(document.activeElement).toBe(checkIn));
 
     const detailsTrigger = within(card).getByRole('button', { name: 'View details for Starter reserve' });
@@ -411,6 +417,29 @@ describe('Finance goals view', () => {
     expect((within(editor).getByLabelText('Goal type') as HTMLSelectElement).value).toBe('increase');
     expect((within(editor).getByLabelText('Target balance') as HTMLInputElement).value).toBe('1000.00');
     expect(screen.getByRole('button', { name: 'Close goal editor' })).toBeTruthy();
+  });
+
+  it('hides legacy Foundation associations while preserving them when a Finance goal is edited', async () => {
+    const user = userEvent.setup();
+    const linkedGoal: MoneyGoal = {
+      ...goals[0]!,
+      foundationId: FINANCE_SAVING_RESERVES_ID
+    };
+    const { callbacks } = renderFinance({ goalData: [linkedGoal] });
+    await user.click(screen.getByRole('tab', { name: 'Goals' }));
+    await user.click(screen.getByRole('button', { name: 'View details for Starter reserve' }));
+    const details = screen.getByRole('dialog', { name: 'Starter reserve' });
+    expect(within(details).queryByText(/Related Finance Foundation/)).toBeNull();
+    await user.click(within(details).getByRole('button', { name: 'Edit goal' }));
+
+    const editor = screen.getByRole('dialog', { name: 'Edit goal' });
+    expect(within(editor).queryByLabelText(/Foundation/)).toBeNull();
+    expect(within(editor).queryByText(/Related Finance Foundation/)).toBeNull();
+    await user.click(within(editor).getByRole('button', { name: 'Save goal' }));
+
+    expect(callbacks.onSaveGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: linkedGoal.id, foundationId: FINANCE_SAVING_RESERVES_ID })
+    );
   });
 
   it('does not treat hidden legacy goal Rhythm IDs as Foundation links or Finance Health contributors', async () => {

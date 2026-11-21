@@ -354,14 +354,14 @@ describe('Flexibility foundation presentation', () => {
       name: /Posterior chain|Core|Front of hip and legs|Upper body/
     })).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-    expect(document.activeElement).toBe(logButton);
+    await waitFor(() => expect(document.activeElement).toBe(logButton));
     expect(changes.every(change => change.sessions.length === 0)).toBe(true);
 
     await user.click(logButton);
     dialog = screen.getByRole('dialog', { name: 'Log a stretch' });
     await user.click(within(dialog).getByRole('checkbox', { name: 'Shoulders' }));
     await user.click(within(dialog).getByRole('button', { name: 'Close stretch session' }));
-    expect(document.activeElement).toBe(logButton);
+    await waitFor(() => expect(document.activeElement).toBe(logButton));
     expect(changes.every(change => change.sessions.length === 0)).toBe(true);
   });
 

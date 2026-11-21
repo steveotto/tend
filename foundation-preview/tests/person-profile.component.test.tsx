@@ -391,6 +391,13 @@ describe('shared person profile', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(within(overall).getByRole('group', { name: 'Health by area' }).getAttribute('data-count')).toBe('2');
     expect(within(overall).queryByText('Prayer')).toBeNull();
+    const remainingAreas = within(overall).getByRole('group', { name: 'Health by area' });
+    expect(within(remainingAreas).getByRole('img', {
+      name: 'Rhythms Health score: unavailable'
+    })).toBeTruthy();
+    expect(within(remainingAreas).getByRole('img', {
+      name: 'Connections Health score: unavailable'
+    })).toBeTruthy();
     await user.click(within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' }));
     expect(within(screen.getByRole('dialog', { name: 'Avery’s Overall Health details' }))
       .queryByText('Prayer')).toBeNull();
@@ -421,8 +428,18 @@ describe('shared person profile', () => {
       expect(element.hasAttribute('aria-expanded')).toBe(false);
       expect(element.hasAttribute('aria-controls')).toBe(false);
     }
-    expect(within(areaScores).getByRole('meter', { name: 'Rhythms Health score' })).toBeTruthy();
-    expect(within(areaScores).getByRole('img', { name: 'Connections Health score: unavailable' })).toBeTruthy();
+    const rhythmMeter = within(areaScores).getByRole('meter', { name: 'Rhythms Health score' });
+    const connectionsImage = within(areaScores).getByRole('img', { name: 'Connections Health score: unavailable' });
+    const prayerImage = within(areaScores).getByRole('img', { name: 'Prayer Health score: unavailable' });
+    for (const [item, label] of [
+      [rhythmMeter, 'Rhythms'],
+      [connectionsImage, 'Connections'],
+      [prayerImage, 'Prayer']
+    ] as const) {
+      expect(item.classList.contains('person-health-component-score')).toBe(true);
+      expect(item.querySelector('.person-health-component-score__badge')).toBeTruthy();
+      expect(item.querySelector('.person-health-component-score__label')?.textContent).toBe(label);
+    }
 
     const overallInfo = within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' });
     await user.click(overallInfo);

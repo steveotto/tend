@@ -100,7 +100,7 @@ import {
 import type { CategoryPreferences, FoundationPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 49;
+export const PREVIEW_SCHEMA_VERSION = 50;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -163,7 +163,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50; resolvedPersonCategories: number }
   | {
       valid: false;
       kind: 'invalid' | 'unsupported';
@@ -878,6 +878,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       && value.schemaVersion !== 46
       && value.schemaVersion !== 47
       && value.schemaVersion !== 48
+      && value.schemaVersion !== 49
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -912,7 +913,8 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV49 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV50 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV49 = value.schemaVersion === 49 || isV50;
   const isV48 = value.schemaVersion === 48 || isV49;
   const isV47 = value.schemaVersion === 47 || isV48;
   const isV46 = value.schemaVersion === 46 || isV47;

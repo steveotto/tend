@@ -185,17 +185,17 @@ export function PersonHealthComponentScores({
           );
         }
         return (
-          <div className={`person-health-component-score ${scoreTone(value)}`} key={label}>
-            <span
-              role={available ? 'meter' : 'img'}
-              aria-label={available ? `${label} Health score` : `${label} Health score: unavailable`}
-              aria-valuemin={available ? 0 : undefined}
-              aria-valuemax={available ? 100 : undefined}
-              aria-valuenow={value ?? undefined}
-              aria-valuetext={value === null ? undefined : `${formatScore(value)} out of 100`}
-            >
-              {content}
-            </span>
+          <div
+            className={`person-health-component-score ${scoreTone(value)}`}
+            role={available ? 'meter' : 'img'}
+            aria-label={available ? `${label} Health score` : `${label} Health score: unavailable`}
+            aria-valuemin={available ? 0 : undefined}
+            aria-valuemax={available ? 100 : undefined}
+            aria-valuenow={value ?? undefined}
+            aria-valuetext={value === null ? undefined : `${formatScore(value)} out of 100`}
+            key={label}
+          >
+            {content}
           </div>
         );
       })}

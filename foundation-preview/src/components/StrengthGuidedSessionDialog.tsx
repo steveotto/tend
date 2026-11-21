@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { useScrollLock } from '../hooks/useScrollLock.ts';
 import { AnchoredPopover } from './AnchoredPopover.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { PersonBadge } from './PersonBadge.tsx';
@@ -108,6 +109,7 @@ export function StrengthGuidedSessionDialog({
   const [reviewing, setReviewing] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [editingDateTime, setEditingDateTime] = useState(false);
+  useScrollLock(true);
   const [timerOptionsOpen, setTimerOptionsOpen] = useState(false);
   const [exerciseMenuOpen, setExerciseMenuOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -199,14 +201,6 @@ export function StrengthGuidedSessionDialog({
       notesButtonRef.current?.focus({ preventScroll: true });
     }
   }, [notesOpen, exercise.id]);
-
-  useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, []);
 
   useEffect(() => {
     setCustomRestMinutes(String(Math.floor(restTimer.durationSeconds / 60)));

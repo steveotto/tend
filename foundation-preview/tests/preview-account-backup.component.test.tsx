@@ -256,7 +256,7 @@ describe('manual Preview account backup and restore', () => {
 
     await user.click(close);
     expect(await screen.queryByRole('dialog', { name: 'Account recovery' })).toBeNull();
-    expect(document.activeElement).toBe(opener);
+    await waitFor(() => expect(document.activeElement).toBe(opener));
     expect(document.body.style.position).not.toBe('fixed');
   });
 

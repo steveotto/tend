@@ -69,21 +69,43 @@ export function MoneyGoalDialog({
       : null;
     if (typeof activeDialog.showModal === 'function') activeDialog.showModal();
     else activeDialog.setAttribute('open', '');
-    if (initialFocusId) {
-      document.getElementById(initialFocusId)?.focus({ preventScroll: true });
-    }
+    const findById = (id: string | undefined) => id
+      ? [...activeDialog.querySelectorAll<HTMLElement>('[id]')].find(element => element.id === id) ?? null
+      : null;
+    const requestedTarget = findById(initialFocusId);
+    const safeRequestedTarget = requestedTarget
+      && !requestedTarget.matches('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+      && !requestedTarget.matches(':disabled')
+      ? requestedTarget
+      : null;
+    const initialTarget = safeRequestedTarget
+      ?? findById(labelledBy)
+      ?? activeDialog.querySelector<HTMLElement>('h1, h2, h3, [role="heading"]')
+      ?? activeDialog;
+    const restoreTabIndex = initialTarget !== activeDialog
+      && initialTarget.getAttribute('tabindex') === null;
+    if (restoreTabIndex) initialTarget.setAttribute('tabindex', '-1');
+    initialTarget.focus({ preventScroll: true });
 
     const anchorReference = anchorRef;
     function closeAndRestoreFocus() {
       if (activeDialog.open && typeof activeDialog.close === 'function') activeDialog.close();
       else activeDialog.removeAttribute('open');
-      const containingDialog = previouslyFocused?.closest('dialog');
-      if (previouslyFocused?.isConnected
-        && !previouslyFocused.hasAttribute('disabled')
-        && !previouslyFocused.closest('[inert]')
-        && !(containingDialog instanceof HTMLDialogElement && !containingDialog.open)) {
-        previouslyFocused.focus({ preventScroll: true });
-      }
+      if (restoreTabIndex) initialTarget.removeAttribute('tabindex');
+      if (!previouslyFocused) return;
+      window.requestAnimationFrame(() => {
+        const containingDialog = previouslyFocused.closest('dialog');
+        const competingDialogOpen = [...document.querySelectorAll<HTMLDialogElement>('dialog[open]')]
+          .some(dialog => dialog !== containingDialog && !dialog.contains(previouslyFocused));
+        if (competingDialogOpen
+          || (document.activeElement !== document.body && document.activeElement !== previouslyFocused)) return;
+        if (previouslyFocused.isConnected
+          && !previouslyFocused.matches(':disabled')
+          && !previouslyFocused.closest('[inert], [hidden]')
+          && !(containingDialog instanceof HTMLDialogElement && !containingDialog.open)) {
+          previouslyFocused.focus({ preventScroll: true });
+        }
+      });
     }
 
     if (!anchorReference) {
@@ -180,7 +202,7 @@ export function MoneyGoalDialog({
       window.visualViewport?.removeEventListener('scroll', syncPosition);
       closeAndRestoreFocus();
     };
-  }, [initialFocusId, anchorRef, phoneFullScreen]);
+  }, [initialFocusId, labelledBy, anchorRef, phoneFullScreen]);
 
   const closeControl = closeLabel && (
     <button
@@ -198,7 +220,7 @@ export function MoneyGoalDialog({
       {titleLeadingAction}
       <h2
         id={titleId ?? 'money-goal-dialog-title'}
-        tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+        tabIndex={-1}
       >
         {title}
       </h2>
@@ -206,7 +228,7 @@ export function MoneyGoalDialog({
   ) : (
     <h2
       id={titleId ?? 'money-goal-dialog-title'}
-      tabIndex={initialFocusId === (titleId ?? 'money-goal-dialog-title') ? -1 : undefined}
+      tabIndex={-1}
     >
       {title}
     </h2>
@@ -218,6 +240,7 @@ export function MoneyGoalDialog({
       ref={dialogRef}
       id={dialogId}
       inert={inert}
+      tabIndex={-1}
       className={[
         'money-goal-dialog',
         dialogClassName,

@@ -825,7 +825,7 @@ describe('shared preview components', () => {
       },
       {
         schedule: { frequency: 'weekly', weekdays: [0] },
-        visible: 'Every Su',
+        visible: 'Sunday',
         accessible: 'Full schedule: Every week on Sunday.'
       }
     ];

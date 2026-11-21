@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -773,6 +773,7 @@ describe('Strength preview presentation', () => {
 
     await user.click(within(session).getByRole('button', { name: 'Finish & save' }));
     await acknowledgeWorkoutOnly(user);
+    expect(document.body.style.position).toBe('');
     expect(changes.at(-1)?.workouts).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: /View Incline Press Progress/ }));
 
@@ -2708,14 +2709,56 @@ describe('Strength preview presentation', () => {
       timeZone: 'America/New_York'
     }];
     renderStrength(data);
-    const row = screen.getByRole('button', { name: /View Upper Body.*Chest, Back/ });
-    expect(row.textContent).toContain('Chest · Back');
+    const row = screen.getByRole('button', { name: 'View Upper Body, Oct 22, 2026' });
+    expect(within(row).getByText('Upper Body')).toBeTruthy();
+    expect(within(row).getByText('Oct 22, 2026')).toBeTruthy();
+    expect(within(row).queryByText('Chest · Back')).toBeNull();
+    expect(row.textContent).not.toContain('Quads');
     await user.click(row);
     const details = screen.getByRole('dialog', { name: 'Upper Body' });
     expect(within(details).getByText('Chest · Back')).toBeTruthy();
     expect(within(details).queryByText('Quads')).toBeNull();
     expect(within(details).getByText('Exercise details were not recorded for this workout.')).toBeTruthy();
     expect(within(details).getByText('Oct 22, 2026 · 9:15 AM–10:00 AM')).toBeTruthy();
+  });
+
+  it('shows the top eligible workout recommendation above Body insights without saving on open', async () => {
+    const user = userEvent.setup();
+    const data = createStrengthData();
+    data.savedWorkouts = [{
+      id: 'recommended-chest-workout',
+      name: 'Chest routine',
+      muscleIds: ['chest'],
+      sharedWith: []
+    }];
+    const { onChange } = renderStrength(data);
+    await user.click(screen.getByRole('tab', { name: 'Body' }));
+
+    const bodyPanel = screen.getByRole('tabpanel', { name: 'Body' });
+    const recommendation = bodyPanel.querySelector('.strength-recommended-workout');
+    const insights = bodyPanel.querySelector('.strength-map-card');
+    expect(recommendation).toBeTruthy();
+    expect(insights).toBeTruthy();
+    expect(Boolean(recommendation!.compareDocumentPosition(insights!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(within(recommendation as HTMLElement).getByRole('heading', { name: 'Chest routine' })).toBeTruthy();
+    const opener = within(recommendation as HTMLElement).getByRole('button', { name: 'Workout' });
+    await user.click(opener);
+    expect(screen.getByRole('dialog', { name: 'Chest routine' })).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Close workout choices' }));
+    expect(document.activeElement).toBe(opener);
+
+    cleanup();
+    const unavailable = createStrengthData();
+    unavailable.savedWorkouts = [{
+      id: 'unavailable-recommendation',
+      name: 'Unavailable routine',
+      muscleIds: [],
+      sharedWith: []
+    }];
+    renderStrength(unavailable);
+    await user.click(screen.getByRole('tab', { name: 'Body' }));
+    expect(document.querySelector('.strength-recommended-workout')).toBeNull();
   });
 
   it('opens all History when editing a recent workout moves it outside the latest three', async () => {
@@ -2900,7 +2943,9 @@ describe('Strength preview presentation', () => {
     const editor = screen.getByRole('dialog', { name: 'Create workout' });
     await user.type(within(editor).getByRole('textbox', { name: 'Workout name' }), 'My workout');
     await expandMuscleDisclosure(user, editor);
-    await user.click(within(editor).getByRole('checkbox', { name: 'Chest' }));
+    const chest = within(editor).getByLabelText('Chest') as HTMLInputElement;
+    await user.click(chest);
+    expect(chest.checked).toBe(true);
     editor.scrollTop = 137;
     const peopleRow = within(editor).getByRole('button', { name: 'Choose people' });
 
@@ -3566,7 +3611,7 @@ describe('Strength preview presentation', () => {
     let workoutDialog = screen.getByRole('dialog', { name: 'Create workout' });
     const workoutName = within(workoutDialog).getByRole('textbox', { name: 'Workout name' });
     await user.type(workoutName, 'Bodyweight day');
-    const addExercise = within(workoutDialog).getByRole('button', { name: 'Add exercise' });
+    const addExercise = within(workoutDialog).getByRole('button', { name: /Add exercise/ });
     await user.click(addExercise);
     let exerciseDialog = screen.getByRole('dialog', { name: 'Add exercise' });
     await user.type(within(exerciseDialog).getByRole('textbox', { name: 'Exercise name' }), 'Push-up');
@@ -4498,8 +4543,10 @@ describe('Strength preview presentation', () => {
     expect(document.activeElement).toBe(settingsButton);
     await user.click(settingsButton);
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: 'Rest settings' })).toBeNull();
-    expect(document.activeElement).toBe(settingsButton);
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Rest settings' })).toBeNull();
+      expect(document.activeElement).toBe(settingsButton);
+    });
 
     const exerciseChoice = within(dialog).getByRole('button', { name: '1 of 2' });
     await user.click(exerciseChoice);

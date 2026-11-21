@@ -133,7 +133,8 @@ describe('pure structured Rhythm schedule domain', () => {
 
   it('formats every supported schedule pattern compactly without guessing dates', () => {
     expect(formatRhythmSchedule({ frequency: 'daily' }, 'compact')).toBe('Daily');
-    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [4] }, 'compact')).toBe('Every Thu');
+    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [4] }, 'compact')).toBe('Thursday');
+    expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [0] }, 'compact')).toBe('Sunday');
     expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [5, 1, 3] }, 'compact')).toBe('Mon · Wed · Fri');
     expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [1, 2, 3, 4, 5] }, 'compact')).toBe('Weekdays');
     expect(formatRhythmSchedule({ frequency: 'weekly', weekdays: [6, 0] }, 'compact')).toBe('Weekends');
@@ -209,7 +210,7 @@ describe('pure structured Rhythm schedule domain', () => {
     expect(formatRhythmSchedule({
       frequency: 'weekly',
       weekdays: [0]
-    }, 'card-footer')).toBe('Every Su');
+    }, 'card-footer')).toBe('Sunday');
     expect(formatRhythmSchedule({ frequency: 'daily' }, 'card-footer')).toBe('Daily');
     expect(formatRhythmSchedule({
       frequency: 'monthly',

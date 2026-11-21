@@ -182,8 +182,8 @@ describe('Cardio preview presentation', () => {
     const data = saveCardioGoals({
       ...createCardioData(),
       runs: [
-        { id: 'run-this-week', date: '2026-10-22', distance: 3 },
-        { id: 'run-prior-week', date: '2026-10-16', distance: 5 }
+        { id: 'run-this-week', date: '2026-10-22', distance: 3, notes: 'Treadmill' },
+        { id: 'run-prior-week', date: '2026-10-16', distance: 5, notes: 'Track session' }
       ]
     }, { weeklyRunTarget: 2, weeklyMileTarget: 8 }, '2026-10-22', '2026-10-19');
     const { container } = renderCardio(data);
@@ -207,6 +207,13 @@ describe('Cardio preview presentation', () => {
     expect(container.querySelector('.cardio-week-day.is-today')?.textContent).toContain('Today');
     expect(screen.getByText('Oct 16, 2026')).toBeTruthy();
     expect(screen.getByText('Oct 22, 2026')).toBeTruthy();
+    const historyList = container.querySelector('.cardio-history-list');
+    expect(historyList?.textContent).toContain('3 miles');
+    expect(historyList?.textContent).not.toContain('Treadmill');
+    expect(historyList?.textContent).not.toContain('Track session');
+    expect(historyList?.querySelectorAll('.cardio-history-actions button')).toHaveLength(2);
+    expect([...historyList!.querySelectorAll('.cardio-history-actions button')]
+      .every(button => button.textContent === 'Edit')).toBe(true);
     expect(screen.getByRole('meter', { name: 'Runs this week' }).getAttribute('aria-valuenow')).toBe('50');
     expect(screen.getByRole('meter', { name: 'Miles this week' }).getAttribute('aria-valuenow')).toBe('37.5');
   });
@@ -325,12 +332,14 @@ describe('Cardio preview presentation', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('logs a date-only run through explicit save and restores focus after Cancel or Escape', async () => {
+  it('logs a date-only run without focusing the date field and restores focus after Cancel or Escape', async () => {
     const user = userEvent.setup();
     const { onChange } = renderCardio();
     const opener = screen.getByRole('button', { name: 'Log run' });
     await user.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Log run' });
+    expect(document.activeElement).toBe(within(dialog).getByRole('heading', { name: 'Log run' }));
+    expect(document.activeElement).not.toBe(within(dialog).getByLabelText('Activity date'));
     expect(within(dialog).queryByLabelText(/time/i)).toBeNull();
     await user.type(within(dialog).getByLabelText('Distance (miles)'), '3');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
@@ -354,6 +363,26 @@ describe('Cardio preview presentation', () => {
       distance: 3
     });
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('calculates and saves optional run duration and pace in the selected distance unit', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderCardio();
+    await user.click(screen.getByRole('button', { name: 'Log run' }));
+    const dialog = screen.getByRole('dialog', { name: 'Log run' });
+
+    await user.selectOptions(within(dialog).getByLabelText('Distance unit'), 'km');
+    await user.type(within(dialog).getByLabelText('Distance (kilometers)'), '10');
+    await user.type(within(dialog).getByLabelText('Hours'), '1');
+    expect(within(dialog).getByText('6:00 per kilometer')).toBeTruthy();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save run' }));
+    expect(onChange.mock.calls[0]?.[0].runs[0]).toMatchObject({
+      distanceUnit: 'km',
+      durationSeconds: 3600
+    });
+    expect(Number((onChange.mock.calls[0]?.[0].runs[0] as { distance: number }).distance))
+      .toBeCloseTo(10 / 1.609344, 5);
   });
 
   it('edits a run under the same ID and deletes only the selected run', async () => {
@@ -385,7 +414,14 @@ describe('Cardio preview presentation', () => {
       { id: 'untouched-run', date: '2026-10-21', distance: 2 }
     ] };
     const { onChange: deleteChange } = renderCardio(afterEdit);
-    await user.click(screen.getByRole('button', { name: /Delete run from Oct 22/ }));
+    const runCard = screen.getByRole('button', { name: /Edit run from Oct 22/ });
+    expect(screen.queryByRole('button', { name: /Delete run from Oct 22/ })).toBeNull();
+    await user.click(runCard);
+    const deleteEditor = screen.getByRole('dialog', { name: 'Edit run' });
+    expect(document.activeElement).not.toBe(within(deleteEditor).getByLabelText('Activity date'));
+    await user.click(within(deleteEditor).getByRole('button', { name: 'Delete run' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Delete this run?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Delete run' }));
     expect(deleteChange.mock.calls[0]![0].runs).toEqual([
       expect.objectContaining({ id: 'untouched-run', distance: 2 })
     ]);

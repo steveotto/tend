@@ -7,14 +7,11 @@ import {
   type GoalDraftErrors,
   type MoneyGoal
 } from '../domain/money-goals.ts';
-import type { FoundationPreview } from '../domain/preview-data.ts';
-import { useAvailableFoundations } from './CategoryAvailabilityContext.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
 type GoalEditorProps = {
   goal?: MoneyGoal;
   newGoalId: string;
-  foundations: readonly FoundationPreview[];
   initialDraft?: Partial<GoalDraft>;
   intro?: string;
   onSave: (goal: MoneyGoal) => void;
@@ -34,7 +31,6 @@ const emptyDraft: GoalDraft = {
 export function GoalEditor({
   goal,
   newGoalId,
-  foundations,
   initialDraft,
   intro,
   onSave,
@@ -44,14 +40,6 @@ export function GoalEditor({
     ? goalDraftFrom(goal)
     : { ...emptyDraft, ...initialDraft });
   const [errors, setErrors] = useState<GoalDraftErrors>({});
-  const selectedFoundationId = draft.foundationId ?? '';
-  const availableFoundations = useAvailableFoundations(foundations).filter(foundation =>
-    foundation.categoryId === 'finances' && foundation.lifecycle === 'active'
-  );
-  const selectedFoundationAvailable = availableFoundations.some(
-    foundation => foundation.id === selectedFoundationId
-  );
-  const selectedFoundationKnown = foundations.some(foundation => foundation.id === selectedFoundationId);
 
   function update(field: keyof GoalDraft, value: string) {
     setDraft(previous => ({ ...previous, [field]: value }));
@@ -119,33 +107,6 @@ export function GoalEditor({
               <option value="increase">Savings increase</option>
               <option value="decrease">Debt reduction</option>
             </select>
-          </div>
-          <div className="goal-field">
-            <label htmlFor="goal-foundation">Related Finance Foundation</label>
-            <select
-              id="goal-foundation"
-              value={selectedFoundationId}
-              onChange={event => update('foundationId', event.currentTarget.value)}
-            >
-              <option value="">Unassigned</option>
-              {availableFoundations.map(foundation => (
-                <option key={foundation.id} value={foundation.id}>{foundation.name}</option>
-              ))}
-              {selectedFoundationId && !selectedFoundationAvailable && (
-                <option value={selectedFoundationId}>
-                  {selectedFoundationKnown
-                    ? 'Hidden Foundation · saved association'
-                    : `Unavailable Foundation (${selectedFoundationId}) · saved reference`}
-                </option>
-              )}
-            </select>
-            {selectedFoundationId && !selectedFoundationAvailable && (
-              <span className="goal-field-error" role="status">
-                {selectedFoundationKnown
-                  ? 'This Foundation is turned off. Its saved association will be retained.'
-                  : 'This Foundation reference is unavailable. Its saved association will be retained until resolved.'}
-              </span>
-            )}
           </div>
           <div className="goal-field">
             <label htmlFor="goal-starting-balance">Starting balance</label>

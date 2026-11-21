@@ -497,7 +497,7 @@ function compactWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
   if (sorted.length === 7) return 'Daily';
   if (sorted.join(',') === '1,2,3,4,5') return 'Weekdays';
   if (sorted.join(',') === '0,6') return 'Weekends';
-  if (sorted.length === 1) return `Every ${shortWeekdayName(sorted[0]!)}`;
+  if (sorted.length === 1) return rhythmWeekdayName(sorted[0]!);
   return sorted.map(shortWeekdayName).join(' · ');
 }
 
@@ -508,7 +508,7 @@ function cardFooterWeekdayName(weekday: RhythmWeekday): string {
 function cardFooterWeekdaysSummary(selected: readonly RhythmWeekday[]): string {
   const sorted = [...selected].sort((left, right) => left - right);
   if (sorted.length === 7) return 'Daily';
-  if (sorted.length === 1) return `Every ${cardFooterWeekdayName(sorted[0]!)}`;
+  if (sorted.length === 1) return rhythmWeekdayName(sorted[0]!);
   return sorted.map(cardFooterWeekdayName).join(' · ');
 }
 

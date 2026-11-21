@@ -729,7 +729,6 @@ export function FinanceGoalsView({
       {dialog?.kind === 'details' && detailsGoal && (
         <FinanceGoalDetailsDialog
           goal={detailsGoal}
-          foundations={foundations}
           onEdit={() => setDialog({
             kind: 'edit',
             goal: detailsGoal,
@@ -752,7 +751,6 @@ export function FinanceGoalsView({
           newGoalId={dialog.newGoalId}
           {...(dialog.initialDraft ? { initialDraft: dialog.initialDraft } : {})}
           {...(dialog.intro ? { intro: dialog.intro } : {})}
-          foundations={foundations}
           onSave={goal => {
             onSaveGoal(goal);
             finishGoalDialog(dialog.goal?.id ?? goal.id, dialog.returnToDetails);

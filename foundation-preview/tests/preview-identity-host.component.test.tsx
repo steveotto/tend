@@ -235,7 +235,7 @@ describe('PreviewIdentityHost', () => {
     await user.type(screen.getByLabelText('Password'), 'not-a-real-password');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    await screen.findByRole('button', { name: 'Sign out' });
+    await screen.findByRole('button', { name: 'More, settings' });
     expect(auth.factoryOptions[0]).toMatchObject({
       auth: {
         autoRefreshToken: true,
@@ -247,7 +247,9 @@ describe('PreviewIdentityHost', () => {
       }
     });
 
-    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
     await screen.findByRole('heading', { name: 'Sign in with Tend' });
     expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(storage.getItem(priorAccountData)).toBe('synthetic-recovery-copy');
@@ -269,7 +271,7 @@ describe('PreviewIdentityHost', () => {
       />
     );
 
-    await screen.findByRole('button', { name: 'Sign out' });
+    await screen.findByRole('button', { name: 'More, settings' });
     expect(screen.queryByRole('heading', { name: 'Sign in with Tend' })).toBeNull();
   });
 
@@ -286,7 +288,7 @@ describe('PreviewIdentityHost', () => {
       />
     );
 
-    await screen.findByRole('button', { name: 'Sign out' });
+    await screen.findByRole('button', { name: 'More, settings' });
     await waitFor(() => expect(auth.from).toHaveBeenCalled());
     const readsBeforeRefresh = auth.from.mock.calls.length;
 
@@ -308,7 +310,7 @@ describe('PreviewIdentityHost', () => {
       />
     );
 
-    await screen.findByRole('button', { name: 'Sign out' });
+    await screen.findByRole('button', { name: 'More, settings' });
     expect(screen.getByRole('region', { name: "Today's plan" })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Preview could not open' })).toBeNull();
     expect(storage.getItem('tend:supabase-auth')).toBe('classic-session-sentinel');
@@ -371,7 +373,7 @@ describe('PreviewIdentityHost', () => {
     };
 
     renderRestoredSession();
-    await screen.findByRole('button', { name: 'Sign out' });
+    await screen.findByRole('button', { name: 'More, settings' });
     await user.click(screen.getByRole('tab', { name: 'All today' }));
     expandAllTodayGroups();
     await screen.findByText('Synthetic daily prayer');
@@ -382,7 +384,7 @@ describe('PreviewIdentityHost', () => {
 
     cleanup();
     renderRestoredSession();
-    await screen.findByRole('button', { name: 'Sign out' });
+    await screen.findByRole('button', { name: 'More, settings' });
     await user.click(screen.getByRole('tab', { name: 'All today' }));
     expandAllTodayGroups();
     await screen.findByText('Synthetic daily prayer');
@@ -411,7 +413,7 @@ describe('PreviewIdentityHost', () => {
       />
     );
 
-    await screen.findByRole('button', { name: 'Sign out' });
+    await screen.findByRole('button', { name: 'More, settings' });
     expect(storage.getItem(accountStorageKey)).toBe(originalRaw);
     await user.click(screen.getByRole('tab', { name: 'All today' }));
     expandAllTodayGroups();

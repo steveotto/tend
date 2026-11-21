@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 export function FoundationRoutineSummary({
   className,
   title,
+  titleId,
   description,
   metadata,
   metadataClassName,
@@ -10,6 +11,7 @@ export function FoundationRoutineSummary({
 }: {
   className: string;
   title: string;
+  titleId?: string;
   description: ReactNode;
   metadata?: ReactNode;
   metadataClassName?: string;
@@ -17,7 +19,7 @@ export function FoundationRoutineSummary({
 }) {
   return (
     <div className={className}>
-      <h3>{title}</h3>
+      <h3 id={titleId}>{title}</h3>
       <p>{description}</p>
       {metadata !== undefined && (
         <p className={metadataClassName}>{metadata}</p>

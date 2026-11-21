@@ -6,6 +6,7 @@ import { loadPreview, PREVIEW_STORAGE_KEY, writePreview } from '../src/storage/p
 import { createValidatedPreviewAccountDocument } from '../src/storage/preview-account-backup.ts';
 import {
   PREVIEW_V48_RECOVERY_KEY,
+  PREVIEW_V49_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
   PREVIEW_V37_RECOVERY_KEY,
   PREVIEW_V38_RECOVERY_KEY,
@@ -161,6 +162,22 @@ describe('v4 migration and recovery domain', () => {
     });
   });
 
+  it('migrates schema v49 without changing legacy Cardio runs and preserves its recovery source', () => {
+    const data = createSamplePreviewData();
+    data.cardio.runs = [{ id: 'legacy-cardio-run', date: currentDate, distance: 2 }];
+    const current = createPreviewEnvelope(data);
+    const raw = JSON.stringify({ ...current, schemaVersion: 49 });
+
+    const migrated = parsePreviewBackup(raw, currentDate);
+
+    expect(migrated.valid).toBe(true);
+    if (!migrated.valid) return;
+    expect(migrated.sourceSchemaVersion).toBe(49);
+    expect(migrated.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(migrated.envelope.data.cardio.runs).toEqual(data.cardio.runs);
+    expect(proposedV4RecoveryKeyForRaw(raw)).toBe(PREVIEW_V49_RECOVERY_KEY);
+  });
+
   it('round-trips an ordered rotation and its completed workout history', () => {
     const data = createSamplePreviewData();
     const savedWorkouts: StrengthSavedWorkout[] = [
@@ -203,7 +220,7 @@ describe('v4 migration and recovery domain', () => {
       supersetGroups: []
     }]);
     const migrated = migratePreviewToProposedV4(JSON.stringify(encoded), currentDate);
-    expect(migrated).toMatchObject({ valid: true, sourceSchemaVersion: 49 });
+    expect(migrated).toMatchObject({ valid: true, sourceSchemaVersion: PREVIEW_SCHEMA_VERSION });
     if (migrated.valid) {
       expect(migrated.envelope.data.strength.rhythmModes[0]).toEqual({
         rhythmId: 'rotation-rhythm',
