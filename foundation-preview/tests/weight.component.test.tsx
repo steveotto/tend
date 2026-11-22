@@ -219,20 +219,27 @@ describe('Weight preview presentation', () => {
       ]
     };
     const { container } = renderWeight(data);
-    expect(screen.getByText('Latest recorded measurement · Oct 20, 2026')).toBeTruthy();
-    expect(screen.getByText('Recorded measurement')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Latest weigh-in' })).toBeTruthy();
+    const latestSection = screen.getByRole('heading', { name: 'Latest weigh-in' }).closest('section');
+    expect(latestSection && within(latestSection).getAllByText('Oct 20, 2026')).toHaveLength(1);
+    expect(screen.getByText('Recorded weigh-in')).toBeTruthy();
     expect(screen.getByText('Goal path')).toBeTruthy();
     expect(screen.getAllByText('Expected today').length).toBeGreaterThan(0);
+    expect(screen.getByText('Goal-path progress')).toBeTruthy();
+    expect(container.querySelector('.preview-score-meter')).toBeNull();
     expect(container.querySelectorAll('.weight-chart__record')).toHaveLength(2);
     expect(container.querySelector('.weight-chart__goal')).toBeTruthy();
   });
 
-  it('keeps progress and history as separate stacked cards in empty and populated states', () => {
+  it('uses sibling Weight sections in empty and populated states', () => {
     const empty = renderWeight();
     const emptyProgress = empty.container.querySelector('.weight-progress');
-    expect(emptyProgress?.querySelector('#weight-panel-progress .weight-progress-card')).toBeTruthy();
+    expect(emptyProgress?.querySelector('#weight-panel-progress .weight-latest-section')).toBeTruthy();
+    expect(emptyProgress?.querySelector('#weight-panel-progress .weight-summary-section')).toBeTruthy();
+    expect(emptyProgress?.querySelector('#weight-panel-progress .weight-chart-section')).toBeTruthy();
+    expect(emptyProgress?.querySelector('#weight-panel-progress .weight-progress-card')).toBeNull();
     expect(emptyProgress?.querySelector('#weight-panel-measurements .weight-history-card')).toBeTruthy();
-    expect(screen.getByText('No valid weigh-ins to show.')).toBeTruthy();
+    expect(screen.getAllByText(/No valid weigh-in/i).length).toBeGreaterThan(0);
     const addWeighIn = screen.getByRole('button', { name: 'Add weigh-in' });
     expect(screen.getAllByRole('button', { name: 'Add weigh-in' })).toHaveLength(1);
     expect(addWeighIn.closest('.weight-history-card')).toBeTruthy();
@@ -243,22 +250,23 @@ describe('Weight preview presentation', () => {
       weighIns: [{ id: 'spaced-history', date: '2026-10-20', weightKg: 80 }]
     });
     const populatedProgress = populated.container.querySelector('.weight-progress');
-    expect(populatedProgress?.querySelector('#weight-panel-progress .weight-progress-card')).toBeTruthy();
+    expect(populatedProgress?.querySelector('#weight-panel-progress .weight-latest-section')).toBeTruthy();
+    expect(populatedProgress?.querySelector('#weight-panel-progress .weight-summary-section')).toBeTruthy();
+    expect(populatedProgress?.querySelector('#weight-panel-progress .weight-chart-section')).toBeTruthy();
+    expect(populatedProgress?.querySelector('#weight-panel-progress .weight-progress-card')).toBeNull();
     expect(populatedProgress?.querySelector('#weight-panel-measurements .weight-history-card')).toBeTruthy();
     expect(screen.getAllByText('Oct 20, 2026').length).toBeGreaterThan(0);
   });
 
-  it('uses the shared full score meter and distinguishes unavailable from numeric zero', () => {
+  it('shows unavailable and numeric zero Goal-path progress without a multicolor meter', () => {
     renderWeight();
-    const unavailableMeter = screen.getByRole('meter', { name: 'Weight progress score, separate from category and Foundation scores' });
-    expect(unavailableMeter.getAttribute('aria-valuetext')).toBe('Score unavailable');
-    expect(unavailableMeter.hasAttribute('aria-valuenow')).toBe(false);
-    expect(unavailableMeter.className).not.toContain('preview-score-meter--compact');
-    expect(unavailableMeter.querySelector('.category-health-spectrum')?.classList.contains('is-empty')).toBe(true);
-    expect(unavailableMeter.querySelector('.preview-score-marker')).toBeNull();
+    expect(screen.getByText('Goal-path progress')).toBeTruthy();
+    expect(screen.queryByRole('meter', { name: /Weight progress score/ })).toBeNull();
+    expect(screen.queryByRole('meter')).toBeNull();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
 
     cleanup();
-    const zero = renderWeight({
+    renderWeight({
       ...createWeightData(),
       goals: {
         startWeightKg: 200,
@@ -268,11 +276,8 @@ describe('Weight preview presentation', () => {
       },
       weighIns: [{ id: 'zero-progress', date: '2026-10-11', weightKg: 210 }]
     }, '2026-10-11');
-    const zeroMeter = screen.getByRole('meter', { name: 'Weight progress score, separate from category and Foundation scores' });
-    expect(zeroMeter.getAttribute('aria-valuenow')).toBe('0');
-    expect(zeroMeter.getAttribute('aria-valuetext')).toBe('0 out of 100');
-    expect(zeroMeter.querySelector('.preview-score-marker')).toBeTruthy();
-    expect(zero.container.querySelector('.preview-score-meter--compact')).toBeNull();
+    expect(screen.queryByRole('meter')).toBeNull();
+    expect(within(screen.getByText('Goal-path progress').closest('div')!).getByText('0 / 100')).toBeTruthy();
   });
 
   it('cancels without saving and records a positive unit-converted weigh-in', async () => {

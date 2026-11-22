@@ -12,7 +12,7 @@ export function cardioHealthStatusMessage({
   hasCompletedWeek: boolean;
 }): string | null {
   if (!hasTrackingStartDate && !hasWeeklyGoals) {
-    return 'Set a Cardio tracking start date and save weekly run and distance goals. Cardio Health uses your run logs and saved goals.';
+    return null;
   }
   if (!hasTrackingStartDate) {
     return 'Set a Cardio tracking start date. Cardio Health uses your run logs and saved weekly goals.';

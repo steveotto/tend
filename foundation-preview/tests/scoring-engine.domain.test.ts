@@ -179,8 +179,8 @@ describe('shared scoring engine Rhythm scores', () => {
     expect(firstDue.scoreClockStartDate).toBe('2026-11-10');
     expect(firstDue.occurrences).toHaveLength(1);
     expect(firstDue.consistency).toEqual({ kind: 'scored', score: 0 });
-    expect(firstDue.onTrack).toEqual({ kind: 'scored', score: 100 });
-    expect(firstDue.health).toBe(25);
+    expect(firstDue.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(firstDue.health).toBeNull();
   });
 
   it('keeps a brand-new Rhythm unscored until its first assigned time block begins', () => {
@@ -199,8 +199,8 @@ describe('shared scoring engine Rhythm scores', () => {
     expect(beforeDue.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
     expect(beforeDue.health).toBeNull();
     expect(atDue.consistency).toEqual({ kind: 'scored', score: 0 });
-    expect(atDue.onTrack).toEqual({ kind: 'scored', score: 100 });
-    expect(atDue.health).toBe(25);
+    expect(atDue.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(atDue.health).toBeNull();
 
     const established = scoreRhythm({
       ...input,
@@ -248,8 +248,8 @@ describe('shared scoring engine Rhythm scores', () => {
     expect(beforeFridayBlock.consistency).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
     expect(beforeFridayBlock.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
     expect(atFridayBlock.consistency).toEqual({ kind: 'scored', score: 0 });
-    expect(atFridayBlock.onTrack).toEqual({ kind: 'scored', score: 100 });
-    expect(atFridayBlock.health).toBe(25);
+    expect(atFridayBlock.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(atFridayBlock.health).toBeNull();
   });
 
   it('keeps known pre-block creation unscored until the assigned block and preserves missing-boundary behavior', () => {
@@ -277,8 +277,12 @@ describe('shared scoring engine Rhythm scores', () => {
 
     expect(beforeBlock.health).toBeNull();
     expect(beforeBlock.consistency).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
-    expect(atBlock.health).toBe(25);
-    expect(missingBoundary.health).toBe(25);
+    expect(atBlock.consistency).toEqual({ kind: 'scored', score: 0 });
+    expect(atBlock.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(atBlock.health).toBeNull();
+    expect(missingBoundary.consistency).toEqual({ kind: 'scored', score: 0 });
+    expect(missingBoundary.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(missingBoundary.health).toBeNull();
   });
 
   it('uses a backdated completion as clock evidence earlier than creation', () => {

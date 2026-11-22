@@ -1308,16 +1308,16 @@ async function verifyFinanceCheckInPalette(page: Page, viewportWidth: number): P
   assert.equal(await dialog.getByRole('button', { name: 'Close balance check-in' }).isVisible(), true);
 }
 
-async function verifyCardioRunDialogLayout(page: Page, viewportWidth: number): Promise<void> {
-  const dialog = page.getByRole('dialog', { name: 'Log run' });
+async function verifyCardioActivityDialogLayout(page: Page, viewportWidth: number): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Log activity' });
   const layout = await dialog.evaluate(element => {
     const form = element.querySelector<HTMLElement>('.cardio-form');
-    const date = element.querySelector<HTMLInputElement>('#cardio-run-date');
+    const date = element.querySelector<HTMLInputElement>('#cardio-activity-date');
     const duration = element.querySelector<HTMLElement>('.cardio-duration__fields');
     const pace = element.querySelector<HTMLElement>('.cardio-pace');
     const actions = element.querySelector<HTMLElement>('.cardio-form__actions');
     if (!form || !date || !duration || !pace || !actions) {
-      throw new Error('The run form is missing duration, pace, date, or action controls.');
+      throw new Error('The activity form is missing type, duration, pace, date, or action controls.');
     }
     const dialogRect = element.getBoundingClientRect();
     const formRect = form.getBoundingClientRect();
@@ -1813,7 +1813,7 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
     {
       name: 'Cardio',
       tablist: 'Cardio Foundation sections',
-      tabs: ['Progress', 'Activities', 'Rhythms'],
+      tabs: ['Insights', 'Activities', 'Rhythms'],
       panels: ['cardio-panel-progress', 'cardio-panel-activities', 'cardio-panel-rhythms']
     },
     {
@@ -2153,20 +2153,22 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
   const cardioTabs = page.getByRole('tablist', { name: 'Cardio Foundation sections' });
   await cardioTabs.getByRole('tab', { name: 'Activities' }).click();
   const activityCard = page.locator('#cardio-panel-activities .cardio-history-card');
-  const runEditButton = activityCard.getByRole('button', { name: /Edit run from/ }).first();
+  const activityHistoryButton = activityCard.locator('.cardio-history-list .cardio-activity-row').first();
 
-  async function verifyRunDialog(isEdit: boolean) {
-    const dialogName = isEdit ? 'Edit run' : 'Log run';
+  async function verifyActivityDialog(isEdit: boolean) {
+    const dialogName = isEdit ? 'Edit run' : 'Log activity';
     const dialog = page.getByRole('dialog', { name: dialogName });
     if (!isEdit) {
-      await page.getByRole('button', { name: 'Log run' }).click();
+      await page.getByRole('button', { name: 'Add activity' }).click();
     } else {
-      await runEditButton.click();
+      await activityHistoryButton.click();
+      const details = page.getByRole('dialog', { name: 'Run details' });
+      await details.getByRole('button', { name: 'Edit activity' }).click();
     }
     await dialog.waitFor();
     const initialFocus = await dialog.evaluate(element => {
-      const title = element.querySelector<HTMLElement>('#cardio-run-title');
-      const date = element.querySelector<HTMLInputElement>('#cardio-run-date');
+      const title = element.querySelector<HTMLElement>('#cardio-activity-title');
+      const date = element.querySelector<HTMLInputElement>('#cardio-activity-date');
       return {
         titleFocused: document.activeElement === title,
         dateFocused: document.activeElement === date,
@@ -2199,8 +2201,12 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
       `${dialogName} pointer focus should not change field dimensions.`);
     }
 
-    await dialog.getByRole('button', { name: 'Close run' }).focus();
-    const dateField = dialog.locator('#cardio-run-date');
+    await dialog.getByRole('button', { name: 'Close activity form' }).focus();
+    const typeField = dialog.getByRole('combobox', { name: 'Activity type' });
+    const dateField = dialog.locator('#cardio-activity-date');
+    await page.keyboard.press('Tab');
+    assert.equal(await typeField.evaluate(input => document.activeElement === input),
+      true, `${dialogName} keyboard order should reach Activity type after Close.`);
     await page.keyboard.press('Tab');
     assert.equal(await dateField.evaluate(input => document.activeElement === input),
       true, `${dialogName} keyboard order should reach the date field after Close.`);
@@ -2235,8 +2241,8 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
     await setPreviewTextSize(page, textSize);
     for (const viewportWidth of [375, 390, 430]) {
       await page.setViewportSize({ width: viewportWidth, height: 844 });
-      await verifyRunDialog(false);
-      await verifyRunDialog(true);
+      await verifyActivityDialog(false);
+      await verifyActivityDialog(true);
     }
   }
 
@@ -2248,27 +2254,47 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
         const rows = [...card.querySelectorAll<HTMLElement>('.cardio-history-list > li')];
         if (rows.length === 0) throw new Error('Cardio history must render at least one run.');
         const layouts = rows.map(row => {
-          const main = row.querySelector<HTMLElement>('.cardio-history-list__main');
-          const performance = row.querySelector<HTMLElement>('.cardio-run-performance');
-          const metrics = performance?.querySelector<HTMLElement>('.cardio-run-performance__metrics');
-          const comparison = performance?.querySelector<HTMLElement>('.cardio-run-performance__comparison');
-          const edit = row.querySelector<HTMLElement>('.cardio-history-actions button');
-          if (!main || !performance || !metrics || !comparison || !edit) {
-            throw new Error('Cardio history must include a run, performance summary, and edit action.');
+          const button = row.querySelector<HTMLButtonElement>('.cardio-activity-row');
+          const main = button?.querySelector<HTMLElement>('.cardio-activity-row__main');
+          const metadata = button?.querySelector<HTMLElement>('.cardio-activity-row__metadata');
+          const distance = main?.querySelector<HTMLElement>('strong');
+          const chevron = button?.querySelector<HTMLElement>('.cardio-activity-row__chevron');
+          const pace = button?.querySelector<HTMLElement>('.cardio-activity-row__pace-cardio-chip');
+          const divider = getComputedStyle(row, '::before');
+          if (!button || !main || !metadata || !distance || !chevron) {
+            throw new Error('Cardio history must use a compact, accessible run-details button.');
           }
+          const paceBounds = pace?.getBoundingClientRect();
+          const paceStyle = pace ? getComputedStyle(pace) : null;
           return {
             rowWidth: row.clientWidth,
+            buttonWidth: button.clientWidth,
             mainWidth: main.clientWidth,
             mainScrollWidth: main.scrollWidth,
-            performanceWidth: performance.clientWidth,
-            performanceScrollWidth: performance.scrollWidth,
-            metricsWidth: metrics.clientWidth,
-            metricsScrollWidth: metrics.scrollWidth,
-            comparisonWidth: comparison.clientWidth,
-            comparisonScrollWidth: comparison.scrollWidth,
-            editLeft: edit.getBoundingClientRect().left,
+            metadataWidth: metadata.clientWidth,
+            metadataScrollWidth: metadata.scrollWidth,
+            distanceWordBreak: getComputedStyle(distance).wordBreak,
+            chevronLeft: chevron.getBoundingClientRect().left,
+            chevronRight: chevron.getBoundingClientRect().right,
+            iconWidth: button.querySelector<HTMLElement>('.cardio-activity-row__type-icon')?.getBoundingClientRect().width,
+            iconHeight: button.querySelector<HTMLElement>('.cardio-activity-row__type-icon')?.getBoundingClientRect().height,
+            iconSvgWidth: button.querySelector<HTMLElement>('.cardio-activity-row__type-icon svg')?.getBoundingClientRect().width,
+            iconSvgHeight: button.querySelector<HTMLElement>('.cardio-activity-row__type-icon svg')?.getBoundingClientRect().height,
             mainRight: main.getBoundingClientRect().right,
-            text: row.textContent ?? ''
+            paceText: pace?.textContent?.trim() ?? null,
+            paceRight: paceBounds?.right,
+            paceWhiteSpace: paceStyle?.whiteSpace,
+            paceBackground: paceStyle?.backgroundColor,
+            paceColor: paceStyle?.color,
+            rowRadius: getComputedStyle(button).borderRadius,
+            rowBorderTopWidth: getComputedStyle(button).borderTopWidth,
+            dividerWidth: divider.width,
+            dividerHeight: divider.height,
+            dividerRadius: divider.borderRadius,
+            dividerBackground: divider.backgroundColor,
+            accessibleName: button.getAttribute('aria-label'),
+            nestedButtons: button.querySelectorAll('button').length,
+            text: button.textContent ?? ''
           };
         });
         return {
@@ -2284,27 +2310,290 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
       assert.ok(layout.cardWidth <= viewportWidth);
       for (const [index, row] of layout.rows.entries()) {
         assert.ok(row.rowWidth <= layout.cardWidth + 1, `${label} row ${index + 1} must fit the card.`);
+        assert.ok(row.buttonWidth > 0 && row.buttonWidth <= row.rowWidth + 1,
+          `${label} row ${index + 1} button must remain inside its list item.`);
         assert.ok(row.mainWidth > 0 && row.mainScrollWidth <= row.mainWidth + 1,
           `${label} row ${index + 1} details must remain within their column.`);
-        assert.ok(row.performanceWidth > 0
-          && row.performanceScrollWidth <= row.performanceWidth + 1,
-        `${label} row ${index + 1} performance summary must not overflow.`);
-        assert.ok(row.metricsWidth > 0 && row.metricsScrollWidth <= row.metricsWidth + 1,
-          `${label} row ${index + 1} metric values must fit.`);
-        assert.ok(row.comparisonWidth > 0
-          && row.comparisonScrollWidth <= row.comparisonWidth + 1,
-        `${label} row ${index + 1} comparison labels and deltas must fit.`);
-        assert.ok(row.mainRight <= row.editLeft,
-          `${label} row ${index + 1} edit action must not overlap run details.`);
-        assert.match(row.text, /Estimated Calories/);
+        assert.ok(row.metadataWidth > 0 && row.metadataScrollWidth <= row.metadataWidth + 1,
+          `${label} row ${index + 1} date and available performance text must fit.`);
+        assert.equal(row.distanceWordBreak, 'normal',
+          `${label} row ${index + 1} distance should not break in the middle of a word.`);
+        assert.ok(row.mainRight <= row.chevronLeft,
+          `${label} row ${index + 1} chevron must not overlap its content.`);
+        assert.equal(row.rowRadius, '12px',
+          `${label} row ${index + 1} should use the shared 12px row radius.`);
+        assert.equal(row.rowBorderTopWidth, '0px',
+          `${label} row ${index + 1} should not own a curved border divider.`);
+        if (index > 0) {
+          assert.equal(row.dividerHeight, '1px',
+            `${label} row ${index + 1} divider should remain one thin pixel.`);
+          assert.equal(row.dividerRadius, '0px',
+            `${label} row ${index + 1} divider should have square ends.`);
+          assert.notEqual(row.dividerBackground, 'rgba(0, 0, 0, 0)',
+            `${label} row ${index + 1} divider should be visible.`);
+        }
+        if (row.paceText) {
+          assert.equal(row.paceWhiteSpace, 'nowrap',
+            `${label} row ${index + 1} pace unit should remain intact.`);
+          assert.equal(row.paceBackground, 'rgba(0, 0, 0, 0)',
+            `${label} row ${index + 1} pace indicator should have no pill background.`);
+          if (row.paceText.includes('▼')) {
+            assert.equal(row.paceColor, 'rgb(34, 197, 94)',
+              `${label} row ${index + 1} faster pace should use Bright green.`);
+          } else if (row.paceText.includes('▲')) {
+            assert.equal(row.paceColor, 'rgb(239, 68, 68)',
+              `${label} row ${index + 1} slower pace should use Bright red.`);
+          }
+          assert.ok(row.paceRight && row.paceRight <= row.chevronLeft,
+            `${label} row ${index + 1} pace indicator should stay separated from the chevron.`);
+        }
+        assert.ok(row.iconWidth && row.iconWidth <= 40 && row.iconHeight && row.iconHeight <= 40,
+          `${label} row ${index + 1} activity icon must remain bounded.`);
+        assert.ok(row.iconSvgWidth && row.iconSvgWidth <= 22 && row.iconSvgHeight && row.iconSvgHeight <= 22,
+          `${label} row ${index + 1} activity icon SVG must remain bounded.`);
+        assert.equal(row.nestedButtons, 0, `${label} row ${index + 1} must not nest buttons.`);
+        assert.match(row.accessibleName ?? '', /^Open (?:run|walk) details/);
       }
-      assert.match(layout.rows[0]!.text, /Pace vs similar-distance run/);
-      assert.match(layout.rows[2]!.text, /1,234\.56 mi/);
+
+      const historyRow = activityCard.locator('.cardio-activity-row').first();
+      await historyRow.hover();
+      const hoverLayout = await historyRow.evaluate(element => ({
+        background: getComputedStyle(element).backgroundColor,
+        radius: getComputedStyle(element).borderRadius
+      }));
+      assert.notEqual(hoverLayout.background, 'rgba(0, 0, 0, 0)',
+        `${label} row hover should use a contained background.`);
+      assert.equal(hoverLayout.radius, '12px',
+        `${label} row hover should retain rounded geometry.`);
+      await historyRow.focus();
+      const focusLayout = await historyRow.evaluate(element => ({
+        outlineStyle: getComputedStyle(element).outlineStyle,
+        outlineWidth: getComputedStyle(element).outlineWidth,
+        radius: getComputedStyle(element).borderRadius
+      }));
+      assert.equal(focusLayout.outlineStyle, 'solid',
+        `${label} row keyboard focus should remain visible.`);
+      assert.equal(focusLayout.outlineWidth, '2px',
+        `${label} row keyboard focus should use a 2px outline.`);
+      assert.equal(focusLayout.radius, '12px',
+        `${label} row keyboard focus should retain rounded geometry.`);
+
+      const allActivitiesLayout = await page.locator('.cardio-all-activities-summary').evaluate(element => {
+        const metrics = [...element.querySelectorAll<HTMLElement>('.cardio-activity-summary__metric')];
+        const headings = [...element.querySelectorAll<HTMLElement>('dt')];
+        const values = [...element.querySelectorAll<HTMLElement>('dd')];
+        const heading = element.querySelector<HTMLElement>('.cardio-activity-summary__heading');
+        const headingTitle = heading?.querySelector<HTMLElement>('h2');
+        const metricsContainer = element.querySelector<HTMLElement>('.cardio-activity-summary__metrics');
+        const explanation = element.querySelector<HTMLElement>('.cardio-activity-summary__explanation');
+        return {
+          subtitle: element.querySelector<HTMLElement>('.cardio-activity-summary__heading p')?.textContent?.trim(),
+          cardPadding: getComputedStyle(element).padding,
+          headingMarginBottom: heading ? getComputedStyle(heading).marginBottom : null,
+          headingFontSize: headingTitle ? getComputedStyle(headingTitle).fontSize : null,
+          explanationText: explanation?.textContent?.trim() ?? null,
+          explanationFontSize: explanation ? getComputedStyle(explanation).fontSize : null,
+          explanationMarginTop: explanation ? getComputedStyle(explanation).marginTop : null,
+          metricCount: metrics.length,
+          metricColumns: metricsContainer ? getComputedStyle(metricsContainer).gridTemplateColumns : null,
+          metricWidth: metrics[0]?.getBoundingClientRect().width,
+          metricHeights: metrics.map(metric => metric.getBoundingClientRect().height),
+          headingAlignments: headings.map(heading => getComputedStyle(heading).textAlign),
+          valueAlignments: values.map(value => getComputedStyle(value).textAlign),
+          dividers: metrics.slice(1).map(metric => getComputedStyle(metric, '::before').height),
+          dividerHeights: metrics.slice(1).map(metric => {
+            const pseudo = getComputedStyle(metric, '::before');
+            return pseudo.height;
+          }),
+          documentWidth: document.documentElement.scrollWidth
+        };
+      });
+      assert.equal(allActivitiesLayout.subtitle, 'All-time totals.', `${label} All Activities subtitle`);
+      assert.equal(allActivitiesLayout.cardPadding, '12px', `${label} All Activities should reduce outer padding.`);
+      assert.equal(allActivitiesLayout.headingMarginBottom, '6px', `${label} All Activities should reduce header-to-metrics gap.`);
+      const textScale = textSize === 'small' ? 1 : textSize === 'medium' ? 1.125 : 1.25;
+      assert.equal(allActivitiesLayout.headingFontSize, `${20 * textScale}px`,
+        `${label} All Activities should preserve the shared 20px heading.`);
+      if (allActivitiesLayout.explanationText) {
+        assert.equal(allActivitiesLayout.explanationFontSize, `${10 * textScale}px`,
+          `${label} All Activities partial calorie text should remain smaller.`);
+        assert.equal(allActivitiesLayout.explanationMarginTop, '4px',
+          `${label} All Activities partial calorie text should stay close to the metrics.`);
+        assert.match(allActivitiesLayout.explanationText, /^Calories available for \d+ of \d+ activities$/,
+          `${label} All Activities partial calorie text should show its actual counts.`);
+      }
+      assert.equal(allActivitiesLayout.metricCount, 3, `${label} All Activities should keep three equal columns.`);
+      assert.ok(allActivitiesLayout.metricWidth && allActivitiesLayout.metricWidth > 0);
+      assert.ok(allActivitiesLayout.metricHeights.every(height => Math.abs(height - allActivitiesLayout.metricHeights[0]!) < 0.5),
+        `${label} All Activities metric columns should keep equal heights.`);
+      assert.ok(allActivitiesLayout.headingAlignments.every(alignment => alignment === 'center'),
+        `${label} All Activities labels should be centered.`);
+      assert.ok(allActivitiesLayout.valueAlignments.every(alignment => alignment === 'center'),
+        `${label} All Activities values should be centered.`);
+      assert.ok(allActivitiesLayout.dividers.every(width => width !== '0px'),
+        `${label} All Activities should keep subtle dividers.`);
+      assert.equal(allActivitiesLayout.documentWidth, viewportWidth);
+
+      const latestLayout = await page.locator('.cardio-latest-activity').evaluate(element => {
+        const metrics = [...element.querySelectorAll<HTMLElement>('.cardio-activity-performance__metrics > div')];
+        const comparison = element.querySelector<HTMLElement>('.cardio-activity-comparison');
+        const deltas = comparison
+          ? [...comparison.querySelectorAll<HTMLElement>('.cardio-activity-comparison__delta')]
+          : [];
+        if (deltas.length === 3) {
+          const sampleValues = [
+            null,
+            { text: '+289', unit: 'kcal' },
+            { text: '+2.2', unit: 'mi' }
+          ] as const;
+          deltas.forEach((delta, index) => {
+            const sample = sampleValues[index];
+            if (!sample) return;
+            const strong = delta.querySelector<HTMLElement>('dd strong');
+            if (!strong) return;
+            const caret = document.createElement('span');
+            caret.className = 'cardio-activity-comparison__delta-caret';
+            caret.setAttribute('aria-hidden', 'true');
+            caret.textContent = '▲';
+            const text = document.createElement('span');
+            text.className = 'cardio-activity-comparison__delta-text';
+            text.textContent = sample.text;
+            const unit = document.createElement('span');
+            unit.className = 'cardio-activity-comparison__delta-unit';
+            unit.textContent = sample.unit;
+            strong.replaceChildren(caret, document.createTextNode(' '), text,
+              document.createTextNode(' '), unit);
+          });
+        }
+        const deltaLayout = comparison
+          ? [...comparison.querySelectorAll<HTMLElement>('.cardio-activity-comparison__delta')].map(delta => {
+              const dt = delta.querySelector<HTMLElement>('dt');
+              const dd = delta.querySelector<HTMLElement>('dd');
+              const strong = delta.querySelector<HTMLElement>('dd strong');
+              const icon = delta.querySelector<HTMLElement>('.cardio-activity-comparison__delta-icon');
+              const caret = strong?.querySelector<HTMLElement>('.cardio-activity-comparison__delta-caret');
+              const text = strong?.querySelector<HTMLElement>('.cardio-activity-comparison__delta-text');
+              const unit = strong?.querySelector<HTMLElement>('.cardio-activity-comparison__delta-unit');
+              const dtRect = dt?.getBoundingClientRect();
+              const ddRect = dd?.getBoundingClientRect();
+              const iconRect = icon?.getBoundingClientRect();
+              const strongRect = strong?.getBoundingClientRect();
+              const deltaRect = delta.getBoundingClientRect();
+              return {
+                background: getComputedStyle(delta).backgroundColor,
+                height: delta.getBoundingClientRect().height,
+                strongFontSize: strong ? getComputedStyle(strong).fontSize : null,
+                strongColor: strong ? getComputedStyle(strong).color : null,
+                strongClass: strong?.className ?? null,
+                caretFontSize: caret ? getComputedStyle(caret).fontSize : null,
+                textFontSize: text ? getComputedStyle(text).fontSize : null,
+                unitFontSize: unit ? getComputedStyle(unit).fontSize : null,
+                caretText: caret?.textContent?.trim() ?? null,
+                valueText: text?.textContent?.trim() ?? null,
+                unitText: unit?.textContent?.trim() ?? null,
+                strongFits: !!strongRect
+                  && strongRect.left >= deltaRect.left - 1
+                  && strongRect.right <= deltaRect.right + 1,
+                iconAndLabel: !!dtRect && !!iconRect
+                  && Math.abs(iconRect.top - dtRect.top) < 2
+                  && iconRect.left < dtRect.right,
+                valueBelowLabel: !!dtRect && !!ddRect && ddRect.top >= dtRect.bottom - 1
+              };
+            })
+          : [];
+        const icons = metrics.map(metric => {
+          const icon = metric.querySelector<HTMLElement>('.cardio-activity-performance__icon');
+          const dt = metric.querySelector<HTMLElement>('dt');
+          const dd = metric.querySelector<HTMLElement>('dd');
+          const iconBounds = icon?.getBoundingClientRect();
+          const dtBounds = dt?.getBoundingClientRect();
+          const ddBounds = dd?.getBoundingClientRect();
+          return {
+            width: iconBounds?.width,
+            height: iconBounds?.height,
+            svgWidth: icon?.querySelector('svg')?.getBoundingClientRect().width,
+            svgHeight: icon?.querySelector('svg')?.getBoundingClientRect().height,
+            labelBelowIcon: !!iconBounds && !!dtBounds && dtBounds.top >= iconBounds.bottom,
+            valueBelowLabel: !!dtBounds && !!ddBounds && ddBounds.top >= dtBounds.bottom
+          };
+        });
+        return {
+          metricCount: metrics.length,
+          metricColumns: getComputedStyle(metrics[0]?.parentElement ?? element).gridTemplateColumns,
+          comparisonBackground: comparison ? getComputedStyle(comparison).backgroundColor : null,
+          comparisonRadius: comparison ? getComputedStyle(comparison).borderRadius : null,
+          comparisonPadding: comparison ? getComputedStyle(comparison).padding : null,
+          comparisonBorder: comparison ? getComputedStyle(comparison).borderTopWidth : null,
+          deltaCount: deltas.length,
+          deltaColumns: comparison ? getComputedStyle(comparison.querySelector('.cardio-activity-comparison__deltas') as Element).gridTemplateColumns : null,
+          deltaLayout,
+          icons
+        };
+      });
+      assert.equal(latestLayout.metricCount, 3, `${label} should keep three metric columns.`);
+      assert.equal(latestLayout.deltaCount, 3, `${label} should keep three comparison areas.`);
+      assert.equal(latestLayout.comparisonBackground, 'rgba(0, 0, 0, 0)',
+        `${label} comparison outer surface should remain transparent.`);
+      assert.equal(latestLayout.comparisonRadius, '0px',
+        `${label} comparison outer surface should not use rounded corners.`);
+      assert.equal(latestLayout.comparisonPadding, '10px 0px 0px',
+        `${label} comparison outer surface should not use inset card padding.`);
+      const expectedDeltaColumns =
+        textSize === 'large' || viewportWidth <= 360 || (textSize === 'medium' && viewportWidth <= 399)
+          ? 1
+          : 3;
+      const deltaColumnCount = latestLayout.deltaColumns
+        ?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+      assert.equal(deltaColumnCount, expectedDeltaColumns,
+        `${label} comparison should use ${expectedDeltaColumns} direct column(s).`);
+      for (const icon of latestLayout.icons) {
+        assert.ok(icon.width && icon.width <= 24 && icon.height && icon.height <= 24,
+          `${label} metric icon wrapper should stay bounded.`);
+        assert.ok(icon.svgWidth && icon.svgWidth <= 24 && icon.svgHeight && icon.svgHeight <= 24,
+          `${label} metric SVG should stay bounded.`);
+        assert.equal(icon.labelBelowIcon, true, `${label} label should sit below its icon.`);
+        assert.equal(icon.valueBelowLabel, true, `${label} value should sit below its label.`);
+      }
+      if (latestLayout.deltaLayout.length === 3) {
+        for (const tile of latestLayout.deltaLayout) {
+          assert.equal(tile.iconAndLabel, true, `${label} tile icon and label should share one row.`);
+          assert.equal(tile.valueBelowLabel, true, `${label} tile value should sit below its label.`);
+          assert.equal(tile.strongFits, true, `${label} tile delta, caret, and unit should stay together.`);
+          assert.notEqual(tile.background, 'rgba(0, 0, 0, 0)', `${label} comparison tile should be shaded.`);
+          const textScale = textSize === 'small' ? 1 : textSize === 'medium' ? 1.125 : 1.25;
+          assert.equal(tile.strongFontSize, `${18 * textScale}px`,
+            `${label} tile middle-row delta text should remain 18px at standard size.`);
+          assert.equal(tile.caretFontSize, `${12 * textScale}px`,
+            `${label} tile caret should remain 12px at standard size.`);
+          assert.equal(tile.unitFontSize, `${13 * textScale}px`,
+            `${label} tile unit should remain 13px at standard size.`);
+          assert.equal(tile.textFontSize, `${18 * textScale}px`,
+            `${label} tile numeric text should remain 18px at standard size.`);
+          if (tile.strongClass?.includes('--positive')) {
+            assert.equal(tile.strongColor, 'rgb(34, 197, 94)',
+              `${label} positive tile should use Bright green.`);
+            if (tile.valueText === '+289') {
+              assert.equal(tile.unitText, 'kcal',
+                `${label} ▲ +289 kcal must remain a single contained delta.`);
+            } else if (tile.valueText === '+2.2') {
+              assert.equal(tile.unitText, 'mi',
+                `${label} ▲ +2.2 mi must remain a single contained delta.`);
+            }
+          } else if (tile.strongClass?.includes('--negative')) {
+            assert.equal(tile.strongColor, 'rgb(239, 68, 68)',
+              `${label} negative tile should use Bright red.`);
+          }
+        }
+        assert.ok(latestLayout.deltaLayout.every(tile =>
+          Math.abs(tile.height - latestLayout.deltaLayout[0]!.height) < 0.5
+        ), `${label} comparison tiles should have equal heights.`);
+      }
     }
   }
 
-  await page.getByRole('button', { name: 'Log run' }).click();
-  const calorieDialog = page.getByRole('dialog', { name: 'Log run' });
+  await page.getByRole('button', { name: 'Add activity' }).click();
+  const calorieDialog = page.getByRole('dialog', { name: 'Log activity' });
+  await calorieDialog.getByRole('combobox', { name: 'Activity type' }).selectOption('run');
   const calorieInfo = calorieDialog.locator('.cardio-calorie-estimate__help summary');
   await calorieDialog.getByRole('spinbutton', { name: 'Seconds' }).focus();
   await page.keyboard.press('Tab');
@@ -2321,9 +2610,135 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
     outlineWidth: '2px'
   }, 'Estimated-calorie information must have a visible keyboard-focus indicator.');
   await page.keyboard.press('Enter');
-  await calorieDialog.getByText(/gross energy expenditure, not active calories/).waitFor();
+  await calorieDialog.getByText(/rough gross-energy estimate, not active calories/).waitFor();
   await calorieDialog.getByRole('button', { name: 'Cancel' }).click();
   await calorieDialog.waitFor({ state: 'detached' });
+
+  await page.setViewportSize({ width: 375, height: 844 });
+  await setPreviewTextSize(page, 'large');
+  await page.getByRole('button', { name: 'Add activity' }).click();
+  const markerRunDialog = page.getByRole('dialog', { name: 'Log activity' });
+  await markerRunDialog.getByRole('combobox', { name: 'Activity type' }).selectOption('run');
+  await markerRunDialog.getByLabel('Distance (miles)').fill('1.23');
+  await markerRunDialog.getByLabel('Notes (optional)')
+    .fill('Synthetic run detail note. '.repeat(35));
+  await markerRunDialog.getByRole('button', { name: 'Save activity' }).click();
+  await markerRunDialog.waitFor({ state: 'detached' });
+  await cardioTabs.getByRole('tab', { name: 'Insights' }).click();
+  const runMarker = page.locator('.cardio-week-day.is-today .cardio-week-day__marker');
+  await runMarker.scrollIntoViewIfNeeded();
+  const markerDetails = await runMarker.evaluate(button => {
+    const tooltip = button.nextElementSibling;
+    const zone = button.closest('.tool-zone');
+    const accent = zone?.querySelector<HTMLElement>('.tool-zone__purpose');
+    return {
+      label: button.getAttribute('aria-label'),
+      describedBy: button.getAttribute('aria-describedby'),
+      markerColor: getComputedStyle(button).color,
+      accentColor: accent ? getComputedStyle(accent).color : null,
+      tooltipText: tooltip?.textContent,
+      tooltipInitiallyHidden: tooltip ? getComputedStyle(tooltip).display === 'none' : false
+    };
+  });
+  assert.match(markerDetails.label ?? '', /View 2 activities.*1\.23 mile run/);
+  assert.ok(markerDetails.describedBy);
+  assert.equal(markerDetails.markerColor, markerDetails.accentColor,
+    'Logged-run markers use the existing Insights blue.');
+  assert.ok(markerDetails.tooltipText?.includes('1.23 mile run'));
+  assert.equal(markerDetails.tooltipInitiallyHidden, true);
+  await runMarker.hover();
+  assert.equal(await runMarker.evaluate(button =>
+    getComputedStyle(button.nextElementSibling as HTMLElement).display), 'block');
+  await page.mouse.move(0, 0);
+  await runMarker.focus();
+  assert.equal(await runMarker.evaluate(button => document.activeElement === button), true);
+  assert.equal(await runMarker.evaluate(button =>
+    getComputedStyle(button.nextElementSibling as HTMLElement).display), 'block');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  const markerFocus = await runMarker.evaluate(button => {
+    const strip = button.closest<HTMLElement>('.cardio-week-strip');
+    const bounds = button.getBoundingClientRect();
+    const style = getComputedStyle(button);
+    if (!strip) throw new Error('Cardio run marker needs its weekly calendar.');
+    return {
+      active: document.activeElement === button,
+      visible: button.matches(':focus-visible'),
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth,
+      right: bounds.right,
+      viewportWidth: document.documentElement.clientWidth,
+      stripOverflow: getComputedStyle(strip).overflow
+    };
+  });
+  assert.equal(markerFocus.active, true);
+  assert.equal(markerFocus.visible, true);
+  assert.equal(markerFocus.outlineStyle, 'solid');
+  assert.equal(markerFocus.outlineWidth, '2px');
+  assert.ok(markerFocus.right <= markerFocus.viewportWidth);
+  assert.equal(markerFocus.stripOverflow, 'visible');
+
+  const beforeDetailsScroll = await page.evaluate(() => document.scrollingElement?.scrollTop ?? 0);
+  await runMarker.click();
+  const runPopover = page.getByRole('dialog', { name: /Activities on/ });
+  const popoverBounds = await runPopover.boundingBox();
+  assert.ok(popoverBounds);
+  assert.ok(popoverBounds!.x >= 0 && popoverBounds!.y >= 0);
+  assert.ok(popoverBounds!.x + popoverBounds!.width <= 376,
+    `Popover right edge ${popoverBounds!.x + popoverBounds!.width} should stay within the mobile viewport.`);
+  assert.ok(popoverBounds!.y + popoverBounds!.height <= 845,
+    `Popover bottom edge ${popoverBounds!.y + popoverBounds!.height} should stay within the mobile viewport.`);
+  assert.equal(await runPopover.getByText('1.23 mile run').isVisible(), true);
+  await runPopover.getByRole('button', { name: /Details for 1.23 mile run/ }).click();
+  assert.equal(await cardioTabs.getByRole('tab', { name: 'Activities' }).getAttribute('aria-selected'), 'true');
+  const runDetailsDialog = page.getByRole('dialog', { name: 'Run details' });
+  const detailLayout = await runDetailsDialog.evaluate(dialog => {
+    const bounds = dialog.getBoundingClientRect();
+    const scrollRegion = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+    const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+    if (!scrollRegion || !close) throw new Error('Run details needs a scroll region and top close control.');
+    const before = scrollRegion.scrollTop;
+    scrollRegion.scrollTop = scrollRegion.scrollHeight;
+    return {
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+      viewportHeight: document.documentElement.clientHeight,
+      overflowY: getComputedStyle(scrollRegion).overflowY,
+      scrollHeight: scrollRegion.scrollHeight,
+      clientHeight: scrollRegion.clientHeight,
+      scrollTop: scrollRegion.scrollTop,
+      initialScrollTop: before,
+      closeTop: close.getBoundingClientRect().top
+    };
+  });
+  assert.deepEqual({
+    left: detailLayout.left,
+    top: detailLayout.top,
+    width: detailLayout.width,
+    height: detailLayout.height,
+    overflowY: detailLayout.overflowY
+  }, {
+    left: 0,
+    top: 0,
+    width: 375,
+    height: detailLayout.viewportHeight,
+    overflowY: 'auto'
+  });
+  assert.ok(detailLayout.scrollHeight > detailLayout.clientHeight);
+  assert.ok(detailLayout.scrollTop > detailLayout.initialScrollTop,
+    'Run details content should scroll inside the full-screen dialog.');
+  assert.ok(detailLayout.closeTop >= 0 && detailLayout.closeTop < 80,
+    'The Close control stays in the persistent top-right header.');
+  assert.equal(await runDetailsDialog.getByText('1.23 miles').isVisible(), true);
+  assert.equal(await runDetailsDialog.getByText('Not recorded').isVisible(), true);
+  await runDetailsDialog.getByRole('button', { name: 'Close run details' }).click();
+  await runDetailsDialog.waitFor({ state: 'detached' });
+  assert.equal(await page.evaluate(() => document.scrollingElement?.scrollTop ?? 0), beforeDetailsScroll,
+    'Closing run details restores the page scroll position.');
+  assert.match(await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? ''),
+    /Open (?:latest )?run details for 1\.23 miles/);
 
   await page.getByRole('button', { name: 'People', exact: true }).click();
   const peopleCard = page.locator('.people-view__list .people-card').first();
@@ -6928,11 +7343,11 @@ async function main() {
           {
             name: 'Cardio',
             tablist: 'Cardio Foundation sections',
-            tabs: ['Progress', 'Activities', 'Rhythms'],
+            tabs: ['Insights', 'Activities', 'Rhythms'],
             panels: ['cardio-panel-progress', 'cardio-panel-activities', 'cardio-panel-rhythms'],
             gear: 'Cardio tracking settings',
             dialog: 'Cardio goals',
-            emptyActivity: 'No valid runs logged yet.',
+            emptyActivity: 'No activity has been logged yet.',
             emptyRhythms: 'No Rhythms are linked to Cardio yet.',
             card: '.cardio-progress-card',
             toolZone: 'Activity insights'
@@ -6960,7 +7375,7 @@ async function main() {
             name: `Open ${foundation.name} foundation details`
           }).click();
           const tabs = page.getByRole('tablist', { name: foundation.tablist });
-          await tabs.getByRole('tab', { name: 'Progress', exact: true }).click();
+          await tabs.getByRole('tab', { name: foundation.name === 'Cardio' ? 'Insights' : 'Progress', exact: true }).click();
           await verifyToolZoneResponsiveLayout(page, foundation.toolZone);
           const toolZonePlacement = await page.evaluate(({ tablistName, zoneName }) => {
             const tablist = document.querySelector<HTMLElement>(
@@ -6997,20 +7412,22 @@ async function main() {
                 const tab = tabs.getByRole('tab', { name: tabName, exact: true });
                 await tab.click();
                 const panel = page.locator(`#${foundation.panels[tabIndex]}`);
-                const panelLayout = await panel.evaluate((element, { tablistName, tabName }) => {
+                const panelLayout = await panel.evaluate((element, { tablistName, tabName, foundationName }) => {
                   const panelElement = element as HTMLElement;
                   const tablist = document.querySelector<HTMLElement>(
                     `[role="tablist"][aria-label="${tablistName}"]`
                   );
                   const zone = panelElement.querySelector<HTMLElement>('.tool-zone');
                   const heading = panelElement.querySelector<HTMLElement>('.strength-section-heading');
-                  const isProgress = tabName === 'Progress';
+                  const isProgress = tabName === 'Insights' || tabName === 'Progress';
                   const root = isProgress ? zone : heading;
                   const title = isProgress
                     ? zone?.querySelector<HTMLElement>('.tool-zone__intro')
                     : heading?.querySelector<HTMLElement>('.strength-section-heading__title-row');
                   const actions = isProgress
-                    ? zone?.querySelector<HTMLElement>('.tool-zone__actions')
+                    ? foundationName === 'Cardio'
+                      ? zone?.querySelector<HTMLElement>('.tool-zone__actions')
+                      : zone?.querySelector<HTMLElement>('.tool-zone__actions')
                     : heading?.querySelector<HTMLElement>('.strength-section-heading__actions');
                   const card = panelElement.querySelector<HTMLElement>(
                     '.cardio-progress-card, .weight-progress-card, .cardio-history-card, .weight-history-card'
@@ -7040,7 +7457,11 @@ async function main() {
                     actionHeights: [...actions.querySelectorAll<HTMLElement>('button')]
                       .map(button => button.getBoundingClientRect().height)
                   };
-                }, { tablistName: foundation.tablist, tabName });
+                }, {
+                  tablistName: foundation.tablist,
+                  tabName,
+                  foundationName: foundation.name
+                });
                 assert.equal(panelLayout.viewportWidth, viewportWidth);
                 assert.equal(panelLayout.documentWidth, viewportWidth,
                   `${foundation.name} ${tabName} must not overflow at ${viewportWidth}px / ${textSize} text.`);
@@ -7057,10 +7478,12 @@ async function main() {
                   `${foundation.name} ${tabName} actions must retain touch targets.`);
                 if ((foundation.name === 'Cardio' && tabName === 'Activities')
                   || (foundation.name === 'Weight' && tabName === 'Weigh-Ins')) {
-                  const sectionSpacing = await panel.evaluate(element => {
+                  const sectionSpacing = await panel.evaluate((element, isCardio) => {
                     const heading = element.querySelector<HTMLElement>('.strength-section-heading');
                     const historyCard = element.querySelector<HTMLElement>(
-                      '.cardio-progress-card, .cardio-history-card, .weight-history-card'
+                      isCardio
+                        ? '.cardio-all-activities-summary'
+                        : '.weight-history-card'
                     );
                     if (!heading || !historyCard) {
                       throw new Error('A Foundation panel is missing its shared heading or card.');
@@ -7070,25 +7493,192 @@ async function main() {
                       rowGap: getComputedStyle(element).rowGap,
                       headingToCard: historyCard.getBoundingClientRect().top - heading.getBoundingClientRect().bottom
                     };
-                  });
+                  }, foundation.name === 'Cardio');
                   assert.equal(sectionSpacing.sharedSpacing, true);
                   assert.equal(sectionSpacing.rowGap, '12px');
                   assert.ok(Math.abs(sectionSpacing.headingToCard - 12) < 0.5,
                     `${foundation.name} ${tabName} content should have the same section gap as Strength Add at ${viewportWidth}px / ${textSize} text.`);
                 }
-                if (tabName === 'Progress') {
-                  assert.ok(Number.parseFloat(panelLayout.cardPadding ?? '0') >= 16,
-                    `${foundation.name} chart card must keep comfortable padding.`);
+                if (tabName === 'Insights' || tabName === 'Progress') {
+                  if (foundation.name === 'Cardio') {
+                    assert.ok(Number.parseFloat(panelLayout.cardPadding ?? '0') >= 16,
+                      `${foundation.name} chart card must keep comfortable padding.`);
+                  }
                   assert.equal(await page.getByRole('button', { name: foundation.gear }).isVisible(), true);
                   if (foundation.name === 'Cardio') {
+                    const summaryLayout = await panel.evaluate(element => {
+                      const summary = element.querySelector<HTMLElement>('.cardio-weekly-summary');
+                      const summaryMetrics = [...(summary?.querySelectorAll<HTMLElement>(
+                        '.cardio-activity-summary__metric'
+                      ) ?? [])];
+                      const measures = element.querySelector<HTMLElement>('.cardio-measures');
+                      const measureCards = [...(measures?.querySelectorAll<HTMLElement>(
+                        '.cardio-measure'
+                      ) ?? [])];
+                      const calendar = element.querySelector<HTMLElement>('.cardio-progress-card');
+                      const weekHeading = calendar?.querySelector<HTMLElement>('#cardio-progress-title');
+                      const weekdays = weekHeading?.nextElementSibling;
+                      const gear = element.querySelector<HTMLElement>(
+                        '[aria-label="Cardio tracking settings"]'
+                      );
+                      if (!summary || !calendar || !weekHeading || !(weekdays instanceof HTMLElement) || !gear) {
+                        throw new Error('Cardio Progress needs its weekly summary, date heading, and goal settings.');
+                      }
+                      const summaryStyle = getComputedStyle(summary);
+                      const metricRects = summaryMetrics.map(metric => {
+                        const rect = metric.getBoundingClientRect();
+                        return { top: rect.top, left: rect.left, width: rect.width, right: rect.right };
+                      });
+                      const metricAlignments = summaryMetrics.map(metric => {
+                        const rect = metric.getBoundingClientRect();
+                        const icon = metric.querySelector<HTMLElement>('.cardio-activity-summary__icon');
+                        const label = metric.querySelector<HTMLElement>('dt');
+                        const value = metric.querySelector<HTMLElement>('.cardio-activity-summary__value');
+                        const unit = metric.querySelector<HTMLElement>('.cardio-activity-summary__unit');
+                        const number = value?.querySelector<HTMLElement>('strong');
+                        const definition = metric.querySelector<HTMLElement>('dd');
+                        const center = rect.left + rect.width / 2;
+                        const centerOf = (element: HTMLElement | null) => element
+                          ? element.getBoundingClientRect().left + element.getBoundingClientRect().width / 2
+                          : null;
+                        return {
+                          iconCenter: centerOf(icon),
+                          labelCenter: centerOf(label),
+                          valueCenter: centerOf(value),
+                          cardCenter: center,
+                          cardTop: rect.top,
+                          cardBottom: rect.bottom,
+                          iconTop: icon?.getBoundingClientRect().top ?? null,
+                          definitionBottom: definition?.getBoundingClientRect().bottom ?? null,
+                          unitText: unit?.textContent?.trim() ?? null,
+                          numberText: number?.textContent?.trim() ?? null,
+                          unitFontSize: unit ? getComputedStyle(unit).fontSize : null,
+                          numberFontSize: number ? getComputedStyle(number).fontSize : null
+                        };
+                      });
+                      return {
+                        summaryBottom: summary.getBoundingClientRect().bottom,
+                        measuresTop: measures?.getBoundingClientRect().top ?? null,
+                        calendarTop: calendar.getBoundingClientRect().top,
+                        summaryWidth: summary.clientWidth,
+                        summaryScrollWidth: summary.scrollWidth,
+                        metricCount: summaryMetrics.length,
+                        metricsFit: summaryMetrics.every(metric => metric.scrollWidth <= metric.clientWidth + 1),
+                        summaryHasCard: summary.classList.contains('card'),
+                        summaryBorderWidth: summaryStyle.borderWidth,
+                        metricRects,
+                        measureCards: measureCards.map(card => {
+                          const rect = card.getBoundingClientRect();
+                          const ring = card.querySelector<HTMLElement>('.cardio-measure__ring');
+                          const copy = card.querySelector<HTMLElement>('.cardio-measure__copy');
+                          const badge = card.querySelector<HTMLElement>('.cardio-measure__badge');
+                          const progress = card.querySelector<HTMLElement>('.cardio-measure__progress');
+                          const ringRect = ring?.getBoundingClientRect();
+                          const copyRect = copy?.getBoundingClientRect();
+                          return {
+                            label: ring?.getAttribute('aria-label') ?? '',
+                            top: rect.top,
+                            left: rect.left,
+                            right: rect.right,
+                            width: rect.width,
+                            height: rect.height,
+                            ringRight: ringRect?.right ?? null,
+                            copyLeft: copyRect?.left ?? null,
+                            copyWidth: copyRect?.width ?? null,
+                            badgeText: badge?.textContent?.trim() ?? null,
+                            progressWidth: progress?.getBoundingClientRect().width ?? null,
+                            cardScrollWidth: card.scrollWidth,
+                            cardClientWidth: card.clientWidth
+                          };
+                        }),
+                        metricAlignments,
+                        rangeHeading: weekHeading.textContent?.trim() ?? '',
+                        weekdayHeading: weekdays.textContent?.trim() ?? '',
+                        gearInsideCalendar: calendar.contains(gear)
+                      };
+                    });
+                    assert.equal(summaryLayout.metricCount, 3);
+                    assert.equal(summaryLayout.summaryHasCard, false,
+                      'This week must not retain an outer card.');
+                    assert.equal(summaryLayout.summaryBorderWidth, '0px');
+                    const shouldStackWeekly =
+                      viewportWidth <= 360
+                      || textSize === 'large';
+                    assert.equal(
+                      new Set(summaryLayout.metricRects.map(rect => rect.top)).size,
+                      shouldStackWeekly ? summaryLayout.metricCount : 1,
+                      `Weekly metric cards should remain three siblings or stack deliberately at ${viewportWidth}px / ${textSize} text.`
+                    );
+                    if (summaryLayout.metricRects.length > 0) {
+                      assert.ok(summaryLayout.metricRects.every(rect => rect.left >= 0 && rect.right <= viewportWidth),
+                        'Weekly metric cards must not overflow the viewport.');
+                    }
+                    assert.ok(summaryLayout.summaryBottom < summaryLayout.calendarTop,
+                      'This week should precede the calendar and its settings control.');
+                    if (summaryLayout.measuresTop !== null) {
+                      assert.ok(summaryLayout.summaryBottom <= summaryLayout.measuresTop,
+                        `Weekly goal cards should appear below This week totals at ${viewportWidth}px / ${textSize} text.`);
+                      assert.ok(summaryLayout.measuresTop < summaryLayout.calendarTop,
+                        `Weekly goal cards should appear above the standalone calendar at ${viewportWidth}px / ${textSize} text.`);
+                    }
+                    if (cardioGoalsConfigured) {
+                      assert.deepEqual(
+                        summaryLayout.measureCards.map(card => card.label),
+                        ['Weekly distance', 'Number of runs'],
+                        `Weekly goal cards should preserve distance-first order at ${viewportWidth}px / ${textSize} text.`
+                      );
+                      for (const card of summaryLayout.measureCards) {
+                        assert.equal(card.badgeText, 'This week');
+                        assert.ok(card.left >= 0 && card.right <= viewportWidth,
+                          `Weekly goal card ${card.label} must not overflow the viewport.`);
+                        assert.ok(card.cardScrollWidth <= card.cardClientWidth + 1,
+                          `Weekly goal card ${card.label} must fit at ${viewportWidth}px / ${textSize} text.`);
+                        assert.ok(card.progressWidth !== null && card.progressWidth > 0,
+                          `Weekly goal card ${card.label} should render a horizontal progress bar.`);
+                        if (textSize !== 'large') {
+                          assert.ok(card.ringRight !== null && card.copyLeft !== null && card.ringRight < card.copyLeft,
+                            `Weekly goal card ${card.label} should keep ring-left, copy-right geometry at ${viewportWidth}px / ${textSize} text.`);
+                        }
+                      }
+                    }
+                    assert.ok(summaryLayout.summaryScrollWidth <= summaryLayout.summaryWidth + 1);
+                    assert.equal(summaryLayout.metricsFit, true,
+                      `Weekly metric cards must fit at ${viewportWidth}px / ${textSize} text.`);
+                    for (const alignment of summaryLayout.metricAlignments) {
+                      for (const center of [alignment.iconCenter, alignment.labelCenter, alignment.valueCenter]) {
+                        assert.ok(center !== null
+                          && Math.abs(center - alignment.cardCenter) <= 2,
+                          `Weekly metric icon, label, and value must stay centered at ${viewportWidth}px / ${textSize} text.`);
+                      }
+                      if (alignment.iconTop !== null && alignment.definitionBottom !== null) {
+                        const topSpace = alignment.iconTop - alignment.cardTop;
+                        const bottomSpace = alignment.cardBottom - alignment.definitionBottom;
+                        assert.ok(Math.abs(topSpace - bottomSpace) <= 3,
+                          `Weekly metric stack should be vertically balanced at ${viewportWidth}px / ${textSize} text.`);
+                      }
+                    }
+                    const calorieAlignment = summaryLayout.metricAlignments.find(alignment =>
+                      alignment.unitText === 'kcal');
+                    if (calorieAlignment?.unitFontSize && calorieAlignment.numberFontSize) {
+                      const unitSize = Number.parseFloat(calorieAlignment.unitFontSize);
+                      const numberSize = Number.parseFloat(calorieAlignment.numberFontSize);
+                      assert.ok(unitSize / numberSize >= 0.58 && unitSize / numberSize <= 0.68,
+                        `Kcal unit should be roughly 60–65% of the calorie number at ${viewportWidth}px / ${textSize} text.`);
+                    }
+                    assert.match(summaryLayout.rangeHeading, / – /);
+                    assert.equal(summaryLayout.weekdayHeading, 'Monday – Sunday');
+                    assert.equal(summaryLayout.gearInsideCalendar, false);
+
                     const todayHighlight = await panel.evaluate(element => {
                       const day = element.querySelector<HTMLElement>('.cardio-week-day.is-today');
                       const zone = element.querySelector<HTMLElement>('.tool-zone');
                       const purpose = zone?.querySelector<HTMLElement>('.tool-zone__purpose');
                       const weekday = day?.querySelector<HTMLElement>(':scope > span:first-child');
-                      const date = day?.querySelector<HTMLElement>('small');
+                      const date = day?.querySelector<HTMLElement>(':scope > small');
                       const today = day?.querySelector<HTMLElement>('.cardio-week-day__today');
-                      const activity = day?.querySelector<HTMLElement>('i');
+                      const activity = day?.querySelector<HTMLElement>(
+                        '.cardio-week-day__marker, .cardio-week-day__marker-placeholder'
+                      );
                       if (!day || !zone || !purpose || !weekday || !date || !today || !activity) {
                         throw new Error('Cardio Activity insights needs a complete current-day highlight.');
                       }
@@ -7098,8 +7688,7 @@ async function main() {
                         const rect = element.getBoundingClientRect();
                         return rect.left + rect.width / 2;
                       });
-                      const meters = [...zone.querySelectorAll<HTMLElement>('.cardio-measure__track')];
-                      const fills = meters.map(meter => meter.querySelector<HTMLElement>(':scope > span'));
+                      const meters = [...zone.querySelectorAll<HTMLElement>('.cardio-measure__ring')];
                       return {
                         dayBackground: getComputedStyle(day).backgroundColor,
                         zoneBackground: getComputedStyle(zone).backgroundColor,
@@ -7110,11 +7699,14 @@ async function main() {
                         todayColor: getComputedStyle(today).color,
                         accentColor: getComputedStyle(purpose).color,
                         activityColor: getComputedStyle(activity).color,
+                        hasRunMarker: activity.classList.contains('cardio-week-day__marker'),
                         centeringOffsets: textCenters.map(center => center - dayCenter),
                         centered: textCenters.every(center => Math.abs(center - dayCenter) <= 1),
                         meterLabels: meters.map(meter => meter.getAttribute('aria-label')),
-                        meterTrackColors: meters.map(meter => getComputedStyle(meter).backgroundColor),
-                        meterFillColors: fills.map(fill => fill ? getComputedStyle(fill).backgroundColor : null)
+                        meterVisuals: meters.map(meter => ({
+                          backgroundImage: getComputedStyle(meter).backgroundImage,
+                          progress: getComputedStyle(meter).getPropertyValue('--cardio-gauge-progress').trim()
+                        }))
                       };
                     });
                     assert.equal(todayHighlight.dayBackground, todayHighlight.zoneBackground);
@@ -7122,18 +7714,20 @@ async function main() {
                     assert.equal(todayHighlight.weekdayColor, todayHighlight.accentColor);
                     assert.equal(todayHighlight.dateColor, todayHighlight.accentColor);
                     assert.equal(todayHighlight.todayColor, todayHighlight.accentColor);
-                    assert.notEqual(todayHighlight.activityColor, todayHighlight.accentColor,
-                      'The activity marker must retain its semantic status color.');
+                    if (todayHighlight.hasRunMarker) {
+                      assert.equal(todayHighlight.activityColor, todayHighlight.accentColor,
+                        'Run markers use the existing Insights blue.');
+                    }
                     assert.equal(todayHighlight.centered, true,
                       `The Today day, date, and label should be centered at ${viewportWidth}px / ${textSize} text: ${todayHighlight.centeringOffsets.join(', ')}px.`);
                     if (cardioGoalsConfigured) {
-                      assert.deepEqual(todayHighlight.meterLabels, ['Runs this week', 'Miles this week']);
-                      assert.deepEqual(todayHighlight.meterTrackColors, [
-                        'rgb(227, 235, 244)', 'rgb(227, 235, 244)'
-                      ]);
-                      assert.deepEqual(todayHighlight.meterFillColors, [
-                        'rgb(74, 107, 148)', 'rgb(74, 107, 148)'
-                      ]);
+                      assert.deepEqual(todayHighlight.meterLabels, ['Weekly distance', 'Number of runs']);
+                      assert.equal(todayHighlight.meterVisuals.length, 2);
+                      for (const visual of todayHighlight.meterVisuals) {
+                        assert.match(visual.backgroundImage, /conic-gradient/);
+                        assert.match(visual.backgroundImage, /rgb\(38, 139, 210\)/);
+                        assert.notEqual(visual.progress, '');
+                      }
                     }
                   } else {
                     const calculationLink = panel.locator('.weight-calculation-info summary');
@@ -7290,7 +7884,7 @@ async function main() {
                   if (foundation.name === 'Cardio') {
                     const runDivider = await panel.evaluate(element => {
                       const card = element.querySelector<HTMLElement>('.cardio-history-card');
-                      if (!card) throw new Error('Cardio Activities needs its run-history card.');
+                      if (!card) throw new Error('Cardio Activities needs its activity-history card.');
                       const list = document.createElement('ol');
                       list.className = 'cardio-history-list';
                       const row = document.createElement('li');
@@ -7301,15 +7895,15 @@ async function main() {
                       return borderWidth;
                     });
                     assert.equal(runDivider, '0px',
-                      'Run-history rows should not use an internal top divider.');
-                    await panel.getByRole('button', { name: 'Log run' }).click();
-                    const runDialog = page.getByRole('dialog', { name: 'Log run' });
-                    const runHeading = runDialog.getByRole('heading', { name: 'Log run' });
-                    assert.equal(await runHeading.evaluate(heading => heading === document.activeElement), true);
-                    assert.equal(await runDialog.getByLabel('Activity date')
+                      'Activity-history rows should not use an internal top divider.');
+                    await panel.getByRole('button', { name: 'Add activity' }).click();
+                    const activityDialog = page.getByRole('dialog', { name: 'Log activity' });
+                    const activityHeading = activityDialog.getByRole('heading', { name: 'Log activity' });
+                    assert.equal(await activityHeading.evaluate(heading => heading === document.activeElement), true);
+                    assert.equal(await activityDialog.getByLabel('Activity date')
                       .evaluate(input => input === document.activeElement), false);
-                    await verifyCardioRunDialogLayout(page, viewportWidth);
-                    await runDialog.getByRole('button', { name: 'Cancel' }).click();
+                    await verifyCardioActivityDialogLayout(page, viewportWidth);
+                    await activityDialog.getByRole('button', { name: 'Cancel' }).click();
                   } else {
                     await panel.getByRole('button', { name: 'Add weigh-in' }).last().click();
                     const weighInDialog = page.getByRole('dialog', { name: 'Add weigh-in' });

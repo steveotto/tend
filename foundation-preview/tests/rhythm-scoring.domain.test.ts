@@ -2171,8 +2171,8 @@ describe('daily occurrence scoring', () => {
         score: 0,
         evidence: { eligibleDueCount: 1, completedCount: 0, todayIncluded: true }
       },
-      onTrack: { kind: 'scored', score: 100 },
-      healthScore: 25
+      onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      healthScore: null
     });
 
     const {

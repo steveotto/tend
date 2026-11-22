@@ -831,7 +831,6 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
         const deduction = Math.min(100, missedOccurrenceCount * deductionPerMissedOccurrence);
         onTrack = lastQualifyingCompletionDate === null
           && missedOccurrenceCount === 0
-          && !firstDueIsScorableToday
           ? unscored('ready-for-first-tend', 'Starts with your first Tend.')
           : {
               kind: 'scored',
