@@ -1,6 +1,18 @@
 # Tend 2 Foundation handoff
 
-## Weight Insights refinement — release candidate
+## Cardio and Weight refinements — shipped 2026-11-22
+
+**Publication:** PR [#122](https://github.com/steveotto/tend/pull/122) merged normally on 2026-11-22. Merge commit: `037482434b303e9af8060393c27d1a73d51f2a32`. Head commit for the release PR: `2f30d6f6adbbfd19bb47d6d2bd9dfad1a8d7c8a`.
+
+**Production:** GitHub Pages workflow [45077842870](https://github.com/steveotto/tend/actions/runs/45077842870) completed successfully for merge commit `037482434b303e9af8060393c27d1a73d51f2a32`. The production root and `/app-preview.html` both returned HTTP 200. Served assets include `/assets/main-C9sZnyYe.js` and `/assets/main-oaq4Dl4p.css`.
+
+**Shipped scope:** Cardio Insights / Activities / Rhythms navigation, weekly totals, compact goal cards, calendar interactions, exceeded-goal ring/bar behavior, shared Insights-blue styling, Run/Walk support, shared activity details and history, and the Weight Insights latest/summary/chart sibling layout with the blue chart and removed progress meter/card nesting.
+
+**Verification:** Semantic typecheck passed; the complete `npm test` suite passed; production Pages and scoring builds passed; Pages artifact tests passed 10/10; focused Weight and app-preview contracts passed; and `git diff --check` passed. Browser/layout checks cover 375/390/430px and text-size variants, but do not prove physical-device or assistive-technology behavior.
+
+**Limits and boundaries:** Synthetic preview fixtures only. No live account, personal record, database, auth, sync, migration, scoring formula, money movement, or existing app shell change was included. `supabase/.temp/` remains local and excluded.
+
+## Weight Insights refinement
 
 **State:** Implemented on `release/toolzone-blue-palette` and left uncommitted. The existing shared `ToolZone` header, settings gear, Weight Health footnote, goals, weigh-ins, chart calculations, units, and disclosure copy are preserved. The extra `Body weight progress` outer card is removed; Latest weigh-in, summary metrics, and chart are sibling sections within the ToolZone. The latest value and date appear once, the score is shown as numeric “Goal-path progress” only, and the chart/legend use shared Insights blue.
 
