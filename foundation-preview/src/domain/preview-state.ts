@@ -63,7 +63,12 @@ import {
 import type { StrengthData } from './strength.ts';
 import { createWeightData, validateWeightDataShape } from './weight.ts';
 import type { WeightData } from './weight.ts';
-import { createCardioData, migrateCardioDataToV28, validateCardioDataShape } from './cardio.ts';
+import {
+  createCardioData,
+  migrateCardioDataToV28,
+  migrateCardioDataToV52,
+  validateCardioDataShape
+} from './cardio.ts';
 import type { CardioData } from './cardio.ts';
 import { createFlexibilityData, migrateFlexibilityData, validateFlexibilityData } from './flexibility.ts';
 import type { FlexibilityData } from './flexibility.ts';
@@ -81,6 +86,8 @@ import { validatePersonNotesCollection } from './person-notes.ts';
 import type { PersonNote } from './person-notes.ts';
 import { validatePersonPrayerRequestsCollection } from './person-prayers.ts';
 import type { PersonPrayerRequest } from './person-prayers.ts';
+import { validatePersonSparkConnectionLinks, validatePersonSparksCollection } from './person-sparks.ts';
+import type { PersonSpark } from './person-sparks.ts';
 import {
   createDefaultTimeBlockSettings,
   isTimeBlockId,
@@ -100,7 +107,7 @@ import {
 import type { CategoryPreferences, FoundationPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 50;
+export const PREVIEW_SCHEMA_VERSION = 52;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -123,6 +130,7 @@ export type PreviewData = {
   personDetails: PersonDetails[];
   personNotes: PersonNote[];
   prayerRequests: PersonPrayerRequest[];
+  personSparks: PersonSpark[];
   timeBlocks: TimeBlockSettings;
   showTended: boolean;
   showCalendarOnToday: boolean;
@@ -163,7 +171,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52; resolvedPersonCategories: number }
   | {
       valid: false;
       kind: 'invalid' | 'unsupported';
@@ -415,6 +423,7 @@ const dataKeysV45 = dataKeysV44;
 const dataKeysV46 = dataKeysV45;
 const dataKeysV47 = [...dataKeysV46, 'foundationPreferences'];
 const dataKeysV48 = [...dataKeysV47, 'prayerEnabled'];
+const dataKeysV51 = [...dataKeysV48, 'personSparks'];
 const envelopeKeys = ['format', 'schemaVersion', 'data'];
 const supportedRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
 const builtInRhythmIds = new Set(todayRhythms.map(rhythm => rhythm.id));
@@ -450,6 +459,7 @@ export function createSamplePreviewData(): PreviewData {
     personDetails: [],
     personNotes: [],
     prayerRequests: [],
+    personSparks: [],
     timeBlocks: createDefaultTimeBlockSettings(),
     showTended: false,
     showCalendarOnToday: true,
@@ -648,7 +658,7 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
   const currentStrength = migrateStrengthDataToV29(migrateStrengthDataToV28(migrateStrengthDataToV27(
     migrateStrengthDataToV26(migrateStrengthDataToV25(data.strength))
   )));
-  const currentCardio = migrateCardioDataToV28(data.cardio);
+  const currentCardio = migrateCardioDataToV52(migrateCardioDataToV28(data.cardio), data.weight);
   return {
     format: PREVIEW_BACKUP_FORMAT,
     schemaVersion: PREVIEW_SCHEMA_VERSION,
@@ -879,6 +889,8 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       && value.schemaVersion !== 47
       && value.schemaVersion !== 48
       && value.schemaVersion !== 49
+      && value.schemaVersion !== 50
+      && value.schemaVersion !== 51
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -913,7 +925,9 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV50 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV52 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV51 = value.schemaVersion === 51 || isV52;
+  const isV50 = value.schemaVersion === 50 || isV51;
   const isV49 = value.schemaVersion === 49 || isV50;
   const isV48 = value.schemaVersion === 48 || isV49;
   const isV47 = value.schemaVersion === 47 || isV48;
@@ -949,7 +963,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const hasCardio = isV18 || hasCurrentFriendshipsData;
   const allowedDataKeys = isV1 ? dataKeysV1 : isV2 ? dataKeysV2
     : isV3 || isV4 ? dataKeysV3
-      : isV48 ? dataKeysV48 : isV47 && value.schemaVersion === 47 ? dataKeysV47 : isV46 && value.schemaVersion === 46 ? dataKeysV46 : isV45 && value.schemaVersion === 45 ? dataKeysV45 : value.schemaVersion === 44 ? dataKeysV44 : isV43 && value.schemaVersion === 43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
+      : isV51 ? dataKeysV51 : isV48 ? dataKeysV48 : isV47 && value.schemaVersion === 47 ? dataKeysV47 : isV46 && value.schemaVersion === 46 ? dataKeysV46 : isV45 && value.schemaVersion === 45 ? dataKeysV45 : value.schemaVersion === 44 ? dataKeysV44 : isV43 && value.schemaVersion === 43 ? dataKeysV43 : isV42 && value.schemaVersion === 42 ? dataKeysV42 : isV41 && value.schemaVersion === 41 ? dataKeysV41 : isV40 ? dataKeysV40 : value.schemaVersion === 39 ? dataKeysV39 : isV38 ? dataKeysV38 : isV37 && value.schemaVersion === 37 ? dataKeysV37 : isV36 ? dataKeysV36 : value.schemaVersion === 35 ? dataKeysV35 : isV34 && value.schemaVersion === 34 ? dataKeysV34 : isV33 ? dataKeysV33 : isV32 ? dataKeysV32 : isV31 ? dataKeysV31 : isV30 ? dataKeysV30 : isV29 ? dataKeysV29 : isV28 ? dataKeysV28 : isV27 ? dataKeysV27 : isV26 ? dataKeysV26 : isV25 ? dataKeysV25 : isV24 ? dataKeysV24 : isV23 ? dataKeysV23 : isV22 ? dataKeysV22 : isV21 ? dataKeysV21 : isV20 ? dataKeysV20 : isV19 ? dataKeysV19 : isV18 ? dataKeysV18 : isV17 ? dataKeysV17 : isV16 ? dataKeysV16 : isV15 ? dataKeysV15 : isV14 ? dataKeysV14 : isV13 ? dataKeysV13
         : isV11 || isV12 ? dataKeysV12 : isV10 ? dataKeysV10
       : isV8 || isV9 ? dataKeysV8 : isV7 ? dataKeysV7 : isV6 ? dataKeysV6 : dataKeysV5;
   const incompatibleDataKey = isRecord(value.data) && !isV19 && !isV20
@@ -1374,7 +1388,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   if (!validateCardioDataShape(cardio, isV28 || isV29 || isV30 || isV31 || isV32)) {
     return { valid: false, kind: 'invalid', message: 'Cardio data must retain its goals and run records.' };
   }
-  const currentCardio = migrateCardioDataToV28(cardio);
+  const currentCardio = migrateCardioDataToV52(migrateCardioDataToV28(cardio), weight);
   const flexibilityInput = isV38 && value.data.flexibility !== undefined
     ? value.data.flexibility
     : createFlexibilityData();
@@ -1440,6 +1454,13 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   if (!validatePersonPrayerRequestsCollection(prayerRequests, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Prayer requests contain invalid fields, history, or unresolved Person IDs.' };
   }
+  const personSparks = isV51 ? value.data.personSparks as PersonSpark[] : [];
+  if (!validatePersonSparksCollection(personSparks, people.map(person => person.id))) {
+    return { valid: false, kind: 'invalid', message: 'Sparks contain invalid fields, completion history, or unresolved Person IDs.' };
+  }
+  if (!validatePersonSparkConnectionLinks(personSparks, friendships)) {
+    return { valid: false, kind: 'invalid', message: 'Spark completion links must match their saved connection history.' };
+  }
   const referencesKnownPeople = (ids: readonly string[]) => ids.every(id => knownPersonIds.has(id));
   if (savedRhythms.some(rhythm => !referencesKnownPeople(rhythm.personIds))
     || friendships.cadenceSettings.some(setting => !knownPersonIds.has(setting.personId))
@@ -1447,6 +1468,10 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
     || personDetails.some(details => !knownPersonIds.has(details.personId))
     || personNotes.some(note => !knownPersonIds.has(note.personId)
       || !referencesKnownPeople(note.sharedWith ?? []))
+    || personSparks.some(spark => !knownPersonIds.has(spark.ownerId)
+      || !referencesKnownPeople(spark.sharedWith)
+      || spark.completionHistory.some(completion =>
+        completion.participantIds !== undefined && !referencesKnownPeople(completion.participantIds)))
     || strength.savedWorkouts.some(workout => !referencesKnownPeople(workout.sharedWith))
     || strength.workouts.some(workout => !referencesKnownPeople(workout.sharedWith ?? []))
     || strength.guidedSessionDraft !== undefined
@@ -1475,6 +1500,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
     personDetails,
     personNotes,
     prayerRequests,
+    personSparks,
     timeBlocks,
     showTended: isV35 ? value.data.showTended as boolean : false,
     showCalendarOnToday: isV42 ? value.data.showCalendarOnToday as boolean : true,

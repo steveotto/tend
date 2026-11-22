@@ -800,7 +800,7 @@ test("Home and Person Spark cards use one shared renderer and preserve card acti
   assert.doesNotMatch(homeRhythmSource, /class="profile-spark-top"/);
   assert.doesNotMatch(homeRhythmSource, /class="planitem dashboard-free-moment-card"/);
   assert.match(styles, /\.spark-card\{/);
-  assert.match(styles, /\.spark-card \.sparkbtn\{border:1px solid/);
+  assert.match(styles, /\.spark-card \.plan-item-action>\.btn\.sparkbtn\{border-color:var\(--spark-action-bg\);background:var\(--spark-action-bg\);color:var\(--spark-action-fg\)\}/);
   assert.match(styles, /\.spark-card \.spark-card__title-line\{display:block;flex:0 1 auto/);
   assert.match(styles, /\.spark-card \.plan-item-copy \.plan-item-heading \.spark-card__title-line \.tend-type-title\{display:inline/);
   assert.match(styles, /\.spark-card \.plan-item-heading>\.plan-item-action\{grid-column:2;grid-row:1;align-self:start;height:max-content\}/);

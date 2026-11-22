@@ -35,6 +35,55 @@ export const HealthScoreInfoButton = forwardRef<HTMLButtonElement, {
 ));
 HealthScoreInfoButton.displayName = 'HealthScoreInfoButton';
 
+export function HealthScoreDisclosureButton({
+  label,
+  expanded,
+  controls,
+  onClick
+}: {
+  label: string;
+  expanded: boolean;
+  controls: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="health-score-breakdown__measure-toggle"
+      aria-label={`${expanded ? 'Hide' : 'Show'} ${label} breakdown`}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      onClick={onClick}
+    >
+      <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+        <path d="M2.5 4.5 6 8l3.5-3.5" />
+      </svg>
+    </button>
+  );
+}
+
+export function HealthScoreDisclosurePanel({
+  id,
+  expanded,
+  children,
+  className = ''
+}: {
+  id: string;
+  expanded: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      id={id}
+      className={`health-score-breakdown__disclosure ${className}`.trim()}
+      hidden={!expanded}
+    >
+      {children}
+    </div>
+  );
+}
+
 type HealthScoreMeasuresProps = {
   healthScore: number | null;
   consistency: HealthScoreMetric;
@@ -111,18 +160,12 @@ export function HealthScoreBreakdown({
               {titlePrefix}
               <span className="health-score-breakdown__title-end">
                 {titleSuffix}
-                <button
-                  type="button"
-                  className="health-score-breakdown__measure-toggle"
-                  aria-label={`${measuresExpanded ? 'Hide' : 'Show'} ${disclosureLabel} Consistency and On Track breakdown`}
-                  aria-expanded={measuresExpanded}
-                  aria-controls={measuresId}
+                <HealthScoreDisclosureButton
+                  label={`${disclosureLabel} Consistency and On Track`}
+                  expanded={measuresExpanded}
+                  controls={measuresId}
                   onClick={() => setMeasuresExpanded(expanded => !expanded)}
-                >
-                  <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-                    <path d="M2.5 4.5 6 8l3.5-3.5" />
-                  </svg>
-                </button>
+                />
               </span>
             </h3>
           </div>
@@ -137,13 +180,13 @@ export function HealthScoreBreakdown({
       <HealthScoreMeter score={score} label={healthLabel} />
       {measureDisclosure
         ? measures && (
-          <div
+          <HealthScoreDisclosurePanel
             id={measuresId}
             className="health-score-breakdown__measures"
-            hidden={!measuresExpanded}
+            expanded={measuresExpanded}
           >
             {measures}
-          </div>
+          </HealthScoreDisclosurePanel>
         )
         : measures}
       {children}
@@ -191,11 +234,14 @@ export function HealthScoreMeter({
   illustrative?: boolean;
 }) {
   const available = score !== null && Number.isFinite(score);
+  const normalizedLabel = /\bscores?\s*$/i.test(label.trim())
+    ? label.trim()
+    : `${label.trim()} score`;
   return (
     <div
       className={`health-score-meter ${scoreTone(available ? score : null)}`}
       role={available ? 'meter' : 'img'}
-      aria-label={available ? `${label} score` : `${label}: Not enough data`}
+      aria-label={available ? normalizedLabel : `${label.trim()}: Not enough data`}
       aria-valuemin={available ? 0 : undefined}
       aria-valuemax={available ? 100 : undefined}
       aria-valuenow={available ? score : undefined}

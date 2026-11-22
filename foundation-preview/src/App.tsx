@@ -52,7 +52,22 @@ import { TimeBlocksSettings } from './components/TimeBlocksSettings.tsx';
 import { useTodayWeather } from './components/useTodayWeather.ts';
 import type { TodayViewId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
-import { connectionCadences, setPersonConnectionCadence } from './domain/friendships.ts';
+import {
+  connectionCadences,
+  setPersonConnectionCadence
+} from './domain/friendships.ts';
+import type { FriendshipConnection } from './domain/friendships.ts';
+import {
+  completePersonSpark,
+  createPersonSpark,
+  deletePersonConnection,
+  deletePersonSpark,
+  savePersonConnection as savePersonConnectionCommand,
+  setPersonSparkArchived,
+  undoPersonSparkCompletion,
+  updatePersonSpark
+} from './domain/person-sparks.ts';
+import type { PersonSparkDraft } from './domain/person-sparks.ts';
 import { selectGlobalSearchResults } from './domain/global-search.ts';
 import type { GlobalSearchResult } from './domain/global-search.ts';
 import { APP_DISPLAY_VERSION } from './domain/app-version.ts';
@@ -248,6 +263,7 @@ import {
   loadV46RecoveryCopy,
   loadV47RecoveryCopy,
   loadV48RecoveryCopy,
+  loadV50RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
   loadStrengthRepairRecoveryCopy,
   loadPreviewImportRecovery,
@@ -658,6 +674,7 @@ function PreviewWorkspace({
   const [v46RecoveryCopy, setV46RecoveryCopy] = useState<string | null>(null);
   const [v47RecoveryCopy, setV47RecoveryCopy] = useState<string | null>(null);
   const [v48RecoveryCopy, setV48RecoveryCopy] = useState<string | null>(null);
+  const [v50RecoveryCopy, setV50RecoveryCopy] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -766,6 +783,8 @@ function PreviewWorkspace({
     setV47RecoveryCopy(v47Recovery.kind === 'loaded' ? v47Recovery.raw : null);
     const v48Recovery = loadV48RecoveryCopy(previewStorage);
     setV48RecoveryCopy(v48Recovery.kind === 'loaded' ? v48Recovery.raw : null);
+    const v50Recovery = loadV50RecoveryCopy(previewStorage);
+    setV50RecoveryCopy(v50Recovery.kind === 'loaded' ? v50Recovery.raw : null);
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -1325,6 +1344,8 @@ function PreviewWorkspace({
     setV47RecoveryCopy(v47.kind === 'loaded' ? v47.raw : null);
     const v48 = loadV48RecoveryCopy(previewStorage);
     setV48RecoveryCopy(v48.kind === 'loaded' ? v48.raw : null);
+    const v50 = loadV50RecoveryCopy(previewStorage);
+    setV50RecoveryCopy(v50.kind === 'loaded' ? v50.raw : null);
   }
 
   function refreshV10RecoveryCopy() {
@@ -1941,6 +1962,113 @@ function PreviewWorkspace({
         );
     if (!result.valid) return result.error;
     return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
+  }
+
+  function createPersonSparkForProfile(ownerId: PersonId, draft: PersonSparkDraft): string | null {
+    const result = createPersonSpark(
+      previewData.personSparks,
+      ownerId,
+      draft,
+      `person-spark-${globalThis.crypto.randomUUID()}`
+    );
+    if (!result.ok) return result.error;
+    return persistSeasonHistory({ ...previewData, personSparks: result.value }, 'Spark');
+  }
+
+  function editPersonSpark(sparkId: string, draft: PersonSparkDraft): string | null {
+    const result = updatePersonSpark(
+      previewData.personSparks,
+      sparkId,
+      draft,
+      previewData.people.map(person => person.id)
+    );
+    if (!result.ok) return result.error;
+    return persistSeasonHistory({ ...previewData, personSparks: result.value }, 'Spark');
+  }
+
+  function archivePersonSpark(sparkId: string, archived: boolean): string | null {
+    if (!previewData.personSparks.some(spark => spark.id === sparkId)) {
+      return 'This Spark is no longer available.';
+    }
+    return persistSeasonHistory({
+      ...previewData,
+      personSparks: setPersonSparkArchived(previewData.personSparks, sparkId, archived)
+    }, 'Spark');
+  }
+
+  function removePersonSpark(sparkId: string, viewerId: PersonId): string | null {
+    const result = deletePersonSpark(
+      previewData.personSparks,
+      previewData.friendships,
+      sparkId,
+      viewerId
+    );
+    if (!result.ok) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      personSparks: result.value.sparks,
+      friendships: result.value.friendships
+    }, 'Spark');
+  }
+
+  function undoSparkCompletion(sparkId: string): string | null {
+    const result = undoPersonSparkCompletion(
+      previewData.personSparks,
+      previewData.friendships,
+      sparkId
+    );
+    if (!result.ok) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      personSparks: result.value.sparks,
+      friendships: result.value.friendships
+    }, 'Spark completion');
+  }
+
+  function completeSparkWithConnection(
+    sparkId: string,
+    connection: FriendshipConnection
+  ): string | null {
+    const result = completePersonSpark(
+      previewData.personSparks,
+      previewData.friendships,
+      sparkId,
+      connection
+    );
+    if (!result.ok) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      personSparks: result.value.sparks,
+      friendships: result.value.friendships
+    }, 'Spark connection');
+  }
+
+  function savePersonConnection(connection: FriendshipConnection): string | null {
+    const result = savePersonConnectionCommand(
+      previewData.personSparks,
+      previewData.friendships,
+      connection
+    );
+    if (!result.ok) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      personSparks: result.value.sparks,
+      friendships: result.value.friendships
+    }, 'connection');
+  }
+
+  function removePersonConnection(connectionId: string): string | null {
+    const result = deletePersonConnection(
+      previewData.personSparks,
+      previewData.friendships,
+      connectionId
+    );
+    if (!result.ok) return result.error;
+    return persistSeasonHistory({
+      ...previewData,
+      personSparks: result.value.sparks,
+      friendships: result.value.friendships
+    }, 'connection');
   }
 
   useEffect(() => {
@@ -3209,12 +3337,6 @@ function PreviewWorkspace({
     });
   }
 
-  function setShowTendedPreference(showTended: boolean) {
-    setPreviewData(previous => previous.showTended === showTended
-      ? previous
-      : { ...previous, showTended });
-  }
-
   function setShowCalendarOnTodayPreference(showCalendarOnToday: boolean) {
     setPreviewData(previous => previous.showCalendarOnToday === showCalendarOnToday
       ? previous
@@ -4408,6 +4530,7 @@ function PreviewWorkspace({
           v46RecoveryCopy={v46RecoveryCopy}
           v47RecoveryCopy={v47RecoveryCopy}
           v48RecoveryCopy={v48RecoveryCopy}
+          v50RecoveryCopy={v50RecoveryCopy}
         />
       )}
       {healthFitnessView}
@@ -4432,8 +4555,6 @@ function PreviewWorkspace({
           undoableRhythms={undoableRhythms}
           satisfiedRhythmIds={satisfiedRhythmIds}
           tendedRhythmIds={tendedRhythmIds}
-          showTended={previewData.showTended}
-          onShowTendedChange={setShowTendedPreference}
           initializing={!hydrated}
           onEditPerson={openPersonDetailsEditor}
           onAddRhythm={(event, personId) => openRhythmEditor(event, undefined, {
@@ -4452,6 +4573,15 @@ function PreviewWorkspace({
           }}
           onPersonSelect={openPersonProfile}
           onConnectionChange={friendships => setPreviewData(previous => ({ ...previous, friendships }))}
+          personSparks={previewData.personSparks}
+          onCreatePersonSpark={createPersonSparkForProfile}
+          onUpdatePersonSpark={editPersonSpark}
+          onArchivePersonSpark={archivePersonSpark}
+          onDeletePersonSpark={removePersonSpark}
+          onUndoPersonSparkCompletion={undoSparkCompletion}
+          onCompletePersonSpark={completeSparkWithConnection}
+          onSaveConnection={savePersonConnection}
+          onDeleteConnection={removePersonConnection}
           onCreatePersonNote={savePersonNote}
           onUpdatePersonNote={editPersonNote}
           onDeletePersonNote={removePersonNote}

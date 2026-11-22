@@ -28,6 +28,7 @@ import { RhythmPersonalBadge } from './RhythmPersonalBadge.tsx';
 import { RhythmMetadata } from './RhythmMetadata.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 import { RhythmCompletionActions } from './RhythmCompletionActions.tsx';
+import { RecordCardFrame } from './RecordCardFrame.tsx';
 import { TimelineChart } from './TimelineChart.tsx';
 import { scoreTone } from '../domain/score-tone.ts';
 import { formatScore } from '../domain/score-display.ts';
@@ -713,7 +714,10 @@ function SimpleRhythmCard({
   const asOfDate = localDateInTimeZone(new Date(), timeZone);
 
   return (
-    <article className={`rhythm-card rhythm-card--simple${suggestion ? ' rhythm-card--suggestion' : ''}`} aria-labelledby={headingId}>
+    <RecordCardFrame
+      className={`rhythm-card--simple${suggestion ? ' rhythm-card--suggestion' : ''}`}
+      headingId={headingId}
+    >
       {suggestion && icon && <span className="rhythm-icon rhythm-card__suggestion-icon" aria-hidden="true">{icon}</span>}
       <div className="rhythm-card__simple-content">
         <RhythmCardSummary
@@ -752,7 +756,7 @@ function SimpleRhythmCard({
         onUndo={suggestion ? undefined : onUndo}
         tendButtonRef={tendButtonRef}
       />
-    </article>
+    </RecordCardFrame>
   );
 }
 

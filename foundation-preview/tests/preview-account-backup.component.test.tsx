@@ -33,6 +33,7 @@ import {
   writePreview
 } from '../src/storage/preview-storage.ts';
 import type { PreviewStorage } from '../src/storage/preview-storage.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 import { installMemoryStorage } from './memory-storage.ts';
 
 const currentDate = '2026-11-04';
@@ -926,13 +927,10 @@ describe('manual Preview account backup and restore', () => {
     const workout = data.strength.workouts[0];
     if (!workout) throw new Error('Synthetic relationship fixture is missing its workout.');
     const preservedWorkout = structuredClone(workout);
-    const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
-      schemaVersion: number;
-      data: {
-        goals: Array<{ supportingRhythmIds?: string[] }>;
-      };
-    };
-    envelope.schemaVersion = 43;
+    const envelope = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>,
+      43
+    ) as { schemaVersion: number; data: { goals: Array<{ supportingRhythmIds?: string[] }> } };
     for (const goal of envelope.data.goals) delete goal.supportingRhythmIds;
 
     const migrated = parsePreviewBackup(JSON.stringify(envelope), currentDate);
@@ -958,11 +956,7 @@ describe('manual Preview account backup and restore', () => {
     const current = createPreviewEnvelope(data);
     const priorData = { ...current.data };
     for (const goal of priorData.goals) delete goal.supportingRhythmIds;
-    const raw = JSON.stringify({
-      ...current,
-      schemaVersion: 43,
-      data: priorData
-    });
+    const raw = JSON.stringify(withPreSparkSchema(current, 43, priorData));
 
     const migrated = parsePreviewBackup(raw, currentDate);
 
@@ -1612,7 +1606,7 @@ describe('manual Preview account backup and restore', () => {
       document: {
         format: current.format,
         schemaVersion: 41,
-        data: priorData
+        data: withPreSparkSchema(current, 41, priorData).data
       },
       schemaVersion: 41,
       revision: 2,
@@ -1695,7 +1689,7 @@ describe('manual Preview account backup and restore', () => {
     const oldDocument = {
       format: currentDocument.format,
       schemaVersion: 36 as const,
-      data: oldData
+      data: withPreSparkSchema(currentDocument, 36, oldData).data
     };
     const migrated = validation.validatePreviewAccountBackup({
       document: oldDocument,

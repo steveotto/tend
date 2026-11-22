@@ -2,8 +2,10 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CardioView } from '../src/components/CardioView.tsx';
-import { createCardioData, saveCardioGoals } from '../src/domain/cardio.ts';
+import { createCardioData, isCardioRun, saveCardioGoals } from '../src/domain/cardio.ts';
 import type { CardioData } from '../src/domain/cardio.ts';
+import { createWeightData } from '../src/domain/weight.ts';
+import type { WeightData } from '../src/domain/weight.ts';
 import { todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 
@@ -12,7 +14,10 @@ afterEach(() => {
   document.querySelectorAll('[data-test-cardio-opener]').forEach(element => element.remove());
 });
 
-function renderCardio(data: CardioData = createCardioData(), options: { saveError?: string } = {}) {
+function renderCardio(
+  data: CardioData = createCardioData(),
+  options: { saveError?: string; weightData?: WeightData } = {}
+) {
   const rhythm = cardioRhythm();
   const onChange = vi.fn((_next: CardioData) => options.saveError ?? null);
   return {
@@ -24,6 +29,7 @@ function renderCardio(data: CardioData = createCardioData(), options: { saveErro
         archivedRhythmIds={new Set()}
         datedRhythmCompletions={[]}
         onChange={onChange}
+        {...(options.weightData ? { weightData: options.weightData } : {})}
       />
     ),
     onChange,
@@ -211,6 +217,10 @@ describe('Cardio preview presentation', () => {
     expect(historyList?.textContent).toContain('3 miles');
     expect(historyList?.textContent).not.toContain('Treadmill');
     expect(historyList?.textContent).not.toContain('Track session');
+    expect(historyList?.textContent).toContain('Duration');
+    expect(historyList?.textContent).toContain('Average pace');
+    expect(historyList?.textContent).toContain('Estimated Calories');
+    expect(historyList?.textContent).toContain('Unavailable');
     expect(historyList?.querySelectorAll('.cardio-history-actions button')).toHaveLength(2);
     expect([...historyList!.querySelectorAll('.cardio-history-actions button')]
       .every(button => button.textContent === 'Edit')).toBe(true);
@@ -383,6 +393,87 @@ describe('Cardio preview presentation', () => {
     });
     expect(Number((onChange.mock.calls[0]?.[0].runs[0] as { distance: number }).distance))
       .toBeCloseTo(10 / 1.609344, 5);
+  });
+
+  it('estimates calories with the latest non-future weigh-in, explains the formula, and saves its snapshot', async () => {
+    const user = userEvent.setup();
+    const weightData: WeightData = {
+      ...createWeightData(),
+      displayUnit: 'kg',
+      weighIns: [
+        { id: 'before-run', date: '2026-10-21', weightKg: 70 },
+        { id: 'after-run', date: '2026-10-23', weightKg: 90 }
+      ]
+    };
+    const { onChange } = renderCardio(createCardioData(), { weightData });
+    await user.click(screen.getByRole('button', { name: 'Log run' }));
+    const dialog = screen.getByRole('dialog', { name: 'Log run' });
+    await user.type(within(dialog).getByLabelText('Distance (miles)'), '5');
+
+    expect(within(dialog).getByText('563 kcal')).toBeTruthy();
+    expect(within(dialog).getByText(/Using 70 kg recorded on Oct 21, 2026/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Save run' }));
+    expect(onChange.mock.calls[0]?.[0].runs[0]).toMatchObject({
+      calorieEstimate: {
+        source: 'estimated',
+        method: 'distance-weight-v1',
+        weightKg: 70,
+        weightSource: 'weigh-in',
+        weightDate: '2026-10-21',
+        weightMeasurementId: 'before-run'
+      }
+    });
+
+    cleanup();
+    renderCardio(createCardioData(), { weightData });
+    await user.click(screen.getByRole('button', { name: 'Log run' }));
+    const helpDialog = screen.getByRole('dialog', { name: 'Log run' });
+    await user.click(helpDialog.querySelector('.cardio-calorie-estimate__help summary')!);
+    expect(within(helpDialog).getByText(/gross energy expenditure, not active calories/)).toBeTruthy();
+    expect(within(helpDialog).getByText(/does not use age or height/)).toBeTruthy();
+  });
+
+  it('allows a manual weight when no dated measurement exists and keeps calories unavailable when omitted', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderCardio();
+    await user.click(screen.getByRole('button', { name: 'Log run' }));
+    const dialog = screen.getByRole('dialog', { name: 'Log run' });
+    await user.type(within(dialog).getByLabelText('Distance (miles)'), '5');
+    expect(within(dialog).getByText('Unavailable')).toBeTruthy();
+    await user.type(within(dialog).getByLabelText('Body weight for estimate (lb)'), '154');
+    expect(within(dialog).getByText(/Using manually entered 154 lb/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Save run' }));
+    const savedRun = onChange.mock.calls[0]?.[0].runs[0];
+    expect(isCardioRun(savedRun)).toBe(true);
+    if (!isCardioRun(savedRun)) return;
+    expect(savedRun.calorieEstimate).toMatchObject({
+      source: 'estimated',
+      method: 'distance-weight-v1',
+      weightSource: 'manual'
+    });
+    expect(savedRun.calorieEstimate?.weightKg).toBeCloseTo(69.853, 2);
+  });
+
+  it('compares distance with the previous run and pace with the similar-distance run', () => {
+    const weightData: WeightData = {
+      ...createWeightData(),
+      weighIns: [{ id: 'run-weight', date: '2026-10-18', weightKg: 70 }]
+    };
+    const data: CardioData = {
+      ...createCardioData(),
+      runs: [
+        { id: 'similar-run', date: '2026-10-19', distance: 6, durationSeconds: 3600 },
+        { id: 'previous-run', date: '2026-10-21', distance: 3, durationSeconds: 1800 },
+        { id: 'current-run', date: '2026-10-22', distance: 6.2, durationSeconds: 2976 }
+      ]
+    };
+    const { container } = renderCardio(data, { weightData });
+    const latestRun = container.querySelector('.cardio-history-list li');
+    expect(latestRun?.textContent).toContain('Average pace');
+    expect(latestRun?.textContent).toContain('Pace vs similar-distance run');
+    expect(latestRun?.textContent).toContain('▲ +3.2 mi');
+    expect(latestRun?.textContent).toContain('▲ 2:00 faster');
+    expect(latestRun?.textContent).toContain('▲ +360 kcal');
   });
 
   it('edits a run under the same ID and deletes only the selected run', async () => {

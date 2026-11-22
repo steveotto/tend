@@ -820,6 +820,7 @@ export function HealthFitnessView({
               categoryHealthScore={healthScore.health}
               foundationNavigation
               foundationActive={!hidden && selected === 'progress' && progressSelected === 'cardio'}
+              weightData={weight.data}
               people={people}
               archivedRhythms={archivedRhythms}
               foundations={foundations}

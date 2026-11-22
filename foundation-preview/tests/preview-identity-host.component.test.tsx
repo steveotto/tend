@@ -398,8 +398,7 @@ describe('PreviewIdentityHost', () => {
     const currentEnvelope = createPreviewEnvelope(data);
     const originalRaw = JSON.stringify({
       ...currentEnvelope,
-      schemaVersion: PREVIEW_SCHEMA_VERSION - 1,
-      data: currentEnvelope.data
+      schemaVersion: PREVIEW_SCHEMA_VERSION - 1
     });
     storage.setItem(accountStorageKey, originalRaw);
     const user = userEvent.setup();

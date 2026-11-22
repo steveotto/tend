@@ -6,6 +6,8 @@ import { blendFitnessHealth } from './fitness-scoring.ts';
 import { rhythmScheduleForDate } from './rhythm-schedule.ts';
 import { rhythmSeasonForDate } from './rhythm-seasons.ts';
 import type { RhythmSchedule } from './rhythm-schedule.ts';
+import { validWeightMeasurements } from './weight.ts';
+import type { WeightData, WeightMeasurement } from './weight.ts';
 import {
   deleteDatedCompletion,
   prepareDatedRhythmCompletion
@@ -17,12 +19,29 @@ import type {
 
 export type CardioDistanceUnit = 'mi' | 'km';
 
+export type CardioCalorieEstimate =
+  | {
+    source: 'estimated';
+    method: 'distance-weight-v1';
+    weightKg: number;
+    weightSource: 'weigh-in';
+    weightDate: string;
+    weightMeasurementId: string;
+  }
+  | {
+    source: 'estimated';
+    method: 'distance-weight-v1';
+    weightKg: number;
+    weightSource: 'manual';
+  };
+
 export type CardioRun = {
   id: string;
   date: string;
   distance: number;
   distanceUnit?: CardioDistanceUnit;
   durationSeconds?: number;
+  calorieEstimate?: CardioCalorieEstimate;
   notes?: string;
   rhythmId?: string;
   rhythmOccurrence?: string;
@@ -74,6 +93,138 @@ export function cardioPaceSecondsPerUnit(
     || !Number.isFinite(distanceInUnit) || distanceInUnit <= 0) return null;
   const pace = Math.round(durationSeconds / distanceInUnit);
   return Number.isSafeInteger(pace) && pace > 0 ? pace : null;
+}
+
+export function formatCardioPace(secondsPerUnit: number | null, unit: CardioDistanceUnit): string {
+  if (secondsPerUnit === null || !Number.isSafeInteger(secondsPerUnit) || secondsPerUnit <= 0) return '—';
+  return `${Math.floor(secondsPerUnit / 60)}:${String(secondsPerUnit % 60).padStart(2, '0')}/${unit}`;
+}
+
+export function estimateCardioCalories(weightKg: number, distanceMiles: number): number | null {
+  if (!Number.isFinite(weightKg) || weightKg <= 0
+    || !Number.isFinite(distanceMiles) || distanceMiles <= 0) return null;
+  const calories = Math.round(weightKg * distanceMiles * 1.609344);
+  return Number.isSafeInteger(calories) && calories > 0 ? calories : null;
+}
+
+export function latestCardioWeightOnOrBefore(
+  weightData: WeightData,
+  runDate: string,
+  today = runDate
+): WeightMeasurement | null {
+  if (!isValidDate(runDate) || !isValidDate(today) || runDate > today) return null;
+  return validWeightMeasurements(weightData, today).records
+    .filter(measurement => measurement.date <= runDate)
+    .at(-1) ?? null;
+}
+
+export function cardioCalorieEstimateFromWeighIn(
+  measurement: WeightMeasurement
+): CardioCalorieEstimate {
+  return {
+    source: 'estimated',
+    method: 'distance-weight-v1',
+    weightKg: measurement.weightKg,
+    weightSource: 'weigh-in',
+    weightDate: measurement.date,
+    weightMeasurementId: measurement.id
+  };
+}
+
+export function cardioRunCalorieEstimate(
+  run: CardioRun,
+  weightData: WeightData,
+  today = run.date
+): { estimate: CardioCalorieEstimate; calories: number } | null {
+  const estimate = run.calorieEstimate
+    ?? (() => {
+      const measurement = latestCardioWeightOnOrBefore(weightData, run.date, today);
+      return measurement ? cardioCalorieEstimateFromWeighIn(measurement) : null;
+    })();
+  if (!estimate) return null;
+  const calories = estimateCardioCalories(estimate.weightKg, run.distance);
+  return calories === null ? null : { estimate, calories };
+}
+
+export type CardioRunComparisons = {
+  previousRun: CardioRun | null;
+  similarDistanceRun: CardioRun | null;
+  paceReferenceRun: CardioRun | null;
+  distanceDelta: number | null;
+  paceImprovementSeconds: number | null;
+  calorieDelta: number | null;
+};
+
+export function selectCardioRunComparisons(
+  runs: readonly CardioRun[],
+  run: CardioRun,
+  weightData: WeightData,
+  today = run.date,
+  similarDistanceTolerance = 0.05
+): CardioRunComparisons {
+  if (!Number.isFinite(similarDistanceTolerance) || similarDistanceTolerance < 0
+    || similarDistanceTolerance > 1) {
+    return {
+      previousRun: null,
+      similarDistanceRun: null,
+      paceReferenceRun: null,
+      distanceDelta: null,
+      paceImprovementSeconds: null,
+      calorieDelta: null
+    };
+  }
+  const ordered = [...runs]
+    .filter(isCardioRun)
+    .sort((left, right) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
+  const currentIndex = ordered.findIndex(item => item.id === run.id);
+  if (currentIndex < 0) {
+    return {
+      previousRun: null,
+      similarDistanceRun: null,
+      paceReferenceRun: null,
+      distanceDelta: null,
+      paceImprovementSeconds: null,
+      calorieDelta: null
+    };
+  }
+  const earlierRuns = ordered.slice(0, currentIndex);
+  const previousRun = earlierRuns.at(-1) ?? null;
+  const similarDistanceRun = earlierRuns.filter(candidate =>
+    candidate.durationSeconds !== undefined
+      && Math.abs(candidate.distance - run.distance) / run.distance <= similarDistanceTolerance
+  ).at(-1) ?? null;
+  const paceReferenceRun = similarDistanceRun ?? (
+    previousRun?.durationSeconds !== undefined ? previousRun : null
+  );
+  const unit = run.distanceUnit ?? 'mi';
+  const currentPace = cardioPaceSecondsPerUnit(
+    run.durationSeconds,
+    cardioDistanceFromMiles(run.distance, unit)
+  );
+  const referencePace = paceReferenceRun
+    ? cardioPaceSecondsPerUnit(
+      paceReferenceRun.durationSeconds,
+      cardioDistanceFromMiles(paceReferenceRun.distance, unit)
+    )
+    : null;
+  const currentCalories = cardioRunCalorieEstimate(run, weightData, today)?.calories ?? null;
+  const previousCalories = previousRun
+    ? cardioRunCalorieEstimate(previousRun, weightData, today)?.calories ?? null
+    : null;
+  return {
+    previousRun,
+    similarDistanceRun,
+    paceReferenceRun,
+    distanceDelta: previousRun
+      ? (run.distance - previousRun.distance) * (unit === 'km' ? 1.609344 : 1)
+      : null,
+    paceImprovementSeconds: currentPace !== null && referencePace !== null
+      ? referencePace - currentPace
+      : null,
+    calorieDelta: currentCalories !== null && previousCalories !== null
+      ? currentCalories - previousCalories
+      : null
+  };
 }
 
 export type CardioData = {
@@ -130,10 +281,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isCardioCalorieEstimate(value: unknown): value is CardioCalorieEstimate {
+  if (!isRecord(value) || value.source !== 'estimated'
+    || value.method !== 'distance-weight-v1'
+    || typeof value.weightKg !== 'number' || !Number.isFinite(value.weightKg) || value.weightKg <= 0) return false;
+  if (value.weightSource === 'manual') {
+    return Object.keys(value).every(key =>
+      ['source', 'method', 'weightKg', 'weightSource'].includes(key)
+    );
+  }
+  return value.weightSource === 'weigh-in'
+    && typeof value.weightDate === 'string' && isValidDate(value.weightDate)
+    && typeof value.weightMeasurementId === 'string'
+    && value.weightMeasurementId.trim().length > 0
+    && value.weightMeasurementId.length <= 160
+    && Object.keys(value).every(key =>
+      ['source', 'method', 'weightKg', 'weightSource', 'weightDate', 'weightMeasurementId'].includes(key)
+    );
+}
+
 export function migrateCardioDataToV28(value: CardioData): CardioData {
   return {
     ...value,
     targetHistory: Array.isArray(value.targetHistory) ? value.targetHistory : []
+  };
+}
+
+export function migrateCardioDataToV52(value: CardioData, weight: WeightData): CardioData {
+  return {
+    ...value,
+    runs: value.runs.map(item => {
+      if (!isCardioRun(item) || item.calorieEstimate !== undefined) return item;
+      const measurement = latestCardioWeightOnOrBefore(weight, item.date);
+      return measurement
+        ? { ...item, calorieEstimate: cardioCalorieEstimateFromWeighIn(measurement) }
+        : item;
+    })
   };
 }
 
@@ -243,6 +426,10 @@ export function isCardioRun(value: unknown): value is CardioRun {
       || typeof value.durationSeconds === 'number'
         && Number.isSafeInteger(value.durationSeconds) && value.durationSeconds > 0
         && value.durationSeconds <= MAX_CARDIO_RUN_DURATION_SECONDS)
+    && (value.calorieEstimate === undefined
+      || isCardioCalorieEstimate(value.calorieEstimate)
+        && (value.calorieEstimate.weightSource !== 'weigh-in'
+          || value.calorieEstimate.weightDate <= value.date))
     && (value.notes === undefined || typeof value.notes === 'string' && value.notes.length <= 1000)
     && ((value.rhythmId === undefined && value.rhythmOccurrence === undefined && value.completionId === undefined)
       || (typeof value.rhythmId === 'string' && value.rhythmId.length > 0
@@ -438,7 +625,10 @@ export function saveCardioRun(
         ? data.runs.map(value => {
             if (!isRecord(value) || value.id !== run.id) return value;
             const updated: Record<string, unknown> = { ...value, ...run };
-            for (const key of ['distanceUnit', 'durationSeconds', 'notes', 'rhythmId', 'rhythmOccurrence', 'completionId'] as const) {
+            for (const key of [
+              'distanceUnit', 'durationSeconds', 'calorieEstimate', 'notes',
+              'rhythmId', 'rhythmOccurrence', 'completionId'
+            ] as const) {
               if (!Object.hasOwn(run, key)) delete updated[key];
             }
             return updated;

@@ -7,6 +7,7 @@ import {
   PREVIEW_SCHEMA_VERSION
 } from '../src/domain/preview-state.ts';
 import { createValidatedPreviewAccountDocument } from '../src/storage/preview-account-backup.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 
 const currentDate = '2026-10-21';
 
@@ -34,11 +35,10 @@ function dataWithGoalLinks() {
 
 describe('legacy goal Rhythm association compatibility', () => {
   it('migrates schema v43 goals without links to the current schema without disturbing balances or history', () => {
-    const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))) as {
-      schemaVersion: number;
-      data: { goals: Array<Record<string, unknown>> };
-    };
-    envelope.schemaVersion = 43;
+    const envelope = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))) as ReturnType<typeof createPreviewEnvelope>,
+      43
+    ) as { schemaVersion: number; data: { goals: Array<Record<string, unknown>> } };
     for (const goal of envelope.data.goals) {
       delete goal.supportingRhythmIds;
       delete goal.foundationId;
@@ -60,11 +60,10 @@ describe('legacy goal Rhythm association compatibility', () => {
 
   it('migrates v44 goals without inferring Foundation assignments and preserves unknown IDs', () => {
     const data = createSamplePreviewData();
-    const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
-      schemaVersion: number;
-      data: { goals: Array<Record<string, unknown>> };
-    };
-    envelope.schemaVersion = 44;
+    const envelope = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>,
+      44
+    ) as { schemaVersion: number; data: { goals: Array<Record<string, unknown>> } };
     for (const goal of envelope.data.goals) delete goal.foundationId;
     envelope.data.goals[0]!.title = 'Emergency reserve';
 

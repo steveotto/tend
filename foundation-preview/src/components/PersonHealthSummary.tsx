@@ -40,6 +40,11 @@ type PersonHealthSummaryProps = {
   detailsDialogTitle?: string;
   detailsLabel?: string;
   headerStyle?: 'summary' | 'category';
+  ariaLabel?: string;
+  summaryDisclosureLabel?: string;
+  infoLabel?: string;
+  scoreLabel?: string;
+  progressLabel?: string;
 };
 
 export function PersonHealthSummary({
@@ -61,9 +66,15 @@ export function PersonHealthSummary({
   detailsContent,
   detailsDialogTitle,
   detailsLabel,
-  headerStyle = 'summary'
+  headerStyle = 'summary',
+  ariaLabel,
+  summaryDisclosureLabel,
+  infoLabel,
+  scoreLabel,
+  progressLabel
 }: PersonHealthSummaryProps) {
   const [expanded, setExpanded] = useState(false);
+  const [componentScoresExpanded, setComponentScoresExpanded] = useState(false);
   const coverage = coverageLabel ?? (totalCount === 0
     ? emptyMessage ?? `No ${itemTerm} yet.`
     : `${eligibleCount} of ${totalCount} ${itemTerm}${totalCount === 1 ? '' : 's'} scored.`);
@@ -73,7 +84,7 @@ export function PersonHealthSummary({
   return (
     <HealthScoreSummary
       className="person-component-health-summary"
-      ariaLabel={`${title} summary`}
+      ariaLabel={ariaLabel ?? `${title} summary`}
       title={title}
       score={health.health}
       consistency={health.consistency}
@@ -81,6 +92,15 @@ export function PersonHealthSummary({
       coverage={coverage}
       expanded={expanded}
       onExpandedChange={setExpanded}
+      {...(headerStyle === 'category' && summaryContent !== undefined
+        ? {
+            summaryDisclosure: {
+              label: summaryDisclosureLabel ?? `${title} component scores`,
+              expanded: componentScoresExpanded,
+              onExpandedChange: setComponentScoresExpanded
+            }
+          }
+        : {})}
       showMeasures={showMeasures}
       showMeasureCaptions={showMeasureCaptions}
       showHealthMeter={showHealthMeter}
@@ -89,6 +109,9 @@ export function PersonHealthSummary({
       {...(detailsContent === undefined ? {} : { detailsContent })}
       {...(detailsDialogTitle === undefined ? {} : { detailsDialogTitle })}
       {...(detailsLabel === undefined ? {} : { detailsLabel })}
+      {...(infoLabel === undefined ? {} : { infoLabel })}
+      {...(scoreLabel === undefined ? {} : { scoreLabel })}
+      {...(progressLabel === undefined ? {} : { progressLabel })}
       consistencyDescription={`The average Consistency score of eligible ${pluralTerm}.`}
       onTrackDescription={`The average On Track score of eligible ${pluralTerm}.`}
     >
@@ -139,66 +162,73 @@ export function PersonHealthComponentScores({
   const dialogAreaDetails = dialogArea ? areaDetails?.[dialogArea] : undefined;
 
   return (
-    <div
-      className="person-health-component-scores"
-      role="group"
-      aria-label="Health by area"
-      data-count={values.length}
-    >
-      {values.map(({ id, label, score }) => {
-        const value = score !== null && Number.isFinite(score) ? score : null;
-        const available = value !== null;
-        const content = (
-          <>
-            <CategoryHealthBadge
-              score={value}
-              appearance="rounded"
-              className="person-health-component-score__badge"
-            />
-            <span className="person-health-component-score__label">
-              {label}
-            </span>
-          </>
-        );
-        if (id && areaDetails) {
-          const selectableArea = id;
-          const expanded = dialogArea === selectableArea;
-          return (
-            <button
-              type="button"
-              ref={element => { scoreButtonRefs.current[selectableArea] = element; }}
-              className={`person-health-component-score ${scoreTone(value)}`}
-              aria-label={`${label} Health ${value === null ? 'unavailable' : formatScore(value)}`}
-              aria-expanded={expanded}
-              aria-haspopup="dialog"
-              key={id}
-              onClick={() => {
-                setDialogArea(selectableArea);
-                setParentDialogInert(true);
-              }}
-            >
-              {content}
-              <span className="visually-hidden">
-                {expanded ? 'Health details open' : 'Health details closed'}
-              </span>
-            </button>
-          );
-        }
-        return (
-          <div
-            className={`person-health-component-score ${scoreTone(value)}`}
-            role={available ? 'meter' : 'img'}
-            aria-label={available ? `${label} Health score` : `${label} Health score: unavailable`}
-            aria-valuemin={available ? 0 : undefined}
-            aria-valuemax={available ? 100 : undefined}
-            aria-valuenow={value ?? undefined}
-            aria-valuetext={value === null ? undefined : `${formatScore(value)} out of 100`}
-            key={label}
-          >
-            {content}
-          </div>
-        );
-      })}
+    <>
+      <div
+        className="person-health-component-scores-container"
+        data-count={values.length}
+      >
+        <div
+          className="person-health-component-scores"
+          role="group"
+          aria-label="Health by area"
+          data-count={values.length}
+        >
+          {values.map(({ id, label, score }) => {
+            const value = score !== null && Number.isFinite(score) ? score : null;
+            const available = value !== null;
+            const content = (
+              <>
+                <CategoryHealthBadge
+                  score={value}
+                  appearance="rounded"
+                  className="person-health-component-score__badge"
+                />
+                <span className="person-health-component-score__label">
+                  {label}
+                </span>
+              </>
+            );
+            if (id && areaDetails) {
+              const selectableArea = id;
+              const expanded = dialogArea === selectableArea;
+              return (
+                <button
+                  type="button"
+                  ref={element => { scoreButtonRefs.current[selectableArea] = element; }}
+                  className={`person-health-component-score ${scoreTone(value)}`}
+                  aria-label={`${label} Health ${value === null ? 'unavailable' : formatScore(value)}`}
+                  aria-expanded={expanded}
+                  aria-haspopup="dialog"
+                  key={id}
+                  onClick={() => {
+                    setDialogArea(selectableArea);
+                    setParentDialogInert(true);
+                  }}
+                >
+                  {content}
+                  <span className="visually-hidden">
+                    {expanded ? 'Health details open' : 'Health details closed'}
+                  </span>
+                </button>
+              );
+            }
+            return (
+              <div
+                className={`person-health-component-score ${scoreTone(value)}`}
+                role={available ? 'meter' : 'img'}
+                aria-label={available ? `${label} Health score` : `${label} Health score: unavailable`}
+                aria-valuemin={available ? 0 : undefined}
+                aria-valuemax={available ? 100 : undefined}
+                aria-valuenow={value ?? undefined}
+                aria-valuetext={value === null ? undefined : `${formatScore(value)} out of 100`}
+                key={label}
+              >
+                {content}
+              </div>
+            );
+          })}
+        </div>
+      </div>
       {dialogAreaDetails && dialogArea && (
         <HealthScoreDetailsDialog
           title={dialogAreaDetails.title}
@@ -218,7 +248,7 @@ export function PersonHealthComponentScores({
           </div>
         </HealthScoreDetailsDialog>
       )}
-    </div>
+    </>
   );
 }
 

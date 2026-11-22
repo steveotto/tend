@@ -16,6 +16,7 @@ import {
 import type { CardioRun } from './cardio.ts';
 import { createFriendshipData } from './friendships.ts';
 import type { ConnectionCadence, FriendshipConnection } from './friendships.ts';
+import type { PersonSpark, PersonSparkCompletion } from './person-sparks.ts';
 import { resolvePersonCategoryGroups } from './person-categories.ts';
 import { validatePersonNotesCollection } from './person-notes.ts';
 import type { PersonNote } from './person-notes.ts';
@@ -41,6 +42,7 @@ export type LegacyImportReport = {
     people: number;
     rhythms: number;
     events: number;
+    sparks: number;
     notes: number;
     strengthTemplates: number;
     strengthLogs: number;
@@ -53,6 +55,7 @@ export type LegacyImportReport = {
     classifications: number;
     rhythms: number;
     rhythmCompletions: number;
+    sparks: number;
     connections: number;
     cadences: number;
     notes: number;
@@ -304,6 +307,7 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
       people: 0,
       rhythms: 0,
       events: 0,
+      sparks: 0,
       notes: 0,
       strengthTemplates: 0,
       strengthLogs: 0,
@@ -316,6 +320,7 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
       classifications: 0,
       rhythms: 0,
       rhythmCompletions: 0,
+      sparks: 0,
       connections: 0,
       cadences: 0,
       notes: 0,
@@ -347,6 +352,11 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
   report.source.people = recordCount(state.people);
   report.source.rhythms = document.rhythms.length;
   report.source.events = recordCount(state.events);
+  if (Array.isArray(state.people)) {
+    for (const person of state.people) {
+      if (isRecord(person)) report.source.sparks += recordCount(person.sparks);
+    }
+  }
   report.source.notes = recordCount(state.personNotes);
   if (isRecord(state.fitness)) {
     report.source.strengthTemplates = recordCount(state.fitness.savedWorkouts);
@@ -462,7 +472,7 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
     }
     for (const key of Object.keys(row)) {
       if (![
-        'id', 'name', 'relation', 'area', 'birthday', 'anniversary', 'photo', 'rhythms',
+        'id', 'name', 'relation', 'area', 'birthday', 'anniversary', 'photo', 'rhythms', 'sparks',
         'connectCadence', 'connectCadenceSetOn', 'cadenceSetOn', 'cadenceDays'
       ].includes(key)) {
         addIssue(report.unsupported, `/people/${index}/${key}`);
@@ -630,6 +640,219 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
     }
   }
 
+  const importedSparks: PersonSpark[] = [];
+  const sourceSparkIds = new Set<string>();
+  const sourceSparkById = new Map<string, PersonSpark>();
+  const sparkEventPaths = new Set<string>();
+  const sourceSparkEvents = document.events.filter(({ value }) =>
+    value.origin === 'spark' || value.note === 'Spark landed'
+      || value.sparkId !== undefined || value.sparkOwnerId !== undefined);
+
+  for (const [sourceIndex, row] of sourceRows.entries()) {
+    if (row.sparks === undefined) continue;
+    const sourcePersonId = typeof row.id === 'string' ? row.id : '';
+    const ownerId = personIdMap.get(sourcePersonId);
+    const personIndex = Array.isArray(state.people)
+      ? state.people.findIndex(person => isRecord(person) && person.id === sourcePersonId)
+      : sourceIndex;
+    const collectionPath = `/people/${personIndex}/sparks`;
+    if (!Array.isArray(row.sparks)) {
+      addIssue(report.invalid, collectionPath);
+      continue;
+    }
+
+    for (const [sparkIndex, value] of row.sparks.entries()) {
+      const path = `${collectionPath}/${sparkIndex}`;
+      if (!isRecord(value)) {
+        addIssue(report.invalid, path);
+        continue;
+      }
+      if (!ownerId) {
+        addIssue(report.ambiguous, `${path}/ownerId`);
+        continue;
+      }
+      if (!isNonEmptyText(value.id, 160)) {
+        addIssue(report.invalid, `${path}/id`);
+        continue;
+      }
+      if (sourceSparkIds.has(value.id)) {
+        addIssue(report.ambiguous, `${path}/id`);
+        continue;
+      }
+      sourceSparkIds.add(value.id);
+      if (!isNonEmptyText(value.text, 180)
+        || value.details !== undefined
+          && (typeof value.details !== 'string' || value.details.length > 4000)
+        || value.done !== undefined && typeof value.done !== 'boolean'
+        || value.doneTs !== undefined && value.doneTs !== null
+          && (typeof value.doneTs !== 'number' || !Number.isSafeInteger(value.doneTs))
+        || value.by !== undefined && value.by !== null && typeof value.by !== 'string'
+        || value.time !== undefined && value.time !== null && typeof value.time !== 'string'
+        || value.areas !== undefined
+          && (!Array.isArray(value.areas) || value.areas.some(area => typeof area !== 'string'))) {
+        addIssue(report.invalid, path);
+        continue;
+      }
+
+      const sourceSharedWith = value.sharedWith === undefined ? [] : value.sharedWith;
+      if (!Array.isArray(sourceSharedWith)) {
+        addIssue(report.invalid, `${path}/sharedWith`);
+        continue;
+      }
+      const sharedWith: PersonId[] = [];
+      let referencesValid = true;
+      for (const sourceId of sourceSharedWith) {
+        const mappedId = typeof sourceId === 'string' ? personIdMap.get(sourceId) : undefined;
+        if (!mappedId || mappedId === ownerId || sharedWith.includes(mappedId)) {
+          referencesValid = false;
+          break;
+        }
+        sharedWith.push(mappedId);
+      }
+      if (!referencesValid) {
+        addIssue(report.ambiguous, `${path}/sharedWith`);
+        continue;
+      }
+
+      const linkedEvents = sourceSparkEvents.filter(({ value: event }) =>
+        event.sparkId === value.id
+        && (event.sparkOwnerId === undefined || event.sparkOwnerId === sourcePersonId));
+      const misownedEvents = sourceSparkEvents.filter(({ value: event }) =>
+        event.sparkId === value.id
+        && event.sparkOwnerId !== undefined
+        && event.sparkOwnerId !== sourcePersonId);
+      if (misownedEvents.length > 0) {
+        for (const event of misownedEvents) {
+          addIssue(report.ambiguous, `${event.path}/sparkOwnerId`);
+          sparkEventPaths.add(event.path);
+        }
+        continue;
+      }
+      if (linkedEvents.length > 1) {
+        for (const event of linkedEvents) sparkEventPaths.add(event.path);
+        addIssue(report.ambiguous, `${path}/completionHistory`);
+        continue;
+      }
+
+      const completed = value.done === true;
+      const linkedEvent = linkedEvents[0];
+      if (linkedEvent) sparkEventPaths.add(linkedEvent.path);
+      if (linkedEvent && !completed) {
+        addIssue(report.ambiguous, `${linkedEvent.path}/sparkId`);
+        continue;
+      }
+      if (!completed && value.doneTs !== undefined && value.doneTs !== null) {
+        addIssue(report.ambiguous, `${path}/doneTs`);
+        continue;
+      }
+
+      let completion: PersonSparkCompletion | undefined;
+      if (completed) {
+        let parts: ReturnType<typeof timestampParts> = null;
+        if (linkedEvent) {
+          parts = timestampParts(linkedEvent.value.ts);
+          if (!parts) {
+            addIssue(report.invalid, `${linkedEvent.path}/ts`);
+            continue;
+          }
+          if (typeof value.doneTs === 'number'
+            && Math.abs(value.doneTs - Date.parse(parts.iso)) > 60_000) {
+            addIssue(report.ambiguous, `${path}/doneTs`);
+            continue;
+          }
+        } else if (typeof value.doneTs === 'number') {
+          parts = timestampParts(value.doneTs);
+          if (!parts) {
+            addIssue(report.invalid, `${path}/doneTs`);
+            continue;
+          }
+        }
+        if (parts && parts.date > currentDate) {
+          addIssue(report.invalid, linkedEvent ? `${linkedEvent.path}/ts` : `${path}/doneTs`);
+          continue;
+        }
+
+        let participantIds: PersonId[] | undefined;
+        if (linkedEvent) {
+          const event = linkedEvent.value;
+          const sourceParticipants: unknown[] = [];
+          if (Array.isArray(event.personIds)) {
+            sourceParticipants.push(...event.personIds);
+          } else if (event.personIds !== undefined) {
+            addIssue(report.invalid, `${linkedEvent.path}/personIds`);
+            continue;
+          } else if (event.personId !== undefined) {
+            sourceParticipants.push(event.personId);
+          }
+          const mappedParticipants: PersonId[] = [];
+          for (const participant of sourceParticipants) {
+            const mappedId = typeof participant === 'string' ? personIdMap.get(participant) : undefined;
+            if (!mappedId || mappedParticipants.includes(mappedId)) {
+              referencesValid = false;
+              break;
+            }
+            mappedParticipants.push(mappedId);
+          }
+          if (!referencesValid) {
+            addIssue(report.ambiguous, `${linkedEvent.path}/personIds`);
+            continue;
+          }
+          participantIds = mappedParticipants;
+        }
+
+        const legacyEventId = linkedEvent && isNonEmptyText(linkedEvent.value.id, 160)
+          ? linkedEvent.value.id
+          : undefined;
+        completion = {
+          id: legacyEventId
+            ? `legacy-spark-completion-${legacyEventId}`
+            : `legacy-spark-completion-${deterministicId(`${sourcePersonId}:${value.id}`)}`,
+          source: 'legacy',
+          ...(parts ? { date: parts.date, time: parts.time, completedAt: parts.iso } : {}),
+          ...(legacyEventId ? { legacyEventId } : {}),
+          ...(participantIds ? { participantIds } : {})
+        };
+      }
+
+      const spark: PersonSpark = {
+        id: value.id,
+        ownerId,
+        title: value.text,
+        ...(value.details ? { description: value.details } : {}),
+        sharedWith,
+        archived: false,
+        completed,
+        completionHistory: completion ? [completion] : [],
+        ...(Object.hasOwn(value, 'by') || Object.hasOwn(value, 'time')
+          ? {
+              legacyTiming: {
+                ...(Object.hasOwn(value, 'by') ? { by: value.by as string | null } : {}),
+                ...(Object.hasOwn(value, 'time') ? { time: value.time as string | null } : {})
+              }
+            }
+          : {}),
+        ...(Array.isArray(value.areas) ? { legacyAreas: [...value.areas] as string[] } : {}),
+        legacyData: {
+          ...value,
+          ...(linkedEvent ? { legacyEvent: { ...linkedEvent.value } } : {})
+        }
+      };
+      importedSparks.push(spark);
+      sourceSparkById.set(value.id, spark);
+      report.supported.sparks++;
+    }
+  }
+
+  for (const event of sourceSparkEvents) {
+    const row = event.value;
+    const alreadyReported = report.ambiguous.some(issue =>
+      issue.path === `${event.path}/sparkId` || issue.path === `${event.path}/sparkOwnerId`);
+    sparkEventPaths.add(event.path);
+    if ((typeof row.sparkId !== 'string' || !sourceSparkById.has(row.sparkId)) && !alreadyReported) {
+      addIssue(report.ambiguous, `${event.path}/sparkId`);
+    }
+  }
+
   const importedConnections: FriendshipConnection[] = [];
   const connectionType = (event: Record<string, unknown>): FriendshipConnection['type'] | null => {
     const sourceType = event.type ?? event.kind;
@@ -691,6 +914,7 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
   for (const event of document.events) {
     const row = event.value;
     if (excludedEventPaths.has(event.path)) continue;
+    if (sparkEventPaths.has(event.path)) continue;
     if (row.fitnessLogId !== undefined) {
       if (typeof row.fitnessLogId !== 'string' || row.fitnessLogId.trim().length === 0) {
         addIssue(report.ambiguous, `${event.path}/fitnessLogId`);
@@ -926,6 +1150,7 @@ export function analyzeLegacyTendImport(originalText: string, currentDate: strin
   }
 
   candidate.personNotes = importedNotes;
+  candidate.personSparks = importedSparks;
   candidate.friendships = { ...createFriendshipData(), cadenceSettings, connections: importedConnections };
   candidate.rhythmHistoryIds = [...importedRhythmIds];
 

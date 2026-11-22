@@ -1,6 +1,12 @@
 import { useId, useRef } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { HealthScoreInfoButton, HealthScoreMeasures, HealthScoreMeter } from './HealthScoreBreakdown.tsx';
+import {
+  HealthScoreDisclosureButton,
+  HealthScoreDisclosurePanel,
+  HealthScoreInfoButton,
+  HealthScoreMeasures,
+  HealthScoreMeter
+} from './HealthScoreBreakdown.tsx';
 import { formatScore } from '../domain/score-display.ts';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 import { HealthScoreDetailsContent } from './HealthScoreDetailsContent.tsx';
@@ -13,6 +19,11 @@ type HealthScoreSummaryProps = {
   coverage: string;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
+  summaryDisclosure?: {
+    label: string;
+    expanded: boolean;
+    onExpandedChange: (expanded: boolean) => void;
+  };
   children: ReactNode;
   summaryContent?: ReactNode;
   detailsContent?: ReactNode;
@@ -21,6 +32,8 @@ type HealthScoreSummaryProps = {
   ariaLabel?: string;
   infoLabel?: string;
   detailsLabel?: string;
+  scoreLabel?: string;
+  progressLabel?: string;
   showMeasures?: boolean;
   showMeasureCaptions?: boolean;
   showHealthMeter?: boolean;
@@ -37,6 +50,7 @@ export function HealthScoreSummary({
   coverage,
   expanded,
   onExpandedChange,
+  summaryDisclosure,
   children,
   summaryContent,
   detailsContent,
@@ -45,6 +59,8 @@ export function HealthScoreSummary({
   ariaLabel,
   infoLabel = title,
   detailsLabel = `${title} scoring explanation`,
+  scoreLabel,
+  progressLabel,
   showMeasures = true,
   showMeasureCaptions = false,
   showHealthMeter = false,
@@ -55,6 +71,7 @@ export function HealthScoreSummary({
   const id = useId();
   const headingId = `${id}-heading`;
   const detailsId = `${id}-details`;
+  const summaryContentId = `${id}-summary-content`;
   const toggleRef = useRef<HTMLButtonElement>(null);
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -78,9 +95,23 @@ export function HealthScoreSummary({
     >
       {headerStyle === 'category' ? (
         <header className="health-score-breakdown__header">
-          <h3 id={headingId}>{title}</h3>
+          <div className="health-score-breakdown__title">
+            <h3 id={headingId}>
+              {title}
+              {summaryDisclosure && (
+                <span className="health-score-breakdown__title-end">
+                  <HealthScoreDisclosureButton
+                    label={summaryDisclosure.label}
+                    expanded={summaryDisclosure.expanded}
+                    controls={summaryContentId}
+                    onClick={() => summaryDisclosure.onExpandedChange(!summaryDisclosure.expanded)}
+                  />
+                </span>
+              )}
+            </h3>
+          </div>
           <HealthSummaryValue
-            label={`${title} score`}
+            label={scoreLabel ?? `${title} score`}
             score={score}
             className="person-profile-overall-score"
             decorative={expanded}
@@ -108,7 +139,7 @@ export function HealthScoreSummary({
             </div>
           </div>
           <HealthSummaryValue
-            label={`${title} score`}
+            label={scoreLabel ?? `${title} score`}
             score={score}
             className="category-health-score"
             decorative={expanded}
@@ -126,9 +157,17 @@ export function HealthScoreSummary({
           showCaptions={showMeasureCaptions}
         />
       ) : showHealthMeter ? (
-        <HealthScoreMeter score={score} label={`${title} progress`} />
+        <HealthScoreMeter score={score} label={progressLabel ?? `${title} progress`} />
       ) : null}
-      {summaryContent}
+      {summaryDisclosure ? (
+        <HealthScoreDisclosurePanel
+          id={summaryContentId}
+          className="person-health-component-disclosure"
+          expanded={summaryDisclosure.expanded}
+        >
+          {summaryContent}
+        </HealthScoreDisclosurePanel>
+      ) : summaryContent}
       {expanded && (
         <HealthScoreDetailsDialog title={detailsDialogTitle} onClose={closeDetails}>
           <div id={detailsId} className="category-health-summary__details" role="region" aria-label={detailsLabel}>

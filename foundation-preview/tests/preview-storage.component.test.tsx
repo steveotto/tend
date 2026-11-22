@@ -118,6 +118,7 @@ import { selectDailyRhythmScore } from '../src/domain/rhythm-scoring.ts';
 import type { PreviewData } from '../src/domain/preview-state.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { addCalendarDays } from '../src/domain/rhythm-occurrences.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 import { installMemoryStorage, MemoryStorage } from './memory-storage.ts';
 
 function render(ui: Parameters<typeof testingRender>[0]) {
@@ -184,11 +185,11 @@ function sampleWithHistory(): PreviewData {
 }
 
 function olderSchemaRaw(version: 43 | 44 | 45, data = sampleWithHistory()): string {
-  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+  const current = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
     schemaVersion: number;
     data: { goals: Array<Record<string, unknown>> };
   };
-  envelope.schemaVersion = version;
+  const envelope = withPreSparkSchema(current as ReturnType<typeof createPreviewEnvelope>, version);
   for (const goal of envelope.data.goals) {
     if (version < 45) delete goal.foundationId;
     if (version === 43) delete goal.supportingRhythmIds;
@@ -197,23 +198,23 @@ function olderSchemaRaw(version: 43 | 44 | 45, data = sampleWithHistory()): stri
 }
 
 function schema46Raw(data = sampleWithHistory()): string {
-  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+  const current = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
     schemaVersion: number;
     data: Record<string, unknown>;
   };
-  envelope.schemaVersion = 46;
-  delete envelope.data.foundationPreferences;
-  delete envelope.data.prayerEnabled;
+  const envelope = withPreSparkSchema(current as ReturnType<typeof createPreviewEnvelope>, 46);
+  delete (envelope.data as Record<string, unknown>).foundationPreferences;
+  delete (envelope.data as Record<string, unknown>).prayerEnabled;
   return JSON.stringify(envelope);
 }
 
 function schema47Raw(data = sampleWithHistory()): string {
-  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+  const current = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
     schemaVersion: number;
     data: Record<string, unknown>;
   };
-  envelope.schemaVersion = 47;
-  delete envelope.data.prayerEnabled;
+  const envelope = withPreSparkSchema(current as ReturnType<typeof createPreviewEnvelope>, 47);
+  delete (envelope.data as Record<string, unknown>).prayerEnabled;
   return JSON.stringify(envelope);
 }
 
@@ -298,6 +299,7 @@ function versionSixRaw(data: PreviewData): string {
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
     personNotes: _personNotes,
+    personSparks: _personSparks,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -346,6 +348,7 @@ function versionEightRaw(data: PreviewData): string {
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
     personNotes: _personNotes,
+    personSparks: _personSparks,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -390,6 +393,7 @@ function versionNineRaw(data: PreviewData): string {
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
     personNotes: _personNotes,
+    personSparks: _personSparks,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({ ...envelope, schemaVersion: 9, data: legacyData });
@@ -406,6 +410,7 @@ function versionTenRaw(data: PreviewData): string {
     peopleGroups: _peopleGroups,
     personDetails: _personDetails,
     personNotes: _personNotes,
+    personSparks: _personSparks,
     ...legacyData
   } = envelope.data;
   return JSON.stringify({
@@ -553,11 +558,10 @@ describe('synthetic preview storage adapter and envelope', () => {
 
     const schema35Data = { ...current.data } as Partial<typeof current.data>;
     delete schema35Data.calendarSources;
-    const migrated35 = validatePreviewEnvelope({
-      ...current,
-      schemaVersion: 35,
-      data: schema35Data
-    }, '2026-10-31');
+    const migrated35 = validatePreviewEnvelope(
+      withPreSparkSchema(current, 35, schema35Data),
+      '2026-10-31'
+    );
     expect(migrated35).toMatchObject({
       valid: true,
       sourceSchemaVersion: 35,
@@ -567,20 +571,16 @@ describe('synthetic preview storage adapter and envelope', () => {
     const priorData = { ...current.data };
     delete (priorData as Partial<typeof priorData>).showTended;
     delete (priorData as Partial<typeof priorData>).calendarSources;
-    const migrated = validatePreviewEnvelope({
-      ...current,
-      schemaVersion: 34,
-      data: priorData
-    }, '2026-10-31');
+    const migrated = validatePreviewEnvelope(
+      withPreSparkSchema(current, 34, priorData),
+      '2026-10-31'
+    );
     expect(migrated).toMatchObject({
       valid: true,
       sourceSchemaVersion: 34,
       envelope: { data: { showTended: false } }
     });
-    expect(validatePreviewEnvelope({
-      ...current,
-      schemaVersion: 34
-    }, '2026-10-31').valid).toBe(false);
+    expect(validatePreviewEnvelope(withPreSparkSchema(current, 34), '2026-10-31').valid).toBe(false);
   });
 
   it('migrates valid v33/v34 sources and preserves exact immutable recovery across retries', () => {
@@ -594,7 +594,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       if (schemaVersion === 33) {
         delete (priorData as Partial<typeof priorData>).timeBlocks;
       }
-      const raw = JSON.stringify({ ...current, schemaVersion, data: priorData });
+      const raw = JSON.stringify(withPreSparkSchema(current, schemaVersion, priorData));
       const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
       const loaded = loadPreview(storage, '2026-10-31');
@@ -629,7 +629,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     delete (priorData as Partial<typeof priorData>).prayerRequests;
     delete (priorData as Partial<typeof priorData>).timeBlocks;
     delete (priorData as Partial<typeof priorData>).showTended;
-    const raw = JSON.stringify({ ...current, schemaVersion: 24, data: priorData });
+    const raw = JSON.stringify(withPreSparkSchema(current, 24, priorData));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
     const loaded = loadPreview(storage, '2026-10-31');
@@ -640,19 +640,16 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(loadV24RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
   });
 
-  it('saves an in-app confirmed change after loading either supported v33 or v34 data', async () => {
+  it('keeps Person Rhythm rows independent from the legacy Show tended preference', async () => {
     const user = userEvent.setup();
     const current = createPreviewEnvelope(createSamplePreviewData());
-    for (const [schemaVersion, recoveryKey] of [
-      [33, PREVIEW_V33_RECOVERY_KEY],
-      [34, PREVIEW_V34_RECOVERY_KEY]
-    ] as const) {
+    for (const schemaVersion of [33, 34] as const) {
       cleanup();
       window.localStorage.clear();
       const priorData = { ...current.data };
       delete (priorData as Partial<typeof priorData>).showTended;
       if (schemaVersion === 33) delete (priorData as Partial<typeof priorData>).timeBlocks;
-      const raw = JSON.stringify({ ...current, schemaVersion, data: priorData });
+      const raw = JSON.stringify(withPreSparkSchema(current, schemaVersion, priorData));
       window.localStorage.setItem(PREVIEW_STORAGE_KEY, raw);
 
       render(<App />);
@@ -660,15 +657,10 @@ describe('synthetic preview storage adapter and envelope', () => {
       await user.click(screen.getByRole('button', { name: 'People' }));
       await user.click(await screen.findByRole('button', { name: /Open profile for Avery Brooks/ }));
       const profile = screen.getByRole('main', { name: 'Avery Brooks' });
-      await user.click(await within(profile).findByRole('button', { name: /Show tended/ }));
-      await waitFor(() => {
-        expect(JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').schemaVersion)
-          .toBe(PREVIEW_SCHEMA_VERSION);
-      });
-      expect(window.localStorage.getItem(recoveryKey)).toBe(raw);
+      expect(within(profile).queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
       const reloaded = loadPreview(window.localStorage, '2026-10-31');
       expect(reloaded.kind).toBe('loaded');
-      if (reloaded.kind === 'loaded') expect(reloaded.data.showTended).toBe(true);
+      if (reloaded.kind === 'loaded') expect(reloaded.data.showTended).toBe(false);
     }
     cleanup();
   });
@@ -688,7 +680,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       secondaryFoundationIds: []
     };
     const priorData = { ...data, savedRhythms: [existingRhythm] };
-    const raw = JSON.stringify({ ...createPreviewEnvelope(priorData), schemaVersion: 39 });
+    const raw = JSON.stringify(withPreSparkSchema(createPreviewEnvelope(priorData), 39));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
     const loaded = loadPreview(storage, '2026-10-31');
@@ -731,12 +723,14 @@ describe('synthetic preview storage adapter and envelope', () => {
   });
 
   it('migrates schema v40 and preserves exact bytes before saving the text-size preference', () => {
-    const priorEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))) as {
+    const priorEnvelope = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))) as ReturnType<typeof createPreviewEnvelope>,
+      40
+    ) as {
       format: string;
       schemaVersion: number;
       data: Record<string, unknown>;
     };
-    priorEnvelope.schemaVersion = 40;
     delete priorEnvelope.data.textSize;
     const raw = ` \n${JSON.stringify(priorEnvelope)}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -763,12 +757,8 @@ describe('synthetic preview storage adapter and envelope', () => {
 
   it('defaults the Today calendar preference and preserves schema v41 bytes before saving', () => {
     const priorData = createSamplePreviewData();
-    const priorEnvelope = {
-      ...createPreviewEnvelope(priorData),
-      schemaVersion: 41,
-      data: { ...priorData } as Record<string, unknown>
-    };
-    delete priorEnvelope.data.showCalendarOnToday;
+    const priorEnvelope = withPreSparkSchema(createPreviewEnvelope(priorData), 41, priorData);
+    Reflect.deleteProperty(priorEnvelope.data, 'showCalendarOnToday');
     const raw = ` \n${JSON.stringify(priorEnvelope)}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
@@ -797,12 +787,8 @@ describe('synthetic preview storage adapter and envelope', () => {
 
   it('defaults categories for schema v42 and preserves its exact recovery copy before saving preferences', () => {
     const priorData = createSamplePreviewData();
-    const priorEnvelope = {
-      ...createPreviewEnvelope(priorData),
-      schemaVersion: 42,
-      data: { ...priorData } as Record<string, unknown>
-    };
-    delete priorEnvelope.data.categoryPreferences;
+    const priorEnvelope = withPreSparkSchema(createPreviewEnvelope(priorData), 42, priorData);
+    Reflect.deleteProperty(priorEnvelope.data, 'categoryPreferences');
     const raw = ` \n${JSON.stringify(priorEnvelope)}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
@@ -1096,11 +1082,11 @@ describe('synthetic preview storage adapter and envelope', () => {
   });
 
   it('retains the Appearance preference from the alternate schema v40 document', () => {
-    const branchEnvelope = {
-      ...createPreviewEnvelope(createSamplePreviewData()),
-      schemaVersion: 40,
-      data: { ...createSamplePreviewData(), textSize: 'large' }
-    };
+    const data = createSamplePreviewData();
+    const branchEnvelope = withPreSparkSchema(createPreviewEnvelope(data), 40, {
+      ...data,
+      textSize: 'large'
+    });
 
     const parsed = parsePreviewBackup(JSON.stringify(branchEnvelope), '2026-10-31');
     expect(parsed.valid).toBe(true);
@@ -1146,12 +1132,14 @@ describe('synthetic preview storage adapter and envelope', () => {
 
   it('migrates schema v28 without inventing Person details and preserves exact source recovery', () => {
     const data = createSamplePreviewData();
-    const priorEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    const priorEnvelope = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>,
+      28
+    ) as {
       format: string;
       schemaVersion: number;
       data: Record<string, unknown>;
     };
-    priorEnvelope.schemaVersion = 28;
     delete priorEnvelope.data.people;
     delete priorEnvelope.data.personDetails;
     delete priorEnvelope.data.personNotes;
@@ -1171,12 +1159,14 @@ describe('synthetic preview storage adapter and envelope', () => {
 
   it('migrates schema v29 with an empty person-note collection and preserves exact raw recovery', () => {
     const data = createSamplePreviewData();
-    const previous = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    const previous = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>,
+      29
+    ) as {
       format: string;
       schemaVersion: number;
       data: Record<string, unknown>;
     };
-    previous.schemaVersion = 29;
     delete previous.data.people;
     delete previous.data.personNotes;
     const raw = ` \n${JSON.stringify(previous)}\n`;
@@ -1200,12 +1190,14 @@ describe('synthetic preview storage adapter and envelope', () => {
       birthday: { monthDay: '02-29' },
       anniversary: { monthDay: '04-15' }
     }];
-    const previous = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    const previous = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>,
+      30
+    ) as {
       format: string;
       schemaVersion: number;
       data: Record<string, unknown>;
     };
-    previous.schemaVersion = 30;
     delete previous.data.people;
     const raw = ` \n${JSON.stringify(previous)}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -1228,12 +1220,14 @@ describe('synthetic preview storage adapter and envelope', () => {
       relationshipLabel: 'Custom relationship',
       birthday: { monthDay: '02-29' }
     }];
-    const prior = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    const prior = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>,
+      31
+    ) as {
       format: string;
       schemaVersion: number;
       data: Record<string, unknown>;
     };
-    prior.schemaVersion = 31;
     delete prior.data.people;
     const raw = `\n${JSON.stringify(prior)}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
@@ -1284,7 +1278,7 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('migrates v32 with an empty Prayer collection and preserves its exact raw source before current-version writes', () => {
     const current = createPreviewEnvelope(createSamplePreviewData());
     const { prayerRequests: _prayerRequests, timeBlocks: _timeBlocks, ...v32Data } = current.data;
-    const raw = JSON.stringify({ ...current, schemaVersion: 32, data: v32Data });
+    const raw = JSON.stringify(withPreSparkSchema(current, 32, v32Data));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
     const loaded = loadPreview(storage, '2026-10-31');
@@ -1312,7 +1306,10 @@ describe('synthetic preview storage adapter and envelope', () => {
       status: 'active',
       createdAt: '2026-10-31T12:00:00.000Z',
       updatedAt: '2026-10-31T12:00:00.000Z',
-      prayerLogs: [{ id: 'preview-prayer-log-one', prayedAt: '2026-10-31T13:00:00.000Z' }]
+      prayerLogs: [
+        { id: 'preview-prayer-log-one', prayedAt: '2026-10-31T13:00:00.000Z' },
+        { id: 'preview-prayer-log-legacy' }
+      ]
     }];
     const backup = JSON.stringify(createPreviewEnvelope(data));
     const parsed = parsePreviewBackup(backup, '2026-10-31');
@@ -1688,9 +1685,10 @@ describe('synthetic preview storage adapter and envelope', () => {
       people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v21Data
     } = current.data;
-    const v21Raw = ` \n${JSON.stringify({ ...current, schemaVersion: 21, data: v21Data })}\n`;
+    const v21Raw = ` \n${JSON.stringify(withPreSparkSchema(current, 21, v21Data))}\n`;
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: v21Raw });
     const loaded = loadPreview(storage, '2026-10-21');
     expect(loaded.kind).toBe('loaded');
@@ -1917,12 +1915,14 @@ describe('synthetic preview storage adapter and envelope', () => {
         people?: unknown;
         personDetails?: unknown;
         personNotes?: unknown;
+        personSparks?: unknown;
       };
     };
     legacy.schemaVersion = 27;
     delete legacy.data.people;
     delete legacy.data.personDetails;
     delete legacy.data.personNotes;
+    delete legacy.data.personSparks;
     delete legacy.data.cardio.trackingStartDate;
     delete legacy.data.cardio.targetHistory;
     delete legacy.data.strength.trackingStartDate;
@@ -1978,6 +1978,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       personDetails: [],
       personNotes: [],
       prayerRequests: [],
+      personSparks: [],
       timeBlocks: createDefaultTimeBlockSettings(),
       showTended: false,
       showCalendarOnToday: true,
@@ -2045,6 +2046,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       peopleGroups: createPersonPickerGroups(),
       personDetails: [],
       personNotes: [],
+      personSparks: [],
       prayerRequests: [],
       timeBlocks: createDefaultTimeBlockSettings(),
       showTended: false,
@@ -2061,9 +2063,8 @@ describe('synthetic preview storage adapter and envelope', () => {
   it('migrates obsolete Today selections to a valid view while parsing older envelopes', () => {
     const previous = createPreviewEnvelope(createSamplePreviewData());
     const legacyEnvelope = {
-      ...previous,
-      schemaVersion: 37,
-      data: { ...previous.data, todayView: 'anytime' }
+      ...withPreSparkSchema(previous, 37),
+      data: { ...withPreSparkSchema(previous, 37).data, todayView: 'anytime' }
     };
     const parsedFlexible = parsePreviewBackup(JSON.stringify(legacyEnvelope), '2026-10-21');
     expect(parsedFlexible.valid).toBe(true);
@@ -2084,6 +2085,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     const data = sampleWithHistory();
     const releasedShapeData = { ...data };
     Reflect.deleteProperty(releasedShapeData, 'flexibility');
+    Reflect.deleteProperty(releasedShapeData, 'personSparks');
     const releasedShape = parsePreviewBackup(JSON.stringify({
       format: 'tend.synthetic-preview',
       schemaVersion: 38,
@@ -2102,6 +2104,7 @@ describe('synthetic preview storage adapter and envelope', () => {
 
     const priorFlexibilityShapeData = { ...data };
     Reflect.deleteProperty(priorFlexibilityShapeData, 'todayView');
+    Reflect.deleteProperty(priorFlexibilityShapeData, 'personSparks');
     const priorFlexibilityShape = parsePreviewBackup(JSON.stringify({
       format: 'tend.synthetic-preview',
       schemaVersion: 38,
@@ -2681,6 +2684,7 @@ describe('synthetic preview storage adapter and envelope', () => {
         peopleGroups: _peopleGroups,
         personDetails: _personDetails,
         personNotes: _personNotes,
+        personSparks: _personSparks,
         ...v16Data
       } = current.data;
       const source = JSON.stringify({ ...current, schemaVersion: 16, data: v16Data });
@@ -2713,6 +2717,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v17Data
     } = current.data;
     const source = JSON.stringify({ ...current, schemaVersion: 17, data: v17Data });
@@ -2740,6 +2745,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v18Data
     } = current.data;
     const originalRaw = ` \n${JSON.stringify({ ...current, schemaVersion: 18, data: v18Data })}\n`;
@@ -2768,6 +2774,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v14Data
     } = envelope.data;
     const originalRaw = JSON.stringify({ ...envelope, schemaVersion: 14, data: v14Data });
@@ -2798,6 +2805,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       peopleGroups: _peopleGroups,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v12Data
     } = current.data;
     const source = JSON.stringify({
@@ -2944,6 +2952,7 @@ describe('synthetic preview storage adapter and envelope', () => {
         peopleGroups: _peopleGroups,
         personDetails: _personDetails,
         personNotes: _personNotes,
+        personSparks: _personSparks,
         ...versionElevenData
       } = versionTwelve.data;
       const originalRaw = ` \n${JSON.stringify({
@@ -3934,7 +3943,7 @@ describe('preview backup controls', () => {
     }];
     const current = createPreviewEnvelope(data);
     const { timeBlocks: _timeBlocks, ...v33Data } = current.data;
-    const raw = JSON.stringify({ ...current, schemaVersion: 33, data: v33Data });
+    const raw = JSON.stringify(withPreSparkSchema(current, 33, v33Data));
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
 
     const migrated = loadPreview(storage, '2026-10-21');
@@ -3959,6 +3968,10 @@ describe('preview backup controls', () => {
         .getByRole('button', { name: 'People' }));
       await user.click(screen.getByRole('button', { name: `Open profile for ${name}` }));
       await user.click(screen.getByRole('tab', { name: 'Prayer' }));
+    };
+    const openActions = async (title: string) => {
+      await user.click(screen.getByRole('button', { name: `Actions for ${title}` }));
+      return screen.getByRole('menu', { name: `Actions for ${title}` });
     };
 
     render(<App />);
@@ -3993,8 +4006,10 @@ describe('preview backup controls', () => {
       dated: saved.data?.datedRhythmCompletions,
       active: saved.data?.activeRhythmCompletions
     };
-    await user.click(screen.getByRole('button', { name: 'Prayed' }));
-    await user.click(screen.getByRole('button', { name: 'Answer' }));
+    let actions = await openActions('Pray about school');
+    await user.click(within(actions).getByRole('menuitem', { name: 'Pray' }));
+    actions = await openActions('Pray about school');
+    await user.click(within(actions).getByRole('menuitem', { name: 'Mark answered' }));
     saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
     expect(saved.data?.prayerRequests?.[0]?.status).toBe('answered');
     expect(saved.data?.prayerRequests?.[0]?.prayerLogs).toHaveLength(1);
@@ -4003,13 +4018,19 @@ describe('preview backup controls', () => {
       dated: saved.data?.datedRhythmCompletions,
       active: saved.data?.activeRhythmCompletions
     }).toEqual(rhythmState);
-    await user.click(screen.getByRole('button', { name: 'Reopen' }));
+    actions = await openActions('Pray about school');
+    await user.click(within(actions).getByRole('menuitem', { name: 'Reopen' }));
 
     await user.click(screen.getByRole('button', { name: 'Back to People' }));
     await openPerson('Morgan Reed');
     expect(screen.getByRole('tabpanel', { name: 'Prayer' })).toBeTruthy();
     expect(screen.getByRole('listitem')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Remove Pray about school from this profile' }));
+    actions = await openActions('Pray about school');
+    await user.click(within(actions).getByRole('menuitem', { name: 'Details/Edit' }));
+    const details = screen.getByRole('dialog', { name: 'Prayer request details' });
+    await user.click(within(details).getByRole('button', {
+      name: 'Remove Pray about school from this profile'
+    }));
     const unlink = screen.getByRole('dialog', { name: 'Remove this request from this profile?' });
     await user.click(within(unlink).getByRole('button', { name: 'Remove from profile' }));
     saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
@@ -4022,7 +4043,10 @@ describe('preview backup controls', () => {
 
     await user.click(screen.getByRole('button', { name: 'Back to People' }));
     await openPerson('Avery Brooks');
-    await user.click(screen.getByRole('button', { name: 'Delete Pray about school' }));
+    actions = await openActions('Pray about school');
+    await user.click(within(actions).getByRole('menuitem', { name: 'Details/Edit' }));
+    const ownerDetails = screen.getByRole('dialog', { name: 'Prayer request details' });
+    await user.click(within(ownerDetails).getByRole('button', { name: 'Delete Pray about school' }));
     const deletion = screen.getByRole('dialog', { name: 'Delete this request?' });
     await user.click(within(deletion).getByRole('button', { name: 'Delete request' }));
     saved = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
@@ -4174,7 +4198,7 @@ describe('preview backup controls', () => {
     if (identity.kind !== 'authenticated') throw new Error('Test identity was not authenticated.');
     const storage = browserPreviewStorage(identity);
     const previous = createSamplePreviewData();
-    const previousRaw = JSON.stringify({ ...createPreviewEnvelope(previous), schemaVersion: 39 });
+    const previousRaw = JSON.stringify(withPreSparkSchema(createPreviewEnvelope(previous), 39));
     storage.setItem(PREVIEW_STORAGE_KEY, previousRaw);
     const imported = createSamplePreviewData();
     imported.goals[0]!.title = 'Synthetic imported goal';

@@ -7,6 +7,7 @@ import { createValidatedPreviewAccountDocument } from '../src/storage/preview-ac
 import {
   PREVIEW_V48_RECOVERY_KEY,
   PREVIEW_V49_RECOVERY_KEY,
+  PREVIEW_V50_RECOVERY_KEY,
   PREVIEW_V3_RECOVERY_KEY,
   PREVIEW_V37_RECOVERY_KEY,
   PREVIEW_V38_RECOVERY_KEY,
@@ -146,7 +147,8 @@ describe('v4 migration and recovery domain', () => {
   it('migrates schema v48 without losing Strength history and preserves its immutable recovery source', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
-    const raw = JSON.stringify({ ...current, schemaVersion: 48 });
+    const { personSparks: _personSparks, ...dataBeforeSparks } = current.data;
+    const raw = JSON.stringify({ ...current, schemaVersion: 48, data: dataBeforeSparks });
     const migrated = parsePreviewBackup(raw, currentDate);
 
     expect(migrated.valid).toBe(true);
@@ -166,7 +168,8 @@ describe('v4 migration and recovery domain', () => {
     const data = createSamplePreviewData();
     data.cardio.runs = [{ id: 'legacy-cardio-run', date: currentDate, distance: 2 }];
     const current = createPreviewEnvelope(data);
-    const raw = JSON.stringify({ ...current, schemaVersion: 49 });
+    const { personSparks: _personSparks, ...dataBeforeSparks } = current.data;
+    const raw = JSON.stringify({ ...current, schemaVersion: 49, data: dataBeforeSparks });
 
     const migrated = parsePreviewBackup(raw, currentDate);
 
@@ -176,6 +179,31 @@ describe('v4 migration and recovery domain', () => {
     expect(migrated.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(migrated.envelope.data.cardio.runs).toEqual(data.cardio.runs);
     expect(proposedV4RecoveryKeyForRaw(raw)).toBe(PREVIEW_V49_RECOVERY_KEY);
+  });
+
+  it('migrates schema v50 by adding an empty Spark collection and preserves its immutable recovery source', () => {
+    const data = createSamplePreviewData();
+    const current = createPreviewEnvelope(data);
+    const { personSparks: _personSparks, ...v50Data } = current.data;
+    const raw = JSON.stringify({ ...current, schemaVersion: 50, data: v50Data });
+
+    const migrated = parsePreviewBackup(raw, currentDate);
+
+    expect(migrated.valid).toBe(true);
+    if (!migrated.valid) return;
+    expect(migrated.sourceSchemaVersion).toBe(50);
+    expect(migrated.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(migrated.envelope.data.personSparks).toEqual([]);
+    expect(migrated.envelope.data.prayerRequests).toEqual(data.prayerRequests);
+    expect(proposedV4RecoveryKeyForRaw(raw)).toBe(PREVIEW_V50_RECOVERY_KEY);
+    const { storage, values } = storageFixture(raw);
+    expect(preserveProposedV4SourceRecovery(storage, raw)).toEqual({
+      kind: 'preserved',
+      key: PREVIEW_V50_RECOVERY_KEY,
+      raw
+    });
+    expect(values.get(PREVIEW_V50_RECOVERY_KEY)).toBe(raw);
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
   });
 
   it('round-trips an ordered rotation and its completed workout history', () => {
@@ -376,6 +404,7 @@ describe('v4 migration and recovery domain', () => {
       people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v25Data
     } = envelope.data;
     const raw = JSON.stringify({
@@ -449,6 +478,7 @@ describe('v4 migration and recovery domain', () => {
       people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v24Data
     } = envelope.data;
     const raw = JSON.stringify({
@@ -742,9 +772,12 @@ describe('v4 migration and recovery domain', () => {
       recordedAt: `${currentDate}T12:00:00.000Z`
     }];
     data.rhythmHistoryIds = ['sample-pray-together'];
+    const current = createPreviewEnvelope(data);
+    const { personSparks: _personSparks, ...dataBeforeSparks } = current.data;
     const raw = JSON.stringify({
-      ...createPreviewEnvelope(data),
-      schemaVersion: 44
+      ...current,
+      schemaVersion: 44,
+      data: dataBeforeSparks
     });
 
     const source = parsePreviewBackup(raw, currentDate);
@@ -826,6 +859,9 @@ describe('v4 migration and recovery domain', () => {
     const v37Data = { ...currentEnvelope.data };
     delete (v37Data as Partial<typeof currentEnvelope.data>).todayView;
     delete (v37Data as Partial<typeof currentEnvelope.data>).flexibility;
+    delete (v37Data as Partial<typeof currentEnvelope.data>).personSparks;
+    const v38Data = { ...currentEnvelope.data };
+    delete (v38Data as Partial<typeof currentEnvelope.data>).personSparks;
     const sources = [
       {
         version: 37,
@@ -835,7 +871,7 @@ describe('v4 migration and recovery domain', () => {
       {
         version: 38,
         key: PREVIEW_V38_RECOVERY_KEY,
-        data: currentEnvelope.data
+        data: v38Data
       }
     ] as const;
 
@@ -882,6 +918,7 @@ describe('v4 migration and recovery domain', () => {
       people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...dataBeforeWeight
     } = data;
     const savedRhythms = dataBeforeWeight.savedRhythms.map(({ healthLogCapability: _capability, ...rhythm }) => rhythm);
@@ -967,6 +1004,7 @@ describe('v4 migration and recovery domain', () => {
     delete (legacyEnvelope.data as Record<string, unknown>).people;
     delete (legacyEnvelope.data as Record<string, unknown>).personDetails;
     delete (legacyEnvelope.data as Record<string, unknown>).personNotes;
+    delete (legacyEnvelope.data as Record<string, unknown>).personSparks;
     const legacyStrength = (legacyEnvelope.data as Record<string, unknown>).strength as Record<string, unknown>;
     const legacySettings = legacyStrength.settings as Record<string, unknown>;
     delete legacySettings.weightUnit;
@@ -1066,6 +1104,7 @@ describe('v4 migration and recovery domain', () => {
       people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v21Data
     } = v21Envelope.data;
     const v21Raw = ` \n${JSON.stringify({
@@ -1126,6 +1165,7 @@ describe('v4 migration and recovery domain', () => {
       people: _people,
       personDetails: _personDetails,
       personNotes: _personNotes,
+      personSparks: _personSparks,
       ...v22Data
     } = current.data;
     const v22Raw = ` \n${JSON.stringify({

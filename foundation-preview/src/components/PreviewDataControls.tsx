@@ -122,6 +122,7 @@ type PreviewDataControlsProps = {
   v46RecoveryCopy?: string | null;
   v47RecoveryCopy?: string | null;
   v48RecoveryCopy?: string | null;
+  v50RecoveryCopy?: string | null;
 };
 
 export function PreviewDataControls({
@@ -222,7 +223,8 @@ export function PreviewDataControls({
   v45RecoveryCopy = null,
   v46RecoveryCopy = null,
   v47RecoveryCopy = null,
-  v48RecoveryCopy = null
+  v48RecoveryCopy = null,
+  v50RecoveryCopy = null
 }: PreviewDataControlsProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
@@ -866,6 +868,16 @@ export function PreviewDataControls({
             Download original v48 recovery backup
           </button>
         )}
+        {v50RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v50-recovery.json',
+              v50RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v50 recovery backup downloaded.')}>
+            Download original v50 recovery backup
+          </button>
+        )}
         {showImportControls && (
           <label className="btn mini ghost preview-data-controls__file-button">
             Dry-run Classic Tend import
@@ -1022,6 +1034,7 @@ export function PreviewDataControls({
             <div><dt>People with multiple categories resolved</dt><dd>{legacyDryRun.report.resolvedCategoryConflicts}</dd></div>
             <div><dt>Source Rhythms</dt><dd>{legacyDryRun.report.source.rhythms}</dd></div>
             <div><dt>Converted Rhythms / completions</dt><dd>{legacyDryRun.report.supported.rhythms} / {legacyDryRun.report.supported.rhythmCompletions}</dd></div>
+            <div><dt>Source / converted Sparks</dt><dd>{legacyDryRun.report.source.sparks} / {legacyDryRun.report.supported.sparks}</dd></div>
             <div><dt>Source connection events</dt><dd>{legacyDryRun.report.source.events}</dd></div>
             <div><dt>Converted connections / cadences</dt><dd>{legacyDryRun.report.supported.connections} / {legacyDryRun.report.supported.cadences}</dd></div>
             <div><dt>Source plain Notes</dt><dd>{legacyDryRun.report.source.notes}</dd></div>

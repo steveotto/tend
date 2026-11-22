@@ -3,6 +3,7 @@ import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   addOrUpdateConnection,
   connectionsForPerson,
+  deleteConnection,
   formatConnectionRecency,
   friendConnectionStatus,
   latestValidConnection,
@@ -377,9 +378,6 @@ export function FriendshipsView({
           personId={historyPersonId}
           people={people}
           connections={activeHistory}
-          data={data}
-          onChange={onChange}
-          onPersonSelect={onPersonSelect}
           onEdit={openEditConnection}
           onClose={() => setHistoryPersonId(null)}
         />
@@ -393,6 +391,10 @@ export function FriendshipsView({
           {...(connectionEditor.type ? { initialType: connectionEditor.type } : {})}
           today={today}
           onSave={saveConnection}
+          onDelete={id => {
+            onChange(deleteConnection(data, id));
+            return null;
+          }}
           onClose={() => setConnectionEditor(null)}
         />
       )}

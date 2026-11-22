@@ -290,7 +290,7 @@ export function scoreClockStartDateForSchedule(input: {
     || createdLocalTime === undefined
     || createdDueTime === undefined
     || createdLocalTime <= createdDueTime
-    || input.completionDates.some(date => date < createdDate)
+    || input.completionDates.some(date => date <= createdDate)
     || dueOccurrencesBetween(input.schedule, createdDate, createdDate).length === 0) {
     return input.startDate;
   }
