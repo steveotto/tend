@@ -7,7 +7,7 @@ import { PersonProfileView } from '../src/components/PersonProfileView.tsx';
 import { CategoryAvailabilityProvider } from '../src/components/CategoryAvailabilityContext.tsx';
 import { defaultCategoryPreferences, defaultFoundationPreferences } from '../src/domain/category-availability.ts';
 import { addOrUpdateConnection, createFriendshipData, setFriendCadence } from '../src/domain/friendships.ts';
-import type { FriendshipData } from '../src/domain/friendships.ts';
+import type { FriendshipConnection, FriendshipData } from '../src/domain/friendships.ts';
 import {
   createPersonNote,
   deletePersonNote,
@@ -15,6 +15,7 @@ import {
 } from '../src/domain/person-notes.ts';
 import type { PersonNote, PersonNoteDraft } from '../src/domain/person-notes.ts';
 import type { PersonPrayerRequest } from '../src/domain/person-prayers.ts';
+import type { PersonSpark, PersonSparkDraft } from '../src/domain/person-sparks.ts';
 import type { PersonDetails } from '../src/domain/person-details.ts';
 import {
   createPersonPickerGroups,
@@ -115,6 +116,7 @@ function ProfileHarness({
   rhythms = [linkedRhythm, otherRhythm],
   archivedRhythms = [],
   prayerRequests = [],
+  personSparks = [],
   rhythmScores = new Map([[linkedRhythm.id, score]]),
   initialFriendships = createFriendshipData(),
   completed = false,
@@ -125,7 +127,11 @@ function ProfileHarness({
   onUndo = vi.fn(),
   onRestoreRhythm = vi.fn(),
   onClose = vi.fn(),
-  onEditPerson = vi.fn()
+  onEditPerson = vi.fn(),
+  onCreatePersonSpark = vi.fn(),
+  onArchivePersonSpark = vi.fn(),
+  onUndoPersonSpark = vi.fn(),
+  onCompletePersonSpark = vi.fn()
 }: {
   personId?: PersonId;
   category?: 'marriage' | 'parenting' | 'friends' | null;
@@ -136,6 +142,7 @@ function ProfileHarness({
   rhythms?: readonly RhythmPreview[];
   archivedRhythms?: readonly RhythmPreview[];
   prayerRequests?: readonly PersonPrayerRequest[];
+  personSparks?: readonly PersonSpark[];
   rhythmScores?: ReadonlyMap<string, RhythmScoreResult>;
   initialFriendships?: FriendshipData;
   completed?: boolean;
@@ -147,6 +154,17 @@ function ProfileHarness({
   onRestoreRhythm?: (id: string) => void;
   onClose?: () => void;
   onEditPerson?: (personId: PersonId, event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onCreatePersonSpark?: (ownerId: PersonId, draft: PersonSparkDraft) => string | null;
+  onArchivePersonSpark?: (sparkId: string, archived: boolean) => string | null;
+  onUndoPersonSpark?: (sparkId: string) => string | null;
+  onCompletePersonSpark?: (sparkId: string, connection: {
+    id: string;
+    type: 'text' | 'call' | 'time-together';
+    date: string;
+    time?: string;
+    participantIds: PersonId[];
+    notes?: string;
+  }) => string | null;
 }) {
   const [friendships, setFriendships] = useState<FriendshipData>(initialFriendships);
   const [personNotes, setPersonNotes] = useState<PersonNote[]>([...initialNotes]);
@@ -179,6 +197,11 @@ function ProfileHarness({
         personDetails={initialDetails}
         personNotes={personNotes}
         prayerRequests={prayerRequests}
+        personSparks={personSparks}
+        onCreatePersonSpark={onCreatePersonSpark}
+        onArchivePersonSpark={onArchivePersonSpark}
+        onUndoPersonSparkCompletion={onUndoPersonSpark}
+        onCompletePersonSpark={onCompletePersonSpark}
         onCreatePersonNote={(ownerId: PersonId, draft: PersonNoteDraft) => {
           const now = '2026-10-31T12:00:00.000Z';
           const result = createPersonNote(personNotes, {
@@ -325,7 +348,7 @@ describe('shared person profile', () => {
     expect(screen.getByLabelText('Avery Brooks personal details').textContent).toContain('Marriage');
   });
 
-  it('shows relationship, category, connection, age, birthday countdown, and anniversary details', () => {
+  it('shows relationship, category, connection, age, and birthday countdown in the summary', () => {
     const connection = {
       id: 'recent-connection',
       type: 'call' as const,
@@ -354,15 +377,16 @@ describe('shared person profile', () => {
     );
     expect(screen.getByText('Marriage')).toBeTruthy();
     expect(screen.getByText('Spouse')).toBeTruthy();
-    expect(screen.getByLabelText('Love language: Quality Time')).toBeTruthy();
     expect(screen.getByLabelText('Age 35')).toBeTruthy();
     expect(screen.getByLabelText('Birthday: Dec 2, in 34d')).toBeTruthy();
-    expect(screen.getByLabelText('Anniversary: Jun 12')).toBeTruthy();
     expect(screen.getByLabelText('Last connected: Yesterday')).toBeTruthy();
-    expect(screen.getByLabelText('Connection cadence: Weekly')).toBeTruthy();
+    expect(screen.queryByLabelText('Love language: Quality Time')).toBeNull();
+    expect(screen.queryByLabelText('Anniversary: Jun 12')).toBeNull();
+    expect(screen.queryByLabelText('Connection cadence: Weekly')).toBeNull();
     const overallHealth = screen.getByRole('region', { name: 'Overall Health summary' });
     const overallHeader = overallHealth.querySelector('.health-score-breakdown__header');
-    expect(Array.from(overallHeader!.children).map(child => child.tagName)).toEqual(['H3', 'SPAN', 'BUTTON']);
+    expect(Array.from(overallHeader!.children).map(child => child.tagName)).toEqual(['DIV', 'SPAN', 'BUTTON']);
+    expect(overallHeader?.querySelector('h3')?.textContent).toBe('Health');
     expect(within(overallHealth).getByRole('meter', { name: 'Overall Health score' })
       .getAttribute('aria-valuetext')).toBe('Score unavailable');
     expect(overallHealth.classList.contains('health-score-breakdown')).toBe(true);
@@ -372,10 +396,33 @@ describe('shared person profile', () => {
     expect(screen.getByRole('button', { name: 'Notes (0)' })).toBeTruthy();
   });
 
+  it('omits unknown birth-year age and empty summary metadata', () => {
+    render(
+      <ProfileHarness
+        category={null}
+        initialDetails={[{
+          personId: 'sample-person-avery',
+          birthday: { monthDay: '12-02' }
+        }]}
+        rhythms={[]}
+      />
+    );
+
+    expect(screen.queryByRole('img', { name: /relationship group/i })).toBeNull();
+    expect(screen.queryByLabelText(/Age \d+/)).toBeNull();
+    expect(screen.getByLabelText(/Birthday: Dec 2,/)).toBeTruthy();
+  });
+
   it('removes Prayer from the profile and Overall Health while preserving an open request draft', async () => {
     const user = userEvent.setup();
     const view = render(<ProfileHarness />);
     const overall = screen.getByRole('region', { name: 'Overall Health summary' });
+    const componentScoresToggle = within(overall).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    });
+    expect(componentScoresToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(componentScoresToggle.getAttribute('aria-controls')!)?.hasAttribute('hidden')).toBe(true);
+    await user.click(componentScoresToggle);
     expect(within(overall).getByRole('group', { name: 'Health by area' }).getAttribute('data-count')).toBe('3');
 
     await user.click(screen.getByRole('tab', { name: 'Prayer' }));
@@ -419,8 +466,17 @@ describe('shared person profile', () => {
 
     expect(within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' })
       .getAttribute('aria-expanded')).toBe('false');
+    const componentScoresToggle = within(overall).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    });
+    expect(componentScoresToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(componentScoresToggle.getAttribute('aria-controls')!)?.hasAttribute('hidden')).toBe(true);
+    expect(within(overall).queryByRole('group', { name: 'Health by area' })).toBeNull();
     expect(within(overall).queryByRole('group', { name: 'Consistency and On Track' })).toBeNull();
     expect(within(overall).getByRole('meter', { name: 'Overall Health progress score' })).toBeTruthy();
+
+    await user.click(componentScoresToggle);
+    expect(componentScoresToggle.getAttribute('aria-expanded')).toBe('true');
     const areaScores = within(overall).getByRole('group', { name: 'Health by area' });
     expect(areaScores.querySelectorAll('button')).toHaveLength(0);
     for (const element of areaScores.querySelectorAll('.person-health-component-score')) {
@@ -442,7 +498,9 @@ describe('shared person profile', () => {
     }
 
     const overallInfo = within(overall).getByRole('button', { name: 'Show Overall Health scoring explanation' });
+    expect(overallInfo.getAttribute('aria-expanded')).toBe('false');
     await user.click(overallInfo);
+    expect(componentScoresToggle.getAttribute('aria-expanded')).toBe('true');
     const overallDialog = screen.getByRole('dialog', { name: 'Avery’s Overall Health details' });
     const dialogAreaScores = within(overallDialog).getByRole('group', { name: 'Health by area' });
     const rhythmScoreButton = within(dialogAreaScores).getByRole('button', { name: 'Rhythms Health 85' });
@@ -456,6 +514,9 @@ describe('shared person profile', () => {
     await waitFor(() => expect(document.activeElement).toBe(rhythmScoreButton));
     await user.click(within(overallDialog).getByRole('button', { name: 'Close Health details' }));
     await waitFor(() => expect(document.activeElement).toBe(overallInfo));
+    await user.click(componentScoresToggle);
+    expect(componentScoresToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(within(overall).queryByRole('group', { name: 'Health by area' })).toBeNull();
   });
 
   it('shows the equal-area overall explanation and shared area details without mixing their scoring levels', async () => {
@@ -607,12 +668,12 @@ describe('shared person profile', () => {
   it('scopes disclosure expansion to the current Person', async () => {
     const user = userEvent.setup();
     const { rerender } = render(<ProfileHarness personId="sample-person-avery" />);
-    const firstToggle = screen.getByRole('button', { name: 'Show Overall Health scoring explanation' });
+    const firstToggle = screen.getByRole('button', { name: 'Show Overall Health component scores breakdown' });
     await user.click(firstToggle);
     expect(firstToggle.getAttribute('aria-expanded')).toBe('true');
 
     rerender(<ProfileHarness personId="sample-person-morgan" />);
-    expect(screen.getByRole('button', { name: 'Show Overall Health scoring explanation' })
+    expect(screen.getByRole('button', { name: 'Show Overall Health component scores breakdown' })
       .getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -628,6 +689,9 @@ describe('shared person profile', () => {
       .getAttribute('aria-valuenow')).toBe('0');
     expect(within(overall).getByRole('meter', { name: 'Overall Health progress score' })
       .getAttribute('aria-valuenow')).toBe('0');
+    await user.click(within(overall).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    }));
     expect(within(within(overall).getByRole('group', { name: 'Health by area' }))
       .getByRole('meter', { name: 'Rhythms Health score' }).getAttribute('aria-valuenow')).toBe('0');
     expect(within(overall).queryByRole('meter', { name: 'Consistency score' })).toBeNull();
@@ -757,7 +821,7 @@ describe('shared person profile', () => {
     expect(screen.getByText('0 in queue')).toBeTruthy();
   });
 
-  it('shows a populated Today queue without expanding area measures', () => {
+  it('keeps the component-score breakdown collapsed while showing a populated Today queue', () => {
     const dailyRhythm: RhythmPreview = {
       ...linkedRhythm,
       schedule: { frequency: 'daily' }
@@ -772,8 +836,11 @@ describe('shared person profile', () => {
     const queueHeading = screen.getByRole('heading', { name: 'Today with Avery' });
     const rhythmCard = screen.getByRole('article', { name: 'Avery and Morgan walk' });
     expect(Boolean(queueHeading.compareDocumentPosition(rhythmCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    const areaScores = screen.getByRole('group', { name: 'Health by area' });
-    expect(areaScores.querySelectorAll('button')).toHaveLength(0);
+    const componentScoresToggle = screen.getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    });
+    expect(componentScoresToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('group', { name: 'Health by area' })).toBeNull();
   });
 
   it('keeps connection cadence out of the Connections panel', async () => {
@@ -785,13 +852,69 @@ describe('shared person profile', () => {
     expect(within(profile).getByRole('button', { name: 'Person settings' })).toBeTruthy();
   });
 
-  it('retains shared Undo behavior for a completed person-linked Rhythm', async () => {
+  it('uses shared in-place tended rows for Person Rhythms and preserves counts, order, and Undo', async () => {
     const user = userEvent.setup();
+    const firstRhythm: RhythmPreview = { ...linkedRhythm, status: 'Due today' };
+    const secondRhythm: RhythmPreview = {
+      ...firstRhythm,
+      id: 'user-rhythm-55555555-5555-4555-8555-555555555555',
+      title: 'Plan an afternoon together',
+      personIds: ['sample-person-avery']
+    };
+    const completedRhythm: RhythmPreview = {
+      ...firstRhythm,
+      completionHistory: [{
+        id: 'person-profile-completion',
+        effectiveDate: '2026-10-29',
+        localTime: '10:15',
+        completedAt: '2026-10-29T10:15:00.000Z'
+      }]
+    };
+    const rhythms = [firstRhythm, secondRhythm] as const;
+    const onTend = vi.fn();
     const undo = vi.fn();
-    render(<ProfileHarness completed onUndo={undo} />);
-    const card = screen.getByRole('article', { name: 'Avery and Morgan walk' });
-    await user.click(within(card).getByRole('button', { name: 'Undo completion for Avery and Morgan walk' }));
+    const view = render(<ProfileHarness rhythms={rhythms} onTend={onTend} onUndo={undo} />);
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    expect(within(profile).getByText('2 in queue')).toBeTruthy();
+    expect(within(profile).queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
+    const firstCard = within(profile).getByRole('article', { name: 'Avery and Morgan walk' });
+    await user.click(within(firstCard).getByRole('button', { name: 'Tend Avery and Morgan walk' }));
+    expect(onTend).toHaveBeenCalledWith(linkedRhythm.id, expect.anything());
+
+    view.rerender(<ProfileHarness rhythms={[completedRhythm, secondRhythm]} completed onTend={onTend} onUndo={undo} />);
+    const row = within(profile).getByRole('button', { name: 'Avery and Morgan walk, Tended 10:15 am' });
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(within(profile).queryByRole('article', { name: 'Avery and Morgan walk' })).toBeNull();
+    expect(within(profile).getByRole('article', { name: 'Plan an afternoon together' })).toBeTruthy();
+    expect(within(profile).getByText('2 in queue')).toBeTruthy();
+    expect(Array.from(profile.querySelectorAll<HTMLElement>('[data-tended-rhythm-item]'))
+      .map(item => item.dataset.tendedRhythmItem)).toEqual([linkedRhythm.id, secondRhythm.id]);
+
+    await user.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(within(profile).getByRole('article', { name: 'Avery and Morgan walk' })).toBeTruthy();
+    await user.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(within(profile).queryByRole('article', { name: 'Avery and Morgan walk' })).toBeNull();
+    await user.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    const expandedCard = within(profile).getByRole('article', { name: 'Avery and Morgan walk' });
+    await user.click(within(expandedCard).getByRole('button', {
+      name: 'Undo completion for Avery and Morgan walk'
+    }));
     expect(undo).toHaveBeenCalledWith(linkedRhythm.id);
+
+    view.rerender(<ProfileHarness rhythms={rhythms} onTend={onTend} onUndo={undo} />);
+    await waitFor(() => {
+      expect(within(profile).getByRole('article', { name: 'Avery and Morgan walk' })).toBeTruthy();
+      expect(document.activeElement instanceof HTMLElement
+        ? document.activeElement.dataset.rhythmTendButton
+        : undefined).toBe(linkedRhythm.id);
+    });
+    expect(within(profile).getByText('2 in queue')).toBeTruthy();
+    expect(within(profile).queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
+    expect(Array.from(profile.querySelectorAll<HTMLElement>('[data-tended-rhythm-item]'))
+      .map(item => item.dataset.tendedRhythmItem)).toEqual([linkedRhythm.id, secondRhythm.id]);
   });
 
   it('opens the Add Rhythm callback with one Person ID and retains empty Category/Foundation associations', async () => {
@@ -820,6 +943,137 @@ describe('shared person profile', () => {
     expect(document.activeElement).toBe(addOpener);
     expect(screen.getByText('No connections yet.')).toBeTruthy();
     expect(JSON.parse(screen.getByTestId('saved-connections').textContent ?? '{}').connections).toEqual([]);
+  });
+
+  it('uses the single Do it action, pencil editing, and safeguarded Spark completion flow', async () => {
+    const user = userEvent.setup();
+    const completeSpark = vi.fn((_sparkId: string, _connection: FriendshipConnection) => null);
+    const createSpark = vi.fn(() => null);
+    const archiveSpark = vi.fn((_sparkId: string, _archived: boolean) => null);
+    const spark: PersonSpark = {
+      id: 'spark-visit-garden',
+      ownerId: 'sample-person-avery',
+      title: 'Visit the garden',
+      description: 'Take an easy walk and enjoy the flowers.',
+      sharedWith: ['sample-person-morgan'],
+      archived: false,
+      completed: false,
+      completionHistory: []
+    };
+    const sparkWithoutDescription: PersonSpark = {
+      id: 'spark-share-tea',
+      ownerId: 'sample-person-avery',
+      title: 'Share tea',
+      sharedWith: [],
+      archived: false,
+      completed: false,
+      completionHistory: []
+    };
+    render(
+      <ProfileHarness
+        rhythms={[]}
+        personSparks={[spark, sparkWithoutDescription]}
+        onCreatePersonSpark={createSpark}
+        onArchivePersonSpark={archiveSpark}
+        onCompletePersonSpark={completeSpark}
+      />
+    );
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+
+    const section = screen.getByRole('region', { name: 'Sparks' });
+    const sparkCard = within(section).getByRole('article', { name: 'Visit the garden' });
+    expect(within(sparkCard).getByText('Take an easy walk and enjoy the flowers.')).toBeTruthy();
+    expect(within(sparkCard).getAllByRole('button', { name: /Open synthetic profile for/ })).toHaveLength(2);
+    expect(within(sparkCard).getByText('Someday')).toBeTruthy();
+    expect(within(section).getByRole('article', { name: 'Share tea' })
+      .querySelector('.person-spark-card__description')).toBeNull();
+    expect(within(section).queryByRole('button', { name: /Actions for/ })).toBeNull();
+
+    const editButton = within(sparkCard).getByRole('button', { name: 'Edit Visit the garden' });
+    await user.click(editButton);
+    const sparkEditor = screen.getByRole('dialog', { name: 'Spark details' });
+    expect((within(sparkEditor).getByLabelText('Description (optional)') as HTMLTextAreaElement).value)
+      .toBe('Take an easy walk and enjoy the flowers.');
+    await user.click(within(sparkEditor).getByRole('button', { name: 'Archive Spark' }));
+    expect(archiveSpark).toHaveBeenCalledWith(spark.id, true);
+    expect(document.activeElement).toBe(editButton);
+
+    await user.click(within(sparkCard).getByRole('button', { name: 'Do it' }));
+    const editor = screen.getByRole('dialog', { name: 'Log a connection for this Spark' });
+    const dateField = within(editor).getByLabelText('Date') as HTMLInputElement;
+    expect(dateField.value).toBe('');
+    expect(completeSpark).not.toHaveBeenCalled();
+    await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
+    expect(within(editor).getByRole('alert').textContent).toContain('Choose a connection date');
+    expect(completeSpark).not.toHaveBeenCalled();
+    fireEvent.change(dateField, { target: { value: '2026-10-28' } });
+    await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
+    expect(within(editor).getByRole('alert').textContent).toContain('Choose the actual connection type');
+    expect(completeSpark).not.toHaveBeenCalled();
+
+    await user.click(within(editor).getByRole('combobox', { name: 'Connection type: Choose type' }));
+    await user.click(within(screen.getByRole('listbox', { name: 'Connection type' }))
+      .getByRole('option', { name: 'Time Together' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
+    expect(completeSpark).toHaveBeenCalledOnce();
+    expect(completeSpark.mock.calls[0]?.[0]).toBe(spark.id);
+    expect(completeSpark.mock.calls[0]?.[1]).toMatchObject({
+      type: 'time-together',
+      date: '2026-10-28',
+      participantIds: ['sample-person-avery', 'sample-person-morgan']
+    });
+
+    await user.click(within(sparkCard).getByRole('button', { name: 'Do it' }));
+    const cancelledEditor = screen.getByRole('dialog', { name: 'Log a connection for this Spark' });
+    await user.click(within(cancelledEditor).getByRole('button', { name: 'Cancel' }));
+    expect(completeSpark).toHaveBeenCalledOnce();
+
+    await user.click(within(section).getByRole('button', { name: '+ Add Spark' }));
+    const addDialog = screen.getByRole('dialog', { name: 'Add Spark' });
+    await user.type(within(addDialog).getByLabelText('Title'), 'Go to the market');
+    await user.click(within(addDialog).getByRole('button', { name: 'Save Spark' }));
+    expect(createSpark).toHaveBeenCalledWith('sample-person-avery', {
+      title: 'Go to the market',
+      sharedWith: []
+    });
+  });
+
+  it('keeps Spark completion undo behind the existing explicit confirmation', async () => {
+    const user = userEvent.setup();
+    const undoSpark = vi.fn((_sparkId: string) => null);
+    const spark: PersonSpark = {
+      id: 'spark-visit-garden-completed',
+      ownerId: 'sample-person-avery',
+      title: 'Visit the garden',
+      sharedWith: [],
+      archived: false,
+      completed: true,
+      completionHistory: [{
+        id: 'spark-visit-garden-completion',
+        source: 'legacy',
+        date: '2026-10-28',
+        completedAt: '2026-10-28T15:00:00.000Z',
+        legacyEventId: 'spark-visit-garden-completion'
+      }]
+    };
+    render(<ProfileHarness rhythms={[]} personSparks={[spark]} onUndoPersonSpark={undoSpark} />);
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+    const card = screen.getByRole('article', { name: spark.title });
+    const editButton = within(card).getByRole('button', { name: `Edit ${spark.title}` });
+    await user.click(editButton);
+    const editor = screen.getByRole('dialog', { name: 'Spark details' });
+    await user.click(within(editor).getByRole('button', { name: 'Undo completion' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Undo this Spark completion?' });
+    expect(undoSpark).not.toHaveBeenCalled();
+    expect(within(confirmation).getByText(/linked connection will be removed/i)).toBeTruthy();
+    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
+    expect(undoSpark).not.toHaveBeenCalled();
+    await user.click(within(editor).getByRole('button', { name: 'Undo completion' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Undo this Spark completion?' }))
+      .getByRole('button', { name: 'Undo completion' }));
+    expect(undoSpark).toHaveBeenCalledOnce();
+    expect(undoSpark).toHaveBeenCalledWith(spark.id);
+    expect(document.activeElement).toBe(editButton);
   });
 
   it('logs one shared event, recalculates the person projection after participant edits, and preserves cadence', async () => {
@@ -872,10 +1126,12 @@ describe('shared person profile', () => {
     expect(stored.connections[0]?.participantIds).toEqual(['sample-person-avery', 'sample-person-morgan']);
     expect(screen.getByRole('button', { name: '+ Add' })).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: /Connection cadence/ })).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Edit' }));
-    const edit = screen.getByRole('dialog', { name: 'Edit connection' });
+    const connectionRow = screen.getByRole('button', { name: /^Text connection,/ });
+    await user.click(connectionRow);
+    const edit = screen.getByRole('dialog', { name: 'Connection details' });
     await user.click(within(edit).getAllByRole('checkbox')[0]!);
     await user.click(within(edit).getByRole('button', { name: 'Save changes' }));
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Connections' }));
     expect(screen.getByText('No connections yet.')).toBeTruthy();
     const edited = JSON.parse(screen.getByTestId('connection-state').textContent ?? '{}') as FriendshipData;
     expect(edited.connections).toHaveLength(1);
@@ -907,7 +1163,9 @@ describe('shared person profile', () => {
     );
     render(<ProfileHarness rhythms={[]} initialFriendships={data} />);
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await user.click(screen.getByRole('button', { name: /^Call connection,/ }));
+    const details = screen.getByRole('dialog', { name: 'Connection details' });
+    await user.click(within(details).getByRole('button', { name: 'Delete connection' }));
     const confirmation = screen.getByRole('alertdialog');
     await user.click(within(confirmation).getByRole('button', { name: 'Delete connection' }));
     expect(screen.getByText('No connections yet.')).toBeTruthy();

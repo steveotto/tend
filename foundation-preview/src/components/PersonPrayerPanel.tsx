@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, MouseEvent } from 'react';
+import type { FormEvent } from 'react';
 import {
   activePrayerRequestCount,
   personPrayerRequestDraft,
-  personPrayerRequestsForPerson,
-  prayerRequestHistorySummary
+  personPrayerRequestsForPerson
 } from '../domain/person-prayers.ts';
 import type {
   PersonPrayerRequest,
@@ -15,6 +14,8 @@ import { personById } from '../domain/preview-data.ts';
 import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import { PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
+import { PersonPrayerCard } from './PersonPrayerCard.tsx';
+import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
 
 type EditorState = {
   request?: PersonPrayerRequest;
@@ -25,6 +26,8 @@ type EditorState = {
 export function PersonPrayerPanel({
   personId,
   enabled = true,
+  today,
+  timeZone: requestedTimeZone,
   people,
   peopleGroups,
   requests,
@@ -37,6 +40,8 @@ export function PersonPrayerPanel({
 }: {
   personId: PersonId;
   enabled?: boolean;
+  today: string;
+  timeZone?: string;
   people: readonly PersonPreview[];
   peopleGroups: readonly PersonPickerGroup[];
   requests: readonly PersonPrayerRequest[];
@@ -68,7 +73,9 @@ export function PersonPrayerPanel({
   const pickerWasOpen = useRef(false);
   const personRequests = personPrayerRequestsForPerson(requests, personId);
   const activeCount = activePrayerRequestCount(requests, personId);
-  const ownerName = (request: PersonPrayerRequest) => personById(people, request.personId).displayName;
+  const person = personById(people, personId);
+  const timeZone = requestedTimeZone
+    ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const groups = [
     { status: 'active' as const, label: 'Active' },
     { status: 'answered' as const, label: 'Answered' },
@@ -106,8 +113,8 @@ export function PersonPrayerPanel({
     }
   }, [pickerOpen]);
 
-  function openEditor(event: MouseEvent<HTMLButtonElement>, request?: PersonPrayerRequest) {
-    returnTarget.current = event.currentTarget;
+  function openEditor(opener: HTMLButtonElement, request?: PersonPrayerRequest) {
+    returnTarget.current = opener;
     setActionError('');
     setPickerOpen(false);
     setEditor({ ...(request ? { request } : {}), draft: personPrayerRequestDraft(request), error: '' });
@@ -148,6 +155,7 @@ export function PersonPrayerPanel({
       return;
     }
     setConfirmRequest(null);
+    setEditor(null);
     setActionError('');
   }
 
@@ -155,13 +163,13 @@ export function PersonPrayerPanel({
   const confirmTitleId = `person-prayer-delete-title-${personId}`;
 
   return (
-    <section className="person-prayer-panel" aria-labelledby={`person-prayer-heading-${personId}`} hidden={!enabled}>
+    <section className="person-prayer-panel prayer-theme" aria-labelledby={`person-prayer-heading-${personId}`} hidden={!enabled}>
       <header className="person-profile__section-heading">
         <div>
           <h3 id={`person-prayer-heading-${personId}`}>Prayer</h3>
           <p>{activeCount} active {activeCount === 1 ? 'request' : 'requests'}</p>
         </div>
-        <button ref={addButtonRef} type="button" className="btn mini" onClick={event => openEditor(event)}>
+        <button ref={addButtonRef} type="button" className="btn mini" onClick={event => openEditor(event.currentTarget)}>
           Add prayer request
         </button>
       </header>
@@ -183,61 +191,27 @@ export function PersonPrayerPanel({
             <h4 id={`person-prayer-${group.status}-${personId}`}>{group.label} ({groupRequests.length})</h4>
             <ul className="person-prayer-list">
               {groupRequests.map(request => {
-                const isOwner = request.personId === personId;
-                const shareNames = (request.sharedWith ?? []).map(id => personById(people, id).displayName);
-                const prayerHistory = prayerRequestHistorySummary(request);
+                const owner = personById(people, request.personId);
+                const sharedPeople = (request.sharedWith ?? []).map(id => personById(people, id));
                 return (
                   <li
                     id={`person-prayer-request-${request.id}`}
-                    className="person-prayer-card"
+                    className="person-prayer-list__item"
                     key={request.id}
                     tabIndex={targetRequestId === request.id ? -1 : undefined}
                     aria-current={targetRequestId === request.id ? 'true' : undefined}
                   >
-                    <div className="person-prayer-card__content">
-                      <h5>{request.title}</h5>
-                      {request.details && <p className="person-prayer-card__details">{request.details}</p>}
-                      {!isOwner && <p className="person-prayer-card__meta">Owned by {ownerName(request)}</p>}
-                      {shareNames.length > 0 && (
-                        <p className="person-prayer-card__meta">Shared with {shareNames.join(', ')}</p>
-                      )}
-                      <p className="person-prayer-card__meta">
-                        Prayed {prayerHistory.count} {prayerHistory.count === 1 ? 'time' : 'times'}
-                        {prayerHistory.lastPrayedAt && ` · Last prayed ${formatPrayerDate(prayerHistory.lastPrayedAt)}`}
-                      </p>
-                    </div>
-                    <div className="person-prayer-card__actions" aria-label={`Actions for ${request.title}`}>
-                      {request.status === 'active' && (
-                        <>
-                          <button type="button" className="btn mini" onClick={() => pray(request)}>Prayed</button>
-                          <button type="button" className="btn mini ghost" onClick={() => changeStatus(request, 'answer')}>Answer</button>
-                          <button type="button" className="btn mini ghost" onClick={() => changeStatus(request, 'archive')}>Archive</button>
-                        </>
-                      )}
-                      {request.status !== 'active' && (
-                        <button type="button" className="btn mini ghost" onClick={() => changeStatus(request, 'reopen')}>Reopen</button>
-                      )}
-                      <button
-                        type="button"
-                        className="btn mini ghost"
-                        aria-label={`Edit ${request.title}`}
-                        onClick={event => openEditor(event, request)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn mini ghost"
-                        aria-label={isOwner ? `Delete ${request.title}` : `Remove ${request.title} from this profile`}
-                        onClick={event => {
-                          returnTarget.current = event.currentTarget;
-                          setActionError('');
-                          setConfirmRequest(request);
-                        }}
-                      >
-                        {isOwner ? 'Delete' : 'Remove'}
-                      </button>
-                    </div>
+                    <PersonPrayerCard
+                      request={request}
+                      person={person}
+                      owner={owner}
+                      sharedPeople={sharedPeople}
+                      today={today}
+                      timeZone={timeZone}
+                      onPray={pray}
+                      onTransition={changeStatus}
+                      onEdit={(selectedRequest, opener) => openEditor(opener, selectedRequest)}
+                    />
                   </li>
                 );
               })}
@@ -250,14 +224,17 @@ export function PersonPrayerPanel({
 
       {enabled && editor && pickerOpen ? (
         <MoneyGoalDialog
+          title="Choose people to share this request with"
           titleId={editorTitleId}
           labelledBy={editorTitleId}
-          dialogClassName="person-prayer-dialog person-prayer-dialog--picker"
+          dialogClassName="person-prayer-dialog person-prayer-dialog--picker prayer-theme"
+          closeLabel="Close people picker"
+          phoneFullScreen
+          scrollableBody
           stopEscapePropagation
           closeOnEscape
           onClose={() => setPickerOpen(false)}
         >
-          <h2 id={editorTitleId}>Choose people to share this request with</h2>
           <PeopleBadgeSelectionPicker
             people={people}
             groups={peopleGroups}
@@ -284,16 +261,19 @@ export function PersonPrayerPanel({
         </MoneyGoalDialog>
       ) : enabled && editor ? (
         <MoneyGoalDialog
+          title={editor.request ? 'Prayer request details' : 'Add prayer request'}
           titleId={editorTitleId}
           labelledBy={editorTitleId}
-          dialogClassName="person-prayer-dialog"
+          dialogClassName="person-prayer-dialog prayer-theme"
           initialFocusId={`person-prayer-title-${personId}`}
+          closeLabel="Close prayer request details"
+          phoneFullScreen
+          scrollableBody
           stopEscapePropagation
           closeOnEscape
           onClose={() => setEditor(null)}
         >
           <form className="person-prayer-form" onSubmit={saveEditor}>
-            <h2 id={editorTitleId}>{editor.request ? 'Edit prayer request' : 'Add prayer request'}</h2>
             <label>
               Title
               <input
@@ -330,21 +310,44 @@ export function PersonPrayerPanel({
               <button type="button" className="btn mini ghost" onClick={() => setEditor(null)}>Cancel</button>
               <button type="submit" className="btn mini">{editor.request ? 'Save changes' : 'Save request'}</button>
             </div>
+            {editor.request && (
+              <div className="person-prayer-form__delete">
+                <button
+                  type="button"
+                  className="person-prayer-form__delete-button"
+                  aria-label={editor.request.personId === personId
+                    ? `Delete ${editor.request.title}`
+                    : `Remove ${editor.request.title} from this profile`}
+                  onClick={() => {
+                    setActionError('');
+                    setConfirmRequest(editor.request ?? null);
+                  }}
+                >
+                  <RhythmMetadataIcon kind="delete" />
+                  {editor.request.personId === personId ? 'Delete request' : 'Remove from this profile'}
+                </button>
+              </div>
+            )}
           </form>
         </MoneyGoalDialog>
       ) : null}
       {enabled && confirmRequest && (
         <MoneyGoalDialog
+          title={confirmRequest.personId === personId
+            ? 'Delete this request?'
+            : 'Remove this request from this profile?'}
           titleId={confirmTitleId}
           labelledBy={confirmTitleId}
-          dialogClassName="person-prayer-dialog"
+          dialogClassName="person-prayer-dialog prayer-theme"
           initialFocusId={`person-prayer-cancel-delete-${personId}`}
+          closeLabel="Close delete confirmation"
+          phoneFullScreen
+          scrollableBody
           stopEscapePropagation
           closeOnEscape
           onClose={() => setConfirmRequest(null)}
         >
           <div className="person-prayer-confirm">
-            <h2 id={confirmTitleId}>{confirmRequest.personId === personId ? 'Delete this request?' : 'Remove this request from this profile?'}</h2>
             <p>
               {confirmRequest.personId === personId
                 ? 'This permanently deletes the request and its prayer history from every linked profile.'
@@ -372,9 +375,4 @@ export function PersonPrayerPanel({
       )}
     </section>
   );
-}
-
-function formatPrayerDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    .format(new Date(value));
 }

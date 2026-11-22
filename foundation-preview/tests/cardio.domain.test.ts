@@ -3,15 +3,22 @@ import {
   cardioDataIssues,
   cardioDistanceFromMiles,
   cardioDistanceToMiles,
+  cardioRunCalorieEstimate,
   cardioPaceSecondsPerUnit,
   cardioWeekStart,
   createCardioData,
   deleteCardioRun,
+  estimateCardioCalories,
+  formatCardioPace,
+  isCardioRun,
+  latestCardioWeightOnOrBefore,
+  migrateCardioDataToV52,
   parseCardioGoalInput,
   parseCardioRunDuration,
   saveCardioDataCommand,
   saveCardioGoals,
   saveCardioRun,
+  selectCardioRunComparisons,
   selectCardioProgress,
   stepCardioGoalInput,
   validatedCardioRuns,
@@ -20,11 +27,31 @@ import {
 import type { CardioData, CardioRun } from '../src/domain/cardio.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import { todayRhythms } from '../src/domain/preview-data.ts';
-import { createPreviewEnvelope, createSamplePreviewData, parsePreviewBackup } from '../src/domain/preview-state.ts';
+import {
+  createEmptyPreviewData,
+  createPreviewEnvelope,
+  createSamplePreviewData,
+  parsePreviewBackup
+} from '../src/domain/preview-state.ts';
 import { prepareDatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
+import { createWeightData } from '../src/domain/weight.ts';
+import type { WeightData } from '../src/domain/weight.ts';
+import {
+  selectFoundationRhythmScores,
+  selectFoundationScore
+} from '../src/domain/foundation-scoring.ts';
+import {
+  createRhythmDraft,
+  resolveTodayRhythms,
+  saveRhythmDraft,
+  updateRhythmDraftFitnessActivity,
+  validateRhythmDraft
+} from '../src/domain/rhythm-editor.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
-import { createRhythmDraft, validateRhythmDraft } from '../src/domain/rhythm-editor.ts';
+import { prepareCompletionHistory } from '../src/domain/rhythm-history.ts';
+import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
+import { isRhythmRelevantOnDate } from '../src/domain/category-rhythms.ts';
 
 const today = '2026-10-22';
 
@@ -99,6 +126,203 @@ function command(
 }
 
 describe('Cardio domain', () => {
+  it.each([
+    { runKind: 'existing', linkDescription: 'existing run' },
+    { runKind: 'new', linkDescription: 'new run' }
+  ] as const)(
+    'scores a same-day Saturday Morning Run Rhythm after linking the $linkDescription and preserves its history lifecycle',
+    ({ runKind }) => {
+      const date = '2026-11-21';
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const now = localDateTimeInZone(date, '20:48', timeZone);
+      const rhythmId = 'user-rhythm-11111111-1111-4111-8111-111111111111';
+      const draft = updateRhythmDraftFitnessActivity(createRhythmDraft(['health']), 'cardio');
+      const created = saveRhythmDraft([], {
+        ...draft,
+        title: 'Saturday run',
+        timeLabel: 'Morning',
+        schedule: { frequency: 'weekly', weekdays: [6], weeklyMode: 'select-days' },
+        scheduleEditing: true
+      }, rhythmId, 'create', {
+        currentDate: date,
+        deviceTimeZone: timeZone,
+        createdLocalTime: '20:48',
+        createdDueTime: '09:00'
+      });
+      expect(created.errors).toEqual({});
+      expect(created.savedRhythms?.[0]).toMatchObject({
+        timeOfDay: 'morning',
+        createdLocalDate: date,
+        createdLocalTime: '20:48',
+        createdDueTime: '09:00',
+        scoring: { trackingStartDate: date }
+      });
+      const rhythm = resolveTodayRhythms(created.savedRhythms ?? [])
+        .find(item => item.id === rhythmId);
+      expect(rhythm).toBeDefined();
+      if (!rhythm) throw new Error('The saved Saturday Rhythm was not resolved.');
+      expect(isRhythmRelevantOnDate(rhythm, date)).toBe(true);
+
+      const score = (
+        rhythmToScore: typeof rhythm = rhythm,
+        records: typeof rhythmToScore.completionHistory = rhythmToScore.completionHistory
+      ) => {
+        const scoreRhythm = records === undefined
+          ? rhythmToScore
+          : { ...rhythmToScore, completionHistory: records };
+        return selectFoundationRhythmScores(
+          [scoreRhythm],
+          [],
+          new Set([rhythmId]),
+          now,
+          timeZone
+        ).get(rhythmId);
+      };
+      expect(score()).toMatchObject({
+        kind: 'unscored',
+        reason: { reasonCode: 'not-started', explanation: 'This Rhythm’s tracking date is in the future.' },
+        healthScore: null
+      });
+
+      const runId = 'existing-saturday-run';
+      const completionId = 'completion-saturday-run';
+      const unlinkedRun = run({ id: runId, date });
+      const previous = {
+        ...createCardioData(),
+        runs: runKind === 'existing' ? [unlinkedRun] : []
+      };
+      const savedRun = saveCardioRun(previous, {
+        ...unlinkedRun,
+        rhythmId,
+        rhythmOccurrence: date,
+        completionId
+      }, date);
+      expect(savedRun.valid).toBe(true);
+      if (!savedRun.valid) throw new Error(savedRun.error);
+
+      const linked = saveCardioDataCommand({
+        previous,
+        next: savedRun.data,
+        today: date,
+        now,
+        rhythms: [rhythm],
+        archivedRhythmIds: new Set(),
+        editableRhythmIds: new Set([rhythmId]),
+        completionState: {
+          datedRhythmCompletions: [],
+          activeRhythmCompletions: [],
+          completedRhythmIds: [],
+          rhythmHistoryIds: []
+        }
+      });
+      expect(linked.valid).toBe(true);
+      if (!linked.valid) throw new Error(linked.error);
+      expect(linked.completionState).toMatchObject({
+        datedRhythmCompletions: [{ id: completionId, rhythmId, effectiveDate: date }],
+        activeRhythmCompletions: [{ rhythmId, completionId }],
+        completedRhythmIds: [rhythmId],
+        rhythmHistoryIds: [rhythmId]
+      });
+
+      const linkedRhythm = { ...rhythm, completionHistory: linked.completionState.datedRhythmCompletions };
+      const linkedScore = score(linkedRhythm, linkedRhythm.completionHistory);
+      if (!linkedScore) throw new Error('The linked Run Rhythm has no score result.');
+      expect(linkedScore).toMatchObject({
+        kind: 'rhythm-score',
+        trackingStartDate: date,
+        consistency: { kind: 'scored', evidence: { completedCount: 1 } }
+      });
+      expect(linkedScore.healthScore).not.toBeNull();
+      expect(selectFoundationScore(
+        'health-cardio',
+        [linkedRhythm],
+        new Map([[rhythmId, linkedScore]]),
+        []
+      )).toMatchObject({
+        eligibleRhythmIds: [rhythmId],
+        health: expect.any(Number)
+      });
+      expect(prepareCompletionHistory(linkedRhythm.completionHistory, date)).toMatchObject({
+        kind: 'recorded',
+        count: 1,
+        firstDate: date,
+        lastDate: date,
+        dailyCounts: [{ date, count: 1 }]
+      });
+
+      const duplicate = saveCardioRun(linked.cardio, {
+        ...run({ id: 'duplicate-saturday-run', date }),
+        rhythmId,
+        rhythmOccurrence: date,
+        completionId: 'completion-duplicate-saturday-run'
+      }, date);
+      expect(duplicate).toMatchObject({
+        valid: false,
+        error: 'A run is already linked to this scheduled Rhythm occurrence.'
+      });
+
+      const unlinked = saveCardioRun(linked.cardio, unlinkedRun, date);
+      expect(unlinked.valid).toBe(true);
+      if (!unlinked.valid) throw new Error(unlinked.error);
+      const undone = saveCardioDataCommand({
+        previous: linked.cardio,
+        next: unlinked.data,
+        today: date,
+        now,
+        rhythms: [rhythm],
+        archivedRhythmIds: new Set(),
+        editableRhythmIds: new Set([rhythmId]),
+        completionState: linked.completionState
+      });
+      expect(undone).toMatchObject({
+        valid: true,
+        completionState: {
+          datedRhythmCompletions: [],
+          activeRhythmCompletions: [],
+          completedRhythmIds: [],
+          rhythmHistoryIds: [rhythmId]
+        }
+      });
+      if (!undone.valid) throw new Error(undone.error);
+      expect(score()).toMatchObject({
+        kind: 'unscored',
+        reason: { reasonCode: 'not-started' },
+        healthScore: null
+      });
+
+      const persisted = createEmptyPreviewData();
+      persisted.savedRhythms = created.savedRhythms ?? [];
+      persisted.cardio = linked.cardio;
+      persisted.datedRhythmCompletions = linked.completionState.datedRhythmCompletions;
+      persisted.activeRhythmCompletions = linked.completionState.activeRhythmCompletions;
+      persisted.completedRhythmIds = linked.completionState.completedRhythmIds;
+      persisted.rhythmHistoryIds = linked.completionState.rhythmHistoryIds;
+      const reloaded = parsePreviewBackup(
+        JSON.stringify(createPreviewEnvelope(persisted)),
+        date
+      );
+      expect(reloaded.valid).toBe(true);
+      if (!reloaded.valid) throw new Error(reloaded.message);
+      const restoredRhythm = resolveTodayRhythms(reloaded.envelope.data.savedRhythms)
+        .find(item => item.id === rhythmId);
+      const restoredRecords = reloaded.envelope.data.datedRhythmCompletions
+        .filter(record => record.rhythmId === rhythmId);
+      expect(restoredRhythm).toBeDefined();
+      if (!restoredRhythm) throw new Error('The saved Saturday Rhythm was lost after reload.');
+      expect(reloaded.envelope.data.cardio.runs).toContainEqual(linked.cardio.runs[0]);
+      expect(score(restoredRhythm, restoredRecords)).toMatchObject({
+        kind: 'rhythm-score',
+        trackingStartDate: date,
+        consistency: { kind: 'scored', evidence: { completedCount: 1 } }
+      });
+      expect(prepareCompletionHistory(restoredRecords, date)).toMatchObject({
+        kind: 'recorded',
+        count: 1,
+        dailyCounts: [{ date, count: 1 }]
+      });
+    }
+  );
+
   it('accepts an explicit Cardio logging capability only for a Health & Fitness Rhythm', () => {
     const cardioDraft = createRhythmDraft(['health']);
     cardioDraft.title = 'Run logging';
@@ -278,6 +502,160 @@ describe('Cardio domain', () => {
     expect(cardioPaceSecondsPerUnit(3600, 0)).toBeNull();
     expect(cardioPaceSecondsPerUnit(3600, Number.NaN)).toBeNull();
     expect(cardioDistanceFromMiles(cardioDistanceToMiles(10, 'km'), 'km')).toBeCloseTo(10, 10);
+  });
+
+  it('estimates gross calories from a weight snapshot and formats pace without false precision', () => {
+    expect(estimateCardioCalories(70, 5)).toBe(563);
+    expect(estimateCardioCalories(0, 5)).toBeNull();
+    expect(estimateCardioCalories(70, Number.NaN)).toBeNull();
+    expect(formatCardioPace(480, 'mi')).toBe('8:00/mi');
+    expect(formatCardioPace(360, 'km')).toBe('6:00/km');
+    expect(formatCardioPace(null, 'mi')).toBe('—');
+  });
+
+  it('selects only the latest valid weigh-in on or before a run date', () => {
+    const weight: WeightData = {
+      ...createWeightData(),
+      weighIns: [
+        { id: 'weight-before', date: '2026-10-19', weightKg: 70 },
+        { id: 'weight-after', date: '2026-10-21', weightKg: 72 },
+        { id: 'weight-future', date: '2026-10-23', weightKg: 80 }
+      ]
+    };
+
+    expect(latestCardioWeightOnOrBefore(weight, '2026-10-20', today))
+      .toMatchObject({ id: 'weight-before', weightKg: 70 });
+    expect(latestCardioWeightOnOrBefore(weight, '2026-10-18', today)).toBeNull();
+    expect(latestCardioWeightOnOrBefore(weight, '2026-10-23', today)).toBeNull();
+  });
+
+  it('snapshots historical estimates during migration and keeps them stable after weigh-in edits', () => {
+    const weight: WeightData = {
+      ...createWeightData(),
+      weighIns: [
+        { id: 'weight-70', date: '2026-10-19', weightKg: 70 },
+        { id: 'weight-72', date: '2026-10-21', weightKg: 72 }
+      ]
+    };
+    const cardio: CardioData = {
+      ...createCardioData(),
+      runs: [
+        run({ id: 'historical-with-weight', date: '2026-10-20', distance: 5 }),
+        { id: 'historical-without-weight', date: '2026-10-18', distance: 3 },
+        { id: 'invalid-preserved', date: '2026-10-20', distance: 0 }
+      ]
+    };
+    const migrated = migrateCardioDataToV52(cardio, weight);
+    const snapshot = migrated.runs[0] as CardioRun;
+    expect(snapshot.calorieEstimate).toMatchObject({
+      source: 'estimated',
+      method: 'distance-weight-v1',
+      weightKg: 70,
+      weightSource: 'weigh-in',
+      weightDate: '2026-10-19',
+      weightMeasurementId: 'weight-70'
+    });
+    expect(migrated.runs[1]).toEqual(cardio.runs[1]);
+    expect(migrated.runs[2]).toBe(cardio.runs[2]);
+    expect(cardioRunCalorieEstimate(snapshot, weight)?.calories).toBe(563);
+
+    const editedWeight: WeightData = {
+      ...weight,
+      weighIns: [{ id: 'weight-70', date: '2026-10-19', weightKg: 90 }]
+    };
+    expect(cardioRunCalorieEstimate(snapshot, editedWeight)?.calories).toBe(563);
+  });
+
+  it('rejects a stored estimate whose weigh-in date is later than the run', () => {
+    expect(isCardioRun(run({
+      date: '2026-10-20',
+      calorieEstimate: {
+        source: 'estimated',
+        method: 'distance-weight-v1',
+        weightKg: 70,
+        weightSource: 'weigh-in',
+        weightDate: '2026-10-21',
+        weightMeasurementId: 'future-weight'
+      }
+    }))).toBe(false);
+  });
+
+  it('compares distance to the prior run and pace to the latest similar-distance run', () => {
+    const weight: WeightData = {
+      ...createWeightData(),
+      weighIns: [{ id: 'comparison-weight', date: '2026-10-18', weightKg: 70 }]
+    };
+    const runs = [
+      run({
+        id: 'similar-run',
+        date: '2026-10-19',
+        distance: 6,
+        durationSeconds: 3600,
+        calorieEstimate: {
+          source: 'estimated',
+          method: 'distance-weight-v1',
+          weightKg: 70,
+          weightSource: 'weigh-in',
+          weightDate: '2026-10-18',
+          weightMeasurementId: 'comparison-weight'
+        }
+      }),
+      run({
+        id: 'previous-run',
+        date: '2026-10-21',
+        distance: 3,
+        durationSeconds: 1800,
+        calorieEstimate: {
+          source: 'estimated',
+          method: 'distance-weight-v1',
+          weightKg: 70,
+          weightSource: 'weigh-in',
+          weightDate: '2026-10-18',
+          weightMeasurementId: 'comparison-weight'
+        }
+      }),
+      run({
+        id: 'current-run',
+        date: today,
+        distance: 6.2,
+        distanceUnit: 'mi',
+        durationSeconds: 2976,
+        calorieEstimate: {
+          source: 'estimated',
+          method: 'distance-weight-v1',
+          weightKg: 70,
+          weightSource: 'weigh-in',
+          weightDate: '2026-10-18',
+          weightMeasurementId: 'comparison-weight'
+        }
+      })
+    ];
+
+    expect(selectCardioRunComparisons(runs, runs[2]!, weight, today)).toMatchObject({
+      previousRun: { id: 'previous-run' },
+      similarDistanceRun: { id: 'similar-run' },
+      paceReferenceRun: { id: 'similar-run' },
+      distanceDelta: 3.2,
+      paceImprovementSeconds: 120,
+      calorieDelta: 360
+    });
+  });
+
+  it('uses stable ID ordering for same-day runs and reports unavailable comparisons cleanly', () => {
+    const weight = createWeightData();
+    const sameDay = [
+      run({ id: 'run-b', date: today, distance: 2 }),
+      run({ id: 'run-a', date: today, distance: 2 })
+    ];
+    expect(selectCardioRunComparisons(sameDay, sameDay[0]!, weight, today).previousRun?.id).toBe('run-a');
+    expect(selectCardioRunComparisons([sameDay[0]!], sameDay[0]!, weight, today)).toMatchObject({
+      previousRun: null,
+      similarDistanceRun: null,
+      paceReferenceRun: null,
+      distanceDelta: null,
+      paceImprovementSeconds: null,
+      calorieDelta: null
+    });
   });
 
   it('round-trips an optional run duration and entry unit in the versioned preview envelope', () => {

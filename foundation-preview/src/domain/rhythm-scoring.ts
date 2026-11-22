@@ -235,7 +235,7 @@ function scoreClockStartDateForScheduleHistory(input: {
     || createdLocalTime === undefined
     || createdDueTime === undefined
     || createdLocalTime <= createdDueTime
-    || input.completionDates.some(date => date < createdDate)) {
+    || input.completionDates.some(date => date <= createdDate)) {
     return input.startDate;
   }
   const creationSchedule = input.scheduleForDate(createdDate);

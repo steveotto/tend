@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import {
   cardioDataIssues,
+  cardioCalorieEstimateFromWeighIn,
   cardioDistanceFromMiles,
   cardioDistanceToMiles,
+  estimateCardioCalories,
   cardioGoalSettings,
   cardioPaceSecondsPerUnit,
   cardioRhythmOccurrenceError,
+  latestCardioWeightOnOrBefore,
   addDateDays,
   cardioTargetsForDate,
   cardioWeekStart,
@@ -21,7 +24,16 @@ import {
   validatedCardioRuns,
   validateCardioGoals
 } from '../domain/cardio.ts';
-import type { CardioData, CardioDistanceUnit, CardioRun } from '../domain/cardio.ts';
+import type { CardioCalorieEstimate, CardioData, CardioDistanceUnit, CardioRun } from '../domain/cardio.ts';
+import {
+  createWeightData,
+  formatWeight,
+  formatWeightInput,
+  parseWeightInput,
+  weightUnit,
+  weightValueInUnit
+} from '../domain/weight.ts';
+import type { WeightData } from '../domain/weight.ts';
 import type { RhythmPreview } from '../domain/preview-data.ts';
 import {
   foundationCatalogue,
@@ -50,6 +62,7 @@ import { FoundationRhythmGroup } from './FoundationRhythmGroup.tsx';
 import { FoundationRhythmAssociationDialog } from './FoundationRhythmAssociationDialog.tsx';
 import { SegmentedTabs } from './SegmentedTabs.tsx';
 import type { SegmentedTab } from './SegmentedTabs.tsx';
+import { CardioRunPerformance } from './CardioRunPerformance.tsx';
 
 export type CardioViewProps = {
   data: CardioData;
@@ -84,6 +97,7 @@ export type CardioViewProps = {
   onOpenCategory?: (categoryId: Destination, openerId: string) => void;
   overallHealthScore?: number | null;
   categoryHealthScore?: number | null;
+  weightData?: WeightData;
 };
 
 type DialogState = { kind: 'goals' } | { kind: 'run'; run?: CardioRun; rhythm?: RhythmPreview };
@@ -123,7 +137,8 @@ export function CardioView({
   onOpenFoundation,
   onOpenCategory,
   overallHealthScore = null,
-  categoryHealthScore = null
+  categoryHealthScore = null,
+  weightData = createWeightData()
 }: CardioViewProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [actionError, setActionError] = useState('');
@@ -369,9 +384,12 @@ export function CardioView({
               <ol className="cardio-history-list">
                 {[...runs].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).map(run => (
                   <li key={run.id}>
-                    <div>
-                      <strong>{formatRunDistance(run)}</strong>
-                      <time dateTime={run.date}>{formatLongDate(run.date)}</time>
+                    <div className="cardio-history-list__main">
+                      <div className="cardio-history-list__heading">
+                        <strong>{formatRunDistance(run)}</strong>
+                        <time dateTime={run.date}>{formatLongDate(run.date)}</time>
+                      </div>
+                      <CardioRunPerformance run={run} runs={runs} weightData={weightData} today={today} />
                     </div>
                     <div className="cardio-history-actions">
                       <button type="button" className="btn mini ghost" aria-label={`Edit run from ${formatLongDate(run.date)}`}
@@ -470,6 +488,7 @@ export function CardioView({
           today={today}
           rhythms={rhythms}
           archivedRhythmIds={archivedRhythmIds}
+          weightData={weightData}
           {...(dialog.run ? { run: dialog.run } : {})}
           {...(dialog.rhythm ? { initialRhythm: dialog.rhythm } : {})}
           onSave={onChange}
@@ -647,6 +666,7 @@ function CardioGoalsDialog({ data, today, onSave, onClose }: {
 function CardioRunDialog({
   data,
   today,
+  weightData,
   rhythms,
   archivedRhythmIds,
   run,
@@ -657,6 +677,7 @@ function CardioRunDialog({
 }: {
   data: CardioData;
   today: string;
+  weightData: WeightData;
   rhythms: readonly RhythmPreview[];
   archivedRhythmIds: ReadonlySet<string>;
   run?: CardioRun;
@@ -678,6 +699,11 @@ function CardioRunDialog({
     ? String(Math.floor(run.durationSeconds % 3600 / 60)) : '');
   const [durationSeconds, setDurationSeconds] = useState(run?.durationSeconds
     ? String(run.durationSeconds % 60) : '');
+  const [manualWeightText, setManualWeightText] = useState(
+    run?.calorieEstimate?.weightSource === 'manual'
+      ? formatWeightInput(run.calorieEstimate.weightKg, weightUnit(weightData.displayUnit))
+      : ''
+  );
   const [notes, setNotes] = useState(run?.notes ?? '');
   const [rhythmId, setRhythmId] = useState(run?.rhythmId ?? initialRhythm?.id ?? '');
   const [error, setError] = useState('');
@@ -690,6 +716,41 @@ function CardioRunDialog({
   const paceSeconds = parsedDuration.valid
     ? cardioPaceSecondsPerUnit(parsedDuration.durationSeconds, numericDistance)
     : null;
+  const weightDisplayUnit = weightUnit(weightData.displayUnit);
+  const currentRunEstimate = run?.date === date ? run.calorieEstimate : undefined;
+  const recordedWeight = currentRunEstimate?.weightSource === 'weigh-in'
+    ? null
+    : latestCardioWeightOnOrBefore(weightData, date, today);
+  const manualWeightKg = manualWeightText.trim()
+    ? parseWeightInput(manualWeightText, weightDisplayUnit)
+    : null;
+  const shouldShowManualWeight = currentRunEstimate?.weightSource === 'manual'
+    || !currentRunEstimate && recordedWeight === null;
+  const calorieEstimate: CardioCalorieEstimate | undefined =
+    currentRunEstimate?.weightSource === 'weigh-in'
+      ? currentRunEstimate
+      : currentRunEstimate?.weightSource === 'manual'
+        ? manualWeightKg === null ? undefined : {
+            source: 'estimated',
+            method: 'distance-weight-v1',
+            weightKg: manualWeightKg,
+            weightSource: 'manual'
+          }
+        : recordedWeight
+          ? cardioCalorieEstimateFromWeighIn(recordedWeight)
+          : manualWeightKg === null ? undefined : {
+              source: 'estimated',
+              method: 'distance-weight-v1',
+              weightKg: manualWeightKg,
+              weightSource: 'manual'
+            };
+  const estimateWeightKg = calorieEstimate?.weightKg ?? null;
+  const estimatedCalories = estimateWeightKg === null
+    ? null
+    : estimateCardioCalories(estimateWeightKg, cardioDistanceToMiles(numericDistance, distanceUnit));
+  const manualWeightInvalid = shouldShowManualWeight && manualWeightText.trim().length > 0
+    && (manualWeightKg === null || manualWeightKg <= 0
+      || weightValueInUnit(manualWeightKg, weightDisplayUnit) > 2000);
   const associationError = rhythmId
     ? cardioRhythmOccurrenceError(selectedRhythm, date, today, archivedRhythmIds)
     : null;
@@ -719,6 +780,10 @@ function CardioRunDialog({
       setError(parsedDuration.error);
       return;
     }
+    if (manualWeightInvalid) {
+      setError('Enter a positive body weight within the supported range, or leave it blank.');
+      return;
+    }
     if (notes.length > 1000) {
       setError('Notes must be 1,000 characters or fewer.');
       return;
@@ -737,6 +802,7 @@ function CardioRunDialog({
       distance: distanceMiles,
       distanceUnit,
       ...(parsedDuration.durationSeconds === null ? {} : { durationSeconds: parsedDuration.durationSeconds }),
+      ...(calorieEstimate ? { calorieEstimate } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       ...(rhythmId ? {
         rhythmId,
@@ -811,6 +877,38 @@ function CardioRunDialog({
           <strong>Pace</strong>
           <span>{paceLabel}</span>
         </p>
+        <div className="cardio-calorie-estimate" aria-live="polite">
+          <div className="cardio-calorie-estimate__heading">
+            <strong>Estimated Calories</strong>
+            <span>{estimatedCalories === null ? 'Unavailable' : `${formatNumber(estimatedCalories)} kcal`}</span>
+          </div>
+          <p>
+            {calorieEstimate?.weightSource === 'weigh-in'
+              ? `Using ${formatWeight(calorieEstimate.weightKg, weightDisplayUnit)} ${weightDisplayUnit} recorded on ${formatLongDate(calorieEstimate.weightDate)}.`
+              : calorieEstimate
+                ? `Using manually entered ${formatWeight(calorieEstimate.weightKg, weightDisplayUnit)} ${weightDisplayUnit}.`
+                : 'No weight is available on or before this run date.'}
+          </p>
+          {shouldShowManualWeight && (
+            <label>
+              Body weight for estimate ({weightDisplayUnit})
+              <input type="number" min="0.1" max="2000" step="0.1" inputMode="decimal"
+                value={manualWeightText}
+                onChange={event => {
+                  setManualWeightText(event.currentTarget.value);
+                  setError('');
+                }} />
+            </label>
+          )}
+          <details className="cardio-calorie-estimate__help">
+            <summary aria-label="About estimated calories"><span aria-hidden="true">ⓘ</span></summary>
+            <p>
+              Estimate = body weight in kilograms × distance in kilometers. This is gross energy
+              expenditure, not active calories; it is a rough level-ground estimate and does not
+              use age or height.
+            </p>
+          </details>
+        </div>
         {selectedRhythm?.healthRunTarget && (
           <p className="cardio-form__notice">
             Rhythm target: {selectedRhythm.healthRunTarget.distance} {selectedRhythm.healthRunTarget.unit}.

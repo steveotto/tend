@@ -9,7 +9,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import type { Browser, Page } from 'playwright';
-import { createEmptyPreviewData, createPreviewEnvelope, parsePreviewBackup } from '../src/domain/preview-state.ts';
+import {
+  createEmptyPreviewData,
+  createPreviewEnvelope,
+  createSamplePreviewData,
+  parsePreviewBackup
+} from '../src/domain/preview-state.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
 import { PREVIEW_ACCOUNT_STORAGE_PREFIX } from '../src/storage/preview-storage.ts';
@@ -48,6 +53,92 @@ async function waitForPreview(url: string, server: ReturnType<typeof spawn>): Pr
     }
   }
   throw new Error(`Vite preview did not become available at ${url}.`);
+}
+
+async function verifyClassicSparkPalette(browser: Browser): Promise<void> {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  try {
+    const [tokens, styles] = await Promise.all([
+      readFile(path.resolve(previewDirectory, '..', 'brand/tend-tokens.css'), 'utf8'),
+      readFile(path.resolve(previewDirectory, '..', 'tend.css'), 'utf8')
+    ]);
+    await page.setContent(`
+      <article class="spark-card">
+        <div class="pi-main">
+          <div class="plan-item-copy">
+            <div class="plan-item-heading">
+              <span class="spark-card__title-line"><span class="tend-type-title">Beach Dinner</span></span>
+              <span class="spark-card__title-edit">
+                <button id="classic-spark-edit" type="button" aria-label="Edit Beach Dinner"><svg></svg></button>
+              </span>
+            </div>
+            <div class="plan-item-description">in Punta Cana</div>
+            <div class="plan-item-meta-people">
+              <span class="prayer-person"><span class="avatar init">AB</span>Avery Brooks</span>
+            </div>
+            <div class="plan-item-action"><button id="classic-spark-do-it" class="btn sparkbtn">Do it</button></div>
+          </div>
+        </div>
+        <div class="dashboard-spark-footer">
+          <span class="spark-card__meta-item"><svg class="plan-detail-icon"></svg>Someday</span>
+        </div>
+      </article>
+    `);
+    await page.addStyleTag({ content: tokens });
+    await page.addStyleTag({ content: styles });
+    await page.addStyleTag({ content: '.spark-card .plan-item-action>.btn { transition: none !important; }' });
+    const colors = await page.locator('.spark-card').evaluate(card => {
+      const style = (selector: string) => {
+        const element = card.querySelector<HTMLElement>(selector);
+        if (!element) throw new Error(`Classic Spark fixture is missing ${selector}.`);
+        return getComputedStyle(element);
+      };
+      return {
+        surface: getComputedStyle(card).backgroundColor,
+        border: getComputedStyle(card).borderTopColor,
+        title: style('.tend-type-title').color,
+        description: style('.plan-item-description').color,
+        badgeSurface: style('.prayer-person').backgroundColor,
+        badgeBorder: style('.prayer-person').borderTopColor,
+        avatarSurface: style('.avatar.init').backgroundColor,
+        avatarText: style('.avatar.init').color,
+        actionSurface: style('.sparkbtn').backgroundColor,
+        actionText: style('.sparkbtn').color,
+        footerText: style('.dashboard-spark-footer').color
+      };
+    });
+    assert.deepEqual(colors, {
+      surface: 'rgb(254, 251, 230)',
+      border: 'rgb(230, 228, 164)',
+      title: 'rgb(32, 39, 35)',
+      description: 'rgb(79, 78, 20)',
+      badgeSurface: 'rgb(255, 255, 255)',
+      badgeBorder: 'rgb(230, 228, 164)',
+      avatarSurface: 'rgb(229, 242, 235)',
+      avatarText: 'rgb(36, 107, 82)',
+      actionSurface: 'rgb(36, 107, 82)',
+      actionText: 'rgb(255, 255, 255)',
+      footerText: 'rgb(79, 78, 20)'
+    });
+    const action = page.locator('#classic-spark-do-it');
+    await action.hover();
+    assert.equal(await action.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(28, 88, 68)');
+    const bounds = await action.boundingBox();
+    assert.ok(bounds);
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    await page.mouse.down();
+    assert.equal(await action.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(28, 88, 68)');
+    await page.mouse.up();
+    await page.locator('#classic-spark-edit').focus();
+    await page.keyboard.press('Tab');
+    const focus = await action.evaluate(button => ({
+      visible: button.matches(':focus-visible'),
+      outlineColor: getComputedStyle(button).outlineColor
+    }));
+    assert.deepEqual(focus, { visible: true, outlineColor: 'rgb(36, 107, 82)' });
+  } finally {
+    await page.close();
+  }
 }
 
 type PreviewTextSize = 'small' | 'medium' | 'large';
@@ -92,13 +183,15 @@ async function measureHeroHeader(page: Page, selector: string) {
 
 function contrastRatio(foreground: string, background: string): number {
   const luminance = (color: string) => {
-    const channels = color.match(/\d+(?:\.\d+)?/g);
+    const srgbMatch = color.match(/color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+    const channels = srgbMatch
+      ? srgbMatch.slice(1).map(Number)
+      : color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(value => Number(value) / 255);
     assert.ok(channels && channels.length >= 3, `Expected an RGB color, got ${color}.`);
     const linearChannel = (index: number) => {
       const value = channels[index];
       if (value === undefined) throw new Error(`Missing RGB channel in ${color}.`);
-      const channel = Number(value) / 255;
-      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
     };
     return 0.2126 * linearChannel(0) + 0.7152 * linearChannel(1) + 0.0722 * linearChannel(2);
   };
@@ -1479,7 +1572,7 @@ async function verifyFitnessLogDialogLayout(
       assert.equal(focusMetrics.active, true);
       assert.equal(focusMetrics.visibleFocus, true);
       assert.equal(focusMetrics.outlineWidth, '2px');
-      assert.equal(focusMetrics.outlineOffset, '2px');
+      assert.equal(focusMetrics.outlineOffset, '-2px');
       assert.ok(focusMetrics.leftClearance >= focusMetrics.outlineClearance,
         `Date focus outline is clipped at the left edge: ${JSON.stringify(focusMetrics)}`);
       assert.ok(focusMetrics.rightClearance >= focusMetrics.outlineClearance,
@@ -1539,12 +1632,16 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
   const previewData = createEmptyPreviewData();
   const today = localDateString(new Date());
   const personId = 'layout-long-person';
+  const sparkPersonId = 'layout-spark-person';
   const recentConnectionDate = new Date();
   recentConnectionDate.setDate(recentConnectionDate.getDate() - 7);
   const recentConnection = localDateString(recentConnectionDate);
   previewData.people = [{
     id: personId,
     displayName: 'Alexandria-Brooks-Williams-ExtremelyLong Synthetic Person'
+  }, {
+    id: sparkPersonId,
+    displayName: 'Jordan-Example-With-A-Deliberately-Long-Synthetic-Name'
   }];
   previewData.peopleGroups = previewData.peopleGroups.map(group => ({
     ...group,
@@ -1557,9 +1654,35 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
   }];
   previewData.friendships.connections = [{
     id: 'synthetic-recent-person-connection',
-    type: 'call',
+    type: 'time-together',
     date: recentConnection,
+    time: '14:45',
+    notes: 'Spent time together and talked about a meaningful family event during the long walk.',
     participantIds: [personId]
+  }];
+  previewData.personSparks = [{
+    id: 'layout-long-spark',
+    ownerId: personId,
+    title: 'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes',
+    description: 'A long but optional description that should wrap inside the pale yellow card without pushing its controls beyond the card or viewport.',
+    sharedWith: [sparkPersonId],
+    archived: false,
+    completed: false,
+    completionHistory: []
+  }, {
+    id: 'layout-completed-spark',
+    ownerId: personId,
+    title: 'Remember the completed one-off Spark with a deliberately long title',
+    sharedWith: [],
+    archived: false,
+    completed: true,
+    completionHistory: [{
+      id: 'layout-completed-spark-event',
+      source: 'legacy',
+      date: today,
+      completedAt: `${today}T18:00:00.000Z`,
+      legacyEventId: 'layout-completed-spark-event'
+    }]
   }];
   const startedAt = `${today}T12:00:00.000Z`;
   const finishedAt = `${today}T12:45:00.000Z`;
@@ -1590,13 +1713,49 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
       }]
     }))
   }];
-  previewData.cardio.runs = [{
-    id: 'synthetic-cardio-run',
-    date: today,
-    distance: 4.2,
-    distanceUnit: 'mi',
-    durationSeconds: 30 * 60
+  const cardioWeightDate = new Date(`${today}T12:00:00`);
+  cardioWeightDate.setDate(cardioWeightDate.getDate() - 5);
+  const longRunDate = new Date(`${today}T12:00:00`);
+  longRunDate.setDate(longRunDate.getDate() - 2);
+  const previousRunDate = new Date(`${today}T12:00:00`);
+  previousRunDate.setDate(previousRunDate.getDate() - 1);
+  const similarRunDate = new Date(`${today}T12:00:00`);
+  similarRunDate.setDate(similarRunDate.getDate() - 3);
+  previewData.weight.weighIns = [{
+    id: 'synthetic-cardio-weight',
+    date: localDateString(cardioWeightDate),
+    weightKg: 70
   }];
+  previewData.cardio.runs = [
+    {
+      id: 'synthetic-similar-run',
+      date: localDateString(similarRunDate),
+      distance: 6,
+      distanceUnit: 'mi',
+      durationSeconds: 60 * 60
+    },
+    {
+      id: 'synthetic-previous-run',
+      date: localDateString(previousRunDate),
+      distance: 3,
+      distanceUnit: 'mi',
+      durationSeconds: 30 * 60
+    },
+    {
+      id: 'synthetic-long-run',
+      date: localDateString(longRunDate),
+      distance: 1234.56,
+      distanceUnit: 'mi',
+      durationSeconds: 7 * 24 * 60 * 60
+    },
+    {
+      id: 'synthetic-cardio-run',
+      date: today,
+      distance: 6.2,
+      distanceUnit: 'mi',
+      durationSeconds: 49 * 60 + 36
+    }
+  ];
   const envelope = createPreviewEnvelope(previewData);
   const validation = parsePreviewBackup(JSON.stringify(envelope), today);
   if (!validation.valid) {
@@ -1994,7 +2153,7 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
   const cardioTabs = page.getByRole('tablist', { name: 'Cardio Foundation sections' });
   await cardioTabs.getByRole('tab', { name: 'Activities' }).click();
   const activityCard = page.locator('#cardio-panel-activities .cardio-history-card');
-  const runEditButton = activityCard.getByRole('button', { name: /Edit run from/ });
+  const runEditButton = activityCard.getByRole('button', { name: /Edit run from/ }).first();
 
   async function verifyRunDialog(isEdit: boolean) {
     const dialogName = isEdit ? 'Edit run' : 'Log run';
@@ -2025,6 +2184,7 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
     for (const [index, field] of fields.entries()) {
       await field.click();
       const pointerStyle = await field.evaluate(input => ({
+        focusVisible: input.matches(':focus-visible'),
         outlineStyle: getComputedStyle(input).outlineStyle,
         boxShadow: getComputedStyle(input).boxShadow
       }));
@@ -2079,6 +2239,91 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
       await verifyRunDialog(true);
     }
   }
+
+  for (const textSize of ['small', 'medium', 'large'] as const) {
+    await setPreviewTextSize(page, textSize);
+    for (const viewportWidth of [320, 375, 390, 430]) {
+      await page.setViewportSize({ width: viewportWidth, height: 844 });
+      const layout = await activityCard.evaluate(card => {
+        const rows = [...card.querySelectorAll<HTMLElement>('.cardio-history-list > li')];
+        if (rows.length === 0) throw new Error('Cardio history must render at least one run.');
+        const layouts = rows.map(row => {
+          const main = row.querySelector<HTMLElement>('.cardio-history-list__main');
+          const performance = row.querySelector<HTMLElement>('.cardio-run-performance');
+          const metrics = performance?.querySelector<HTMLElement>('.cardio-run-performance__metrics');
+          const comparison = performance?.querySelector<HTMLElement>('.cardio-run-performance__comparison');
+          const edit = row.querySelector<HTMLElement>('.cardio-history-actions button');
+          if (!main || !performance || !metrics || !comparison || !edit) {
+            throw new Error('Cardio history must include a run, performance summary, and edit action.');
+          }
+          return {
+            rowWidth: row.clientWidth,
+            mainWidth: main.clientWidth,
+            mainScrollWidth: main.scrollWidth,
+            performanceWidth: performance.clientWidth,
+            performanceScrollWidth: performance.scrollWidth,
+            metricsWidth: metrics.clientWidth,
+            metricsScrollWidth: metrics.scrollWidth,
+            comparisonWidth: comparison.clientWidth,
+            comparisonScrollWidth: comparison.scrollWidth,
+            editLeft: edit.getBoundingClientRect().left,
+            mainRight: main.getBoundingClientRect().right,
+            text: row.textContent ?? ''
+          };
+        });
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          cardWidth: card.clientWidth,
+          rows: layouts
+        };
+      });
+      const label = `Cardio history at ${viewportWidth}px / ${textSize} text`;
+      assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
+      assert.equal(layout.documentWidth, viewportWidth, `${label} must not create page overflow`);
+      assert.ok(layout.cardWidth <= viewportWidth);
+      for (const [index, row] of layout.rows.entries()) {
+        assert.ok(row.rowWidth <= layout.cardWidth + 1, `${label} row ${index + 1} must fit the card.`);
+        assert.ok(row.mainWidth > 0 && row.mainScrollWidth <= row.mainWidth + 1,
+          `${label} row ${index + 1} details must remain within their column.`);
+        assert.ok(row.performanceWidth > 0
+          && row.performanceScrollWidth <= row.performanceWidth + 1,
+        `${label} row ${index + 1} performance summary must not overflow.`);
+        assert.ok(row.metricsWidth > 0 && row.metricsScrollWidth <= row.metricsWidth + 1,
+          `${label} row ${index + 1} metric values must fit.`);
+        assert.ok(row.comparisonWidth > 0
+          && row.comparisonScrollWidth <= row.comparisonWidth + 1,
+        `${label} row ${index + 1} comparison labels and deltas must fit.`);
+        assert.ok(row.mainRight <= row.editLeft,
+          `${label} row ${index + 1} edit action must not overlap run details.`);
+        assert.match(row.text, /Estimated Calories/);
+      }
+      assert.match(layout.rows[0]!.text, /Pace vs similar-distance run/);
+      assert.match(layout.rows[2]!.text, /1,234\.56 mi/);
+    }
+  }
+
+  await page.getByRole('button', { name: 'Log run' }).click();
+  const calorieDialog = page.getByRole('dialog', { name: 'Log run' });
+  const calorieInfo = calorieDialog.locator('.cardio-calorie-estimate__help summary');
+  await calorieDialog.getByRole('spinbutton', { name: 'Seconds' }).focus();
+  await page.keyboard.press('Tab');
+  const infoFocus = await calorieInfo.evaluate(element => ({
+    focused: document.activeElement === element,
+    visible: element.matches(':focus-visible'),
+    outlineStyle: getComputedStyle(element).outlineStyle,
+    outlineWidth: getComputedStyle(element).outlineWidth
+  }));
+  assert.deepEqual(infoFocus, {
+    focused: true,
+    visible: true,
+    outlineStyle: 'solid',
+    outlineWidth: '2px'
+  }, 'Estimated-calorie information must have a visible keyboard-focus indicator.');
+  await page.keyboard.press('Enter');
+  await calorieDialog.getByText(/gross energy expenditure, not active calories/).waitFor();
+  await calorieDialog.getByRole('button', { name: 'Cancel' }).click();
+  await calorieDialog.waitFor({ state: 'detached' });
 
   await page.getByRole('button', { name: 'People', exact: true }).click();
   const peopleCard = page.locator('.people-view__list .people-card').first();
@@ -2171,7 +2416,254 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
     }
   }
 
-  await context.close();
+await peopleCardButton.click();
+await page.getByRole('tab', { name: 'Connections' }).click();
+const sparkCard = page.locator('.person-spark-card').first();
+const completedSparkCard = page.locator('.person-spark-card').nth(1);
+await sparkCard.waitFor({ state: 'visible' });
+await completedSparkCard.waitFor({ state: 'visible' });
+assert.equal(await sparkCard.locator('.person-spark-card__title').textContent(),
+  'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes');
+assert.equal(await sparkCard.locator('.person-spark-card__people .person-badge-visual').count(), 2);
+assert.equal((await sparkCard.locator('.person-spark-card__footer').innerText()).trim(), 'Someday');
+assert.equal(await sparkCard.locator('.person-spark-card__description').count(), 1);
+assert.equal(await completedSparkCard.locator('.person-spark-card__description').count(), 0);
+assert.equal(await sparkCard.getByRole('button', { name: /Actions for/ }).count(), 0);
+for (const textSize of ['small', 'medium', 'large'] as const) {
+  await setPreviewTextSize(page, textSize);
+  for (const viewportWidth of [375, 390, 430]) {
+    await page.setViewportSize({ width: viewportWidth, height: 844 });
+    const layout = await sparkCard.evaluate(card => {
+      const element = card as HTMLElement;
+      const rect = (selector: string) => {
+        const target = element.querySelector<HTMLElement>(selector);
+        if (!target) throw new Error(`Missing Spark layout element: ${selector}`);
+        const bounds = target.getBoundingClientRect();
+        return {
+          left: bounds.left,
+          right: bounds.right,
+          top: bounds.top,
+          bottom: bounds.bottom,
+          width: bounds.width,
+          height: bounds.height,
+          scrollWidth: target.scrollWidth,
+          clientWidth: target.clientWidth
+        };
+      };
+      const bounds = element.getBoundingClientRect();
+      const body = rect('.person-spark-card__body');
+      const people = rect('.person-spark-card__people');
+      const action = rect('.person-spark-card__do-it');
+      const edit = rect('.person-spark-card__edit');
+      return {
+        viewportWidth: document.documentElement.clientWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        card: {
+          left: bounds.left,
+          right: bounds.right,
+          width: bounds.width,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth
+        },
+        background: getComputedStyle(element).backgroundColor,
+        borderColor: getComputedStyle(element).borderTopColor,
+        actionColor: getComputedStyle(element.querySelector('.person-spark-card__do-it')!).color,
+        actionBackground: getComputedStyle(element.querySelector('.person-spark-card__do-it')!).backgroundColor,
+        titleColor: getComputedStyle(element.querySelector('.person-spark-card__title')!).color,
+        descriptionColor: getComputedStyle(element.querySelector('.person-spark-card__description')!).color,
+        title: rect('.person-spark-card__title'),
+        description: rect('.person-spark-card__description'),
+        body,
+        people,
+        action,
+        edit,
+        footer: rect('.person-spark-card__footer'),
+        cardRadius: getComputedStyle(element).borderRadius,
+        cardPadding: getComputedStyle(element).padding,
+        titleFontSize: getComputedStyle(element.querySelector('.person-spark-card__title')!).fontSize,
+        footerColor: getComputedStyle(element.querySelector('.person-spark-card__footer')!).color,
+        sparkleFill: getComputedStyle(element.querySelector('.person-spark-card__footer-label svg')!).fill,
+        sparkleStroke: getComputedStyle(element.querySelector('.person-spark-card__footer-label svg')!).stroke,
+        sparkleStrokeWidth: getComputedStyle(element.querySelector('.person-spark-card__footer-label svg')!).strokeWidth,
+        editColor: getComputedStyle(element.querySelector('.person-spark-card__edit')!).color,
+        editBackground: getComputedStyle(element.querySelector('.person-spark-card__edit')!).backgroundColor,
+        editBorderWidth: getComputedStyle(element.querySelector('.person-spark-card__edit')!).borderTopWidth,
+        badgeBackground: getComputedStyle(element.querySelector('.rhythm-person-badge')!).backgroundColor,
+        badgeBorderWidth: getComputedStyle(element.querySelector('.rhythm-person-badge')!).borderTopWidth,
+        badgeColor: getComputedStyle(element.querySelector('.rhythm-person-badge')!).color,
+        badgeVisualBackground: getComputedStyle(element.querySelector('.person-badge-visual')!).backgroundColor,
+        badgeVisualBorderColor: getComputedStyle(element.querySelector('.person-badge-visual')!).borderTopColor,
+        avatarBackground: getComputedStyle(element.querySelector('.person-badge-avatar')!).backgroundColor,
+        avatarColor: getComputedStyle(element.querySelector('.person-badge-avatar')!).color
+      };
+    });
+    const label = `Spark card at ${viewportWidth}px / ${textSize} text`;
+    assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
+    assert.equal(layout.documentWidth, viewportWidth, `${label} must not overflow the page`);
+    assert.equal(layout.background, 'rgb(254, 251, 230)', `${label} must use the approved pale-yellow surface`);
+    assert.equal(layout.borderColor, 'rgb(230, 228, 164)', `${label} must use the approved pale-yellow border`);
+    assert.equal(layout.cardRadius, '15px');
+    assert.equal(layout.cardPadding, '11px 14px');
+    assert.equal(layout.titleFontSize, textSize === 'small' ? '19px' : textSize === 'medium' ? '21.375px' : '23.75px');
+    assert.equal(layout.titleColor, 'rgb(32, 39, 35)');
+    assert.equal(layout.descriptionColor, 'rgb(79, 78, 20)');
+    assert.equal(layout.footerColor, 'rgb(79, 78, 20)');
+    assert.equal(layout.sparkleFill, 'rgb(227, 168, 28)');
+    assert.equal(layout.sparkleStroke, 'rgb(138, 98, 0)');
+    assert.equal(layout.sparkleStrokeWidth, '1.5px');
+    assert.equal(layout.editColor, 'rgb(79, 78, 20)');
+    assert.equal(layout.editBackground, 'rgba(0, 0, 0, 0)');
+    assert.equal(layout.editBorderWidth, '0px');
+    assert.equal(layout.badgeBackground, 'rgb(255, 255, 255)');
+    assert.equal(layout.badgeBorderWidth, '0px', `${label} must not double-outline People badges.`);
+    assert.equal(layout.badgeColor, 'rgb(0, 0, 0)');
+    assert.equal(layout.badgeVisualBackground, 'rgb(255, 255, 255)');
+    assert.equal(layout.badgeVisualBorderColor, 'rgb(230, 228, 164)');
+    assert.equal(layout.avatarBackground, 'rgb(229, 242, 235)');
+    assert.equal(layout.avatarColor, 'rgb(36, 107, 82)');
+    assert.ok(contrastRatio(layout.actionColor, layout.actionBackground) >= 4.5,
+      `${label} action text contrast must meet 4.5:1.`);
+    assert.equal(layout.actionColor, 'rgb(255, 255, 255)');
+    assert.equal(layout.actionBackground, 'rgb(36, 107, 82)');
+    assert.equal(layout.edit.width, 44);
+    assert.equal(layout.edit.height, 44);
+    assert.ok(layout.card.scrollWidth <= layout.card.clientWidth + 1,
+      `${label} card content must not overflow its border.`);
+    for (const [name, bounds] of [
+      ['title', layout.title],
+      ['description', layout.description],
+      ['footer', layout.footer],
+      ['edit control', layout.edit]
+    ] as const) {
+      assert.ok(bounds.left >= layout.card.left && bounds.right <= layout.card.right,
+        `${label} ${name} must remain inside the card.`);
+      assert.ok(bounds.scrollWidth <= bounds.clientWidth + 1,
+        `${label} ${name} must wrap without clipping.`);
+    }
+    assert.ok(layout.body.top >= layout.description.bottom - 1,
+      `${label} people and action body should follow the description.`);
+    assert.ok(layout.action.right <= layout.body.right + 1,
+      `${label} Do it action should align to the right of its body.`);
+    const peopleAndActionOverlap = layout.people.left < layout.action.right
+      && layout.people.right > layout.action.left
+      && layout.people.top < layout.action.bottom
+      && layout.people.bottom > layout.action.top;
+    assert.equal(peopleAndActionOverlap, false,
+      `${label} associated people badges and Do it action must wrap without overlap.`);
+    assert.ok(layout.title.right < layout.edit.left,
+      `${label} title and quiet edit control must not overlap.`);
+
+    const completedLayout = await completedSparkCard.evaluate(card => {
+      const element = card as HTMLElement;
+      const title = element.querySelector<HTMLElement>('.person-spark-card__title');
+      const footer = element.querySelector<HTMLElement>('.person-spark-card__footer');
+      if (!title || !footer) throw new Error('Completed Spark is missing its shared card layout.');
+      return {
+        cardWidth: element.clientWidth,
+        cardScrollWidth: element.scrollWidth,
+        titleFits: title.scrollWidth <= title.clientWidth + 1,
+        footerFits: footer.scrollWidth <= footer.clientWidth + 1,
+        hasEdit: element.querySelector('.person-spark-card__edit') !== null,
+        hasDoIt: element.querySelector('.person-spark-card__do-it') !== null
+      };
+    });
+    assert.ok(completedLayout.cardScrollWidth <= completedLayout.cardWidth + 1,
+      `${label} completed Spark should not overflow its card.`);
+    assert.ok(completedLayout.titleFits && completedLayout.footerFits,
+      `${label} completed Spark title and completion footer should wrap without clipping.`);
+    assert.equal(completedLayout.hasEdit, true);
+    assert.equal(completedLayout.hasDoIt, false);
+  }
+}
+
+const sparkEdit = sparkCard.getByRole('button', {
+  name: 'Edit Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+});
+const addSpark = page.getByRole('button', { name: '+ Add Spark' });
+const addSparkStyle = await addSpark.evaluate(button => ({
+  background: getComputedStyle(button).backgroundColor,
+  color: getComputedStyle(button).color,
+  borderColor: getComputedStyle(button).borderTopColor,
+  height: getComputedStyle(button).minHeight
+}));
+assert.equal(addSparkStyle.background, 'rgb(255, 255, 255)');
+assert.equal(addSparkStyle.color, 'rgb(36, 107, 82)');
+assert.equal(addSparkStyle.borderColor, 'rgb(36, 107, 82)');
+assert.equal(addSparkStyle.height, '42px');
+assert.ok(contrastRatio(addSparkStyle.color, addSparkStyle.background) >= 4.5,
+  'Add Spark text contrast must meet 4.5:1.');
+await addSpark.hover();
+const addSparkHoverBackground = await addSpark.evaluate(button => getComputedStyle(button).backgroundColor);
+assert.equal(await colorsRenderIdentically(page, addSparkHoverBackground, 'rgb(233, 240, 238)'), true,
+  'Add Spark hover should render the approved pale-teal surface.');
+const disabledAddStyles = await addSpark.evaluate(button => {
+  const control = button as HTMLButtonElement;
+  control.disabled = true;
+  const styles = { opacity: getComputedStyle(control).opacity, cursor: getComputedStyle(control).cursor };
+  control.disabled = false;
+  return styles;
+});
+assert.deepEqual(disabledAddStyles, { opacity: '0.55', cursor: 'not-allowed' });
+const addBounds = await addSpark.boundingBox();
+assert.ok(addBounds);
+await page.mouse.move(addBounds.x + addBounds.width / 2, addBounds.y + addBounds.height / 2);
+await page.mouse.down();
+const addSparkPressedBackground = await addSpark.evaluate(button => getComputedStyle(button).backgroundColor);
+assert.equal(await colorsRenderIdentically(page, addSparkPressedBackground, 'rgb(216, 228, 224)'), true,
+  'Add Spark pressed state should render the approved teal surface.');
+await page.mouse.up();
+const addSparkDialog = page.getByRole('dialog', { name: 'Add Spark' });
+await addSparkDialog.getByRole('button', { name: 'Cancel' }).click();
+await sparkEdit.click();
+const sparkDetails = page.getByRole('dialog', { name: 'Spark details' });
+await sparkDetails.getByRole('textbox', { name: 'Title' }).waitFor();
+await sparkDetails.getByRole('button', { name: 'Cancel' }).click();
+assert.equal(await sparkEdit.evaluate(element => document.activeElement === element),
+  true, 'Closing Spark editing should return focus to its pencil control.');
+await sparkEdit.focus();
+await page.keyboard.press('Tab');
+await page.keyboard.press('Shift+Tab');
+const sparkEditFocus = await sparkEdit.evaluate(element => ({
+  visible: element.matches(':focus-visible'),
+  outlineStyle: getComputedStyle(element).outlineStyle,
+  outlineWidth: getComputedStyle(element).outlineWidth,
+  outlineColor: getComputedStyle(element).outlineColor
+}));
+assert.deepEqual(sparkEditFocus, {
+  visible: true,
+  outlineStyle: 'solid',
+  outlineWidth: '2px',
+  outlineColor: 'rgb(36, 107, 82)'
+});
+const doItButton = sparkCard.getByRole('button', { name: 'Do it' });
+await doItButton.hover();
+assert.equal(await doItButton.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(28, 88, 68)');
+await doItButton.focus();
+await page.keyboard.press('Tab');
+await page.keyboard.press('Shift+Tab');
+assert.deepEqual(await doItButton.evaluate(button => ({
+  visible: button.matches(':focus-visible'),
+  outlineColor: getComputedStyle(button).outlineColor
+})), { visible: true, outlineColor: 'rgb(36, 107, 82)' });
+const disabledDoItStyles = await doItButton.evaluate(button => {
+  const control = button as HTMLButtonElement;
+  control.disabled = true;
+  const styles = { opacity: getComputedStyle(control).opacity, cursor: getComputedStyle(control).cursor };
+  control.disabled = false;
+  return styles;
+});
+assert.deepEqual(disabledDoItStyles, { opacity: '0.55', cursor: 'not-allowed' });
+const doItBounds = await doItButton.boundingBox();
+assert.ok(doItBounds);
+await page.mouse.move(doItBounds.x + doItBounds.width / 2, doItBounds.y + doItBounds.height / 2);
+await page.mouse.down();
+assert.equal(await doItButton.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(28, 88, 68)');
+await page.mouse.up();
+const sparkConnectionDialog = page.getByRole('dialog', { name: 'Log a connection for this Spark' });
+await sparkConnectionDialog.getByRole('button', { name: 'Cancel' }).click();
+assert.equal(await doItButton.evaluate(element => document.activeElement === element),
+  true, 'Cancelling Do it should return focus to the primary action.');
+await context.close();
 }
 
 async function main() {
@@ -2237,6 +2729,7 @@ async function main() {
     ], { cwd: previewDirectory, stdio: 'inherit' });
     await waitForPreview(`${baseUrl}/app-preview.html`, previewServer);
     browser = await chromium.launch({ headless: true });
+    await verifyClassicSparkPalette(browser);
 
     await run(process.execPath, [
       viteCli,
@@ -4683,7 +5176,7 @@ async function main() {
             await categorySizeToggle.click();
           }
           assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
-          for (const viewportWidth of [375, 390, 430]) {
+          for (const viewportWidth of [320, 375, 390, 430]) {
             await page.setViewportSize({ width: viewportWidth, height: 844 });
             const categorySettingsLayout = await page.evaluate(() => {
               const settings = document.querySelector<HTMLElement>('.category-settings');
@@ -4806,10 +5299,13 @@ async function main() {
               if (!settings) throw new Error('Prayer Settings is missing its responsive layout host.');
               return [2, 3].map(count => {
                 const fixture = document.createElement('div');
-                fixture.className = 'person-health-component-scores';
+                fixture.className = 'person-health-component-scores-container';
                 fixture.dataset.count = String(count);
                 fixture.setAttribute('aria-hidden', 'true');
                 fixture.style.width = '100%';
+                const group = document.createElement('div');
+                group.className = 'person-health-component-scores';
+                group.dataset.count = String(count);
                 const areas = count === 2
                   ? [{ label: 'Rhythms', score: '72' }, { label: 'Connections', score: '—' }]
                   : [
@@ -4827,11 +5323,12 @@ async function main() {
                   labelElement.className = 'person-health-component-score__label';
                   labelElement.textContent = label;
                   item.append(badge, labelElement);
-                  fixture.append(item);
+                  group.append(item);
                 }
+                fixture.append(group);
                 settings.append(fixture);
-                const tracks = getComputedStyle(fixture).gridTemplateColumns.match(/[\d.]+px/g) ?? [];
-                const items = [...fixture.querySelectorAll<HTMLElement>('.person-health-component-score')]
+                const tracks = getComputedStyle(group).gridTemplateColumns.match(/[\d.]+px/g) ?? [];
+                const items = [...group.querySelectorAll<HTMLElement>('.person-health-component-score')]
                   .map(item => {
                     const badge = item.querySelector<HTMLElement>('.person-health-component-score__badge');
                     const label = item.querySelector<HTMLElement>('.person-health-component-score__label');
@@ -4839,6 +5336,12 @@ async function main() {
                     const itemRect = item.getBoundingClientRect();
                     const badgeRect = badge.getBoundingClientRect();
                     const labelRect = label.getBoundingClientRect();
+                    const textRange = document.createRange();
+                    textRange.selectNodeContents(label);
+                    const textLineTops = new Set(
+                      [...textRange.getClientRects()].map(rect => Math.round(rect.top))
+                    );
+                    const stackStyle = getComputedStyle(group).gridTemplateColumns.split(' ').length === 1;
                     return {
                       gap: Number.parseFloat(getComputedStyle(item).rowGap),
                       verticalSeparation: labelRect.top - badgeRect.bottom,
@@ -4848,13 +5351,25 @@ async function main() {
                       labelCenterOffset: Math.abs(
                         labelRect.left + labelRect.width / 2 - (itemRect.left + itemRect.width / 2)
                       ),
-                      labelHeight: labelRect.height
+                      labelHeight: labelRect.height,
+                      labelClientWidth: label.clientWidth,
+                      labelScrollWidth: label.scrollWidth,
+                      labelText: label.textContent?.trim(),
+                      labelWhiteSpace: getComputedStyle(label).whiteSpace,
+                      labelWordBreak: getComputedStyle(label).wordBreak,
+                      labelOverflowWrap: getComputedStyle(label).overflowWrap,
+                      textLineCount: textLineTops.size,
+                      stacked: stackStyle,
+                      labelLeft: labelRect.left <= itemRect.left + 3,
+                      badgeRight: badgeRect.right >= itemRect.right - 3,
+                      rowAligned: Math.abs(labelRect.top - badgeRect.top) <= 6
                     };
                   });
                 const result = {
                   count,
                   tracks: tracks.map(Number.parseFloat),
-                  dividers: [...fixture.children].map(element => getComputedStyle(element).borderLeftWidth),
+                  dividers: [...group.children].map(element => getComputedStyle(element).borderLeftWidth),
+                  separators: [...group.children].map(element => getComputedStyle(element).borderTopWidth),
                   items,
                   width: fixture.getBoundingClientRect().width
                 };
@@ -4872,18 +5387,46 @@ async function main() {
             assert.equal(prayerSettingsLayout.descriptionFits, true);
             assert.equal(prayerSettingsLayout.descriptionVisible, true);
             for (const layout of personHealthLayouts) {
-              assert.equal(layout.tracks.length, layout.count);
-              assert.ok(layout.tracks.every(track => Math.abs(track - layout.tracks[0]!) < 1),
-                `Person Health must retain equal ${layout.count}-column tracks at ${viewportWidth}px / ${textSize}.`);
-              assert.deepEqual(layout.dividers, ['0px', ...Array.from({ length: layout.count - 1 }, () => '1px')]);
               assert.ok(layout.width <= viewportWidth);
-              assert.ok(layout.items.every(item =>
-                Math.abs(item.gap - 8) < 0.5
-                && item.verticalSeparation >= 7.5
-                && item.badgeCenterOffset < 1
-                && item.labelCenterOffset < 1
-                && item.labelHeight > 0
-              ), `Person Health badges and labels must stack and stay centered at ${viewportWidth}px / ${textSize}.`);
+              const stacked = layout.items.every(item => item.stacked);
+              if (stacked) {
+                assert.equal(layout.tracks.length, 1);
+                assert.deepEqual(layout.dividers, Array.from({ length: layout.count }, () => '0px'),
+                  `Stacked divider layout at ${viewportWidth}px / ${textSize}: ${JSON.stringify(layout)}`);
+                assert.deepEqual(layout.separators, Array.from({ length: layout.count }, () => '1px'),
+                  `Stacked separator layout at ${viewportWidth}px / ${textSize}: ${JSON.stringify(layout)}`);
+                assert.ok(layout.items.every(item =>
+                  item.labelLeft
+                  && item.badgeRight
+                  && item.rowAligned
+                  && item.labelHeight > 0
+                  && item.labelScrollWidth <= item.labelClientWidth + 1
+                  && item.labelWhiteSpace === 'nowrap'
+                  && item.labelWordBreak === 'normal'
+                  && item.labelOverflowWrap === 'normal'
+                  && item.textLineCount === 1
+                  && item.labelText !== 'Connections\n'
+                ), `Person Health labels and badges must remain in stacked rows at ${viewportWidth}px / ${textSize}: ${JSON.stringify(layout.items)}`);
+              } else {
+                assert.equal(layout.tracks.length, layout.count);
+                assert.ok(layout.tracks.every(track => Math.abs(track - layout.tracks[0]!) < 1),
+                  `Person Health must retain equal ${layout.count}-column tracks at ${viewportWidth}px / ${textSize}.`);
+                assert.deepEqual(layout.dividers, ['0px', ...Array.from({ length: layout.count - 1 }, () => '1px')],
+                  `Column divider layout at ${viewportWidth}px / ${textSize}: ${JSON.stringify(layout)}`);
+                assert.ok(layout.items.every(item =>
+                  Math.abs(item.gap - 8) < 0.5
+                  && item.verticalSeparation >= 7.5
+                  && item.badgeCenterOffset < 1
+                  && item.labelCenterOffset < 1
+                  && item.labelHeight > 0
+                  && item.labelScrollWidth <= item.labelClientWidth + 1
+                  && item.labelWhiteSpace === 'nowrap'
+                  && item.labelWordBreak === 'normal'
+                  && item.labelOverflowWrap === 'normal'
+                  && item.textLineCount === 1
+                  && item.labelText !== 'Connections\n'
+                ), `Person Health badges and labels must stack and stay centered at ${viewportWidth}px / ${textSize}.`);
+              }
             }
           }
         }
@@ -6715,15 +7258,20 @@ async function main() {
                         overflow: style.overflow,
                         outlineWidth: style.outlineWidth,
                         outlineOffset: style.outlineOffset,
+                        borderColor: style.borderColor,
+                        boxShadow: style.boxShadow,
                         leftClearance: rect.left - regionRect.left,
                         rightClearance: regionRect.right - rect.right,
-                        requiredClearance: clearance
+                        requiredClearance: clearance,
+                        outlineStyle: style.outlineStyle
                       };
                     });
                     assert.equal(numericFocus.active, true);
                     assert.equal(numericFocus.overflow, 'visible');
-                    assert.equal(numericFocus.outlineWidth, '2px');
-                    assert.equal(numericFocus.outlineOffset, '2px');
+                    assert.equal(numericFocus.outlineStyle, 'none');
+                    assert.equal(numericFocus.outlineOffset, '0px');
+                    assert.equal(numericFocus.boxShadow, 'none');
+                    assert.notEqual(numericFocus.borderColor, 'rgb(220, 228, 221)');
                     assert.ok(numericFocus.leftClearance >= numericFocus.requiredClearance);
                     assert.ok(numericFocus.rightClearance >= numericFocus.requiredClearance);
                     if (foundation.name === 'Cardio' && !cardioGoalsConfigured) {
@@ -7825,8 +8373,260 @@ async function main() {
       await profilePage.setViewportSize({ width: 1280, height: 900 });
       await profilePage.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }).click();
       const personProfile = profilePage.getByRole('main', { name: 'Avery Brooks' });
+      const overallHealth = personProfile.getByRole('region', { name: 'Overall Health summary' });
+      assert.equal(await overallHealth.getByRole('button', {
+        name: 'Show Overall Health component scores breakdown'
+      }).count(), 1);
+      const areaDisclosure = overallHealth.locator('.health-score-breakdown__measure-toggle');
+      assert.equal(await areaDisclosure.getAttribute('aria-label'), 'Show Overall Health component scores breakdown');
+      assert.equal(await areaDisclosure.getAttribute('aria-expanded'), 'false');
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await profilePage.evaluate(size => {
+          document.documentElement.dataset.mobileTextSize = size === 'small'
+            ? 'normal'
+            : size === 'medium' ? 'large' : 'larger';
+          document.documentElement.dataset.mobileTextSizeLevel = size === 'large' ? 'larger' : size;
+        }, textSize);
+        for (const width of [320, 375, 390, 430]) {
+          await profilePage.setViewportSize({ width, height: 844 });
+          const collapsed = await overallHealth.evaluate(card => {
+            const header = card.querySelector<HTMLElement>('.health-score-breakdown__header');
+            const title = header?.querySelector<HTMLElement>('.health-score-breakdown__title');
+            const score = header?.querySelector<HTMLElement>(':scope > span');
+            const toggle = header?.querySelector<HTMLElement>('.health-score-breakdown__measure-toggle');
+            const panel = card.querySelector<HTMLElement>('.person-health-component-disclosure');
+            if (!header || !title || !score || !toggle || !panel) {
+              throw new Error('Overall Health needs its title, score, disclosure, and collapsed panel.');
+            }
+            const titleBounds = title.getBoundingClientRect();
+            const scoreBounds = score.getBoundingClientRect();
+            const cardBounds = card.getBoundingClientRect();
+            return {
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth,
+              cardHeight: cardBounds.height,
+              titleWidth: title.clientWidth,
+              titleScrollWidth: title.scrollWidth,
+              titleRight: titleBounds.right,
+              scoreLeft: scoreBounds.left,
+              toggleVisible: toggle.getBoundingClientRect().width > 0,
+              panelHidden: panel.hidden,
+              titleText: title.querySelector('h3')?.textContent?.trim()
+                ?? title.textContent?.trim()
+                ?? '',
+              chevronBesideTitle: (() => {
+                const heading = title.querySelector<HTMLElement>('h3');
+                const chevron = title.querySelector<HTMLElement>('.health-score-breakdown__measure-toggle');
+                if (!heading || !chevron) return false;
+                const headingBounds = heading.getBoundingClientRect();
+                const chevronBounds = chevron.getBoundingClientRect();
+                return chevronBounds.left >= headingBounds.left
+                  && chevronBounds.right <= headingBounds.right + 1
+                  && chevronBounds.top < headingBounds.bottom
+                  && chevronBounds.bottom > headingBounds.top;
+              })()
+            };
+          });
+          assert.equal(collapsed.documentWidth, width,
+            `Person Overall Health must not overflow at ${width}px / ${textSize} text.`);
+          assert.equal(collapsed.viewportWidth, width);
+          assert.ok(collapsed.titleWidth > 0);
+          assert.ok(collapsed.titleScrollWidth <= collapsed.titleWidth,
+            `Overall Health heading must wrap without overflow at ${width}px / ${textSize} text.`);
+          assert.equal(collapsed.titleText, 'Health');
+          assert.equal(collapsed.chevronBesideTitle, true,
+            `Health heading and chevron must stay together at ${width}px / ${textSize} text.`);
+          assert.ok(collapsed.titleRight <= collapsed.scoreLeft + 1,
+            `Overall Health heading and score must not overlap at ${width}px / ${textSize} text.`);
+          assert.equal(collapsed.toggleVisible, true);
+          assert.equal(collapsed.panelHidden, true,
+            `Overall Health component scores must start collapsed at ${width}px / ${textSize} text.`);
+
+          await areaDisclosure.click();
+          assert.equal(await areaDisclosure.getAttribute('aria-expanded'), 'true');
+          assert.equal(await areaDisclosure.getAttribute('aria-label'), 'Hide Overall Health component scores breakdown');
+          const expanded = await overallHealth.evaluate(card => {
+            const panel = card.querySelector<HTMLElement>('.person-health-component-disclosure');
+            const group = panel?.querySelector<HTMLElement>('[aria-label="Health by area"]');
+            const items = Array.from(panel?.querySelectorAll<HTMLElement>('.person-health-component-score') ?? []);
+            if (!panel || !group || items.length !== 3) {
+              throw new Error('Expanded Overall Health must show all three area score columns.');
+            }
+            const cardBounds = card.getBoundingClientRect();
+            const groupBounds = group.getBoundingClientRect();
+            const itemLayouts = items.map(item => {
+              const badge = item.querySelector<HTMLElement>('.person-health-component-score__badge');
+              const label = item.querySelector<HTMLElement>('.person-health-component-score__label');
+              if (!badge || !label) throw new Error('An expanded Person Health item is missing its label or score.');
+              const badgeBounds = badge.getBoundingClientRect();
+              const labelBounds = label.getBoundingClientRect();
+              const itemBounds = item.getBoundingClientRect();
+              const labelStyle = getComputedStyle(label);
+              const labelText = label.textContent?.trim() ?? '';
+              const textRange = document.createRange();
+              textRange.selectNodeContents(label);
+              const textLineTops = new Set(
+                [...textRange.getClientRects()].map(rect => Math.round(rect.top))
+              );
+              const stacked = getComputedStyle(group).gridTemplateColumns
+                .trim()
+                .split(/\s+/)
+                .length === 1;
+              const labelFits = label.clientWidth > 0
+                && label.scrollWidth <= label.clientWidth + 1
+                && labelStyle.whiteSpace === 'nowrap'
+                && labelStyle.wordBreak === 'normal'
+                && labelStyle.overflowWrap === 'normal'
+                && textLineTops.size === 1
+                && labelText.length > 0;
+              return {
+                text: labelText,
+                stacked,
+                labelWidth: label.clientWidth,
+                labelScrollWidth: label.scrollWidth,
+                whiteSpace: labelStyle.whiteSpace,
+                wordBreak: labelStyle.wordBreak,
+                overflowWrap: labelStyle.overflowWrap,
+                textLineCount: textLineTops.size,
+                fits: labelFits && (stacked
+                  ? labelBounds.left >= itemBounds.left
+                  && badgeBounds.right <= itemBounds.right + 1
+                  && labelBounds.right < badgeBounds.left
+                  && Math.abs(labelBounds.top + labelBounds.height / 2
+                    - (badgeBounds.top + badgeBounds.height / 2)) <= 1
+                  : labelBounds.top >= badgeBounds.bottom && labelBounds.bottom <= itemBounds.bottom + 1)
+              };
+            });
+            const labelsFit = itemLayouts.every(item => item.fits);
+            return {
+              hidden: panel.hidden,
+              cardHeight: cardBounds.height,
+              groupFits: groupBounds.left >= cardBounds.left && groupBounds.right <= cardBounds.right,
+              labelsFit,
+              itemLayouts,
+              connectionsText: items.find(item =>
+                item.querySelector('.person-health-component-score__label')?.textContent?.trim() === 'Connections'
+              )?.querySelector('.person-health-component-score__label')?.textContent?.trim(),
+              documentWidth: document.documentElement.scrollWidth
+            };
+          });
+          assert.equal(expanded.hidden, false);
+          assert.ok(expanded.cardHeight > collapsed.cardHeight,
+            `Expanding Overall Health must reveal its breakdown at ${width}px / ${textSize} text.`);
+          assert.equal(expanded.groupFits, true);
+          assert.equal(expanded.labelsFit, true,
+            `Every Person Health label must fit without breaking at ${width}px / ${textSize}: ${JSON.stringify(expanded.itemLayouts)}`);
+          assert.equal(expanded.connectionsText, 'Connections');
+          assert.equal(expanded.documentWidth, width);
+
+          await areaDisclosure.click();
+          assert.equal(await areaDisclosure.getAttribute('aria-expanded'), 'false');
+          assert.equal(await areaDisclosure.getAttribute('aria-label'), 'Show Overall Health component scores breakdown');
+          const recollapsed = await overallHealth.evaluate(card => ({
+            hidden: card.querySelector<HTMLElement>('.person-health-component-disclosure')?.hidden,
+            cardHeight: card.getBoundingClientRect().height
+          }));
+          assert.equal(recollapsed.hidden, true);
+          assert.ok(Math.abs(recollapsed.cardHeight - collapsed.cardHeight) <= 1,
+            `Collapsed Overall Health should leave no reserved panel space at ${width}px / ${textSize} text.`);
+        }
+      }
+      const personRhythmsPanel = personProfile.getByRole('tabpanel', { name: 'Rhythms' });
+      assert.equal(await personProfile.getByRole('button', { name: /Show tended|Hide tended/ }).count(), 0);
+      await personRhythmsPanel.evaluate(panel => {
+        const item = document.createElement('div');
+        item.className = 'tended-rhythm-done-row__item';
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'tended-rhythm-done-row';
+        row.setAttribute('aria-expanded', 'false');
+        row.setAttribute('aria-label', 'Synthetic long-titled Rhythm, Tended 10:15 am');
+        const check = document.createElement('span');
+        check.className = 'tended-rhythm-done-row__check';
+        check.setAttribute('aria-hidden', 'true');
+        check.textContent = '✓';
+        const title = document.createElement('span');
+        title.className = 'tended-rhythm-done-row__title';
+        title.textContent = 'Avery and Morgan plan a thoughtful afternoon together beyond the usual routine with a deliberately long synthetic title for responsive wrapping';
+        const time = document.createElement('time');
+        time.className = 'tended-rhythm-done-row__time';
+        time.dateTime = '2026-10-29T10:15:00';
+        time.textContent = 'Tended 10:15 am';
+        row.append(check, title, time);
+        item.append(row);
+        panel.append(item);
+      });
+      const syntheticTendedRow = personRhythmsPanel.locator('.tended-rhythm-done-row').last();
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await profilePage.evaluate(size => {
+          document.documentElement.dataset.mobileTextSize = size === 'small'
+            ? 'normal'
+            : size === 'medium' ? 'large' : 'larger';
+          document.documentElement.dataset.mobileTextSizeLevel = size === 'large' ? 'larger' : size;
+        }, textSize);
+        for (const width of [375, 390, 430]) {
+          await profilePage.setViewportSize({ width, height: 844 });
+          const rowLayout = await syntheticTendedRow.evaluate(row => {
+            const title = row.querySelector<HTMLElement>('.tended-rhythm-done-row__title');
+            const time = row.querySelector<HTMLElement>('.tended-rhythm-done-row__time');
+            const check = row.querySelector<HTMLElement>('.tended-rhythm-done-row__check');
+            if (!title || !time || !check) throw new Error('Compact tended rows need their title, time, and check.');
+            const rowBounds = row.getBoundingClientRect();
+            const titleBounds = title.getBoundingClientRect();
+            const timeBounds = time.getBoundingClientRect();
+            const checkBounds = check.getBoundingClientRect();
+            return {
+              documentWidth: document.documentElement.scrollWidth,
+              viewportWidth: document.documentElement.clientWidth,
+              rowWidth: row.clientWidth,
+              rowScrollWidth: row.scrollWidth,
+              rowHeight: rowBounds.height,
+              titleWidth: title.clientWidth,
+              titleScrollWidth: title.scrollWidth,
+              titleHeight: titleBounds.height,
+              titleLineHeight: Number.parseFloat(getComputedStyle(title).lineHeight),
+              titleRight: titleBounds.right,
+              titleWhiteSpace: getComputedStyle(title).whiteSpace,
+              timeLeft: timeBounds.left,
+              timeRight: timeBounds.right,
+              checkBottom: checkBounds.bottom,
+              rowBottom: rowBounds.bottom
+            };
+          });
+          assert.equal(rowLayout.documentWidth, width,
+            `Person compact Rhythm rows must not create page overflow at ${width}px / ${textSize} text.`);
+          assert.equal(rowLayout.viewportWidth, width);
+          assert.ok(rowLayout.rowWidth > 0 && rowLayout.rowScrollWidth <= rowLayout.rowWidth + 1);
+          assert.ok(rowLayout.titleWidth > 0 && rowLayout.titleScrollWidth <= rowLayout.titleWidth + 1,
+            `Long compact-row titles must wrap without clipping at ${width}px / ${textSize} text.`);
+          assert.ok(rowLayout.titleHeight > rowLayout.titleLineHeight,
+            `Long compact-row titles should wrap onto multiple lines at ${width}px / ${textSize} text.`);
+          assert.equal(rowLayout.titleWhiteSpace, 'normal');
+          assert.ok(rowLayout.titleRight <= rowLayout.timeLeft,
+            `Compact-row title and completion time must not overlap at ${width}px / ${textSize} text.`);
+          assert.ok(rowLayout.timeRight <= width);
+          assert.ok(rowLayout.checkBottom <= rowLayout.rowBottom);
+        }
+      }
       await personProfile.getByRole('tab', { name: 'Connections' }).click();
       await profilePage.setViewportSize({ width: 375, height: 844 });
+      await personProfile.getByRole('button', { name: '+ Add', exact: true }).click();
+      const createConnectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
+      await createConnectionDialog.getByRole('button', { name: 'Save connection' }).click();
+      await createConnectionDialog.waitFor({ state: 'detached' });
+      await personProfile.getByRole('button', { name: '+ Add', exact: true }).click();
+      const describedConnectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
+      await describedConnectionDialog.getByRole('combobox', { name: 'Connection type: Text' }).click();
+      await profilePage.getByRole('listbox', { name: 'Connection type' })
+        .getByRole('option', { name: 'Time Together' }).click();
+      await describedConnectionDialog.getByLabel('Time (optional)').fill('14:45');
+      await describedConnectionDialog.getByLabel('Notes (optional)')
+        .fill('Spent time together and talked about a meaningful family event during the long walk.');
+      await describedConnectionDialog.getByRole('button', { name: 'Save connection' }).click();
+      await describedConnectionDialog.waitFor({ state: 'detached' });
+      const compactConnectionRow = personProfile.locator('.friendships-connection-row')
+        .filter({ hasText: 'Text' }).last();
+      await compactConnectionRow.waitFor();
       let checkedKeyboardSelect = false;
       let checkedTouchSelect = false;
       for (const textSize of ['small', 'medium', 'large'] as const) {
@@ -7842,7 +8642,83 @@ async function main() {
           { width: 430, height: 844 }
         ]) {
           await profilePage.setViewportSize(viewport);
-          const addConnection = personProfile.getByRole('button', { name: '+ Add' });
+          const rowLayout = await compactConnectionRow.evaluate(row => {
+            const title = row.querySelector<HTMLElement>('.friendships-connection-row__title');
+            const footer = row.querySelector<HTMLElement>('.friendships-connection-row__footer');
+            const icon = row.querySelector<HTMLElement>('.friendships-connection-row__icon');
+            const chevron = row.querySelector<HTMLElement>('.friendships-connection-row__chevron');
+            if (!title || !footer || !icon || !chevron) throw new Error('Connection rows need a title, date, and chevron.');
+            const rowBounds = row.getBoundingClientRect();
+            const titleBounds = title.getBoundingClientRect();
+            const footerBounds = footer.getBoundingClientRect();
+            const iconBounds = icon.getBoundingClientRect();
+            const chevronBounds = chevron.getBoundingClientRect();
+            return {
+              documentWidth: document.documentElement.scrollWidth,
+              rowWidth: row.clientWidth,
+              rowScrollWidth: row.scrollWidth,
+              titleWidth: title.clientWidth,
+              titleScrollWidth: title.scrollWidth,
+              titleBottom: titleBounds.bottom,
+              footerTop: footerBounds.top,
+              footerRightInset: rowBounds.right - footerBounds.right,
+              footerText: footer.textContent?.trim(),
+              notes: row.querySelector('.friendships-connection-row__notes')?.textContent,
+              iconLeftInset: iconBounds.left - rowBounds.left,
+              chevronRightInset: rowBounds.right - chevronBounds.right,
+              radius: getComputedStyle(row).borderRadius,
+              gridColumns: getComputedStyle(row).gridTemplateColumns
+            };
+          });
+          assert.equal(rowLayout.documentWidth, viewport.width,
+            `Connection rows must not create page overflow at ${viewport.width}px / ${textSize} text.`);
+          assert.ok(rowLayout.rowWidth > 0 && rowLayout.rowScrollWidth <= rowLayout.rowWidth + 1);
+          assert.ok(rowLayout.titleWidth > 0 && rowLayout.titleScrollWidth <= rowLayout.titleWidth + 1);
+          assert.ok(rowLayout.titleBottom <= rowLayout.footerTop,
+            `Connection title must remain above its date footer at ${viewport.width}px / ${textSize} text.`);
+          assert.ok(Math.abs(rowLayout.footerRightInset - 14) <= 1,
+            'The date footer should align with the compact row’s shared 14px content inset.');
+          assert.ok(Math.abs(rowLayout.iconLeftInset - 14) <= 1,
+            'The connection icon should align with the compact row’s shared 14px content inset.');
+          assert.ok(Math.abs(rowLayout.chevronRightInset - 14) <= 1,
+            'The chevron should align with the compact row’s shared 14px content inset.');
+          assert.equal(rowLayout.notes, undefined, 'Empty descriptions should not render filler.');
+          assert.equal(rowLayout.footerText?.includes('10:15'), false, 'A missing time should not be invented.');
+          assert.equal(rowLayout.radius, '14px');
+          assert.equal(rowLayout.gridColumns.split(' ').length, 2);
+
+          const describedRow = personProfile.locator('.friendships-connection-row')
+            .filter({ hasText: 'Spent time together' }).last();
+          const describedLayout = await describedRow.evaluate(row => {
+            const title = row.querySelector<HTMLElement>('.friendships-connection-row__title');
+            const notes = row.querySelector<HTMLElement>('.friendships-connection-row__notes');
+            const footer = row.querySelector<HTMLElement>('.friendships-connection-row__footer');
+            if (!title || !notes || !footer) throw new Error('Described Connection needs its title, notes, and footer.');
+            const titleBounds = title.getBoundingClientRect();
+            const footerBounds = footer.getBoundingClientRect();
+            return {
+              title: title.textContent?.trim(),
+              titleHeight: titleBounds.height,
+              titleLineHeight: Number.parseFloat(getComputedStyle(title).lineHeight),
+              titleWordBreak: getComputedStyle(title).wordBreak,
+              titleOverflowWrap: getComputedStyle(title).overflowWrap,
+              notes: notes.textContent?.trim(),
+              footerText: footer.textContent?.trim(),
+              titleBottom: titleBounds.bottom,
+              footerTop: footerBounds.top,
+              rowWidth: row.clientWidth,
+              rowScrollWidth: row.scrollWidth
+            };
+          });
+          assert.equal(describedLayout.title, 'Time Together');
+          assert.equal(describedLayout.titleWordBreak, 'normal');
+          assert.equal(describedLayout.titleOverflowWrap, 'break-word');
+          assert.ok(describedLayout.titleHeight >= describedLayout.titleLineHeight);
+          assert.ok(describedLayout.titleBottom <= describedLayout.footerTop);
+          assert.ok(describedLayout.notes?.includes('Spent time together'));
+          assert.ok(describedLayout.footerText?.includes('2:45 PM'));
+          assert.ok(describedLayout.rowScrollWidth <= describedLayout.rowWidth + 1);
+          const addConnection = personProfile.getByRole('button', { name: '+ Add', exact: true });
           const originalBodyStyles = await profilePage.evaluate(() => ({
             overflow: document.body.style.overflow,
             position: document.body.style.position,
@@ -7959,8 +8835,28 @@ async function main() {
         }
       }
 
+      await profilePage.setViewportSize({ width: 375, height: 844 });
+      const detailsRow = compactConnectionRow;
+      await detailsRow.focus();
+      await profilePage.keyboard.press('Tab');
+      await profilePage.keyboard.press('Shift+Tab');
+      const connectionKeyboardFocus = await detailsRow.evaluate(element => ({
+        visible: element.matches(':focus-visible'),
+        outlineStyle: getComputedStyle(element).outlineStyle,
+        outlineWidth: getComputedStyle(element).outlineWidth
+      }));
+      assert.equal(connectionKeyboardFocus.visible, true);
+      assert.equal(connectionKeyboardFocus.outlineStyle, 'solid');
+      assert.equal(connectionKeyboardFocus.outlineWidth, '3px');
+      await profilePage.keyboard.press('Enter');
+      const connectionDetails = profilePage.getByRole('dialog', { name: 'Connection details' });
+      assert.equal(await connectionDetails.getByRole('button', { name: 'Close connection editor' }).isVisible(), true);
+      assert.equal(await connectionDetails.getByText('0 / 4,000 characters').isVisible(), true);
+      await connectionDetails.getByRole('button', { name: 'Close connection editor' }).click();
+      await profilePage.waitForFunction(() => document.activeElement?.classList.contains('friendships-connection-row'));
+
       await profilePage.setViewportSize({ width: 430, height: 390 });
-      await personProfile.getByRole('button', { name: '+ Add' }).click();
+      await personProfile.getByRole('button', { name: '+ Add', exact: true }).click();
       const landscapeConnectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
       const landscapeForm = landscapeConnectionDialog.locator('.friendships-connection-form');
       const landscapeScroll = await landscapeForm.evaluate(form => ({
@@ -7978,6 +8874,212 @@ async function main() {
       await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
       assert.deepEqual(profileClassicCssRequests, [], 'Person profile React pages must not request tend.css.');
       await profileContext.close();
+
+      const prayerFixture = createSamplePreviewData();
+      const prayerToday = localDateString(new Date());
+      const prayerNow = new Date().toISOString();
+      const prayerCreatedAt = new Date(Date.parse(prayerNow) - 60 * 86_400_000).toISOString();
+      const prayerTitle = 'Avery and Morgan are holding a thoughtful synthetic prayer request for a meaningful season';
+      const prayerDetails = Array.from({ length: 20 }, (_, index) =>
+        `Synthetic prayer context ${index + 1} explains the request with enough detail to test responsive wrapping, dialog scrolling, and preservation of the complete text.`
+      ).join(' ');
+      prayerFixture.prayerRequests = [{
+        id: 'browser-prayer-request',
+        personId: 'sample-person-avery',
+        sharedWith: ['sample-person-morgan'],
+        title: prayerTitle,
+        details: prayerDetails,
+        status: 'active',
+        createdAt: prayerCreatedAt,
+        updatedAt: prayerNow,
+        prayerLogs: [
+          { id: 'browser-prayer-today', prayedAt: prayerNow },
+          { id: 'browser-prayer-older', prayedAt: new Date(Date.parse(prayerNow) - 45 * 86_400_000).toISOString() },
+          { id: 'browser-prayer-undated' }
+        ]
+      }];
+      const prayerEnvelope = createPreviewEnvelope(prayerFixture);
+      const prayerValidation = parsePreviewBackup(JSON.stringify(prayerEnvelope), prayerToday);
+      if (!prayerValidation.valid) {
+        throw new Error(`Synthetic Prayer card fixture is invalid: ${prayerValidation.message}`);
+      }
+      const prayerStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:c0000000-0000-4000-8000-000000000004`;
+      const prayerContext = await browser.newContext({ viewport: { width: 375, height: 844 } });
+      await prayerContext.addInitScript(({ key, value }) => {
+        const session = {
+          user: {
+            id: 'c0000000-0000-4000-8000-000000000004',
+            email: 'browser-test@example.test'
+          }
+        };
+        Object.assign(window, {
+          supabase: {
+            createClient: () => ({
+              auth: {
+                onAuthStateChange(callback: (event: string, value: typeof session) => void) {
+                  callback('INITIAL_SESSION', session);
+                  return { data: { subscription: { unsubscribe() {} } } };
+                },
+                async signInWithPassword() { return { error: null, data: { session } }; },
+                async resetPasswordForEmail() { return { error: null }; },
+                async updateUser() { return { error: null }; },
+                async signOut() { return { error: null }; }
+              }
+            })
+          }
+        });
+        window.localStorage.setItem(key, value);
+      }, {
+        key: prayerStorageKey,
+        value: JSON.stringify(prayerEnvelope)
+      });
+      const prayerPage = await prayerContext.newPage();
+      const prayerClassicRequests: string[] = [];
+      await prayerPage.route('**/tend.css', async route => {
+        prayerClassicRequests.push(route.request().url());
+        await route.abort();
+      });
+      await prayerPage.route('https://cdn.jsdelivr.net/**', route => route.abort());
+      await prayerPage.route('https://fonts.googleapis.com/**', route => route.abort());
+      await prayerPage.route('https://fonts.gstatic.com/**', route => route.abort());
+      await prayerPage.goto(`${baseUrl}/app-preview.html?identity=dashboard`);
+      const prayerNavigation = prayerPage.getByRole('navigation', { name: 'Tools and navigation' });
+      await prayerNavigation.waitFor();
+      await prayerNavigation.getByRole('button', { name: 'People' }).click();
+      await prayerPage.getByRole('button', { name: 'Open profile for Avery Brooks' }).click();
+      const prayerProfile = prayerPage.getByRole('main', { name: 'Avery Brooks' });
+      await prayerProfile.getByRole('tab', { name: 'Prayer' }).click();
+      const prayerCard = prayerProfile.getByRole('article', { name: prayerTitle });
+      await prayerCard.waitFor({ state: 'visible' });
+
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await setPreviewTextSize(prayerPage, textSize);
+        for (const viewportWidth of [375, 390, 430] as const) {
+          await prayerPage.setViewportSize({ width: viewportWidth, height: 844 });
+          const layout = await prayerCard.evaluate(card => {
+            const title = card.querySelector<HTMLElement>('.person-prayer-card__title');
+            const details = card.querySelector<HTMLElement>('.person-prayer-card__details');
+            const actions = card.querySelector<HTMLElement>('.person-prayer-card__actions-trigger');
+            const history = card.querySelector<HTMLElement>('.person-prayer-card__history');
+            const footer = card.querySelector<HTMLElement>('.person-prayer-card__footer');
+            if (!title || !details || !actions || !history || !footer) {
+              throw new Error('Prayer cards need the request title, details, Actions, history, and footer.');
+            }
+            const bounds = (element: Element) => {
+              const rect = element.getBoundingClientRect();
+              return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width };
+            };
+            const cardStyle = getComputedStyle(card);
+            const actionStyle = getComputedStyle(actions);
+            const detailsStyle = getComputedStyle(details);
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              card: bounds(card),
+              cardScrollWidth: card.scrollWidth,
+              background: cardStyle.backgroundColor,
+              borderColor: cardStyle.borderTopColor,
+              title: { ...bounds(title), scrollWidth: title.scrollWidth, clientWidth: title.clientWidth },
+              details: { ...bounds(details), scrollWidth: details.scrollWidth, clientWidth: details.clientWidth },
+              detailsWhiteSpace: detailsStyle.whiteSpace,
+              actions: bounds(actions),
+              history: bounds(history),
+              footer: bounds(footer),
+              actionForeground: actionStyle.color,
+              actionBackground: actionStyle.backgroundColor
+            };
+          });
+          const label = `Prayer card at ${viewportWidth}px / ${textSize} text`;
+          assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
+          assert.equal(layout.documentWidth, viewportWidth, `${label} must not create page overflow`);
+          assert.ok(layout.card.left >= 0 && layout.card.right <= viewportWidth);
+          assert.ok(layout.cardScrollWidth <= layout.card.width + 1, `${label} card should not overflow internally`);
+          assert.ok(layout.title.clientWidth > 0 && layout.title.scrollWidth <= layout.title.clientWidth + 1,
+            `${label} title must wrap rather than clip`);
+          assert.ok(layout.details.clientWidth > 0 && layout.details.scrollWidth <= layout.details.clientWidth + 1,
+            `${label} details must wrap rather than clip`);
+          assert.equal(layout.detailsWhiteSpace, 'pre-wrap');
+          assert.ok(layout.title.right <= layout.actions.left + 1,
+            `${label} title and Actions control must not overlap`);
+          assert.ok(layout.footer.left >= layout.card.left && layout.footer.right <= layout.card.right,
+            `${label} footer divider must remain within the card`);
+          assert.ok(layout.history.left >= layout.card.left && layout.history.right <= layout.card.right);
+          const actionContrast = contrastRatio(layout.actionForeground, layout.actionBackground);
+          assert.ok(actionContrast >= 4.5,
+            `${label} Actions text must retain accessible contrast (${layout.actionForeground} on ${layout.actionBackground}, ${actionContrast.toFixed(2)}:1).`);
+          assert.notEqual(layout.background, 'rgba(0, 0, 0, 0)',
+            `${label} should retain the Prayer surface treatment`);
+          assert.notEqual(layout.borderColor, 'rgba(0, 0, 0, 0)',
+            `${label} should retain the Prayer border`);
+        }
+      }
+
+      await prayerPage.setViewportSize({ width: 375, height: 650 });
+      const prayerActions = prayerCard.getByRole('button', { name: `Actions for ${prayerTitle}` });
+      await prayerActions.click();
+      const prayerMenu = prayerPage.getByRole('menu', { name: `Actions for ${prayerTitle}` });
+      const menuBounds = await prayerMenu.evaluate(menu => {
+        const rect = menu.getBoundingClientRect();
+        return {
+          parentIsBody: menu.parentElement === document.body,
+          left: rect.left,
+          right: rect.right,
+          bottom: rect.bottom,
+          viewportWidth: document.documentElement.clientWidth
+        };
+      });
+      assert.equal(menuBounds.parentIsBody, true, 'Prayer Actions must portal outside clipping cards and scroll containers.');
+      assert.ok(menuBounds.left >= 0 && menuBounds.right <= menuBounds.viewportWidth);
+      assert.ok(menuBounds.bottom <= 650);
+      await prayerActions.click();
+      await prayerMenu.waitFor({ state: 'detached' });
+
+      await prayerActions.click();
+      await prayerMenu.waitFor({ state: 'visible' });
+      await prayerMenu.getByRole('menuitem', { name: 'Details/Edit' }).click();
+      const prayerEditor = prayerPage.getByRole('dialog', { name: 'Prayer request details' });
+      assert.equal(await prayerEditor.evaluate(dialog => dialog.classList.contains('dialog--phone-fullscreen')), true);
+      const deleteAction = prayerEditor.locator('.person-prayer-form__delete');
+      assert.equal(await deleteAction.isVisible(), true);
+      assert.equal(await deleteAction.evaluate(element => getComputedStyle(element).borderTopStyle), 'solid');
+      await prayerEditor.getByRole('button', { name: 'Close prayer request details' }).click();
+
+      const historyTrigger = prayerCard.getByRole('button', {
+        name: `Prayer history for ${prayerTitle}: 3 prayers recorded`
+      });
+      await historyTrigger.scrollIntoViewIfNeeded();
+      const scrollBeforeHistory = await prayerPage.evaluate(() => window.scrollY);
+      await historyTrigger.click();
+      const prayerHistory = prayerPage.getByRole('dialog', { name: 'Prayer history' });
+      const historyScroll = prayerHistory.locator('.money-goal-dialog__scroll-region');
+      const historyScrollMetrics = await historyScroll.evaluate(region => ({
+        clientHeight: region.clientHeight,
+        scrollHeight: region.scrollHeight
+      }));
+      assert.ok(historyScrollMetrics.scrollHeight > historyScrollMetrics.clientHeight,
+        'Long synthetic Prayer history must scroll inside the full-screen dialog.');
+      const chartScroll = prayerHistory.getByRole('region', {
+        name: 'Prayer history chart; scroll horizontally for older dates'
+      });
+      const chartScrollMetrics = await chartScroll.evaluate(region => ({
+        clientWidth: region.clientWidth,
+        scrollWidth: region.scrollWidth
+      }));
+      assert.ok(chartScrollMetrics.scrollWidth > chartScrollMetrics.clientWidth,
+        'Prayer chart should provide horizontal access to older history.');
+      await chartScroll.evaluate(region => { region.scrollLeft = 0; });
+      assert.ok(await chartScroll.getByRole('listitem', { name: /prayer/ }).count() > 0);
+      await historyScroll.evaluate(region => { region.scrollTop = region.scrollHeight; });
+      assert.ok(await historyScroll.evaluate(region => region.scrollTop > 0));
+      await prayerHistory.getByRole('button', { name: 'Close prayer history' }).click();
+      await prayerPage.waitForFunction(
+        expected => window.scrollY === expected
+          && document.body.style.position === ''
+          && document.body.style.top === '',
+        scrollBeforeHistory
+      );
+      assert.deepEqual(prayerClassicRequests, [], 'Prayer React pages must not request tend.css.');
+      await prayerContext.close();
 
       const doneRowsFixture = createEmptyPreviewData();
       const today = localDateString(new Date());
@@ -8142,7 +9244,8 @@ async function main() {
                 fontSize: titleStyle.fontSize,
                 fontWeight: titleStyle.fontWeight,
                 whiteSpace: titleStyle.whiteSpace,
-                textOverflow: titleStyle.textOverflow
+                textOverflow: titleStyle.textOverflow,
+                overflowWrap: titleStyle.overflowWrap
               },
               time: {
                 ...bounds(time),
@@ -8167,8 +9270,9 @@ async function main() {
           assert.equal(layout.row.gap, '16px');
           assert.equal(layout.check.width, 24);
           assert.equal(layout.check.height, 24);
-          assert.equal(layout.title.whiteSpace, 'nowrap');
-          assert.equal(layout.title.textOverflow, 'ellipsis');
+          assert.equal(layout.title.whiteSpace, 'normal');
+          assert.equal(layout.title.textOverflow, 'clip');
+          assert.equal(layout.title.overflowWrap, 'anywhere');
           assert.equal(layout.time.whiteSpace, 'nowrap');
           assert.equal(layout.hasSeparateDoneRowsSection, false);
           assert.equal(layout.hasSeparateDoneRowsHeading, false);

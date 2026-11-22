@@ -12,6 +12,7 @@ import { createPreviewEnvelope, createSamplePreviewData, parsePreviewBackup } fr
 import type { SavedRhythm } from '../src/domain/rhythm-editor.ts';
 import type { DatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import { createValidatedPreviewAccountDocument } from '../src/storage/preview-account-backup.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 
 const today = '2026-10-23';
 const rhythmId = 'user-rhythm-11111111-1111-4111-8111-111111111113';
@@ -221,11 +222,10 @@ describe('Flexibility manual-log Rhythm associations', () => {
       regionIds: ['calves'],
       notes: 'Existing manual log'
     }];
-    const legacyEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(oldData))) as {
-      schemaVersion: number;
-      data: typeof oldData;
-    };
-    legacyEnvelope.schemaVersion = 45;
+    const legacyEnvelope = withPreSparkSchema(
+      JSON.parse(JSON.stringify(createPreviewEnvelope(oldData))) as ReturnType<typeof createPreviewEnvelope>,
+      45
+    );
     const migrated = parsePreviewBackup(JSON.stringify(legacyEnvelope), today);
     expect(migrated.valid).toBe(true);
     if (!migrated.valid) return;

@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { personById, syntheticPeople } from '../domain/preview-data.ts';
 import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
-import {
-  deleteConnection,
-  setPersonConnectionCadence
-} from '../domain/friendships.ts';
+import { setPersonConnectionCadence } from '../domain/friendships.ts';
 import type {
   ConnectionCadence,
   ConnectionType,
@@ -13,7 +10,7 @@ import type {
   FriendshipData
 } from '../domain/friendships.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
-import { PersonBadge, PersonBadgeVisual } from './PersonBadge.tsx';
+import { PersonBadgeVisual } from './PersonBadge.tsx';
 import { PersonConnectionCadenceSelect } from './PersonConnectionCadenceSelect.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
 import type { StyledSelectOption } from './StyledSelect.tsx';
@@ -26,6 +23,10 @@ export const connectionTypeLabels: Record<ConnectionType, string> = {
 const connectionTypes = ['text', 'call', 'time-together'] as const;
 const connectionTypeOptions: readonly StyledSelectOption<ConnectionType>[] =
   connectionTypes.map(value => ({ value, label: connectionTypeLabels[value] }));
+const unconfirmedConnectionTypeOptions: readonly StyledSelectOption<ConnectionType | ''>[] = [
+  { value: '', label: 'Choose type' },
+  ...connectionTypeOptions
+];
 
 export function ConnectionTypeActions({
   personId,
@@ -82,48 +83,12 @@ export function FriendshipCadenceControl({
 
 export function ConnectionHistoryList({
   connections,
-  people = syntheticPeople,
-  onEdit,
-  onDelete,
-  onPersonSelect
+  onEdit
 }: {
   connections: readonly FriendshipConnection[];
-  people?: readonly PersonPreview[];
   onEdit: (connection: FriendshipConnection, event: MouseEvent<HTMLButtonElement>) => void;
-  onDelete: (connectionId: string) => void;
-  onPersonSelect: (personId: PersonId) => void;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
-  const deleteCancelButton = useRef<HTMLButtonElement>(null);
-  const deleteOpener = useRef<HTMLButtonElement | null>(null);
-  const editButtons = useRef(new Map<string, HTMLButtonElement>());
   const emptyHistoryMessage = useRef<HTMLParagraphElement>(null);
-  const focusEditAfterDelete = useRef(false);
-  const focusCloseAfterDelete = useRef(false);
-  const returnToDelete = useRef(false);
-
-  useEffect(() => {
-    if (confirmingDeleteId !== null) deleteCancelButton.current?.focus();
-    else if (returnToDelete.current) {
-      returnToDelete.current = false;
-      deleteOpener.current?.focus();
-    }
-    else if (focusEditAfterDelete.current) {
-      focusEditAfterDelete.current = false;
-      if (connections.length > 0) {
-        [...editButtons.current.values()][0]?.focus();
-      } else {
-        focusCloseAfterDelete.current = true;
-      }
-    }
-    if (focusCloseAfterDelete.current && connections.length === 0) {
-      focusCloseAfterDelete.current = false;
-      const closeButton = document.querySelector<HTMLButtonElement>('#friendships-history-dialog-close');
-      if (closeButton) closeButton.focus();
-      else emptyHistoryMessage.current?.focus();
-    }
-  }, [confirmingDeleteId, connections.length]);
 
   if (connections.length === 0) {
     return <p ref={emptyHistoryMessage} className="friendships-empty" tabIndex={-1}>No connections yet.</p>;
@@ -131,91 +96,42 @@ export function ConnectionHistoryList({
 
   return (
     <ol className="friendships-history-list">
-      {connections.map(connection => (
-        <li key={connection.id} className="friendships-history-item">
-          <div className="friendships-history-item__heading">
-            <strong>{connectionTypeLabels[connection.type]}</strong>
-            <time dateTime={connection.date}>{formatLocalDate(connection.date)}</time>
-            {connection.time && <span>{formatLocalTime(connection.time)}</span>}
-          </div>
-          <div className="friendships-history-item__participants">
-            {connection.participantIds.map(id => (
-              <PersonBadge key={id} person={personById(people, id)} onSelect={onPersonSelect} />
-            ))}
-          </div>
-          {expandedId === connection.id && (
-            <p className="friendships-history-item__notes">
-              {connection.notes || 'No notes.'}
-            </p>
-          )}
-          <div className="friendships-actions">
+      {connections.map(connection => {
+        const notes = connection.notes?.trim();
+        const notesId = `friendships-connection-notes-${connection.id}`;
+        return (
+          <li key={connection.id} className="friendships-history-item">
             <button
               type="button"
-              className="btn mini ghost"
-              aria-expanded={expandedId === connection.id}
-              onClick={() => setExpandedId(current => current === connection.id ? null : connection.id)}
-            >
-              {expandedId === connection.id ? 'Hide details' : 'Details'}
-            </button>
-            <button
-              type="button"
-              className="btn mini ghost"
-              data-connection-edit={connection.id}
-              ref={button => {
-                if (button) editButtons.current.set(connection.id, button);
-                else editButtons.current.delete(connection.id);
-              }}
+              className="tended-rhythm-done-row friendships-connection-row"
+              aria-label={`${connectionTypeLabels[connection.type]} connection, ${formatLocalDate(connection.date)}${connection.time ? ` at ${formatLocalTime(connection.time)}` : ''}. Open details.`}
+              {...(notes ? { 'aria-describedby': notesId } : {})}
               onClick={event => onEdit(connection, event)}
             >
-              Edit
+              <span className="friendships-connection-row__heading">
+                <span className="friendships-connection-row__icon" aria-hidden="true">
+                  <ConnectionTypeIcon type={connection.type} />
+                </span>
+                <span className="friendships-connection-row__title">{connectionTypeLabels[connection.type]}</span>
+              </span>
+              <span className="friendships-connection-row__chevron" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none">
+                  <path d="m5 3 5 5-5 5" />
+                </svg>
+              </span>
+              {notes && <span id={notesId} className="friendships-connection-row__notes">{notes}</span>}
+              <span className="friendships-connection-row__footer">
+                <time dateTime={connection.date}>{formatLocalDate(connection.date)}</time>
+                {connection.time && (
+                  <time dateTime={`${connection.date}T${connection.time}`}>
+                    {formatLocalTime(connection.time)}
+                  </time>
+                )}
+              </span>
             </button>
-            <button
-              type="button"
-              className="btn mini ghost"
-              data-connection-delete={connection.id}
-              onClick={event => {
-                deleteOpener.current = event.currentTarget;
-                setConfirmingDeleteId(connection.id);
-              }}
-            >
-              Delete
-            </button>
-          </div>
-          {confirmingDeleteId === connection.id && (
-            <div className="friendships-delete-confirmation" role="alertdialog"
-              aria-labelledby={`friendship-delete-title-${connection.id}`}>
-              <p id={`friendship-delete-title-${connection.id}`}>
-                Delete this connection from the history of all its participants?
-              </p>
-              <div className="friendships-actions">
-                <button
-                  ref={deleteCancelButton}
-                  type="button"
-                  className="btn mini ghost"
-                  onClick={() => {
-                    returnToDelete.current = true;
-                    setConfirmingDeleteId(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn mini"
-                  onClick={() => {
-                    focusEditAfterDelete.current = true;
-                    onDelete(connection.id);
-                    setConfirmingDeleteId(null);
-                    setExpandedId(null);
-                  }}
-                >
-                  Delete connection
-                </button>
-              </div>
-            </div>
-          )}
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -225,18 +141,12 @@ export function ConnectionHistoryDialog({
   people = syntheticPeople,
   connections,
   onEdit,
-  onChange,
-  data,
-  onPersonSelect,
   onClose
 }: {
   personId: PersonId;
   people?: readonly PersonPreview[];
   connections: readonly FriendshipConnection[];
   onEdit: (connection: FriendshipConnection, event: MouseEvent<HTMLButtonElement>) => void;
-  onChange: (data: FriendshipData) => void;
-  data: FriendshipData;
-  onPersonSelect: (personId: PersonId) => void;
   onClose: () => void;
 }) {
   const person = personById(people, personId);
@@ -251,10 +161,7 @@ export function ConnectionHistoryDialog({
     >
       <ConnectionHistoryList
         connections={connections}
-        people={people}
         onEdit={onEdit}
-        onDelete={id => onChange(deleteConnection(data, id))}
-        onPersonSelect={onPersonSelect}
       />
     </MoneyGoalDialog>
   );
@@ -265,29 +172,57 @@ export function ConnectionEditor({
   people = syntheticPeople,
   initialParticipantIds,
   initialType,
+  initialDate,
+  requireTypeConfirmation = false,
+  sparkTitle,
   today,
   onSave,
+  onDelete,
   onClose
 }: {
   record?: FriendshipConnection;
   people?: readonly PersonPreview[];
   initialParticipantIds: PersonId[];
   initialType?: ConnectionType;
+  initialDate?: string;
+  requireTypeConfirmation?: boolean;
+  sparkTitle?: string;
   today: string;
   onSave: (record: FriendshipConnection) => string | null;
+  onDelete?: (connectionId: string) => string | null;
   onClose: () => void;
 }) {
-  const [type, setType] = useState<ConnectionType>(record?.type ?? initialType ?? 'text');
-  const [date, setDate] = useState(record?.date ?? today);
+  const [type, setType] = useState<ConnectionType | ''>(
+    record?.type ?? initialType ?? (requireTypeConfirmation ? '' : 'text')
+  );
+  const [date, setDate] = useState(record?.date ?? initialDate ?? today);
   const [time, setTime] = useState(record?.time ?? '');
   const [participantIds, setParticipantIds] = useState<PersonId[]>(initialParticipantIds);
   const [notes, setNotes] = useState(record?.notes ?? '');
   const [error, setError] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const deleteTrigger = useRef<HTMLButtonElement>(null);
+  const deleteCancel = useRef<HTMLButtonElement>(null);
+  const returnToDelete = useRef(false);
+
+  useEffect(() => {
+    if (confirmingDelete) {
+      deleteCancel.current?.focus();
+    } else if (returnToDelete.current) {
+      returnToDelete.current = false;
+      deleteTrigger.current?.focus();
+    }
+  }, [confirmingDelete]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!date) {
       setError('Choose a connection date.');
+      return;
+    }
+    if (!type) {
+      setError('Choose the actual connection type.');
       return;
     }
     if (participantIds.length === 0) {
@@ -318,9 +253,12 @@ export function ConnectionEditor({
 
   return (
     <MoneyGoalDialog
-      title={record ? 'Edit connection' : 'Log connection'}
+      title={sparkTitle ? 'Log a connection for this Spark' : record ? 'Connection details' : 'Log connection'}
       titleId="friendship-connection-title"
       labelledBy="friendship-connection-title"
+      {...(sparkTitle
+        ? { intro: `Completing “${sparkTitle}” will save one Connection record. Confirm the type, actual date and participants before saving.` }
+        : {})}
       initialFocusId="friendship-connection-type"
       closeLabel="Close connection editor"
       phoneFullScreen
@@ -332,7 +270,7 @@ export function ConnectionEditor({
           <StyledSelect
             id="friendship-connection-type"
             label="Connection type"
-            options={connectionTypeOptions}
+            options={requireTypeConfirmation ? unconfirmedConnectionTypeOptions : connectionTypeOptions}
             value={type}
             matchTriggerWidth
             containerClassName="friendships-connection-type"
@@ -365,15 +303,86 @@ export function ConnectionEditor({
             </label>
           ))}
         </fieldset>
-        <label>
-          <span>Notes (optional)</span>
-          <textarea maxLength={4000} value={notes} onChange={event => setNotes(event.currentTarget.value)} />
-        </label>
+        <div className="friendships-connection-notes">
+          <label>
+            <span>Notes (optional)</span>
+            <textarea
+              aria-describedby="friendship-connection-note-count"
+              maxLength={4000}
+              value={notes}
+              onChange={event => setNotes(event.currentTarget.value)}
+            />
+          </label>
+          <span id="friendship-connection-note-count" className="friendships-connection-form__note-count" aria-live="polite">
+            {notes.length} / 4,000 characters
+          </span>
+        </div>
         {error && <p className="friendships-form-error" role="alert">{error}</p>}
         <div className="money-goal-dialog__actions">
           <button type="submit" className="btn mini">{record ? 'Save changes' : 'Save connection'}</button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
         </div>
+        {record && onDelete && (
+          <div className="friendships-connection-delete">
+            <button
+              ref={deleteTrigger}
+              type="button"
+              className="friendships-connection-delete__button"
+              aria-label="Delete connection"
+              onClick={() => {
+                setDeleteError('');
+                setConfirmingDelete(true);
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 4v5m4-5v5" />
+              </svg>
+              <span>Delete connection</span>
+            </button>
+          </div>
+        )}
+        {confirmingDelete && record && onDelete && (
+          <div
+            className="friendships-delete-confirmation"
+            role="alertdialog"
+            aria-labelledby="friendship-connection-delete-title"
+          >
+            <p id="friendship-connection-delete-title">
+              {record.sparkId
+                ? 'Delete this Spark connection from every participant’s history and restore its Spark to pending?'
+                : 'Delete this connection from the history of all its participants?'}
+            </p>
+            {deleteError && <p className="friendships-form-error" role="alert">{deleteError}</p>}
+            <div className="friendships-actions">
+              <button
+                ref={deleteCancel}
+                type="button"
+                className="btn mini ghost"
+                onClick={() => {
+                  returnToDelete.current = true;
+                  setDeleteError('');
+                  setConfirmingDelete(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn mini"
+                onClick={() => {
+                  const deleteErrorMessage = onDelete(record.id);
+                  if (deleteErrorMessage) {
+                    setDeleteError(deleteErrorMessage);
+                    return;
+                  }
+                  onClose();
+                }}
+              >
+                {record.sparkId ? 'Delete and restore Spark' : 'Delete connection'}
+              </button>
+            </div>
+          </div>
+        )}
       </form>
     </MoneyGoalDialog>
   );

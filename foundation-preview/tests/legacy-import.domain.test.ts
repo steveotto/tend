@@ -259,7 +259,21 @@ describe('Classic Tend import dry run', () => {
       expect(reloaded.data.personNotes).toEqual(candidate.personNotes);
       expect(reloaded.data.savedRhythms).toEqual(candidate.savedRhythms);
       expect(reloaded.data.datedRhythmCompletions).toEqual(candidate.datedRhythmCompletions);
-      expect(reloaded.data.cardio.runs).toEqual(candidate.cardio.runs);
+      expect(reloaded.data.cardio.runs).toHaveLength(candidate.cardio.runs.length);
+      expect(reloaded.data.cardio.runs[0]).toEqual(candidate.cardio.runs[0]);
+      expect(reloaded.data.cardio.runs[1]).toMatchObject({
+        id: 'run-two',
+        date: '2026-10-14',
+        distance: 1.5,
+        calorieEstimate: {
+          source: 'estimated',
+          method: 'distance-weight-v1',
+          weightKg: 68.1522535925,
+          weightSource: 'weigh-in',
+          weightDate: '2026-10-13',
+          weightMeasurementId: 'weight-one'
+        }
+      });
       expect(reloaded.data.weight.weighIns).toEqual(candidate.weight.weighIns);
       expect(JSON.parse(values.get('tend2:synthetic-preview')!).data).toEqual(reloaded.data);
     }

@@ -26,6 +26,7 @@ import {
 } from '../src/storage/preview-storage.ts';
 import type { PreviewStorage } from '../src/storage/preview-storage.ts';
 import { installMemoryStorage } from './memory-storage.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 
 beforeEach(installMemoryStorage);
 afterEach(() => {
@@ -93,11 +94,7 @@ describe('account-isolated Preview storage', () => {
     if (!scopeA || !scopeB) return;
 
     const v33 = createPreviewEnvelope(createEmptyPreviewData());
-    const v32 = {
-      ...v33,
-      schemaVersion: 32,
-      data: { ...v33.data }
-    };
+    const v32 = withPreSparkSchema(v33, 32);
     delete (v32.data as Record<string, unknown>).prayerRequests;
     delete (v32.data as Record<string, unknown>).timeBlocks;
     delete (v32.data as Record<string, unknown>).showTended;
@@ -159,13 +156,13 @@ describe('account-isolated Preview storage', () => {
     expect(values.size).toBe(2);
   });
 
-  it('saves the Today preference in the account envelope and restores it without creating completions', async () => {
+  it('keeps the legacy Show tended preference out of Person and preserves the stored value', async () => {
     const scope = createPreviewStorageScope({
       getItem: key => window.localStorage.getItem(key),
       setItem: (key, value) => window.localStorage.setItem(key, value)
     }, accountA);
     if (!scope) return;
-    const initialData = accountData('Account A');
+    const initialData = { ...accountData('Account A'), showTended: true };
     const saved = writePreview(scope.storage, initialData, null, { currentDate: '2026-11-01' });
     expect(saved.kind).toBe('saved');
 
@@ -177,22 +174,19 @@ describe('account-isolated Preview storage', () => {
     };
     const firstRender = render(<App identity={accountA} />);
     const firstProfile = await openProfile();
-    const toggle = await within(firstProfile).findByRole('button', { name: /Show tended/ });
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
-    await user.click(toggle);
-    await waitFor(() => {
-      const loaded = loadPreview(scope.storage, '2026-11-01');
-      expect(loaded.kind === 'loaded' && loaded.data.showTended).toBe(true);
-    });
+    expect(within(firstProfile).queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
+    const loaded = loadPreview(scope.storage, '2026-11-01');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind === 'loaded') expect(loaded.data.showTended).toBe(true);
     firstRender.unmount();
 
     render(<App identity={accountA} />);
     const reloadedProfile = await openProfile();
-    expect((await within(reloadedProfile).findByRole('button', { name: /Hide tended/ }))
-      .getAttribute('aria-pressed')).toBe('true');
+    expect(within(reloadedProfile).queryByRole('button', { name: /Show tended|Hide tended/ })).toBeNull();
     const loadedAgain = loadPreview(scope.storage, '2026-11-01');
     expect(loadedAgain.kind).toBe('loaded');
     if (loadedAgain.kind === 'loaded') {
+      expect(loadedAgain.data.showTended).toBe(true);
       expect(loadedAgain.data.datedRhythmCompletions).toEqual([]);
       expect(loadedAgain.data.activeRhythmCompletions).toEqual([]);
       expect(loadedAgain.data.completedRhythmIds).toEqual([]);

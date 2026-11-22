@@ -11,6 +11,7 @@ import {
   PREVIEW_SCHEMA_VERSION,
   validatePreviewEnvelope
 } from '../src/domain/preview-state.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 
 describe('calendar source contract', () => {
   it('accepts public iCloud subscription URLs and preserves their exact entered form', () => {
@@ -100,11 +101,9 @@ describe('calendar source backup schema', () => {
       ...currentEnvelope.data,
       savedRhythms: [oldRhythm]
     };
-    const parsedOld = parsePreviewBackup(JSON.stringify({
-      ...currentEnvelope,
-      schemaVersion: 39,
-      data: oldData
-    }), '2026-11-06');
+    const parsedOld = parsePreviewBackup(JSON.stringify(
+      withPreSparkSchema(currentEnvelope, 39, oldData)
+    ), '2026-11-06');
 
     expect(parsedOld).toMatchObject({
       valid: true,
@@ -129,7 +128,7 @@ describe('calendar source backup schema', () => {
     const previous = createPreviewEnvelope(data);
     const oldData = { ...previous.data } as Record<string, unknown>;
     delete oldData.calendarSources;
-    const raw = JSON.stringify({ ...previous, schemaVersion: 35, data: oldData });
+    const raw = JSON.stringify(withPreSparkSchema(previous, 35, oldData));
     const parsed = validatePreviewEnvelope(JSON.parse(raw), '2026-11-06');
 
     expect(parsed.valid).toBe(true);

@@ -5,7 +5,7 @@ export type PrayerRequestStatus = 'active' | 'answered' | 'archived';
 
 export type PersonPrayerLog = {
   id: string;
-  prayedAt: string;
+  prayedAt?: string;
 };
 
 export type PersonPrayerRequest = {
@@ -106,8 +106,9 @@ export function validatePersonPrayerRequestsCollection(
         || Object.keys(log).some(key => !['id', 'prayedAt'].includes(key))
         || !isValidId(log.id)
         || logIds.has(log.id)
-        || !isCanonicalTimestamp(log.prayedAt)
-        || Date.parse(log.prayedAt) < Date.parse(candidate.createdAt)) return false;
+        || log.prayedAt !== undefined
+          && (!isCanonicalTimestamp(log.prayedAt)
+            || Date.parse(log.prayedAt) < Date.parse(candidate.createdAt))) return false;
       logIds.add(log.id);
     }
     requestIds.add(candidate.id);
@@ -143,12 +144,19 @@ export function prayerRequestHistorySummary(request: PersonPrayerRequest): {
   count: number;
   lastPrayedAt: string | null;
 } {
+  let lastPrayedAt: string | null = null;
+  let latestInstant = Number.NEGATIVE_INFINITY;
+  for (const log of request.prayerLogs) {
+    if (log.prayedAt === undefined) continue;
+    const instant = Date.parse(log.prayedAt);
+    if (instant > latestInstant) {
+      latestInstant = instant;
+      lastPrayedAt = log.prayedAt;
+    }
+  }
   return {
     count: request.prayerLogs.length,
-    lastPrayedAt: request.prayerLogs.reduce<string | null>(
-      (latest, log) => latest === null || log.prayedAt > latest ? log.prayedAt : latest,
-      null
-    )
+    lastPrayedAt
   };
 }
 

@@ -22,6 +22,8 @@ export type FriendshipConnection = {
   time?: string;
   participantIds: PersonId[];
   notes?: string;
+  sparkId?: string;
+  sparkOwnerId?: PersonId;
   [key: string]: unknown;
 };
 

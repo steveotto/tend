@@ -14,6 +14,7 @@ import type { RhythmWeekday } from '../src/domain/rhythm-schedule.ts';
 import { activeIdForMarriageSuggestion } from '../src/domain/category-rhythms.ts';
 import { addOrUpdateConnection, setFriendCadence } from '../src/domain/friendships.ts';
 import { hasFoundationIcon } from '../src/components/MarriageIcon.tsx';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 import { createStrengthGuidedSession, startStrengthSessionRestTimer } from '../src/domain/strength.ts';
 import { createFlexibilityData, flexibilityRoutineSuggestions } from '../src/domain/flexibility.ts';
 import type { StrengthSavedWorkout, StrengthWorkoutLog } from '../src/domain/strength.ts';
@@ -172,18 +173,19 @@ async function chooseCategoryFoundation(
 }
 
 function schema44Raw(data: ReturnType<typeof createSamplePreviewData>): string {
-  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+  const envelope = withPreSparkSchema(JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
     schemaVersion: number;
-    data: { goals: Array<Record<string, unknown>> };
-  };
-  envelope.schemaVersion = 44;
+    data: { goals: Array<Record<string, unknown>>; personSparks?: unknown };
+  }, 44);
   for (const goal of envelope.data.goals) delete goal.foundationId;
   return JSON.stringify(envelope);
 }
 
 function schema45Raw(data: ReturnType<typeof createSamplePreviewData>): string {
-  const envelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as { schemaVersion: number };
-  envelope.schemaVersion = 45;
+  const envelope = withPreSparkSchema(
+    JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>,
+    45
+  );
   return JSON.stringify(envelope);
 }
 
@@ -1221,7 +1223,6 @@ describe('Tend Today preview', () => {
     await user.click(within(settings).getByRole('button', { name: 'Save' }));
     expect(document.activeElement).toBe(settingsButton);
     expect(within(morganProfile).getByText('Friends')).toBeTruthy();
-    expect(within(morganProfile).getByLabelText('Connection cadence: Weekly')).toBeTruthy();
     await user.click(within(morganProfile).getByRole('button', { name: 'Back to People' }));
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Friendships' }));
@@ -1261,7 +1262,13 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: 'Friendships' }));
     await user.click(screen.getByRole('button', { name: 'Open People filtered to Friends · 1' }));
     await user.click(screen.getByRole('button', { name: 'Open profile for Morgan Reed' }));
-    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+    const restoredMorganProfile = screen.getByRole('main', { name: 'Morgan Reed' });
+    const restoredSettingsButton = within(restoredMorganProfile).getByRole('button', { name: 'Person settings' });
+    await user.click(restoredSettingsButton);
+    const restoredSettings = screen.getByRole('dialog', { name: 'Person settings — Morgan Reed' });
+    expect(within(restoredSettings).getByRole('combobox', { name: 'Connection cadence: Weekly' })).toBeTruthy();
+    await user.click(within(restoredSettings).getByRole('button', { name: 'Cancel' }));
+    await user.click(within(restoredMorganProfile).getByRole('tab', { name: 'Connections' }));
     expect(screen.getByText('Text')).toBeTruthy();
   });
 
@@ -4457,8 +4464,6 @@ describe('Tend Today preview', () => {
     const profile = profileForEdit;
     expect(within(profile).getByText('Marriage')).toBeTruthy();
     expect(within(profile).getByLabelText(/^Birthday: Mar 1,/)).toBeTruthy();
-    expect(within(profile).getByLabelText('Anniversary: Dec 31')).toBeTruthy();
-    expect(within(profile).getByText('Words of Affirmation')).toBeTruthy();
     expect(within(profile).getByRole('article', { name: 'Preserved person rhythm' })).toBeTruthy();
     const profileEditButton = within(profile).getByRole('button', { name: 'Person settings' });
     await user.click(profileEditButton);
@@ -4481,6 +4486,8 @@ describe('Tend Today preview', () => {
     const clearDetailsButton = within(profileToClear).getByRole('button', { name: 'Person settings' });
     await user.click(clearDetailsButton);
     editor = screen.getByRole('dialog', { name: 'Person settings — Avery Brooks' });
+    expect((within(editor).getByLabelText('Anniversary') as HTMLInputElement).value).toBe('2010-12-31');
+    expect(within(editor).getByRole('combobox', { name: 'Love language: Words of Affirmation' })).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: 'Clear birthday' }));
     await user.click(within(editor).getByRole('button', { name: 'Clear anniversary' }));
     await user.click(within(editor).getByRole('combobox', { name: 'Relationship: Son' }));
