@@ -111,8 +111,8 @@ describe('selecting equal-weight Foundation scores', () => {
     expect(atEvening).toMatchObject({
       kind: 'rhythm-score',
       consistency: { kind: 'scored', score: 0 },
-      onTrack: { kind: 'scored', score: 100 },
-      healthScore: 25
+      onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      healthScore: null
     });
   });
 

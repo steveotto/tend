@@ -2,7 +2,9 @@
   --tend-canvas: #F7F9F7;
   --tend-cream: #F4F1E8;
   --tend-surface: #FFFFFF;
+  --tend-card: var(--tend-surface);
   --tend-ink: #202723;
+  --tend-text: var(--tend-ink);
   --tend-secondary: #5E6B63;
   --tend-forest: #246B52;
   --tend-mint: #67C5A3;

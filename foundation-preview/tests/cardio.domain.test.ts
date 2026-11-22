@@ -10,6 +10,8 @@ import {
   deleteCardioRun,
   estimateCardioCalories,
   formatCardioPace,
+  formatCardioWeekRange,
+  formatCardioWeekdayRange,
   isCardioRun,
   latestCardioWeightOnOrBefore,
   migrateCardioDataToV52,
@@ -18,6 +20,7 @@ import {
   saveCardioDataCommand,
   saveCardioGoals,
   saveCardioRun,
+  selectCardioRunTotals,
   selectCardioRunComparisons,
   selectCardioProgress,
   stepCardioGoalInput,
@@ -258,7 +261,7 @@ describe('Cardio domain', () => {
       }, date);
       expect(duplicate).toMatchObject({
         valid: false,
-        error: 'A run is already linked to this scheduled Rhythm occurrence.'
+        error: 'An activity is already linked to this scheduled Rhythm occurrence.'
       });
 
       const unlinked = saveCardioRun(linked.cardio, unlinkedRun, date);
@@ -641,13 +644,90 @@ describe('Cardio domain', () => {
     });
   });
 
-  it('uses stable ID ordering for same-day runs and reports unavailable comparisons cleanly', () => {
+  it('does not compare pace against a different-distance run when no similar-distance duration exists', () => {
+    const previous = run({ id: 'previous', date: '2026-10-21', distance: 3, durationSeconds: 1800 });
+    const current = run({ id: 'current', date: today, distance: 6.2, durationSeconds: 3600 });
+    const comparison = selectCardioRunComparisons([previous, current], current, createWeightData(), today);
+
+    expect(comparison).toMatchObject({
+      previousRun: { id: 'previous' },
+      similarDistanceRun: null,
+      paceReferenceRun: null,
+      paceImprovementSeconds: null,
+      distanceDelta: 3.2
+    });
+  });
+
+  it('summarizes run totals in canonical miles and reports partial duration and calorie coverage', () => {
+    const timedWithEstimate = run({
+      id: 'timed-estimated',
+      date: '2026-10-19',
+      distance: 2,
+      durationSeconds: 1200,
+      calorieEstimate: {
+        source: 'estimated',
+        method: 'distance-weight-v1',
+        weightKg: 70,
+        weightSource: 'manual'
+      }
+    });
+    const untimedKilometers = run({
+      id: 'untimed-kilometers',
+      date: '2026-10-20',
+      distance: cardioDistanceToMiles(10, 'km'),
+      distanceUnit: 'km'
+    });
+    const timedWithoutEstimate = run({
+      id: 'timed-without-estimate',
+      date: '2026-10-21',
+      distance: 4,
+      durationSeconds: 1800
+    });
+    const future = run({ id: 'future', date: '2026-10-23', distance: 8 });
+
+    expect(selectCardioRunTotals(
+      [timedWithEstimate, untimedKilometers, timedWithoutEstimate, future],
+      createWeightData(),
+      today
+    )).toMatchObject({
+      runCount: 3,
+      durationRunCount: 2,
+      durationSeconds: 3000,
+      estimatedRunCount: 1,
+      estimatedCalories: 225
+    });
+    expect(selectCardioRunTotals(
+      [timedWithEstimate, untimedKilometers, timedWithoutEstimate],
+      createWeightData(),
+      today
+    ).distanceMiles).toBeCloseTo(12.2137119, 6);
+  });
+
+  it('keeps unavailable duration and calorie totals distinct from zero', () => {
+    const runs = [run({ id: 'no-duration' })];
+    expect(selectCardioRunTotals(runs, createWeightData(), today)).toMatchObject({
+      runCount: 1,
+      distanceMiles: 3,
+      durationRunCount: 0,
+      durationSeconds: null,
+      estimatedRunCount: 0,
+      estimatedCalories: null
+    });
+    expect(selectCardioRunTotals([], createWeightData(), today)).toMatchObject({
+      runCount: 0,
+      distanceMiles: 0,
+      durationSeconds: null,
+      estimatedCalories: null
+    });
+  });
+
+  it('does not infer an earlier same-day run when activity time is not recorded', () => {
     const weight = createWeightData();
     const sameDay = [
       run({ id: 'run-b', date: today, distance: 2 }),
       run({ id: 'run-a', date: today, distance: 2 })
     ];
-    expect(selectCardioRunComparisons(sameDay, sameDay[0]!, weight, today).previousRun?.id).toBe('run-a');
+    expect(selectCardioRunComparisons(sameDay, sameDay[0]!, weight, today).previousRun).toBeNull();
     expect(selectCardioRunComparisons([sameDay[0]!], sameDay[0]!, weight, today)).toMatchObject({
       previousRun: null,
       similarDistanceRun: null,
@@ -697,6 +777,35 @@ describe('Cardio domain', () => {
     };
     expect(selectCardioProgress(data, '2026-10-22')).toMatchObject({ weekStart: '2026-10-19', runs: 1, miles: 3 });
     expect(selectCardioProgress(data, '2026-10-25')).toMatchObject({ weekStart: '2026-10-19', runs: 2, miles: 8 });
+  });
+
+  it('formats the fixed Monday–Sunday range across month and year boundaries independently of timezone', () => {
+    expect(formatCardioWeekRange('2026-11-16', '2026-11-22')).toBe('Nov 16 – Nov 22');
+    expect(formatCardioWeekdayRange('2026-11-16', '2026-11-22')).toBe('Monday – Sunday');
+    expect(formatCardioWeekRange('2026-11-30', '2026-12-06')).toBe('Nov 30 – Dec 6');
+    expect(formatCardioWeekRange('2026-12-28', '2027-01-03')).toBe('Dec 28, 2026 – Jan 3, 2027');
+  });
+
+  it('keeps Cardio Health independent of saved or estimated calories', () => {
+    const base: CardioData = {
+      ...createCardioData(),
+      goals: { weeklyRunTarget: 2, weeklyMileTarget: 8 },
+      runs: [run({ id: 'same-run', distance: 4 })]
+    };
+    const withEstimate: CardioData = {
+      ...base,
+      runs: [{
+        ...base.runs[0]!,
+        calorieEstimate: {
+          source: 'estimated',
+          method: 'distance-weight-v1',
+          weightKg: 70,
+          weightSource: 'manual'
+        }
+      }]
+    };
+
+    expect(selectCardioProgress(withEstimate, today)).toEqual(selectCardioProgress(base, today));
   });
 
   it('keeps multiple same-date runs and excludes invalid, duplicate-ID, and future evidence without dropping raw records', () => {

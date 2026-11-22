@@ -89,6 +89,7 @@ export function AnchoredPopover({
       const panelBounds = popover.getBoundingClientRect();
       const panel = {
         ...panelBounds,
+        width: Math.max(panelBounds.width, popover.scrollWidth),
         height: Math.max(panelBounds.height, popover.scrollHeight)
       };
       const visibleViewport = window.visualViewport;
@@ -192,8 +193,8 @@ export function AnchoredPopover({
         position: 'fixed',
         top: position?.top ?? 0,
         left: position?.left ?? 0,
-        maxHeight: position?.maxHeight ?? 0,
-        maxWidth: position?.maxWidth ?? 0,
+        maxHeight: position?.maxHeight ?? 'calc(100vh - 24px)',
+        maxWidth: position?.maxWidth ?? 'calc(100vw - 24px)',
         visibility: position ? 'visible' : 'hidden'
       }}
       onKeyDown={onKeyDown}

@@ -3866,12 +3866,11 @@ describe('Tend Today preview', () => {
     const cardScore = screen.getByRole('button', {
       name: historyButtonName('View scores and history for New morning rhythm')
     });
-    expect(cardScore.getAttribute('aria-label')).toContain('Health 25 out of 100');
+    expect(cardScore.getAttribute('aria-label')).toContain('Health unavailable');
     await user.click(cardScore);
     const history = await screen.findByRole('region', { name: 'History for New morning rhythm' });
     const summary = within(history).getByRole('region', { name: 'Health score summary' });
-    expect(within(summary).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow'))
-      .toBe('25');
+    expect(within(summary).getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
 
     await user.click(within(summary).getByRole('button', {
       name: 'Show Consistency and On Track score details'
@@ -3880,12 +3879,11 @@ describe('Tend Today preview', () => {
     const detailsSummary = within(details).getByRole('region', {
       name: 'Rhythm Health score details score summary'
     });
-    expect(within(detailsSummary).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow'))
-      .toBe('25');
+    expect(within(detailsSummary).getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
     expect(within(detailsSummary).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow'))
       .toBe('0');
-    expect(within(detailsSummary).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow'))
-      .toBe('100');
+    expect(within(detailsSummary).getByRole('img', { name: 'On Track: Unscored because Starts with your first Tend.' }))
+      .toBeTruthy();
   });
 
   it('keeps Take a walk descriptive cadence literal until a structured schedule is explicitly saved', async () => {
@@ -8242,7 +8240,7 @@ describe('Tend Today preview', () => {
 
     const cardioOpener = screen.getByRole('button', { name: 'Log run Health cardio due' });
     await user.click(cardioOpener);
-    expect(await screen.findByRole('dialog', { name: 'Log run' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Log activity' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Cardio Foundation' })).toBeTruthy();
     expect(document.querySelector('.health-fitness-page--foundation-detail')).toBeTruthy();
     expect(screen.queryByRole('tablist', { name: 'Health and Fitness' })).toBeNull();
@@ -8273,7 +8271,7 @@ describe('Tend Today preview', () => {
     expect(rhythmPanel.queryByRole('button', { name: 'Workout mode' })).toBeNull();
     const cardioRhythmLog = rhythmPanel.getByRole('button', { name: 'Log run Health cardio due' });
     await user.click(cardioRhythmLog);
-    const rhythmLogDialog = await screen.findByRole('dialog', { name: 'Log run' });
+    const rhythmLogDialog = await screen.findByRole('dialog', { name: 'Log activity' });
     await user.click(within(rhythmLogDialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(document.activeElement).toBe(cardioRhythmLog));
     await user.click(screen.getByRole('button', { name: 'Archived rhythms (1)' }));
@@ -8283,15 +8281,17 @@ describe('Tend Today preview', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Foundations' }));
     expect(screen.queryByRole('heading', { name: 'Your Rhythms' })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Weekly cardio' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Progress' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('heading', { name: / – / })).toBeTruthy();
+    expect(screen.getByText('Monday – Sunday')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Insights' }).getAttribute('aria-selected')).toBe('true');
     await user.click(screen.getByRole('tab', { name: 'Activities' }));
-    expect(screen.getByRole('heading', { name: 'Run history' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Log run' }));
-    const foundationRunDialog = screen.getByRole('dialog', { name: 'Log run' });
+    expect(screen.getByRole('heading', { name: 'Activity History' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Add activity' }));
+    const foundationRunDialog = screen.getByRole('dialog', { name: 'Log activity' });
+    await user.selectOptions(within(foundationRunDialog).getByLabelText('Activity type'), 'run');
     await user.type(within(foundationRunDialog).getByLabelText('Distance (miles)'), '3');
-    await user.click(within(foundationRunDialog).getByRole('button', { name: 'Save run' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log run' })).toBeNull());
+    await user.click(within(foundationRunDialog).getByRole('button', { name: 'Save activity' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log activity' })).toBeNull());
     let savedData = parsePreviewBackup(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!, todayDate);
     expect(savedData.valid).toBe(true);
     if (savedData.valid) expect(savedData.envelope.data.cardio.runs).toHaveLength(1);
@@ -8317,13 +8317,13 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: 'All Foundations' }));
     await user.click(within(screen.getByRole('region', { name: 'Foundations' }))
       .getByRole('button', { name: /Open Cardio foundation details/ }));
-    expect(screen.getByRole('heading', { name: 'Weekly cardio' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: / – / })).toBeTruthy();
     await user.click(screen.getByRole('tab', { name: 'Activities' }));
-    expect(screen.getByRole('heading', { name: 'Run history' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Activity History' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'All Foundations' }));
     await user.click(within(screen.getByRole('region', { name: 'Foundations' }))
       .getByRole('button', { name: /Open Weight foundation details/ }));
-    expect(screen.getByRole('heading', { name: 'Body weight progress' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Weight insights' })).toBeTruthy();
     await user.click(screen.getByRole('tab', { name: 'Weigh-Ins' }));
     expect(screen.getByRole('heading', { name: 'Weigh-in history' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Add weigh-in' }));
@@ -8860,7 +8860,7 @@ describe('Tend Today preview', () => {
     expect(cardioHeader.compareDocumentPosition(cardioHealthHeading) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(cardioHealthHeading.compareDocumentPosition(
-      screen.getByRole('heading', { name: 'Weekly cardio' })
+      screen.getByRole('heading', { name: / – / })
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getAllByRole('heading', { name: 'Cardio Health' })).toHaveLength(1);
     const cardioHealthSummary = cardioHealthHeading.closest('.fitness-score-summary') as HTMLElement;
@@ -8912,16 +8912,17 @@ describe('Tend Today preview', () => {
     expect(weightHealthHeading.textContent).toBe('Health');
     expect(weightHeader.compareDocumentPosition(weightHealthHeading) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Body weight progress' })).toBeNull();
     expect(weightHealthHeading.compareDocumentPosition(
-      screen.getByRole('heading', { name: 'Body weight progress' })
+      screen.getByRole('heading', { name: 'Weight insights' })
     ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(weightHealthHeading.closest('.fitness-score-summary')!)
       .getByRole('img', { name: 'Weight Health: Not enough data' })).toBeTruthy();
     expect(weightHealthHeading.closest('.fitness-score-summary')?.classList)
       .toContain('foundation-health-card');
-    expect(screen.getByRole('meter', {
+    expect(screen.queryByRole('meter', {
       name: 'Weight progress score, separate from category and Foundation scores'
-    })).toBeTruthy();
+    })).toBeNull();
 
     const weightInfo = within(weightHealthHeading.closest('.fitness-score-summary')!)
       .getByRole('button', { name: 'Show Weight Health scoring details' });
@@ -9506,8 +9507,7 @@ describe('Tend Today preview', () => {
           .toBe(false);
       }
     });
-    expect(screen.getByRole('meter', { name: 'Weight Health score' }).getAttribute('aria-valuenow'))
-      .toBe('25');
+    expect(screen.getByRole('img', { name: 'Weight Health: Not enough data' })).toBeTruthy();
   });
 
   it('links a Cardio run to one shared Rhythm completion, reloads it, and deletes only owned credit', async () => {
@@ -9557,10 +9557,10 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: 'All Foundations' }));
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
     await user.click(screen.getByRole('button', { name: 'Log run Cardio integration rhythm' }));
-    const logDialog = screen.getByRole('dialog', { name: 'Log run' });
+    const logDialog = screen.getByRole('dialog', { name: 'Log activity' });
     await user.type(within(logDialog).getByLabelText('Distance (miles)'), '3');
-    await user.click(within(logDialog).getByRole('button', { name: 'Save run' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log run' })).toBeNull());
+    await user.click(within(logDialog).getByRole('button', { name: 'Save activity' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log activity' })).toBeNull());
 
     const saved = parsePreviewBackup(
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
@@ -9619,8 +9619,10 @@ describe('Tend Today preview', () => {
     expect(cardioDetailScore).toBe(Number(categoryMeter.getAttribute('aria-valuenow')));
     expect(cardioCard.querySelector('.foundation-card__score')?.textContent)
       .toBe(String(Math.round(cardioDetailScore)));
-    expect(screen.getByText('3 miles')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /^Edit run from/ }));
+    expect(screen.getByRole('button', { name: /Open latest .* details for 3 miles/ })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Open latest .* details for 3 miles/ }));
+    const runDetails = screen.getByRole('dialog', { name: 'Run details' });
+    await user.click(within(runDetails).getByRole('button', { name: 'Edit activity' }));
     const editRun = screen.getByRole('dialog', { name: 'Edit run' });
     await user.click(within(editRun).getByRole('button', { name: 'Delete run' }));
     await user.click(within(screen.getByRole('dialog', { name: 'Delete this run?' }))

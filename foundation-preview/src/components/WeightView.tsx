@@ -33,7 +33,6 @@ import type {
 import type { DatedRhythmCompletion } from '../domain/rhythm-completion.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
-import { ScoreMeter } from './Cards.tsx';
 import { NumericControl } from './NumericControl.tsx';
 import { FitnessScoreSummary } from './FitnessScoreSummary.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
@@ -260,46 +259,44 @@ export function WeightView({
               />
             }
           >
-            <section className="card weight-progress-card" aria-labelledby="weight-progress-heading">
-              <header className="weight-card-heading">
-                <div><h2 id="weight-progress-heading">Body weight progress</h2>
-                  <p>{progress.latest
-                    ? `Latest recorded measurement · ${formatDate(progress.latest.date)}`
-                    : 'No valid weigh-in recorded yet.'}</p>
-                </div>
-              </header>
-              {progress.latest && (
-                <div className="weight-latest-record" aria-label="Latest recorded measurement">
-                  <span>Latest recorded</span>
+            <section className="weight-latest-section" aria-labelledby="weight-latest-heading">
+              <h2 id="weight-latest-heading">Latest weigh-in</h2>
+              {progress.latest ? (
+                <div className="weight-latest-record" aria-label="Latest weigh-in">
                   <strong>{formatWeight(progress.latest.weightKg, weightUnit(data.displayUnit))} {weightUnit(data.displayUnit)}</strong>
                   <time dateTime={progress.latest.date}>{formatDate(progress.latest.date)}</time>
                 </div>
+              ) : (
+                <p className="weight-empty" role="status">No valid weigh-in recorded yet.</p>
               )}
               {progress.latest && (progress.latestAge ?? 0) > 0 && (
                 <p className="weight-stale-notice">
-                  The estimate below uses the {formatDate(progress.latest.date)} measurement; it is not a measurement of today’s weight.
+                  The estimate is based on the latest weigh-in, not today’s weight.
                 </p>
               )}
-              <div className="weight-metrics">
-                <div><span>Expected today</span>
-                  <strong>{progress.expectedWeightKg === null ? '—' : `${formatWeight(progress.expectedWeightKg, weightUnit(data.displayUnit))} ${weightUnit(data.displayUnit)}`}</strong>
-                  <small>{progress.latest ? 'Goal-path estimate' : progress.status}</small>
+            </section>
+            <section className="weight-summary-section" aria-label="Weight summary">
+              <dl className="weight-metrics">
+                <div><dt>Expected today</dt>
+                  <dd><strong>{progress.expectedWeightKg === null ? '—' : `${formatWeight(progress.expectedWeightKg, weightUnit(data.displayUnit))} ${weightUnit(data.displayUnit)}`}</strong>
+                    <small>{progress.latest ? 'Goal-path estimate' : progress.status}</small></dd>
                 </div>
-                <div><span>Progress score</span>
-                  <strong>{progress.score === null ? '—' : `${formatScore(progress.score)} / 100`}</strong>
-                  <small>{progress.goalStatus ?? progress.status}</small>
+                <div><dt>Goal-path progress</dt>
+                  <dd><strong>{progress.score === null ? '—' : `${formatScore(progress.score)} / 100`}</strong>
+                    <small>{progress.goalStatus ?? progress.status}</small></dd>
                 </div>
-                <div><span>Goal weight</span>
-                  <strong>{weightGoalSettings(data.goals)
+                <div><dt>Goal weight</dt>
+                  <dd><strong>{weightGoalSettings(data.goals)
                     ? `${formatWeight(weightGoalSettings(data.goals)!.targetWeightKg, weightUnit(data.displayUnit))} ${weightUnit(data.displayUnit)}`
                     : '—'}</strong>
-                  <small>{weightGoalSettings(data.goals)?.goalDate
-                    ? `By ${formatDate(weightGoalSettings(data.goals)!.goalDate)}`
-                    : 'Set a complete goal'}</small>
+                    <small>{weightGoalSettings(data.goals)?.goalDate
+                      ? `By ${formatDate(weightGoalSettings(data.goals)!.goalDate)}`
+                      : 'Set a complete goal'}</small></dd>
                 </div>
-              </div>
-              <ScoreMeter label="Weight progress score, separate from category and Foundation scores"
-                score={progress.score} />
+              </dl>
+            </section>
+            <section className="weight-chart-section" aria-labelledby="weight-chart-heading">
+              <h2 id="weight-chart-heading">Weight chart</h2>
               {trackingSetupRequired ? (
                 <p className="weight-chart-empty" role="status">
                   Use Weight tracking settings (gear) to set a goal, or add a weigh-in to begin tracking progress.
@@ -824,7 +821,7 @@ function WeightChart({
         <text x="400" y="221" textAnchor="end">{formatAxisDate(end)}</text>
       </svg>
       <div className="weight-chart-legend" aria-label="Chart legend">
-        <span><i className="weight-chart-legend__record" />Recorded measurement</span>
+        <span><i className="weight-chart-legend__record" />Recorded weigh-in</span>
         {goals && <span><i className="weight-chart-legend__goal" />Goal path</span>}
         {showExpected && <span><i className="weight-chart-legend__expected" />Expected today</span>}
         <span className="weight-chart-legend__unit">Values in {unit}</span>

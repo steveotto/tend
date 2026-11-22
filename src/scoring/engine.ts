@@ -480,8 +480,6 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
     } else if (occurrence.missed) {
       onTrackValue = Math.max(0, onTrackValue - POINTS_PER_CONSECUTIVE_MISS);
       hasOnTrackEvidence = true;
-    } else {
-      hasOnTrackEvidence = true;
     }
     return {
       ...occurrence,
