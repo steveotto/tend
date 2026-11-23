@@ -17,7 +17,7 @@
 3. Sign out, request a password reset for the same address, open the reset email, and set a new password directly in the browser. Verify sign-in with the new password.
 4. Create only clearly synthetic Preview data, reload, and confirm the synthetic Preview state remains available. Reset that synthetic data afterward.
 
-**Release route:** PR #123 is merged to `main`. Commit `2cf11c0` is pushed on `release/focus-update`, and PR #124 is open against `main`. Its Cloudflare Pages check is still pending. Merge and production deployment remain pending that required check and the user's manual live-auth verification. The latest successful Pages run was for merge commit `0c6564c9ed03427dc6d285b18c538c5eb8d1de60`, not this release.
+**Release route:** PR #123 is merged to `main`. Commit `2cf11c0` is pushed on `release/focus-update`, and PR #124 is open against `main`. Its Cloudflare Pages check passed on head `5b9f21c2`; recheck the latest head before merge. Merge and production deployment remain pending the user's manual live-auth verification. The latest successful production Pages run was for merge commit `0c6564c9ed03427dc6d285b18c538c5eb8d1de60`, not this release.
 
 ## Connection Health, compact history, and Rhythm icon — release candidate (2026-11-23)
 
