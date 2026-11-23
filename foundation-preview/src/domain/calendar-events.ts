@@ -139,7 +139,7 @@ function zonedDateTimeToInstant(parts: DateParts, timeZone: string): number {
   return high * 1000;
 }
 
-function zonedWallTimeToInstant(parts: DateTimeParts, timeZone: string): number {
+export function zonedWallTimeToInstant(parts: DateTimeParts, timeZone: string): number {
   const target = Date.UTC(
     parts.year,
     parts.month - 1,

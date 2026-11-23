@@ -319,11 +319,13 @@ function failureDiagnostic(
 export function CalendarAgendaSection({
   sources,
   timeZone,
-  readerEnabled
+  readerEnabled,
+  onEventsChange
 }: {
   sources: readonly CalendarSource[];
   timeZone: string;
   readerEnabled: boolean;
+  onEventsChange?: (events: readonly CalendarEvent[]) => void;
 }) {
   const [retryCount, setRetryCount] = useState(0);
   const [selectedRange, setSelectedRange] = useState<CalendarRange>('today');
@@ -338,6 +340,10 @@ export function CalendarAgendaSection({
     () => sources.filter(source => source.enabled !== false),
     [sources]
   );
+
+  useEffect(() => {
+    onEventsChange?.(state.events);
+  }, [onEventsChange, state.events]);
 
   useEffect(() => {
     if (!readerEnabled || enabledSources.length === 0) {

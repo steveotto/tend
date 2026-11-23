@@ -132,6 +132,7 @@ type TodayViewProps = {
   localTimeZone?: string;
   calendarReaderEnabled?: boolean;
   showCalendarOnToday?: boolean;
+  onCalendarEventsChange?: (events: readonly import('../domain/calendar-events.ts').CalendarEvent[]) => void;
 };
 
 export function TodayView({
@@ -165,6 +166,7 @@ export function TodayView({
   localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   calendarReaderEnabled = false,
   showCalendarOnToday = true,
+  onCalendarEventsChange,
 }: TodayViewProps) {
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
@@ -546,6 +548,7 @@ export function TodayView({
           sources={calendarSources}
           timeZone={localTimeZone}
           readerEnabled={calendarReaderEnabled}
+          {...(onCalendarEventsChange ? { onEventsChange: onCalendarEventsChange } : {})}
         />
       )}
     </main>
