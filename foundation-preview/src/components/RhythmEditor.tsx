@@ -54,6 +54,7 @@ import {
 import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { CheckboxTileOptions } from './CheckboxTileOptions.tsx';
+import { PersonLinkIcon } from './PersonLinkIcon.tsx';
 
 function mergePickerSelection(
   existingIds: readonly string[],
@@ -83,7 +84,9 @@ function emptyDraft(): RhythmDraft {
     categoryIds: [],
     schedule: { frequency: 'daily' },
     scheduleEditing: true,
-    personal: false
+    personal: false,
+    alsoLogConnection: false,
+    alsoLogConnectionExplicit: false
   };
 }
 
@@ -99,13 +102,16 @@ function RhythmSectionHeading({
   return (
     <h3 id={id} className="rhythm-editor__section-heading">
       <span className="rhythm-editor__section-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-          strokeLinecap="round" strokeLinejoin="round" focusable="false">
-          {icon === 'details' && <><path d="m14.5 5.5 4 4" /><path d="M4 20l4.8-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.8 16 4 20Z" /></>}
-          {icon === 'timing' && <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.2 2" /></>}
-          {icon === 'connections' && <><path d="m9.5 14.5-1.2 1.2a3.7 3.7 0 0 1-5.2-5.2l3.1-3.1a3.7 3.7 0 0 1 5.2 0" /><path d="m14.5 9.5 1.2-1.2a3.7 3.7 0 0 1 5.2 5.2l-3.1 3.1a3.7 3.7 0 0 1-5.2 0" /><path d="m8.8 15.2 6.4-6.4" /></>}
-          {icon === 'activity' && <path d="M3 12h4l3-7 4 14 3-7h4" />}
-        </svg>
+        {icon === 'connections'
+          ? <PersonLinkIcon />
+          : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+              strokeLinecap="round" strokeLinejoin="round" focusable="false">
+              {icon === 'details' && <><path d="m14.5 5.5 4 4" /><path d="M4 20l4.8-1 10.4-10.4a2.1 2.1 0 0 0-3-3L5.8 16 4 20Z" /></>}
+              {icon === 'timing' && <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.2 2" /></>}
+              {icon === 'activity' && <path d="M3 12h4l3-7 4 14 3-7h4" />}
+            </svg>
+          )}
       </span>
       <span className="rhythm-editor__section-title">{title}</span>
       <span className="rhythm-editor__section-divider" aria-hidden="true" />
@@ -420,7 +426,17 @@ export function RhythmEditor({
           return next;
         });
       } else {
-        update('personIds', normalizeRhythmPersonIds(pickerSelection as RhythmDraft['personIds']));
+        const personIds = normalizeRhythmPersonIds(pickerSelection as RhythmDraft['personIds']);
+        setDraft(previous => {
+          const attachingPeople = previous.personIds.length === 0 && personIds.length > 0;
+          return {
+            ...previous,
+            personIds,
+            ...(attachingPeople && !previous.alsoLogConnectionExplicit && !rhythm
+              ? { alsoLogConnection: true }
+              : {})
+          };
+        });
       }
     }
     setPendingCategoryRemoval(null);
@@ -910,6 +926,26 @@ export function RhythmEditor({
             openerRef={peoplePickerOpenerRef}
             onChoose={() => openPicker('people')}
           />
+          {draft.personIds.length > 0 && (
+            <label className="rhythm-editor__association-checkbox">
+              <input
+                type="checkbox"
+                checked={draft.alsoLogConnection ?? false}
+                onChange={event => {
+                  const checked = event.currentTarget.checked;
+                  setDraft(previous => ({
+                    ...previous,
+                    alsoLogConnection: checked,
+                    alsoLogConnectionExplicit: true
+                  }));
+                }}
+              />
+              <span>
+                <strong>Also log a connection</strong>
+                <small>When you Tend this Rhythm, record a connection with the people selected.</small>
+              </span>
+            </label>
+          )}
           <div className={`rhythm-editor__category-field${categoryValidationMessage
             ? ' rhythm-editor__category-field--invalid'
             : ''}`}>

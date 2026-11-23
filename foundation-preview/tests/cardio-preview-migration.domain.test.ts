@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { createSamplePreviewData } from '../src/domain/preview-state.ts';
-import { createPreviewEnvelope, parsePreviewBackup } from '../src/domain/preview-state.ts';
+import {
+  PREVIEW_SCHEMA_VERSION,
+  createPreviewEnvelope,
+  parsePreviewBackup
+} from '../src/domain/preview-state.ts';
 import {
   PREVIEW_V51_RECOVERY_KEY,
   preserveProposedV4SourceRecovery
 } from '../src/storage/preview-v4-recovery.ts';
 import { PREVIEW_STORAGE_KEY } from '../src/storage/preview-storage.ts';
 import type { PreviewStorage } from '../src/storage/preview-storage.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 
 const today = '2026-10-22';
 
@@ -22,7 +27,7 @@ describe('Cardio estimate preview migration', () => {
       { id: 'run-before-weight', date: '2026-10-18', distance: 3 }
     ];
     const current = createPreviewEnvelope(data);
-    const raw = JSON.stringify({
+    const raw = JSON.stringify(withPreSparkSchema({
       ...current,
       schemaVersion: 51,
       data: {
@@ -35,14 +40,14 @@ describe('Cardio estimate preview migration', () => {
           ]
         }
       }
-    });
+    }, 51));
 
     const migrated = parsePreviewBackup(raw, today);
 
-    expect(migrated.valid).toBe(true);
+    expect(migrated, migrated.valid ? undefined : migrated.message).toMatchObject({ valid: true });
     if (!migrated.valid) return;
     expect(migrated.sourceSchemaVersion).toBe(51);
-    expect(migrated.envelope.schemaVersion).toBe(52);
+    expect(migrated.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(migrated.envelope.data.cardio.runs).toEqual([
       expect.objectContaining({
         id: 'legacy-run',

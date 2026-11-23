@@ -335,4 +335,64 @@ describe('Rhythm completion controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close completion' }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it('requires at least one selected person for a Rhythm connection or an explicit skip', () => {
+    const connectionRhythm = {
+      ...rhythm,
+      personIds: ['sample-person-avery', 'sample-person-morgan'] as const,
+      alsoLogConnection: true
+    };
+    const onSave = vi.fn<(record: RhythmCompletionRecord, participantIds?: readonly import('../src/domain/preview-data.ts').PersonId[]) => string | null>(() => null);
+    const onSaved = vi.fn();
+    render(
+      <RhythmCompletionForm
+        rhythm={{ ...connectionRhythm, personIds: [...connectionRhythm.personIds] }}
+        onSave={onSave}
+        onCancel={() => undefined}
+        onSaved={onSaved}
+      />
+    );
+
+    expect(screen.queryByRole('combobox')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Avery Brooks'));
+    fireEvent.click(screen.getByLabelText('Morgan Reed'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toBe('Choose at least one person, or skip the connection.');
+
+    fireEvent.click(screen.getByLabelText('Also log a connection'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[1]).toBeUndefined();
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+
+  it('passes the user-confirmed actual participant list without changing the saved Rhythm association', () => {
+    const connectionRhythm = {
+      ...rhythm,
+      personIds: ['sample-person-avery'] as const,
+      alsoLogConnection: true
+    };
+    const onSave = vi.fn<
+      (record: RhythmCompletionRecord, participantIds?: readonly import('../src/domain/preview-data.ts').PersonId[]) => string | null
+    >(() => null);
+    render(
+      <RhythmCompletionForm
+        rhythm={{ ...connectionRhythm, personIds: [...connectionRhythm.personIds] }}
+        onSave={onSave}
+        onCancel={() => undefined}
+        onSaved={() => undefined}
+      />
+    );
+
+    expect((screen.getByLabelText('Avery Brooks') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Morgan Reed') as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByLabelText('Avery Brooks'));
+    fireEvent.click(screen.getByLabelText('Morgan Reed'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[1]).toEqual(['sample-person-morgan']);
+    expect(connectionRhythm.personIds).toEqual(['sample-person-avery']);
+  });
 });

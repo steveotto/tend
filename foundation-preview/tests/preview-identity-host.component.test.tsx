@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -12,12 +12,19 @@ import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
 import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import type { SavedRhythm } from '../src/domain/rhythm-editor.ts';
+import { defaultCategoryPreferences } from '../src/domain/category-availability.ts';
 import {
+  createEmptyPreviewData,
   createPreviewEnvelope,
   createSamplePreviewData,
+  parsePreviewBackup,
   PREVIEW_SCHEMA_VERSION
 } from '../src/domain/preview-state.ts';
-import { PREVIEW_ACCOUNT_STORAGE_PREFIX } from '../src/storage/preview-storage.ts';
+import { migratePreviewToProposedV4 } from '../src/domain/preview-v4-migration.ts';
+import {
+  PREVIEW_ACCOUNT_STORAGE_PREFIX,
+  PREVIEW_STORAGE_KEY
+} from '../src/storage/preview-storage.ts';
 import { installMemoryStorage } from './memory-storage.ts';
 
 const accountId = 'a0000000-0000-4000-8000-000000000001';
@@ -85,6 +92,7 @@ function fakeAuth(
   let callback: ((event: string, value: PreviewSession | null) => void) | null = null;
   const resetPasswordForEmail = vi.fn(async () => ({ error: resetError }));
   const updateUser = vi.fn(async () => ({ error: updateError }));
+  const signUp = vi.fn(async () => ({ data: { session: null }, error: null }));
   const signInWithPassword = vi.fn(async () => {
     callback?.('SIGNED_IN', session);
     return { data: { session }, error: null };
@@ -106,6 +114,7 @@ function fakeAuth(
         queueMicrotask(() => callback?.('INITIAL_SESSION', initialSession));
         return { data: { subscription: { unsubscribe: vi.fn() } } };
       },
+      signUp,
       signInWithPassword,
       resetPasswordForEmail,
       updateUser,
@@ -123,6 +132,7 @@ function fakeAuth(
     factoryOptions,
     resetPasswordForEmail,
     updateUser,
+    signUp,
     signInWithPassword,
     signOut,
     from,
@@ -178,6 +188,54 @@ describe('PreviewIdentityHost', () => {
     expect(screen.getByText(
       'Use your existing Tend email and password. Preview keeps a separate local copy on this device.'
     )).toBeTruthy();
+  });
+
+  it('offers Sign up with password validation, show controls, and a confirmation success state', async () => {
+    window.history.replaceState(null, '', '/app-preview.html?source=signup#temporary-state');
+    installMemoryStorage();
+    const auth = fakeAuth();
+    const user = userEvent.setup();
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+    await user.click(screen.getByRole('button', { name: 'Sign up' }));
+    await screen.findByRole('heading', { name: 'Create your Tend account' });
+
+    await user.type(screen.getByRole('textbox', { name: 'Email address' }), 'new-user@example.test');
+    const password = screen.getByLabelText('Password');
+    await user.type(password, 'short');
+    await user.type(screen.getByLabelText('Confirm password'), 'short');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('at least 8 characters');
+    expect(auth.signUp).not.toHaveBeenCalled();
+
+    await user.clear(password);
+    await user.clear(screen.getByLabelText('Confirm password'));
+    await user.type(password, 'long-enough-password');
+    await user.type(screen.getByLabelText('Confirm password'), 'different-password');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('passwords do not match');
+    expect(auth.signUp).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText('Confirm password'));
+    await user.type(screen.getByLabelText('Confirm password'), 'long-enough-password');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password.getAttribute('type')).toBe('text');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+
+    await screen.findByRole('heading', { name: 'Check your email' });
+    expect(auth.signUp).toHaveBeenCalledWith({
+      email: 'new-user@example.test',
+      password: 'long-enough-password',
+      options: { emailRedirectTo: `${window.location.origin}/app-preview.html` }
+    });
   });
 
   it('does not initialize authentication or account data before access is enabled', () => {
@@ -316,6 +374,109 @@ describe('PreviewIdentityHost', () => {
     expect(storage.getItem('tend:supabase-auth')).toBe('classic-session-sentinel');
   });
 
+  it('keeps new-account data empty and isolated through first save, sign-out, sign-in, and reload', async () => {
+    const storage = installMemoryStorage();
+    vi.stubEnv('VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED', 'true');
+    storage.setItem('tend:supabase-auth', 'classic-session-sentinel');
+    const anonymousData = createEmptyPreviewData();
+    anonymousData.people = [{ id: 'sample-person-avery', displayName: 'Anonymous only' }];
+    const otherAccountData = createEmptyPreviewData();
+    otherAccountData.people = [{ id: 'sample-person-morgan', displayName: 'Other account only' }];
+    const anonymousRaw = JSON.stringify(createPreviewEnvelope(anonymousData));
+    const otherAccountKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:b0000000-0000-4000-8000-000000000002`;
+    const otherAccountRaw = JSON.stringify(createPreviewEnvelope(otherAccountData));
+    storage.setItem(PREVIEW_STORAGE_KEY, anonymousRaw);
+    storage.setItem(otherAccountKey, otherAccountRaw);
+
+    const user = userEvent.setup();
+    const auth = fakeAuth(null, null, null, true);
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+    await user.click(screen.getByRole('button', { name: 'Sign up' }));
+    await user.type(screen.getByRole('textbox', { name: 'Email address' }), 'new-user@example.test');
+    await user.type(screen.getByLabelText('Password'), 'long-enough-password');
+    await user.type(screen.getByLabelText('Confirm password'), 'long-enough-password');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    await screen.findByRole('heading', { name: 'Check your email' });
+    expect(auth.signUp).toHaveBeenCalledOnce();
+    expect(storage.getItem(accountStorageKey)).toBeNull();
+
+    act(() => auth.emitEvent('SIGNED_IN', session));
+    await screen.findByRole('region', { name: "Today's plan" });
+    const initializedAccountRaw = storage.getItem(accountStorageKey);
+    expect(initializedAccountRaw).not.toBeNull();
+    const initializedAccount = JSON.parse(initializedAccountRaw!);
+    expect(initializedAccount.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(initializedAccount.data).toMatchObject({
+      goals: [],
+      savedRhythms: [],
+      people: [],
+      categoryPreferences: defaultCategoryPreferences,
+      friendships: { cadenceSettings: [], connections: [] }
+    });
+    await waitFor(() => expect(auth.rpc).toHaveBeenCalledWith(
+      'tend_save_preview_backup',
+      expect.objectContaining({
+        p_expected_revision: 0,
+        p_schema_version: PREVIEW_SCHEMA_VERSION
+      })
+    ));
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(anonymousRaw);
+    expect(storage.getItem(otherAccountKey)).toBe(otherAccountRaw);
+
+    await user.click(screen.getByRole('button', { name: 'People' }));
+    expect(screen.queryByRole('button', { name: 'Open profile for Anonymous only' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open profile for Other account only' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Add person' }));
+    const personDialog = screen.getByRole('dialog');
+    await user.type(within(personDialog).getByLabelText('Name'), 'New account person');
+    await user.click(within(personDialog).getByRole('button', { name: 'Add person' }));
+    await screen.findByRole('button', { name: 'Open profile for New account person' });
+
+    const savedAccountRaw = storage.getItem(accountStorageKey);
+    expect(savedAccountRaw).not.toBeNull();
+    const savedAccount = JSON.parse(savedAccountRaw!);
+    expect(savedAccount.data.people.map((person: { displayName: string }) => person.displayName))
+      .toEqual(['New account person']);
+    expect(savedAccount.data.savedRhythms).toEqual([]);
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(anonymousRaw);
+    expect(storage.getItem(otherAccountKey)).toBe(otherAccountRaw);
+
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    await screen.findByRole('heading', { name: 'Sign in with Tend' });
+    await user.type(screen.getByRole('textbox', { name: 'Email address' }), 'new-user@example.test');
+    await user.type(screen.getByLabelText('Password'), 'long-enough-password');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await screen.findByRole('button', { name: 'More, settings' });
+    await user.click(screen.getByRole('button', { name: 'People' }));
+    expect(await screen.findByRole('button', { name: 'Open profile for New account person' })).toBeTruthy();
+
+    cleanup();
+    const restoredAuth = fakeAuth(session);
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={restoredAuth.clientFactory}
+      />
+    );
+    await screen.findByRole('button', { name: 'More, settings' });
+    await user.click(screen.getByRole('button', { name: 'People' }));
+    expect(await screen.findByRole('button', { name: 'Open profile for New account person' })).toBeTruthy();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(anonymousRaw);
+    expect(storage.getItem(otherAccountKey)).toBe(otherAccountRaw);
+  });
+
   it('keeps account backup available in Pages mode while hiding synthetic import controls', async () => {
     vi.stubEnv('MODE', 'pages');
     installMemoryStorage();
@@ -396,10 +557,24 @@ describe('PreviewIdentityHost', () => {
     const storage = installMemoryStorage();
     const data = scoredFaithFixture();
     const currentEnvelope = createPreviewEnvelope(data);
+    const rhythmId = data.savedRhythms[0]!.id;
     const originalRaw = JSON.stringify({
       ...currentEnvelope,
       schemaVersion: PREVIEW_SCHEMA_VERSION - 1
     });
+    const parsedOriginal = parsePreviewBackup(originalRaw, localDateString(new Date()));
+    expect(parsedOriginal.valid).toBe(true);
+    if (parsedOriginal.valid) {
+      expect(parsedOriginal.envelope.data.datedRhythmCompletions).toHaveLength(23);
+      expect(parsedOriginal.envelope.data.rhythmHistoryIds).toContain(rhythmId);
+    }
+    const migratedOriginal = migratePreviewToProposedV4(originalRaw, localDateString(new Date()));
+    expect(migratedOriginal.valid).toBe(true);
+    if (migratedOriginal.valid) {
+      expect(migratedOriginal.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION - 1);
+      expect(migratedOriginal.envelope.data.datedRhythmCompletions).toHaveLength(23);
+      expect(migratedOriginal.envelope.data.rhythmHistoryIds).toContain(rhythmId);
+    }
     storage.setItem(accountStorageKey, originalRaw);
     const user = userEvent.setup();
     const auth = fakeAuth(session);
@@ -417,14 +592,21 @@ describe('PreviewIdentityHost', () => {
     await user.click(screen.getByRole('tab', { name: 'All today' }));
     expandAllTodayGroups();
     await screen.findByText('Synthetic daily prayer');
+    expect(storage.getItem(accountStorageKey)).toBe(originalRaw);
     const faithRow = screen.getAllByRole('button', { name: 'Faith' })
       .find(button => button.classList.contains('menu-area'));
     expect(faithRow?.querySelector('.ma-score')?.textContent).not.toBe('—');
-    expect(storage.getItem(accountStorageKey)).toBe(originalRaw);
+    const stored = parsePreviewBackup(storage.getItem(accountStorageKey)!, localDateString(new Date()));
+    expect(stored.valid).toBe(true);
+    if (stored.valid) {
+      expect(stored.envelope.data.datedRhythmCompletions).toHaveLength(23);
+      expect(stored.envelope.data.rhythmHistoryIds).toContain(rhythmId);
+    }
     expect(screen.queryByRole('heading', { name: 'Preview could not open' })).toBeNull();
   });
 
-  it('sends password-reset requests back to the Preview root without revealing account existence', async () => {
+  it('sends password-reset requests back to the current Preview app without revealing account existence', async () => {
+    window.history.replaceState(null, '', '/app-preview.html?source=recovery#temporary-state');
     installMemoryStorage();
     const auth = fakeAuth();
     const user = userEvent.setup();
@@ -446,7 +628,7 @@ describe('PreviewIdentityHost', () => {
     );
     expect(auth.resetPasswordForEmail).toHaveBeenCalledWith(
       'synthetic@example.test',
-      { redirectTo: `${window.location.origin}/` }
+      { redirectTo: `${window.location.origin}/app-preview.html` }
     );
   });
 

@@ -2,6 +2,11 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RhythmEditor } from '../src/components/RhythmEditor.tsx';
+import { CategoryAvailabilityProvider } from '../src/components/CategoryAvailabilityContext.tsx';
+import {
+  defaultCategoryPreferences,
+  defaultFoundationPreferences
+} from '../src/domain/category-availability.ts';
 import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
 import type { PersonPreview } from '../src/domain/preview-data.ts';
 import type { RhythmDraft, SavedRhythm } from '../src/domain/rhythm-editor.ts';
@@ -13,6 +18,7 @@ import {
 import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+import { localDateString } from '../src/domain/money-goals.ts';
 
 afterEach(cleanup);
 
@@ -74,6 +80,127 @@ async function choose(user: ReturnType<typeof userEvent.setup>, label: string, o
 }
 
 describe('shared structured Rhythm editor', () => {
+  it('uses the shared Person + Link icon for the Connections section', () => {
+    const dialog = renderEditor();
+    const heading = within(dialog).getByRole('heading', { name: 'Connections' });
+
+    expect(heading.querySelector('.person-link-icon')?.getAttribute('stroke')).toBe('currentColor');
+    expect(heading.querySelector('.person-link-icon')?.getAttribute('viewBox')).toBe('0 0 64 64');
+  });
+
+  it('defaults Connection logging only for a new Rhythm, not an existing unset Rhythm', async () => {
+    const user = userEvent.setup();
+    const people = [{ id: 'sample-person-avery' as const, displayName: 'Avery Brooks' }];
+    const newDraft: RhythmDraft = {
+      title: 'A new Dating Rhythm',
+      description: '',
+      cadence: 'Weekly',
+      timeLabel: 'Anytime',
+      personIds: [],
+      categoryIds: ['dating'],
+      scheduleEditing: true,
+      primaryFoundationId: 'dating-connection',
+      secondaryFoundationIds: []
+    };
+    const onSave = vi.fn((_draft: RhythmDraft) => ({}));
+    render(
+      <CategoryAvailabilityProvider
+        preferences={{ ...defaultCategoryPreferences, marriage: false, dating: true }}
+        foundationPreferences={defaultFoundationPreferences}
+      >
+        <RhythmEditor
+          initialDraft={newDraft}
+          people={people}
+          peopleGroups={[]}
+          onSave={onSave}
+          onClose={vi.fn()}
+        />
+      </CategoryAvailabilityProvider>
+    );
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    expect(within(editor).queryByRole('checkbox', { name: /Also log a connection/ })).toBeNull();
+    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    let picker = associationPicker('Choose people');
+    await user.click(within(picker).getByRole('button', { name: 'Avery Brooks' }));
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    expect((within(editor).getByRole('checkbox', {
+      name: /Also log a connection/
+    }) as HTMLInputElement).checked).toBe(true);
+
+    cleanup();
+    const existing: RhythmPreview = {
+      ...todayRhythms[0]!,
+      id: 'user-rhythm-84000000-0000-4000-8000-000000000035',
+      categoryIds: ['dating'],
+      personIds: [],
+      primaryFoundationId: 'dating-connection',
+      secondaryFoundationIds: [],
+    };
+    render(
+      <CategoryAvailabilityProvider
+        preferences={{ ...defaultCategoryPreferences, marriage: false, dating: true }}
+        foundationPreferences={defaultFoundationPreferences}
+      >
+        <RhythmEditor
+          rhythm={existing}
+          people={people}
+          peopleGroups={[]}
+          onSave={onSave}
+          onClose={vi.fn()}
+        />
+      </CategoryAvailabilityProvider>
+    );
+    const edit = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    await user.click(within(edit).getByRole('button', { name: 'Choose people' }));
+    picker = associationPicker('Choose people');
+    await user.click(within(picker).getByRole('button', { name: 'Avery Brooks' }));
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
+    expect((within(edit).getByRole('checkbox', {
+      name: /Also log a connection/
+    }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it.each([
+    ['every-two-weeks', '2', 'weeks'],
+    ['every-three-months', '3', 'months']
+  ] as const)(
+    'maps the %s recommendation to its exact editable interval without fixed dates or weekdays',
+    (recommendedFrequency, interval, unit) => {
+      render(
+        <RhythmEditor
+          initialDraft={{
+            title: 'A suggested Rhythm',
+            description: '',
+            cadence: 'Suggested',
+            timeLabel: 'Anytime',
+            personIds: [],
+            categoryIds: [],
+            scheduleEditing: true,
+            personal: false,
+            primaryFoundationId: null,
+            secondaryFoundationIds: []
+          }}
+          recommendedFrequency={recommendedFrequency}
+          onSave={vi.fn(() => ({}))}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect((screen.getByRole('spinbutton', { name: /Repeat every/i }) as HTMLInputElement).value)
+        .toBe(interval);
+      expect(screen.getByRole('combobox', { name: /Repeat interval unit/i }).textContent?.toLowerCase())
+        .toContain(unit);
+      expect((screen.getByLabelText('Starting on') as HTMLInputElement).value)
+        .toBe(localDateString(new Date()));
+      expect(document.querySelector<HTMLInputElement>('.rhythm-schedule-fields__weekday input:checked'))
+        .toBeNull();
+      if (recommendedFrequency === 'every-three-months') {
+        expect(screen.getByRole('combobox', { name: /Repeat on/i }).textContent)
+          .toContain('Choose a pattern');
+      }
+    }
+  );
+
   it('configures a saved-workout rotation with accessible ordering and advancement choices', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn((_draft: RhythmDraft) => ({}));
@@ -480,13 +607,22 @@ describe('shared structured Rhythm editor', () => {
   it('uses the same Details, Timing, and Connections sections and Save action for Add and Edit', () => {
     const sectionNames = ['Details', 'Timing', 'Connections'];
     const addEditor = renderEditor();
-    expect(within(addEditor).getAllByRole('heading', { level: 3 }).map(heading => heading.textContent))
+    expect(within(addEditor).getAllByRole('heading', { level: 3 }).map(heading =>
+      heading.querySelector('.rhythm-editor__section-title')?.textContent?.trim()
+    ))
       .toEqual(sectionNames);
     for (const heading of within(addEditor).getAllByRole('heading', { level: 3 })) {
       expect(heading.querySelector('.rhythm-editor__section-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(heading.querySelector('.rhythm-editor__section-icon svg')?.getAttribute('focusable')).toBe('false');
       expect(heading.querySelector('.rhythm-editor__section-divider')?.getAttribute('aria-hidden')).toBe('true');
     }
+    const addConnectionsIcon = within(addEditor)
+      .getByRole('heading', { name: 'Connections' })
+      .querySelector('.rhythm-editor__section-icon svg')!;
+    expect(addConnectionsIcon.getAttribute('viewBox')).toBe('0 0 64 64');
+    expect(addConnectionsIcon.getAttribute('stroke')).toBe('currentColor');
+    expect(addConnectionsIcon.getAttribute('stroke-width')).toBe('5');
+    expect(addConnectionsIcon.getAttribute('aria-hidden')).toBe('true');
     expect(within(addEditor).getByRole('button', { name: 'Save' })).toBeTruthy();
     expect(within(addEditor).queryByRole('button', { name: 'Add Rhythm' })).toBeNull();
     expect(addEditor.classList.contains('dialog--phone-fullscreen')).toBe(true);
@@ -497,9 +633,17 @@ describe('shared structured Rhythm editor', () => {
       <RhythmEditor rhythm={todayRhythms[0]!} onSave={vi.fn(() => ({}))} onClose={vi.fn()} />
     );
     const editEditor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
-    expect(within(editEditor).getAllByRole('heading', { level: 3 }).map(heading => heading.textContent))
+    expect(within(editEditor).getAllByRole('heading', { level: 3 }).map(heading =>
+      heading.querySelector('.rhythm-editor__section-title')?.textContent?.trim()
+    ))
       .toEqual(sectionNames);
     expect(editEditor.querySelectorAll('.rhythm-editor__section-icon')).toHaveLength(3);
+    const editConnectionsIcon = within(editEditor)
+      .getByRole('heading', { name: 'Connections' })
+      .querySelector('.rhythm-editor__section-icon svg')!;
+    expect(editConnectionsIcon.getAttribute('viewBox')).toBe('0 0 64 64');
+    expect(editConnectionsIcon.getAttribute('stroke')).toBe('currentColor');
+    expect(editConnectionsIcon.getAttribute('stroke-width')).toBe('5');
     expect(within(editEditor).getByRole('button', { name: 'Save' })).toBeTruthy();
     expect(within(editEditor).queryByRole('button', { name: 'Save Rhythm' })).toBeNull();
     expect(editEditor.classList.contains('dialog--phone-fullscreen')).toBe(true);

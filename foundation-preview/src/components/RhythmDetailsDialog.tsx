@@ -55,8 +55,14 @@ type RhythmDetailsDialogProps = {
   completed?: boolean;
   datedCompletions?: readonly DatedRhythmCompletion[];
   completionHistoryAvailable?: boolean;
-  onSaveCompletion?: (record: RhythmCompletionRecord) => string | null;
-  onLogCompletion?: (record: RhythmCompletionRecord) => string | null;
+  onSaveCompletion?: (
+    record: RhythmCompletionRecord,
+    connectionParticipantIds?: PersonId[]
+  ) => string | null;
+  onLogCompletion?: (
+    record: RhythmCompletionRecord,
+    connectionParticipantIds?: PersonId[]
+  ) => string | null;
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
   onEditSeason?: (rhythmId: string, draft: RhythmSeasonEditDraft) => string | null;

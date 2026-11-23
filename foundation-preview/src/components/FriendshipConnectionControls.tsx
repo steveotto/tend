@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { personById, syntheticPeople } from '../domain/preview-data.ts';
 import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
+import { localDateString } from '../domain/money-goals.ts';
 import { setPersonConnectionCadence } from '../domain/friendships.ts';
 import type {
   ConnectionCadence,
@@ -10,23 +11,22 @@ import type {
   FriendshipData
 } from '../domain/friendships.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
-import { PersonBadgeVisual } from './PersonBadge.tsx';
+import { PeopleParticipantPicker } from './PeopleParticipantPicker.tsx';
 import { PersonConnectionCadenceSelect } from './PersonConnectionCadenceSelect.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
 import type { StyledSelectOption } from './StyledSelect.tsx';
+import { CompletionDateTimeFields } from './CompletionDateTimeFields.tsx';
 
 export const connectionTypeLabels: Record<ConnectionType, string> = {
   text: 'Text',
   call: 'Call',
-  'time-together': 'Time Together'
+  'time-together': 'Time Together',
+  rhythm: 'Rhythm',
+  spark: 'Spark'
 };
 const connectionTypes = ['text', 'call', 'time-together'] as const;
 const connectionTypeOptions: readonly StyledSelectOption<ConnectionType>[] =
   connectionTypes.map(value => ({ value, label: connectionTypeLabels[value] }));
-const unconfirmedConnectionTypeOptions: readonly StyledSelectOption<ConnectionType | ''>[] = [
-  { value: '', label: 'Choose type' },
-  ...connectionTypeOptions
-];
 
 export function ConnectionTypeActions({
   personId,
@@ -40,7 +40,7 @@ export function ConnectionTypeActions({
   const person = personById(people, personId);
   return (
     <div className="friendships-quick-actions" role="group" aria-label={`Log a connection with ${person.displayName}`}>
-      {(Object.keys(connectionTypeLabels) as ConnectionType[]).map(type => (
+      {connectionTypes.map(type => (
         <button
           key={type}
           type="button"
@@ -97,35 +97,65 @@ export function ConnectionHistoryList({
   return (
     <ol className="friendships-history-list">
       {connections.map(connection => {
-        const notes = connection.notes?.trim();
-        const notesId = `friendships-connection-notes-${connection.id}`;
+        const sparkSource = connection.sparkTitleSnapshot !== undefined
+          || connection.sparkId !== undefined
+          || connection.type === 'spark';
+        const rhythmSource = !sparkSource && (
+          connection.rhythmTitleSnapshot !== undefined
+          || connection.rhythmId !== undefined
+          || connection.type === 'rhythm'
+        );
+        const sourceKind = sparkSource ? 'spark' : rhythmSource ? 'rhythm' : 'manual';
+        const sourceLabel = sourceKind === 'spark'
+          ? 'Spark'
+          : sourceKind === 'rhythm'
+            ? 'Rhythm'
+            : 'Manual';
+        const sourceTitle = sourceKind === 'spark'
+          ? connection.sparkTitleSnapshot
+          : sourceKind === 'rhythm'
+            ? connection.rhythmTitleSnapshot
+            : undefined;
+        const title = sourceTitle?.trim() || connectionTypeLabels[connection.type];
+        const formattedDate = formatLocalDate(connection.date);
+        const formattedTime = connection.time ? formatLocalTime(connection.time) : null;
+        const accessibleTitle = title === sourceLabel || title === `${sourceLabel} connection`
+          ? `${sourceLabel} connection`
+          : `${title}, ${sourceLabel} connection`;
         return (
           <li key={connection.id} className="friendships-history-item">
             <button
               type="button"
               className="tended-rhythm-done-row friendships-connection-row"
-              aria-label={`${connectionTypeLabels[connection.type]} connection, ${formatLocalDate(connection.date)}${connection.time ? ` at ${formatLocalTime(connection.time)}` : ''}. Open details.`}
-              {...(notes ? { 'aria-describedby': notesId } : {})}
+              aria-label={`${accessibleTitle}, ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ''}. Open details.`}
               onClick={event => onEdit(connection, event)}
             >
-              <span className="friendships-connection-row__heading">
-                <span className="friendships-connection-row__icon" aria-hidden="true">
-                  <ConnectionTypeIcon type={connection.type} />
+              <span
+                className={`tended-rhythm-done-row__check friendships-connection-row__check friendships-connection-row__check--${sourceKind}`}
+                aria-hidden="true"
+              >
+                ✓
+              </span>
+              <span className="friendships-connection-row__content">
+                <span className="tended-rhythm-done-row__title friendships-connection-row__title">
+                  {title}
                 </span>
-                <span className="friendships-connection-row__title">{connectionTypeLabels[connection.type]}</span>
+                <span className="friendships-connection-row__source-type">{sourceLabel}</span>
               </span>
-              <span className="friendships-connection-row__chevron" aria-hidden="true">
-                <svg viewBox="0 0 16 16" fill="none">
-                  <path d="m5 3 5 5-5 5" />
-                </svg>
-              </span>
-              {notes && <span id={notesId} className="friendships-connection-row__notes">{notes}</span>}
-              <span className="friendships-connection-row__footer">
-                <time dateTime={connection.date}>{formatLocalDate(connection.date)}</time>
-                {connection.time && (
-                  <time dateTime={`${connection.date}T${connection.time}`}>
-                    {formatLocalTime(connection.time)}
-                  </time>
+              <span className="tended-rhythm-done-row__time friendships-connection-row__timestamp">
+                <time dateTime={connection.time
+                  ? `${connection.date}T${connection.time}`
+                  : connection.date}
+                >
+                  {formattedDate}
+                </time>
+                {formattedTime && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <time dateTime={`${connection.date}T${connection.time}`}>
+                      {formattedTime}
+                    </time>
+                  </>
                 )}
               </span>
             </button>
@@ -173,7 +203,6 @@ export function ConnectionEditor({
   initialParticipantIds,
   initialType,
   initialDate,
-  requireTypeConfirmation = false,
   sparkTitle,
   today,
   onSave,
@@ -185,26 +214,74 @@ export function ConnectionEditor({
   initialParticipantIds: PersonId[];
   initialType?: ConnectionType;
   initialDate?: string;
-  requireTypeConfirmation?: boolean;
   sparkTitle?: string;
   today: string;
   onSave: (record: FriendshipConnection) => string | null;
   onDelete?: (connectionId: string) => string | null;
   onClose: () => void;
 }) {
+  const sparkInitialDateTime = useRef<{
+    date: string;
+    hour: number;
+    minute: number;
+    period: 'AM' | 'PM';
+  } | null>(null);
+  if (sparkTitle && !record && sparkInitialDateTime.current === null) {
+    const now = new Date();
+    const hour24 = now.getHours();
+    sparkInitialDateTime.current = {
+      date: localDateString(now),
+      hour: hour24 % 12 || 12,
+      minute: now.getMinutes(),
+      period: hour24 < 12 ? 'AM' : 'PM'
+    };
+  }
+  const sourceUsesSharedDateTime = Boolean(sparkTitle || record?.type === 'spark');
+  const initialSourceTime = record?.time?.split(':') ?? [];
+  const initialHour24 = initialSourceTime[0] !== undefined
+    ? Number(initialSourceTime[0])
+    : sparkInitialDateTime.current?.hour
+      ? (sparkInitialDateTime.current.period === 'PM'
+          ? (sparkInitialDateTime.current.hour % 12) + 12
+          : sparkInitialDateTime.current.hour % 12)
+      : 12;
+  const initialMinute = initialSourceTime[1] !== undefined
+    ? Number(initialSourceTime[1])
+    : sparkInitialDateTime.current?.minute ?? 0;
   const [type, setType] = useState<ConnectionType | ''>(
-    record?.type ?? initialType ?? (requireTypeConfirmation ? '' : 'text')
+    record?.type ?? (sparkTitle ? 'spark' : initialType ?? 'text')
   );
-  const [date, setDate] = useState(record?.date ?? initialDate ?? today);
+  const [date, setDate] = useState(record?.date
+    ?? initialDate
+    ?? sparkInitialDateTime.current?.date
+    ?? today);
   const [time, setTime] = useState(record?.time ?? '');
+  const [hour, setHour] = useState(initialHour24 % 12 || 12);
+  const [minute, setMinute] = useState(initialMinute);
+  const [period, setPeriod] = useState<'AM' | 'PM'>(
+    initialHour24 < 12 ? 'AM' : 'PM'
+  );
+  const [hasTime, setHasTime] = useState(sourceUsesSharedDateTime
+    ? record ? Boolean(record.time) : true
+    : true);
   const [participantIds, setParticipantIds] = useState<PersonId[]>(initialParticipantIds);
   const [notes, setNotes] = useState(record?.notes ?? '');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const creationId = useRef<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const deleteTrigger = useRef<HTMLButtonElement>(null);
   const deleteCancel = useRef<HTMLButtonElement>(null);
   const returnToDelete = useRef(false);
+  const isOwnedRhythmConnection = record?.ownedByRhythmCompletion === true;
+  const sourceTitle = record?.sparkTitleSnapshot ?? record?.rhythmTitleSnapshot;
+  const sourceLabel = record?.sparkTitleSnapshot !== undefined || record?.sparkId !== undefined
+    ? 'Spark'
+    : record?.rhythmTitleSnapshot !== undefined || record?.rhythmId !== undefined
+      ? 'Rhythm'
+      : null;
 
   useEffect(() => {
     if (confirmingDelete) {
@@ -217,8 +294,19 @@ export function ConnectionEditor({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitting.current) return;
     if (!date) {
       setError('Choose a connection date.');
+      return;
+    }
+    const sourceTime = sourceUsesSharedDateTime
+      ? hasTime
+        ? `${String((hour % 12) + (period === 'PM' ? 12 : 0)).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+        : ''
+      : time;
+    if (sourceUsesSharedDateTime && hasTime
+      && !/^([01]\d|2[0-3]):[0-5]\d$/.test(sourceTime)) {
+      setError('Choose a valid connection time.');
       return;
     }
     if (!type) {
@@ -229,22 +317,45 @@ export function ConnectionEditor({
       setError('Choose at least one participant.');
       return;
     }
+    let id = record?.id ?? creationId.current;
+    if (!id) {
+      try {
+        id = `friendship-connection-${globalThis.crypto.randomUUID()}`;
+        creationId.current = id;
+      } catch {
+        setError('A secure Connection ID could not be created. No connection was saved.');
+        return;
+      }
+    }
     const {
       time: _previousTime,
+      timeZone: _previousTimeZone,
       notes: _previousNotes,
       ...existingFields
     } = record ?? {};
     const next: FriendshipConnection = {
       ...existingFields,
-      id: record?.id ?? `friendship-connection-${globalThis.crypto.randomUUID()}`,
+      id,
       type,
       date,
-      ...(time ? { time } : {}),
+      ...(sourceTime ? {
+        time: sourceTime,
+        ...(record?.timeZone
+          ? { timeZone: record.timeZone }
+          : sourceUsesSharedDateTime
+            ? { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }
+            : {})
+      } : {}),
       participantIds,
-      ...(notes.trim() ? { notes: notes.trim() } : {})
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
+      ...(sparkTitle ? { sparkTitleSnapshot: sparkTitle } : {})
     };
+    submitting.current = true;
+    setBusy(true);
     const saveError = onSave(next);
     if (saveError) {
+      submitting.current = false;
+      setBusy(false);
       setError(saveError);
       return;
     }
@@ -257,52 +368,89 @@ export function ConnectionEditor({
       titleId="friendship-connection-title"
       labelledBy="friendship-connection-title"
       {...(sparkTitle
-        ? { intro: `Completing “${sparkTitle}” will save one Connection record. Confirm the type, actual date and participants before saving.` }
+        ? { intro: `Completing “${sparkTitle}” will save one Spark connection. Confirm the actual date and participants before saving.` }
         : {})}
-      initialFocusId="friendship-connection-type"
+      initialFocusId={sparkTitle ? 'friendship-connection-date' : 'friendship-connection-type'}
       closeLabel="Close connection editor"
       phoneFullScreen
+      {...(sourceUsesSharedDateTime ? { scrollableBody: true } : {})}
       onClose={onClose}
     >
       <form className="friendships-connection-form" onSubmit={submit} noValidate>
-        <label>
-          <span>Connection type</span>
-          <StyledSelect
-            id="friendship-connection-type"
-            label="Connection type"
-            options={requireTypeConfirmation ? unconfirmedConnectionTypeOptions : connectionTypeOptions}
-            value={type}
-            matchTriggerWidth
-            containerClassName="friendships-connection-type"
-            triggerClassName="friendships-connection-type__trigger"
-            onChange={setType}
+        {sparkTitle ? (
+          <p className="friendships-connection-form__source-context">
+            <strong>Spark</strong>
+            <span>{sparkTitle}</span>
+          </p>
+        ) : (
+          <label>
+            <span>Connection type</span>
+            <StyledSelect
+              id="friendship-connection-type"
+              label="Connection type"
+              options={record?.type === 'rhythm' || record?.type === 'spark'
+                ? [...connectionTypeOptions, { value: record.type, label: connectionTypeLabels[record.type] }]
+                : connectionTypeOptions}
+              value={type}
+              matchTriggerWidth
+              containerClassName="friendships-connection-type"
+              triggerClassName="friendships-connection-type__trigger"
+              onChange={setType}
+            />
+          </label>
+        )}
+        {record && sourceTitle && sourceLabel && (
+          <p className="friendships-connection-form__source-context">
+            <strong>{sourceLabel}</strong>
+            <span>{sourceTitle}</span>
+          </p>
+        )}
+        {sourceUsesSharedDateTime ? (
+          <CompletionDateTimeFields
+            date={date}
+            hour={hour}
+            minute={minute}
+            period={period}
+            hasTime={hasTime}
+            idPrefix="friendship-connection"
+            dateError={undefined}
+            timeError={undefined}
+            onDateChange={setDate}
+            onHourChange={setHour}
+            onMinuteChange={setMinute}
+            onPeriodChange={setPeriod}
+            onAddTime={() => setHasTime(true)}
           />
-        </label>
-        <div className="friendships-date-fields">
-          <label>
-            <span>Date</span>
-            <input type="date" value={date} onChange={event => setDate(event.currentTarget.value)} required />
-          </label>
-          <label>
-            <span>Time (optional)</span>
-            <input type="time" value={time} onChange={event => setTime(event.currentTarget.value)} />
-          </label>
-        </div>
-        <fieldset className="friendships-participants">
-          <legend>Actual participants</legend>
-          {people.map(person => (
-            <label key={person.id}>
+        ) : (
+          <div className="friendships-date-fields">
+            <label>
+              <span>Date</span>
               <input
-                type="checkbox"
-                checked={participantIds.includes(person.id)}
-                onChange={() => setParticipantIds(current => current.includes(person.id)
-                  ? current.filter(id => id !== person.id)
-                  : [...current, person.id])}
+                id="friendship-connection-date"
+                type="date"
+                value={date}
+                onChange={event => setDate(event.currentTarget.value)}
+                required
               />
-              <PersonBadgeVisual person={person} />
             </label>
-          ))}
-        </fieldset>
+            <label>
+              <span>Time (optional)</span>
+              <input type="time" value={time} onChange={event => setTime(event.currentTarget.value)} />
+            </label>
+          </div>
+        )}
+        <PeopleParticipantPicker
+          people={people}
+          selectedIds={participantIds}
+          onChange={(personId, selected) => setParticipantIds(current => selected
+            ? current.includes(personId) ? current : [...current, personId]
+            : current.filter(id => id !== personId))}
+        />
+        {isOwnedRhythmConnection && (
+          <p className="friendships-connection-form__ownership-note">
+            Saving changes keeps the Rhythm title as context and detaches this Connection from the completion, so undoing that completion will not remove it.
+          </p>
+        )}
         <div className="friendships-connection-notes">
           <label>
             <span>Notes (optional)</span>
@@ -319,7 +467,9 @@ export function ConnectionEditor({
         </div>
         {error && <p className="friendships-form-error" role="alert">{error}</p>}
         <div className="money-goal-dialog__actions">
-          <button type="submit" className="btn mini">{record ? 'Save changes' : 'Save connection'}</button>
+          <button type="submit" className="btn mini" disabled={busy}>
+            {record ? 'Save changes' : 'Save connection'}
+          </button>
           <button type="button" className="btn mini ghost" onClick={onClose}>Cancel</button>
         </div>
         {record && onDelete && (
@@ -400,6 +550,13 @@ function ConnectionTypeIcon({ type }: { type: ConnectionType }) {
     return (
       <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
         <path d="M6 3.5 4 5c.3 5.2 5.8 10.7 11 11l1.5-2-3-3-2 1c-1.6-.7-2.8-1.9-3.5-3.5l1-2z" />
+      </svg>
+    );
+  }
+  if (type === 'spark') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+        <path d="m10 1.5 2.2 6.3 6.3 2.2-6.3 2.2L10 18.5l-2.2-6.3L1.5 10l6.3-2.2z" />
       </svg>
     );
   }

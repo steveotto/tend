@@ -3,6 +3,7 @@ import type { CategoryPreferences } from '../domain/category-availability.ts';
 import type { FoundationPreferences } from '../domain/category-availability.ts';
 import { areas, foundationCatalogue, foundationTerminologyForCategory } from '../domain/preview-data.ts';
 import type { CategoryId } from '../domain/preview-data.ts';
+import { normalizeCategoryPreferences } from '../domain/category-availability.ts';
 import { AreaIcon } from './AreaIcon.tsx';
 import { MarriageIcon } from './MarriageIcon.tsx';
 import { SettingsSwitch } from './SettingsSwitch.tsx';
@@ -19,6 +20,7 @@ export function CategorySettings({
   onFoundationChange: (foundationId: string, enabled: boolean) => void;
 }) {
   const [expandedCategories, setExpandedCategories] = useState<ReadonlySet<CategoryId>>(new Set());
+  const normalizedPreferences = normalizeCategoryPreferences(preferences);
 
   function toggleExpanded(categoryId: CategoryId) {
     setExpandedCategories(previous => {
@@ -32,6 +34,7 @@ export function CategorySettings({
   return (
     <div className="category-settings">
       <p>Choose the areas you want to focus on. Turning one off keeps its data and linked Rhythms.</p>
+      <p>Choose Marriage or Dating.</p>
       <ul className="category-settings__list">
         {areas.map(area => {
           const term = foundationTerminologyForCategory(area.id);
@@ -59,7 +62,7 @@ export function CategorySettings({
                 </button>
                 <SettingsSwitch
                   label={area.label}
-                  checked={preferences[area.id]}
+                  checked={normalizedPreferences[area.id]}
                   onChange={enabled => onChange(area.id, enabled)}
                 />
               </div>

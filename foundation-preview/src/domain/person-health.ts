@@ -6,6 +6,7 @@ import type {
   ScoredConsistencyMetric,
   ScoredOnTrackMetric
 } from './rhythm-scoring.ts';
+import type { PersonConnectionHealthSelection } from './person-connection-health.ts';
 
 export type PersonRhythmHealthSelection = HealthMeasureAggregate & {
   rhythmIds: readonly string[];
@@ -141,11 +142,17 @@ export function selectPersonHealth(
 
 export function selectPersonOverallHealth(
   rhythms: Pick<PersonRhythmHealthSelection, 'consistency' | 'onTrack'>,
+  connection: Pick<PersonConnectionHealthSelection, 'score'>,
   prayerEnabled = true
 ): PersonHealthSelection {
   return selectPersonHealth([
     { id: 'rhythms', consistency: rhythms.consistency, onTrack: rhythms.onTrack },
-    { id: 'connection', consistency: null, onTrack: null, scoringStatus: 'unavailable' },
+    {
+      id: 'connection',
+      consistency: connection.score,
+      onTrack: connection.score,
+      ...(connection.score === null ? { scoringStatus: 'unavailable' as const } : {})
+    },
     ...(prayerEnabled
       ? [{ id: 'prayer', consistency: null, onTrack: null, scoringStatus: 'unavailable' as const }]
       : [])

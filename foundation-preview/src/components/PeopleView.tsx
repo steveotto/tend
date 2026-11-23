@@ -21,6 +21,7 @@ import { categoryIdForPersonGroup, isCategoryEnabled } from '../domain/category-
 const classificationFilters: readonly { id: PersonPickerGroupId | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'marriage', label: 'Marriage' },
+  { id: 'dating', label: 'Dating' },
   { id: 'parenting', label: 'Parenting' },
   { id: 'friends', label: 'Friends' }
 ];

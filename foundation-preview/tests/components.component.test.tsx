@@ -199,7 +199,8 @@ describe('shared preview components', () => {
   });
 
   it('renders every associated Category as a navigable badge with accessible names', async () => {
-    const rhythm = { ...todayRhythms[0]!, categoryIds: areas.map(area => area.id) };
+    const visibleAreas = areas.filter(area => area.id !== 'dating');
+    const rhythm = { ...todayRhythms[0]!, categoryIds: visibleAreas.map(area => area.id) };
     const onOpenCategory = vi.fn();
     const { container } = render(
       <RhythmCategoryBadges rhythm={rhythm} onOpenCategory={onOpenCategory} />
@@ -208,7 +209,7 @@ describe('shared preview components', () => {
     const badges = within(group).getAllByRole('button');
 
     expect(badges.map(badge => badge.getAttribute('aria-label'))).toEqual(
-      areas.map(area => area.label)
+      visibleAreas.map(area => area.label)
     );
     expect(badges.every(badge => badge.getAttribute('data-tooltip') === badge.getAttribute('aria-label'))).toBe(true);
     expect(badges.every(badge => badge.getAttribute('title') === null)).toBe(true);
@@ -232,6 +233,7 @@ describe('shared preview components', () => {
     const expectedSymbols = [
       'M12 3v18M6 9h12',
       'M19 14c1.49-1.46',
+      'M19 14c1.49-1.46',
       'M15 21v-8a1 1 0 0 0-1-1',
       'M22 12h-2.48',
       'M12 2v20M17 5H9.5',
@@ -240,7 +242,7 @@ describe('shared preview components', () => {
     const { container } = render(<>{areas.map(area => <AreaIcon key={area.id} id={area.id} />)}</>);
     const icons = [...container.querySelectorAll<HTMLElement>('.area-svg-icon')];
 
-    expect(icons).toHaveLength(6);
+    expect(icons).toHaveLength(7);
     expect(icons.every(icon => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
     icons.forEach((icon, index) => {
       expect(decodeURIComponent(icon.style.getPropertyValue('--area-icon')))
@@ -268,15 +270,16 @@ describe('shared preview components', () => {
         .style.getPropertyValue('--area-icon').slice(5, -2)
     );
 
-    expect(icons).toHaveLength(6);
+    expect(icons).toHaveLength(7);
     expect(summaryAssets[0]).toContain('stroke-width="2.75"');
     expect(summaryAssets[0]).toContain('M12 3v18M6 9h12');
     expect(summaryAssets[1]).toMatch(/fill=['"]none['"]/);
     expect(summaryAssets[1]).toContain('stroke=');
-    expect(summaryAssets[2]).not.toContain('fill-opacity="0.12"');
+    expect(summaryAssets[1]).toBe(summaryAssets[2]);
     expect(summaryAssets[3]).not.toContain('fill-opacity="0.12"');
-    expect(summaryAssets[4]).toContain('M12 2v20M17 5H9.5');
-    expect(summaryAssets[5]).not.toContain('fill-opacity="0.12"');
+    expect(summaryAssets[4]).not.toContain('fill-opacity="0.12"');
+    expect(summaryAssets[5]).toContain('M12 2v20M17 5H9.5');
+    expect(summaryAssets[6]).not.toContain('fill-opacity="0.12"');
     expect(defaultFaithAsset).toMatch(/stroke-width=['"]2\.5['"]/);
   });
 
@@ -1740,7 +1743,11 @@ describe('shared preview components', () => {
       <MarriageIcon group="foundations" id="connection" className="mapped-icon" />
     );
     let icon = container.querySelector<HTMLElement>('.marriage-svg-icon');
-    expect(decodeURIComponent(icon?.style.getPropertyValue('--marriage-icon') ?? '')).toContain('M10 13a5 5 0 0 0 7.54.54');
+    const connectionSource = decodeURIComponent(icon?.style.getPropertyValue('--marriage-icon') ?? '');
+    expect(connectionSource).toContain("viewBox='0 0 64 64'");
+    expect(connectionSource).toContain("cx='20' cy='16' r='8'");
+    expect(connectionSource).toContain("stroke-width='5'");
+    expect(connectionSource).toContain("M43 48.35");
     expect(icon?.getAttribute('aria-hidden')).toBe('true');
 
     rerender(<MarriageIcon group="rhythms" id="date-night" />);
@@ -1814,7 +1821,7 @@ describe('shared preview components', () => {
     expect(mappedIcons).toHaveLength(10);
     const sources = mappedIcons.map(icon => decodeURIComponent(icon.style.getPropertyValue('--marriage-icon')));
     const expectedFoundationSymbols = [
-      'M10 13a5 5 0 0 0 7.54.54',
+      "viewBox='0 0 64 64'",
       'M14 9a2 2 0 0 1-2 2H6',
       'm16.24 7.76-1.804 5.411',
       'M7 20h10',

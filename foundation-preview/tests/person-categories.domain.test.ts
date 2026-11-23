@@ -7,6 +7,7 @@ import {
 } from '../src/domain/person-categories.ts';
 import { createPersonPickerGroups } from '../src/domain/preview-data.ts';
 import { createPreviewEnvelope, createSamplePreviewData, validatePreviewEnvelope } from '../src/domain/preview-state.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 
 describe('single Person categories', () => {
   it('resolves every conflicting combination by Marriage, Parenting, Friend priority', () => {
@@ -44,20 +45,24 @@ describe('single Person categories', () => {
   it('resolves multiple categories at the preview import/validation boundary without changing the source envelope', () => {
     const envelope = createPreviewEnvelope(createSamplePreviewData());
     const person = envelope.data.people[0]!;
-    envelope.data.peopleGroups = [
-      { id: 'marriage', label: 'Marriage', memberIds: [person.id] },
-      { id: 'parenting', label: 'Parenting', memberIds: [person.id] },
-      { id: 'friends', label: 'Friends', memberIds: [person.id] }
-    ];
-    const sourceMemberships = envelope.data.peopleGroups.map(group => [...group.memberIds]);
+    const legacyEnvelope = withPreSparkSchema(envelope, 53, {
+      ...envelope.data,
+      peopleGroups: [
+        { id: 'marriage', label: 'Marriage', memberIds: [person.id] },
+        { id: 'parenting', label: 'Parenting', memberIds: [person.id] },
+        { id: 'friends', label: 'Friends', memberIds: [person.id] }
+      ]
+    });
+    const sourceMemberships = legacyEnvelope.data.peopleGroups.map(group => [...group.memberIds]);
 
-    const result = validatePreviewEnvelope(envelope, '2026-10-31');
+    const result = validatePreviewEnvelope(legacyEnvelope, '2026-10-31');
 
-    expect(result).toMatchObject({ valid: true, resolvedPersonCategories: 1 });
-    expect(envelope.data.peopleGroups.map(group => group.memberIds)).toEqual(sourceMemberships);
+    expect(result, result.valid ? undefined : result.message)
+      .toMatchObject({ valid: true, resolvedPersonCategories: 1 });
+    expect(legacyEnvelope.data.peopleGroups.map(group => group.memberIds)).toEqual(sourceMemberships);
     if (result.valid) {
       expect(result.envelope.data.peopleGroups.map(group => group.memberIds))
-        .toEqual([[person.id], [], []]);
+        .toEqual([[person.id], [], [], []]);
     }
     const sampleGroups = createPersonPickerGroups();
     for (const id of ['sample-person-avery', 'sample-person-morgan', 'sample-person-jordan']) {

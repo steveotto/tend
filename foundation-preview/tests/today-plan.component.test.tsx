@@ -233,7 +233,8 @@ describe('Today time-frame interaction', () => {
     expect(overall.contains(categories)).toBe(true);
     expect(greeting && (greeting.compareDocumentPosition(categories) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
     expect(categories.compareDocumentPosition(plan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(categories).getAllByRole('button')).toHaveLength(areas.length);
+    expect(within(categories).getAllByRole('button'))
+      .toHaveLength(areas.filter(area => area.id !== 'dating').length);
     expect(within(categories).getAllByRole('button')
       .every(category => category.querySelector('.ma-score__value')?.textContent?.trim() === '—')).toBe(true);
   });
@@ -252,7 +253,7 @@ describe('Today time-frame interaction', () => {
     const categoryNavigation = screen.getByRole('navigation', { name: 'Today categories' });
     const categoryCards = within(categoryNavigation).getAllByRole('button');
     expect(categoryCards.map(card => card.querySelector('.ma-name')?.textContent))
-      .toEqual(areas.map(area => area.label));
+      .toEqual(areas.filter(area => area.id !== 'dating').map(area => area.label));
     for (const card of categoryCards) {
       expect(card.querySelector('.menu-area-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(card.querySelector('.ma-score__value')).toBeTruthy();
@@ -270,7 +271,8 @@ describe('Today time-frame interaction', () => {
     const overall = screen.getByRole('region', { name: 'Overall health summary' });
     const categories = screen.getByRole('navigation', { name: 'Today categories' });
     expect(overall.contains(categories)).toBe(true);
-    expect(within(categories).getAllByRole('button')).toHaveLength(areas.length);
+    expect(within(categories).getAllByRole('button'))
+      .toHaveLength(areas.filter(area => area.id !== 'dating').length);
     expect(within(categories).getAllByRole('button').slice(0, 3)
       .map(category => category.querySelector('.ma-score__value')?.textContent?.trim()))
       .toEqual(['100', '13', '13']);
@@ -686,9 +688,29 @@ describe('Today time-frame interaction', () => {
     });
     const plan = todayPlan();
     expect(plan.querySelector('.today-timeframe-header .today-plan__view-heading')?.textContent).toBe('Now');
-    expect(within(plan).getByRole('status').textContent).toContain('No active Rhythms right now.');
-    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
+    const emptyState = within(plan).getByRole('status');
+    expect(emptyState.textContent).toContain('No active Rhythms right now.');
+    await user.click(within(emptyState).getByRole('button', { name: 'View all today' }));
+    expect(within(planTabs(plan)).getByRole('tab', { name: 'All today' }).getAttribute('aria-selected'))
+      .toBe('true');
     expect(plan.querySelectorAll('.today-timeframe-header__disclosure[aria-expanded="true"]')).toHaveLength(0);
+  });
+
+  it('keeps empty messages consistent across Now, Flexible, and All today', async () => {
+    const user = userEvent.setup();
+    renderToday({ rhythms: [] });
+    const plan = todayPlan();
+
+    expect(within(plan).getByText('No active Rhythms right now.')).toBeTruthy();
+    expect(within(plan).getByRole('button', { name: 'View all today' })).toBeTruthy();
+
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'Flexible' }));
+    expect(within(plan).getByText('No flexible Rhythms due today.')).toBeTruthy();
+    expect(within(plan).queryByRole('button', { name: 'View all today' })).toBeNull();
+
+    await user.click(within(planTabs(plan)).getByRole('tab', { name: 'All today' }));
+    expect(within(plan).getByText('No Rhythms due today.')).toBeTruthy();
+    expect(within(plan).queryByRole('button', { name: 'View all today' })).toBeNull();
   });
 
   it('shows the local-reader scope for configured calendar sources without a settings shortcut', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { foundationCatalogue, todayRhythms } from '../src/domain/preview-data.ts';
+import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import { defaultCategoryPreferences } from '../src/domain/category-availability.ts';
 import {
   activeTodayRhythms,
@@ -36,7 +37,77 @@ const validDraft: RhythmDraft = {
   secondaryFoundationIds: []
 };
 
+function previewRhythmFromSaved(rhythm: SavedRhythm): RhythmPreview {
+  return { ...rhythm, automation: 'manual', status: 'Not confirmed' };
+}
+
 describe('synthetic Rhythm editor domain', () => {
+  it('persists new-Rhythm defaults and explicit choices while leaving existing unset Rhythms opt-in', () => {
+    const newRhythmId = 'user-rhythm-84000000-0000-4000-8000-000000000033';
+    const newRhythm = saveRhythmDraft([], {
+      ...validDraft,
+      personIds: ['sample-person-avery'],
+      alsoLogConnection: true,
+      alsoLogConnectionExplicit: false
+    }, newRhythmId, 'create').savedRhythms?.[0];
+    expect(newRhythm?.alsoLogConnection).toBe(true);
+
+    const removedPeople = rhythmDraftFrom(previewRhythmFromSaved(newRhythm!), newRhythm!.categoryIds);
+    removedPeople.personIds = [];
+    const savedWithoutPeople = saveRhythmDraft(
+      [newRhythm!],
+      removedPeople,
+      newRhythmId,
+      'edit'
+    ).savedRhythms?.[0];
+    expect(savedWithoutPeople?.alsoLogConnection).toBe(true);
+
+    const readdedPeople = rhythmDraftFrom(
+      previewRhythmFromSaved(savedWithoutPeople!),
+      savedWithoutPeople!.categoryIds
+    );
+    readdedPeople.personIds = ['sample-person-avery'];
+    const savedAgain = saveRhythmDraft(
+      [savedWithoutPeople!],
+      readdedPeople,
+      newRhythmId,
+      'edit'
+    ).savedRhythms?.[0];
+    expect(savedAgain?.alsoLogConnection).toBe(true);
+
+    const explicitOff = rhythmDraftFrom(previewRhythmFromSaved(savedAgain!), savedAgain!.categoryIds);
+    explicitOff.alsoLogConnection = false;
+    explicitOff.alsoLogConnectionExplicit = true;
+    explicitOff.personIds = [];
+    const savedOff = saveRhythmDraft(
+      [savedAgain!],
+      explicitOff,
+      newRhythmId,
+      'edit'
+    ).savedRhythms?.[0];
+    expect(savedOff?.alsoLogConnection).toBe(false);
+
+    const existingId = 'user-rhythm-84000000-0000-4000-8000-000000000034';
+    const existingUnset = saveRhythmDraft([], {
+      ...validDraft,
+      personIds: [],
+      alsoLogConnection: false,
+      alsoLogConnectionExplicit: false
+    }, existingId, 'create').savedRhythms?.[0];
+    const editExisting = rhythmDraftFrom(
+      previewRhythmFromSaved(existingUnset!),
+      existingUnset!.categoryIds
+    );
+    editExisting.personIds = ['sample-person-avery'];
+    const savedExisting = saveRhythmDraft(
+      [existingUnset!],
+      editExisting,
+      existingId,
+      'edit'
+    ).savedRhythms?.[0];
+    expect(savedExisting?.alsoLogConnection).toBeUndefined();
+  });
+
   it('requires matching Practices per Foundation-backed category while tolerating legacy records', () => {
     const faithPractice = foundationCatalogue.find(foundation =>
       foundation.categoryId === 'faith'
@@ -265,7 +336,8 @@ describe('synthetic Rhythm editor domain', () => {
       categoryIds: [],
       schedule: { frequency: 'daily' },
       originalSchedule: { frequency: 'daily' },
-      scheduleEditing: false
+      scheduleEditing: false,
+      alsoLogConnection: false
     });
   });
 

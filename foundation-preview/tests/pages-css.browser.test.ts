@@ -17,7 +17,10 @@ import {
 } from '../src/domain/preview-state.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
 import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
-import { PREVIEW_ACCOUNT_STORAGE_PREFIX } from '../src/storage/preview-storage.ts';
+import {
+  PREVIEW_ACCOUNT_STORAGE_PREFIX,
+  PREVIEW_STORAGE_KEY
+} from '../src/storage/preview-storage.ts';
 
 const previewDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const viteCli = path.resolve(previewDirectory, 'node_modules/vite/bin/vite.js');
@@ -138,6 +141,93 @@ async function verifyClassicSparkPalette(browser: Browser): Promise<void> {
     assert.deepEqual(focus, { visible: true, outlineColor: 'rgb(36, 107, 82)' });
   } finally {
     await page.close();
+  }
+}
+
+async function verifyRhythmConnectionCheckboxPalette(browser: Browser): Promise<void> {
+  const [tokens, styles] = await Promise.all([
+    readFile(path.resolve(previewDirectory, 'public/brand/tend-tokens.css'), 'utf8'),
+    readFile(path.resolve(previewDirectory, 'src/styles.css'), 'utf8')
+  ]);
+  for (const viewportWidth of [375, 390, 430]) {
+    const page = await browser.newPage({ viewport: { width: viewportWidth, height: 844 } });
+    try {
+      await page.setContent(`
+        <div class="rhythm-editor__association">
+          <label class="rhythm-editor__association-checkbox">
+            <input type="checkbox" checked>
+            <span>
+              <strong>Also log a connection</strong>
+              <small>When you Tend this Rhythm, record a connection with the people selected.</small>
+            </span>
+          </label>
+        </div>
+      `);
+      await page.addStyleTag({ content: tokens });
+      await page.addStyleTag({ content: styles });
+
+      const unchecked = page.locator('.rhythm-editor__association-checkbox input');
+      const row = page.locator('.rhythm-editor__association-checkbox');
+      const checkedState = await unchecked.evaluate(input => {
+        const label = input.closest('label')!;
+        const style = getComputedStyle(input);
+        const labelStyle = getComputedStyle(label);
+        return {
+          checked: (input as HTMLInputElement).checked,
+          accentColor: style.accentColor,
+          width: style.width,
+          height: style.height,
+          rowBackground: labelStyle.backgroundColor,
+          rowBorder: labelStyle.borderTopColor
+        };
+      });
+      assert.equal(checkedState.checked, true);
+      assert.equal(checkedState.accentColor, 'rgb(112, 73, 173)');
+      assert.equal(checkedState.width, '18px');
+      assert.equal(checkedState.height, '18px');
+      assert.equal(checkedState.rowBackground, 'rgb(255, 255, 255)');
+      assert.equal(checkedState.rowBorder, 'rgb(220, 228, 222)');
+
+      await unchecked.uncheck();
+      assert.equal(await unchecked.isChecked(), false);
+      assert.equal(await unchecked.evaluate(input => getComputedStyle(input).accentColor),
+        'rgb(112, 73, 173)');
+
+      await page.keyboard.press('Tab');
+      await unchecked.focus();
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Shift+Tab');
+      const focus = await unchecked.evaluate(input => {
+        const style = getComputedStyle(input);
+        return {
+          active: document.activeElement === input,
+          visible: input.matches(':focus-visible'),
+          outlineStyle: style.outlineStyle,
+          outlineWidth: style.outlineWidth,
+          outlineColor: style.outlineColor
+        };
+      });
+      assert.equal(focus.active, true);
+      assert.equal(focus.visible, true);
+      assert.equal(focus.outlineStyle, 'solid');
+      assert.equal(focus.outlineWidth, '3px');
+      assert.equal(focus.outlineColor, 'rgb(112, 73, 173)');
+
+      const layout = await row.evaluate(label => {
+        const rect = label.getBoundingClientRect();
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          left: rect.left,
+          right: rect.right
+        };
+      });
+      assert.equal(layout.viewportWidth, viewportWidth);
+      assert.equal(layout.documentWidth, viewportWidth);
+      assert.ok(layout.left >= 0 && layout.right <= viewportWidth);
+    } finally {
+      await page.close();
+    }
   }
 }
 
@@ -1631,11 +1721,13 @@ async function verifyFitnessLogDialogLayout(
 async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, baseUrl: string) {
   const previewData = createEmptyPreviewData();
   const today = localDateString(new Date());
-  const personId = 'layout-long-person';
+  const personId = 'sample-person-avery';
   const sparkPersonId = 'layout-spark-person';
   const recentConnectionDate = new Date();
   recentConnectionDate.setDate(recentConnectionDate.getDate() - 7);
   const recentConnection = localDateString(recentConnectionDate);
+  const futureDueDate = new Date();
+  futureDueDate.setDate(futureDueDate.getDate() + 7);
   previewData.people = [{
     id: personId,
     displayName: 'Alexandria-Brooks-Williams-ExtremelyLong Synthetic Person'
@@ -1660,11 +1752,18 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
     notes: 'Spent time together and talked about a meaningful family event during the long walk.',
     participantIds: [personId]
   }];
+  previewData.personNotes = [1, 2].map(index => ({
+    id: `layout-person-note-${index}`,
+    personId,
+    content: `Synthetic person note ${index}`,
+    createdAt: `${today}T12:00:00.000Z`,
+    updatedAt: `${today}T12:00:00.000Z`
+  }));
   previewData.personSparks = [{
     id: 'layout-long-spark',
     ownerId: personId,
     title: 'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes',
-    description: 'A long but optional description that should wrap inside the pale yellow card without pushing its controls beyond the card or viewport.',
+    description: 'A long but optional description that should wrap inside the white card without pushing its controls beyond the card or viewport.',
     sharedWith: [sparkPersonId],
     archived: false,
     completed: false,
@@ -1673,6 +1772,7 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
     id: 'layout-completed-spark',
     ownerId: personId,
     title: 'Remember the completed one-off Spark with a deliberately long title',
+    dueDate: localDateString(futureDueDate),
     sharedWith: [],
     archived: false,
     completed: true,
@@ -1683,7 +1783,16 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
       completedAt: `${today}T18:00:00.000Z`,
       legacyEventId: 'layout-completed-spark-event'
     }]
-  }];
+  }, ...Array.from({ length: 12 }, (_, index) => ({
+    id: `layout-scroll-spark-${index + 1}`,
+    ownerId: personId,
+    title: `A long-list Spark ${index + 1} with enough copy to wrap at supported mobile widths`,
+    description: 'Synthetic list content for verifying bounded scrolling without changing any saved schedule or connection.',
+    sharedWith: index % 2 === 0 ? [sparkPersonId] : [],
+    archived: false,
+    completed: false,
+    completionHistory: []
+  }))];
   const startedAt = `${today}T12:00:00.000Z`;
   const finishedAt = `${today}T12:45:00.000Z`;
   const confirmedAt = `${today}T12:15:00.000Z`;
@@ -2837,12 +2946,80 @@ const sparkCard = page.locator('.person-spark-card').first();
 const completedSparkCard = page.locator('.person-spark-card').nth(1);
 await sparkCard.waitFor({ state: 'visible' });
 await completedSparkCard.waitFor({ state: 'visible' });
+const sparkDisclosure = sparkCard.getByRole('button', {
+  name: 'Expand Spark Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+});
+assert.equal(await sparkDisclosure.getAttribute('aria-expanded'), 'false',
+  'Spark cards must start collapsed.');
+const compactSparkStyle = await sparkCard.evaluate(card => {
+  const chevron = card.querySelector<HTMLElement>('.person-spark-card__chevron');
+  const title = card.querySelector<HTMLElement>('.person-spark-card__compact-title');
+  const disclosure = card.querySelector<HTMLElement>('.person-spark-card__disclosure');
+  if (!chevron || !title || !disclosure) {
+    throw new Error('The compact Spark row is missing its disclosure content.');
+  }
+  const centerY = (element: HTMLElement) => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.top + bounds.height / 2;
+  };
+  return {
+    cardBackground: getComputedStyle(card).backgroundColor,
+    chevronBackground: getComputedStyle(chevron).backgroundColor,
+    chevronBorder: getComputedStyle(chevron).borderTopColor,
+    chevronColor: getComputedStyle(chevron).color,
+    chevronRadius: getComputedStyle(chevron).borderRadius,
+    chevronWidth: chevron.getBoundingClientRect().width,
+    titleOverflow: getComputedStyle(title).textOverflow,
+    titleWhiteSpace: getComputedStyle(title).whiteSpace,
+    hasSparkle: card.querySelector('.person-spark-card__sparkle') !== null,
+    disclosureHeight: disclosure.getBoundingClientRect().height,
+    centerDifference: Math.max(
+      Math.abs(centerY(chevron) - centerY(title))
+    )
+  };
+});
+assert.equal(compactSparkStyle.cardBackground, 'rgb(255, 255, 255)',
+  'Collapsed Spark rows should remain white.');
+assert.equal(compactSparkStyle.chevronBackground, 'rgb(254, 251, 230)',
+  'The compact disclosure control should use the pale-yellow Spark surface.');
+assert.equal(compactSparkStyle.chevronBorder, 'rgb(230, 228, 164)',
+  'The compact disclosure control should have a subtle gold border.');
+assert.equal(compactSparkStyle.chevronColor, 'rgb(138, 98, 0)',
+  'The compact disclosure chevron should be gold.');
+assert.equal(compactSparkStyle.chevronRadius, '50%',
+  'The compact Spark chevron should sit in a circular control.');
+assert.equal(compactSparkStyle.chevronWidth, 30,
+  'The compact Spark chevron should be 30px.');
+assert.equal(compactSparkStyle.titleOverflow, 'ellipsis',
+  'The compact Spark title should ellipsize on one line.');
+assert.equal(compactSparkStyle.titleWhiteSpace, 'nowrap',
+  'The compact Spark title should remain on one line.');
+assert.equal(compactSparkStyle.hasSparkle, false,
+  'Compact Spark cards must not include a leading sparkle.');
+assert.ok(compactSparkStyle.disclosureHeight >= 44,
+  'The compact Spark row should preserve an accessible touch target.');
+assert.ok(compactSparkStyle.centerDifference < 1,
+  'The title and chevron should remain vertically centered.');
+assert.equal(await sparkCard.locator('.person-spark-card__description').count(), 0,
+  'Collapsed Spark rows must not show the expanded description.');
+await sparkDisclosure.click();
+await completedSparkCard.getByRole('button', {
+  name: 'Expand Spark Remember the completed one-off Spark with a deliberately long title'
+}).click();
 assert.equal(await sparkCard.locator('.person-spark-card__title').textContent(),
   'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes');
 assert.equal(await sparkCard.locator('.person-spark-card__people .person-badge-visual').count(), 2);
-assert.equal((await sparkCard.locator('.person-spark-card__footer').innerText()).trim(), 'Someday');
+assert.match((await sparkCard.locator('.person-spark-card__footer').innerText()).trim(), /^Someday/);
+assert.equal(await sparkCard.getByRole('button', { name: /Notes/ }).count(), 0,
+  'Expanded Spark cards should not expose a Notes action.');
 assert.equal(await sparkCard.locator('.person-spark-card__description').count(), 1);
 assert.equal(await completedSparkCard.locator('.person-spark-card__description').count(), 0);
+assert.match(
+  (await completedSparkCard.locator('.person-spark-card__due-date').innerText()).trim(),
+  /^Due [A-Z][a-z]+ \d{1,2}, \d{4}$/
+);
+assert.equal(await completedSparkCard.getByRole('button', { name: /Notes/ }).count(), 0,
+  'Completed Spark cards should not expose a Notes action.');
 assert.equal(await sparkCard.getByRole('button', { name: /Actions for/ }).count(), 0);
 for (const textSize of ['small', 'medium', 'large'] as const) {
   await setPreviewTextSize(page, textSize);
@@ -2866,10 +3043,45 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
         };
       };
       const bounds = element.getBoundingClientRect();
-      const body = rect('.person-spark-card__body');
+      const associationRow = rect('.person-spark-card__association-row');
       const people = rect('.person-spark-card__people');
+      const actionRow = rect('.person-spark-card__action-row');
       const action = rect('.person-spark-card__do-it');
       const edit = rect('.person-spark-card__edit');
+      const collapse = rect('.person-spark-card__collapse');
+      const dueDate = rect('.person-spark-card__due-date');
+      const actionElement = element.querySelector<HTMLElement>('.person-spark-card__do-it');
+      if (!actionElement) throw new Error('The active Spark is missing its Do it button.');
+      const dueDateElement = element.querySelector<HTMLElement>('.person-spark-card__due-date');
+      if (!dueDateElement) throw new Error('The active Spark is missing its due-date label.');
+      const sharedTend = document.createElement('button');
+      sharedTend.className = 'rhythm-card__tend';
+      element.append(sharedTend);
+      const actionStyle = getComputedStyle(actionElement);
+      const sharedTendStyle = getComputedStyle(sharedTend);
+      const actionSizing = {
+        width: actionStyle.width,
+        height: actionStyle.height,
+        minHeight: actionStyle.minHeight,
+        borderRadius: actionStyle.borderRadius,
+        padding: actionStyle.padding,
+        fontFamily: actionStyle.fontFamily,
+        fontSize: actionStyle.fontSize,
+        fontWeight: actionStyle.fontWeight,
+        lineHeight: actionStyle.lineHeight
+      };
+      const sharedTendSizing = {
+        width: sharedTendStyle.width,
+        height: sharedTendStyle.height,
+        minHeight: sharedTendStyle.minHeight,
+        borderRadius: sharedTendStyle.borderRadius,
+        padding: sharedTendStyle.padding,
+        fontFamily: sharedTendStyle.fontFamily,
+        fontSize: sharedTendStyle.fontSize,
+        fontWeight: sharedTendStyle.fontWeight,
+        lineHeight: sharedTendStyle.lineHeight
+      };
+      sharedTend.remove();
       return {
         viewportWidth: document.documentElement.clientWidth,
         documentWidth: document.documentElement.scrollWidth,
@@ -2888,18 +3100,23 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
         descriptionColor: getComputedStyle(element.querySelector('.person-spark-card__description')!).color,
         title: rect('.person-spark-card__title'),
         description: rect('.person-spark-card__description'),
-        body,
+        associationRow,
         people,
+        actionRow,
         action,
+        actionSizing,
+        sharedTendSizing,
         edit,
+        collapse,
+        dueDate,
         footer: rect('.person-spark-card__footer'),
         cardRadius: getComputedStyle(element).borderRadius,
         cardPadding: getComputedStyle(element).padding,
         titleFontSize: getComputedStyle(element.querySelector('.person-spark-card__title')!).fontSize,
-        footerColor: getComputedStyle(element.querySelector('.person-spark-card__footer')!).color,
-        sparkleFill: getComputedStyle(element.querySelector('.person-spark-card__footer-label svg')!).fill,
-        sparkleStroke: getComputedStyle(element.querySelector('.person-spark-card__footer-label svg')!).stroke,
-        sparkleStrokeWidth: getComputedStyle(element.querySelector('.person-spark-card__footer-label svg')!).strokeWidth,
+        footerBorderTopWidth: getComputedStyle(element.querySelector('.person-spark-card__footer')!).borderTopWidth,
+        dueDateColor: getComputedStyle(dueDateElement).color,
+        dueDateWeight: getComputedStyle(dueDateElement).fontWeight,
+        dueDateBackground: getComputedStyle(dueDateElement).backgroundColor,
         editColor: getComputedStyle(element.querySelector('.person-spark-card__edit')!).color,
         editBackground: getComputedStyle(element.querySelector('.person-spark-card__edit')!).backgroundColor,
         editBorderWidth: getComputedStyle(element.querySelector('.person-spark-card__edit')!).borderTopWidth,
@@ -2908,6 +3125,7 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
         badgeColor: getComputedStyle(element.querySelector('.rhythm-person-badge')!).color,
         badgeVisualBackground: getComputedStyle(element.querySelector('.person-badge-visual')!).backgroundColor,
         badgeVisualBorderColor: getComputedStyle(element.querySelector('.person-badge-visual')!).borderTopColor,
+        badgeVisualColor: getComputedStyle(element.querySelector('.person-badge-visual')!).color,
         avatarBackground: getComputedStyle(element.querySelector('.person-badge-avatar')!).backgroundColor,
         avatarColor: getComputedStyle(element.querySelector('.person-badge-avatar')!).color
       };
@@ -2915,58 +3133,73 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
     const label = `Spark card at ${viewportWidth}px / ${textSize} text`;
     assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
     assert.equal(layout.documentWidth, viewportWidth, `${label} must not overflow the page`);
-    assert.equal(layout.background, 'rgb(254, 251, 230)', `${label} must use the approved pale-yellow surface`);
-    assert.equal(layout.borderColor, 'rgb(230, 228, 164)', `${label} must use the approved pale-yellow border`);
-    assert.equal(layout.cardRadius, '15px');
-    assert.equal(layout.cardPadding, '11px 14px');
-    assert.equal(layout.titleFontSize, textSize === 'small' ? '19px' : textSize === 'medium' ? '21.375px' : '23.75px');
+    assert.equal(layout.background, 'rgb(255, 255, 255)', `${label} must use a bright-white surface`);
+    assert.equal(layout.borderColor, 'rgb(220, 228, 222)', `${label} must use the subtle Tend card border`);
+    assert.equal(layout.cardRadius, '20px');
+    assert.equal(layout.cardPadding, '12px');
+    assert.equal(layout.titleFontSize, textSize === 'small' ? '16px' : textSize === 'medium' ? '18px' : '20px');
     assert.equal(layout.titleColor, 'rgb(32, 39, 35)');
-    assert.equal(layout.descriptionColor, 'rgb(79, 78, 20)');
-    assert.equal(layout.footerColor, 'rgb(79, 78, 20)');
-    assert.equal(layout.sparkleFill, 'rgb(227, 168, 28)');
-    assert.equal(layout.sparkleStroke, 'rgb(138, 98, 0)');
-    assert.equal(layout.sparkleStrokeWidth, '1.5px');
-    assert.equal(layout.editColor, 'rgb(79, 78, 20)');
+    assert.equal(layout.descriptionColor, 'rgb(94, 107, 99)');
+    assert.equal(layout.footerBorderTopWidth, '1px',
+      `${label} footer should have a light divider.`);
+    assert.equal(layout.dueDateColor, 'rgb(148, 107, 0)');
+    assert.ok(Number(layout.dueDateWeight) >= 600);
+    assert.notEqual(layout.dueDateBackground, 'rgba(0, 0, 0, 0)',
+      `${label} due-date/Someday should use an amber pill surface.`);
+    assert.ok(contrastRatio(layout.dueDateColor, 'rgb(255, 255, 255)') >= 4.5,
+      `${label} due-date label contrast against the white card must meet 4.5:1.`);
+    assert.equal(layout.editColor, 'rgb(94, 107, 99)');
     assert.equal(layout.editBackground, 'rgba(0, 0, 0, 0)');
     assert.equal(layout.editBorderWidth, '0px');
-    assert.equal(layout.badgeBackground, 'rgb(255, 255, 255)');
+    assert.equal(layout.badgeBackground, 'rgba(0, 0, 0, 0)');
     assert.equal(layout.badgeBorderWidth, '0px', `${label} must not double-outline People badges.`);
-    assert.equal(layout.badgeColor, 'rgb(0, 0, 0)');
-    assert.equal(layout.badgeVisualBackground, 'rgb(255, 255, 255)');
-    assert.equal(layout.badgeVisualBorderColor, 'rgb(230, 228, 164)');
+    assert.equal(layout.badgeVisualBackground, 'rgb(247, 249, 247)');
+    assert.equal(layout.badgeVisualBorderColor, 'rgb(220, 228, 222)');
+    assert.equal(layout.badgeVisualColor, 'rgb(36, 107, 82)');
     assert.equal(layout.avatarBackground, 'rgb(229, 242, 235)');
     assert.equal(layout.avatarColor, 'rgb(36, 107, 82)');
     assert.ok(contrastRatio(layout.actionColor, layout.actionBackground) >= 4.5,
       `${label} action text contrast must meet 4.5:1.`);
     assert.equal(layout.actionColor, 'rgb(255, 255, 255)');
     assert.equal(layout.actionBackground, 'rgb(36, 107, 82)');
+    assert.equal(layout.action.width, 92,
+      `${label} Do it should use the standard Rhythm Tend width.`);
+    assert.equal(layout.action.height, 44,
+      `${label} Do it should use the standard Rhythm Tend height.`);
+    assert.deepEqual(layout.actionSizing, layout.sharedTendSizing,
+      `${label} Do it should inherit the shared Rhythm Tend sizing and typography.`);
     assert.equal(layout.edit.width, 44);
     assert.equal(layout.edit.height, 44);
+    assert.equal(layout.edit.right, layout.footer.right);
     assert.ok(layout.card.scrollWidth <= layout.card.clientWidth + 1,
       `${label} card content must not overflow its border.`);
     for (const [name, bounds] of [
       ['title', layout.title],
       ['description', layout.description],
+      ['association row', layout.associationRow],
+      ['action row', layout.actionRow],
       ['footer', layout.footer],
-      ['edit control', layout.edit]
+      ['edit control', layout.edit],
+      ['due date', layout.dueDate],
+      ['Do it', layout.action]
     ] as const) {
       assert.ok(bounds.left >= layout.card.left && bounds.right <= layout.card.right,
         `${label} ${name} must remain inside the card.`);
       assert.ok(bounds.scrollWidth <= bounds.clientWidth + 1,
         `${label} ${name} must wrap without clipping.`);
     }
-    assert.ok(layout.body.top >= layout.description.bottom - 1,
-      `${label} people and action body should follow the description.`);
-    assert.ok(layout.action.right <= layout.body.right + 1,
-      `${label} Do it action should align to the right of its body.`);
-    const peopleAndActionOverlap = layout.people.left < layout.action.right
-      && layout.people.right > layout.action.left
-      && layout.people.top < layout.action.bottom
-      && layout.people.bottom > layout.action.top;
-    assert.equal(peopleAndActionOverlap, false,
-      `${label} associated people badges and Do it action must wrap without overlap.`);
-    assert.ok(layout.title.right < layout.edit.left,
-      `${label} title and quiet edit control must not overlap.`);
+    assert.ok(layout.associationRow.top >= layout.description.bottom - 1,
+      `${label} people and edit control should follow the description.`);
+    assert.ok(layout.action.right <= layout.card.right,
+      `${label} Do it should remain right-aligned.`);
+    assert.ok(layout.actionRow.right <= layout.card.right,
+      `${label} the action row should remain right-aligned.`);
+    assert.ok(layout.action.top >= layout.people.bottom - 1,
+      `${label} Do it should occupy a separate row below the people badges.`);
+    assert.ok(layout.footer.top >= layout.action.bottom - 1,
+      `${label} the footer should remain below the action row.`);
+    assert.ok(layout.title.right <= layout.collapse.left,
+      `${label} title should use the available width up to the collapse control.`);
 
     const completedLayout = await completedSparkCard.evaluate(card => {
       const element = card as HTMLElement;
@@ -2979,7 +3212,9 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
         titleFits: title.scrollWidth <= title.clientWidth + 1,
         footerFits: footer.scrollWidth <= footer.clientWidth + 1,
         hasEdit: element.querySelector('.person-spark-card__edit') !== null,
-        hasDoIt: element.querySelector('.person-spark-card__do-it') !== null
+        hasDoIt: element.querySelector('.person-spark-card__do-it') !== null,
+        hasNotes: element.querySelector('.person-spark-card__notes') !== null,
+        hasDescription: element.querySelector('.person-spark-card__description') !== null,
       };
     });
     assert.ok(completedLayout.cardScrollWidth <= completedLayout.cardWidth + 1,
@@ -2988,12 +3223,155 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
       `${label} completed Spark title and completion footer should wrap without clipping.`);
     assert.equal(completedLayout.hasEdit, true);
     assert.equal(completedLayout.hasDoIt, false);
+    assert.equal(completedLayout.hasDescription, false);
+    assert.equal(completedLayout.hasNotes, false);
+
+    if (textSize === 'small' && viewportWidth === 375) {
+      await page.setViewportSize({ width: 375, height: 520 });
+    }
+    await sparkCard.getByRole('button', { name: 'Edit Spark' }).click();
+    const sparkEditor = page.getByRole('dialog', { name: 'Edit Spark' });
+    await sparkEditor.waitFor({ state: 'visible' });
+    const editorLayout = await sparkEditor.evaluate(dialog => {
+      const rect = (element: Element) => {
+        const bounds = element.getBoundingClientRect();
+        return { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom, width: bounds.width };
+      };
+      const scrollRegion = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+      const actions = dialog.querySelector<HTMLElement>('.person-spark-form__actions');
+      const deleteButton = dialog.querySelector<HTMLButtonElement>('.person-spark-form__delete-button');
+      const secondaryActions = dialog.querySelector<HTMLElement>('.person-spark-form__secondary-actions');
+      const title = dialog.querySelector<HTMLInputElement>('.person-spark-form__fields input');
+      const close = dialog.querySelector<HTMLButtonElement>('.money-goal-dialog__close');
+      if (!scrollRegion || !actions || !deleteButton || !secondaryActions || !title || !close) {
+        throw new Error('Edit Spark is missing its shared dialog structure.');
+      }
+      return {
+        dialog: rect(dialog),
+        region: rect(scrollRegion),
+        actions: rect(actions),
+        deleteButton: rect(deleteButton),
+        secondaryActions: rect(secondaryActions),
+        actionPosition: getComputedStyle(actions).position,
+        actionPaddingBottom: getComputedStyle(actions).paddingBottom,
+        actionBackground: getComputedStyle(actions).backgroundColor,
+        actionButtonHeights: [...actions.querySelectorAll('button')]
+          .map(button => button.getBoundingClientRect().height),
+        actionButtonBounds: [...actions.querySelectorAll('button')].map(button => {
+          const bounds = button.getBoundingClientRect();
+          return { left: bounds.left, right: bounds.right };
+        }),
+        fieldWidths: [...dialog.querySelectorAll<HTMLElement>('.person-spark-form__fields input, .person-spark-form__fields textarea')]
+          .map(field => field.getBoundingClientRect().width),
+        focusedTag: document.activeElement?.tagName ?? '',
+        regionFocusVisible: scrollRegion.matches(':focus-visible'),
+        closeRight: close.getBoundingClientRect().right,
+        headerRight: dialog.querySelector('.money-goal-dialog__persistent-header')?.getBoundingClientRect().right ?? 0,
+        hasManage: dialog.querySelector('.person-spark-form__manage') !== null,
+        hasNotes: dialog.querySelector('.person-spark-form__notes-row') !== null,
+        deleteLabel: deleteButton.textContent?.trim() ?? '',
+        actionLabels: [...actions.querySelectorAll('button')].map(button => button.textContent?.trim() ?? '')
+      };
+    });
+    assert.ok(editorLayout.dialog.width > 0 && editorLayout.dialog.width <= viewportWidth);
+    assert.equal(editorLayout.actionPosition, 'static');
+    assert.ok(Number.parseFloat(editorLayout.actionPaddingBottom) >= 12);
+    assert.equal(editorLayout.actionBackground, 'rgb(255, 255, 255)');
+    assert.ok(editorLayout.actionButtonHeights.every(height => height >= 44));
+    assert.ok(editorLayout.actionButtonBounds[0]!.left <= editorLayout.actionButtonBounds[1]!.left,
+      `${label} Cancel should remain on the left of the primary action.`);
+    assert.ok(editorLayout.actionButtonBounds[1]!.right >= editorLayout.actions.right - 1,
+      `${label} the primary action should remain aligned to the right.`);
+    assert.ok(editorLayout.fieldWidths.length >= 3);
+    assert.ok(editorLayout.fieldWidths.every(width => width > 0 && width <= editorLayout.region.width));
+    assert.ok(!['INPUT', 'TEXTAREA', 'SELECT'].includes(editorLayout.focusedTag),
+      `${label} Edit Spark must not autofocus a form field.`);
+    assert.equal(editorLayout.regionFocusVisible, false,
+      `${label} editor opening must not display an outer scroll-region focus ring.`);
+    assert.ok(Math.abs(editorLayout.closeRight - editorLayout.headerRight) < 1,
+      `${label} Edit Spark Close must remain at the top right.`);
+    assert.equal(editorLayout.hasManage, false);
+    assert.equal(editorLayout.hasNotes, false);
+    assert.equal(editorLayout.deleteLabel, 'Delete Spark');
+    assert.deepEqual(editorLayout.actionLabels, ['Cancel', 'Save changes']);
+    assert.ok(editorLayout.deleteButton.bottom <= editorLayout.actions.top,
+      `${label} Delete Spark should sit above the primary action bar: ${JSON.stringify({
+        deleteButton: editorLayout.deleteButton,
+        actions: editorLayout.actions
+      })}`);
+
+    const peopleRow = sparkEditor.locator('.person-spark-form .rhythm-editor__association-row');
+    await peopleRow.click();
+    const peoplePicker = page.getByRole('dialog', { name: 'Choose people' });
+    await peoplePicker.waitFor({ state: 'visible' });
+    assert.equal(await peoplePicker.getByRole('button', { name: 'Done' }).count(), 1);
+    assert.equal(await peoplePicker.getByRole('button', { name: 'Cancel' }).count(), 1);
+    const fixedOwner = peoplePicker.locator('.rhythm-association-picker__options .rhythm-association-picker__option[disabled][data-selected="true"]');
+    assert.equal(await fixedOwner.count(), 1,
+      `${label} the Spark owner should remain preselected and fixed in the shared People picker.`);
+    await peoplePicker.getByRole('button', { name: 'Cancel' }).click();
+
+    assert.equal(await sparkEditor.getByText('Manage Spark').count(), 0);
+    assert.equal(await sparkEditor.getByRole('button', { name: /Archive Spark/ }).count(), 0);
+    assert.equal(await sparkEditor.locator('.person-spark-form__delete-button').count(), 1);
+
+    if (textSize === 'small' && viewportWidth === 375) {
+      const scrollRegion = sparkEditor.locator('.money-goal-dialog__scroll-region');
+      await scrollRegion.focus();
+      await page.keyboard.press('End');
+      const bottomLayout = await sparkEditor.evaluate(dialog => {
+        const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')!;
+        const actions = dialog.querySelector<HTMLElement>('.person-spark-form__actions')!;
+        const deleteButton = dialog.querySelector<HTMLElement>('.person-spark-form__delete-button')!;
+        const regionBounds = region.getBoundingClientRect();
+        const actionBounds = actions.getBoundingClientRect();
+        const deleteBounds = deleteButton.getBoundingClientRect();
+        return {
+          scrollTop: region.scrollTop,
+          scrollHeight: region.scrollHeight,
+          clientHeight: region.clientHeight,
+          actionTop: actionBounds.top,
+          actionBottom: actionBounds.bottom,
+          regionTop: regionBounds.top,
+          regionBottom: regionBounds.bottom,
+          deleteBottom: deleteBounds.bottom
+        };
+      });
+      assert.ok(bottomLayout.scrollHeight > bottomLayout.clientHeight);
+      assert.ok(bottomLayout.scrollTop > 0, 'Long Edit Spark content should scroll with the keyboard.');
+      assert.ok(bottomLayout.actionTop >= bottomLayout.regionTop);
+      assert.ok(bottomLayout.actionBottom <= bottomLayout.regionBottom,
+        'The primary action row should remain reachable at the end of the editor content.');
+      assert.ok(bottomLayout.deleteBottom <= bottomLayout.actionTop,
+        'Delete Spark should remain reachable above the primary action row.');
+    }
+
+    await sparkEditor.getByRole('button', { name: 'Cancel' }).click();
+    await sparkEditor.waitFor({ state: 'detached' });
+
+    const addSparkButton = page.locator('.person-spark-panel__add');
+    await addSparkButton.click();
+    const addEditor = page.getByRole('dialog', { name: 'Add Spark' });
+    await addEditor.waitFor({ state: 'visible' });
+    assert.equal(await addEditor.locator('select').count(), 0);
+    assert.equal(await addEditor.locator('.person-spark-form__notes-row').count(), 0);
+    assert.equal(await addEditor.getByRole('button', { name: 'Create Spark' }).count(), 1);
+    const addPeopleRow = addEditor.locator('.person-spark-form .rhythm-editor__association-row');
+    await addPeopleRow.click();
+    const addPeoplePicker = page.getByRole('dialog', { name: 'Choose people' });
+    await addPeoplePicker.waitFor({ state: 'visible' });
+    assert.equal(
+      await addPeoplePicker.locator('.rhythm-association-picker__options .rhythm-association-picker__option[disabled][data-selected="true"]').count(),
+      1,
+      `${label} Add Spark should preselect its owner in the shared People picker.`
+    );
+    await addPeoplePicker.getByRole('button', { name: 'Cancel' }).click();
+    await addEditor.getByRole('button', { name: 'Cancel' }).click();
+    await addEditor.waitFor({ state: 'detached' });
   }
 }
 
-const sparkEdit = sparkCard.getByRole('button', {
-  name: 'Edit Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
-});
+const sparkEdit = sparkCard.getByRole('button', { name: 'Edit Spark' });
 const addSpark = page.getByRole('button', { name: '+ Add Spark' });
 const addSparkStyle = await addSpark.evaluate(button => ({
   background: getComputedStyle(button).backgroundColor,
@@ -3028,10 +3406,25 @@ assert.equal(await colorsRenderIdentically(page, addSparkPressedBackground, 'rgb
   'Add Spark pressed state should render the approved teal surface.');
 await page.mouse.up();
 const addSparkDialog = page.getByRole('dialog', { name: 'Add Spark' });
+assert.equal(await addSparkDialog.locator('select').count(), 0,
+  'Add Spark should not expose a duplicate owner dropdown.');
+assert.equal(await addSparkDialog.locator('.person-spark-form__notes-row').count(), 0);
+assert.equal(await addSparkDialog.getByRole('button', { name: 'Create Spark' }).count(), 1);
+const addPeopleRow = addSparkDialog.locator('.person-spark-form .rhythm-editor__association-row');
+await addPeopleRow.click();
+const addPeoplePicker = page.getByRole('dialog', { name: 'Choose people' });
+await addPeoplePicker.waitFor({ state: 'visible' });
+assert.equal(
+  await addPeoplePicker.locator('.rhythm-association-picker__options .rhythm-association-picker__option[disabled][data-selected="true"]').count(),
+  1,
+  'Add Spark should preselect its internally assigned owner in the shared People picker.'
+);
+await addPeoplePicker.getByRole('button', { name: 'Cancel' }).click();
 await addSparkDialog.getByRole('button', { name: 'Cancel' }).click();
 await sparkEdit.click();
-const sparkDetails = page.getByRole('dialog', { name: 'Spark details' });
+const sparkDetails = page.getByRole('dialog', { name: 'Edit Spark' });
 await sparkDetails.getByRole('textbox', { name: 'Title' }).waitFor();
+assert.equal(await sparkDetails.getByRole('button', { name: /Notes/ }).count(), 0);
 await sparkDetails.getByRole('button', { name: 'Cancel' }).click();
 assert.equal(await sparkEdit.evaluate(element => document.activeElement === element),
   true, 'Closing Spark editing should return focus to its pencil control.');
@@ -3059,7 +3452,7 @@ await page.keyboard.press('Shift+Tab');
 assert.deepEqual(await doItButton.evaluate(button => ({
   visible: button.matches(':focus-visible'),
   outlineColor: getComputedStyle(button).outlineColor
-})), { visible: true, outlineColor: 'rgb(36, 107, 82)' });
+})), { visible: true, outlineColor: 'rgb(28, 88, 68)' });
 const disabledDoItStyles = await doItButton.evaluate(button => {
   const control = button as HTMLButtonElement;
   control.disabled = true;
@@ -3068,17 +3461,1020 @@ const disabledDoItStyles = await doItButton.evaluate(button => {
   return styles;
 });
 assert.deepEqual(disabledDoItStyles, { opacity: '0.55', cursor: 'not-allowed' });
-const doItBounds = await doItButton.boundingBox();
-assert.ok(doItBounds);
-await page.mouse.move(doItBounds.x + doItBounds.width / 2, doItBounds.y + doItBounds.height / 2);
-await page.mouse.down();
-assert.equal(await doItButton.evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(28, 88, 68)');
-await page.mouse.up();
+
+await page.getByRole('button', { name: 'Today', exact: true }).click();
+const homeSparks = page.locator('.today-sparks-section');
+await homeSparks.waitFor({ state: 'visible' });
+assert.equal(await homeSparks.getByText('A few ideas for connecting.').count(), 0,
+  'Home Sparks should not show the superseded subtitle.');
+assert.equal(await homeSparks.locator('.person-spark-card').count(), 3,
+  'Home must keep its three-Spark display limit.');
+for (const textSize of ['small', 'medium', 'large'] as const) {
+  await setPreviewTextSize(page, textSize);
+  for (const viewportWidth of [375, 390, 430]) {
+    await page.setViewportSize({ width: viewportWidth, height: 844 });
+    const viewAll = homeSparks.getByRole('button', { name: 'View all' });
+    await viewAll.evaluate(button => button.scrollIntoView({ block: 'center' }));
+    const pageScrollBefore = await page.evaluate(() => document.scrollingElement?.scrollTop ?? 0);
+    await viewAll.click();
+    const library = page.getByRole('dialog', { name: 'Sparks' });
+    const scrollRegion = library.locator('.money-goal-dialog__scroll-region');
+    await scrollRegion.waitFor({ state: 'visible' });
+    assert.equal(await library.getByRole('tab', { name: 'Active (13)' }).count(), 1);
+    assert.equal(await library.getByRole('tab', { name: 'Completed (1)' }).count(), 1);
+    assert.equal(await library.getByRole('tab', { name: 'Archived (0)' }).count(), 1);
+    const firstSpark = library.locator('.person-spark-card').first();
+    const firstDisclosure = firstSpark.locator('.person-spark-card__disclosure');
+    assert.equal(await firstDisclosure.getAttribute('aria-expanded'), 'false',
+      'Every Spark in the full list starts collapsed.');
+    const initialLayout = await library.evaluate(dialog => {
+      const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+      const header = dialog.querySelector<HTMLElement>('.money-goal-dialog__persistent-header');
+      const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+      if (!region || !header || !close) throw new Error('Sparks library is missing its shared dialog shell.');
+      const rect = (element: HTMLElement) => {
+        const bounds = element.getBoundingClientRect();
+        return { top: bounds.top, bottom: bounds.bottom, left: bounds.left, right: bounds.right };
+      };
+      return {
+        viewportWidth: document.documentElement.clientWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        region: rect(region),
+        header: rect(header),
+        close: rect(close),
+        maxScroll: region.scrollHeight - region.clientHeight,
+        headerBackground: getComputedStyle(header).backgroundColor
+      };
+    });
+    assert.equal(initialLayout.viewportWidth, viewportWidth);
+    assert.equal(initialLayout.documentWidth, viewportWidth,
+      `The Sparks library must not overflow at ${viewportWidth}px / ${textSize}.`);
+    assert.ok(initialLayout.maxScroll > 0,
+      `The full Sparks list must have real internal scrolling at ${viewportWidth}px / ${textSize}.`);
+    assert.ok(initialLayout.close.left >= 0 && initialLayout.close.right <= viewportWidth);
+    assert.ok(initialLayout.region.bottom <= 844 && initialLayout.region.top >= initialLayout.header.bottom - 1);
+    await scrollRegion.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    const scrolledLayout = await library.evaluate(dialog => {
+      const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')!;
+      const header = dialog.querySelector<HTMLElement>('.money-goal-dialog__persistent-header')!;
+      const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close')!;
+      const rect = (element: HTMLElement) => {
+        const bounds = element.getBoundingClientRect();
+        return { top: bounds.top, bottom: bounds.bottom };
+      };
+      return {
+        scrollTop: region.scrollTop,
+        maximum: region.scrollHeight - region.clientHeight,
+        header: rect(header),
+        close: rect(close)
+      };
+    });
+    assert.ok(scrolledLayout.scrollTop >= scrolledLayout.maximum - 1,
+      `The full Sparks list must scroll to its end at ${viewportWidth}px / ${textSize}.`);
+    assert.equal(scrolledLayout.header.top, initialLayout.header.top,
+      'The dialog header must remain pinned while the Spark list scrolls.');
+    assert.ok(scrolledLayout.close.top >= 0 && scrolledLayout.close.bottom <= 844);
+
+    await scrollRegion.focus();
+    const closeByEscape = textSize === 'small' && viewportWidth === 375;
+    if (closeByEscape) {
+      await page.keyboard.press('Escape');
+    } else {
+      await library.getByRole('button', { name: 'Close Sparks' }).click();
+    }
+    await library.waitFor({ state: 'hidden' });
+    assert.equal(await viewAll.evaluate(button => document.activeElement === button), true,
+      `Closing Sparks must restore focus at ${viewportWidth}px / ${textSize}.`);
+    assert.equal(await page.evaluate(() => document.scrollingElement?.scrollTop ?? 0), pageScrollBefore,
+      `Closing Sparks must restore page scroll at ${viewportWidth}px / ${textSize}.`);
+  }
+}
 const sparkConnectionDialog = page.getByRole('dialog', { name: 'Log a connection for this Spark' });
+await page.getByRole('button', { name: 'People', exact: true }).click();
+await peopleCardButton.click();
+await page.getByRole('tab', { name: 'Connections' }).click();
+await page.locator('.person-spark-card').first().getByRole('button', {
+  name: 'Expand Spark Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+}).click();
+await doItButton.click();
+await sparkConnectionDialog.waitFor({ state: 'visible' });
+for (const viewportWidth of [375, 390, 430]) {
+  await page.setViewportSize({ width: viewportWidth, height: 520 });
+  const sparkScroll = await sparkConnectionDialog.evaluate(dialog => {
+    const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+    const actions = dialog.querySelector<HTMLElement>('.friendships-connection-form .money-goal-dialog__actions');
+    const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+    if (!region || !actions || !close) throw new Error('Spark completion is missing its shared scroll region.');
+    region.scrollTop = region.scrollHeight;
+    const regionBounds = region.getBoundingClientRect();
+    const actionBounds = actions.getBoundingClientRect();
+    return {
+      scrollTop: region.scrollTop,
+      maximum: region.scrollHeight - region.clientHeight,
+      regionTop: regionBounds.top,
+      regionBottom: regionBounds.bottom,
+      actionTop: actionBounds.top,
+      actionBottom: actionBounds.bottom,
+      closeTop: close.getBoundingClientRect().top
+    };
+  });
+  assert.ok(sparkScroll.scrollTop >= sparkScroll.maximum - 1,
+    `Spark completion must scroll to the save action at ${viewportWidth}px.`);
+  assert.ok(sparkScroll.actionTop >= sparkScroll.regionTop);
+  assert.ok(sparkScroll.actionBottom <= sparkScroll.regionBottom + 1);
+  assert.ok(sparkScroll.closeTop >= 0);
+}
 await sparkConnectionDialog.getByRole('button', { name: 'Cancel' }).click();
 assert.equal(await doItButton.evaluate(element => document.activeElement === element),
   true, 'Cancelling Do it should return focus to the primary action.');
+
+await page.getByRole('tab', { name: 'Rhythms' }).click();
+const tendButton = page.getByRole('button', { name: /^Tend / }).first();
+const rhythmCompletionDialog = page.getByRole('dialog', { name: 'When did you tend it?' });
+await tendButton.click();
+await rhythmCompletionDialog.waitFor({ state: 'visible' });
+for (const viewportWidth of [375, 390, 430]) {
+  await page.setViewportSize({ width: viewportWidth, height: 520 });
+  const rhythmScroll = await rhythmCompletionDialog.evaluate(dialog => {
+    const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+    const actions = dialog.querySelector<HTMLElement>('.rhythm-completion-form__actions');
+    const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+    if (!region || !actions || !close) throw new Error('Rhythm completion is missing its shared scroll region.');
+    region.scrollTop = region.scrollHeight;
+    const regionBounds = region.getBoundingClientRect();
+    const actionBounds = actions.getBoundingClientRect();
+    return {
+      scrollTop: region.scrollTop,
+      maximum: region.scrollHeight - region.clientHeight,
+      regionTop: regionBounds.top,
+      regionBottom: regionBounds.bottom,
+      actionTop: actionBounds.top,
+      actionBottom: actionBounds.bottom,
+      closeTop: close.getBoundingClientRect().top
+    };
+  });
+  assert.ok(rhythmScroll.scrollTop >= rhythmScroll.maximum - 1,
+    `Rhythm completion must scroll to the save action at ${viewportWidth}px.`);
+  assert.ok(rhythmScroll.actionTop >= rhythmScroll.regionTop);
+  assert.ok(rhythmScroll.actionBottom <= rhythmScroll.regionBottom + 1);
+  assert.ok(rhythmScroll.closeTop >= 0);
+}
+await rhythmCompletionDialog.getByRole('button', { name: 'Close completion' }).click();
 await context.close();
+}
+
+async function verifyDatingSuggestionPickerResponsiveLayout(browser: Browser) {
+const previewData = createSamplePreviewData();
+previewData.categoryPreferences = {
+  ...previewData.categoryPreferences,
+  marriage: false,
+  dating: true
+};
+const envelope = createPreviewEnvelope(previewData);
+const validation = parsePreviewBackup(JSON.stringify(envelope), localDateString(new Date()));
+if (!validation.valid) throw new Error(`Synthetic Dating browser fixture is invalid: ${validation.message}`);
+
+const devPort = await availablePort();
+const devUrl = `http://127.0.0.1:${devPort}`;
+let devServer: ReturnType<typeof spawn> | undefined;
+try {
+  devServer = spawn(process.execPath, [
+    viteCli,
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(devPort),
+    '--strictPort'
+  ], { cwd: previewDirectory, stdio: 'ignore' });
+  await waitForPreview(`${devUrl}/app-preview.html`, devServer);
+
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 900 },
+    hasTouch: true
+  });
+  try {
+    await context.addInitScript(({ key, value }) => {
+      window.localStorage.setItem(key, value);
+    }, {
+      key: PREVIEW_STORAGE_KEY,
+      value: JSON.stringify(envelope)
+    });
+
+    const page = await context.newPage();
+    page.setDefaultTimeout(5_000);
+    await page.route('**/*', route => {
+      if (new URL(route.request().url()).origin === devUrl) return route.continue();
+      return route.abort();
+    });
+    await page.goto(`${devUrl}/app-preview.html`);
+    await page.locator('.home-dashboard').waitFor();
+    const areaButtonNames = await page.locator('.areanav button').allTextContents();
+    const persistedDatingPreference = await page.evaluate(key => {
+      const raw = window.localStorage.getItem(key);
+      return raw ? JSON.parse(raw).data?.categoryPreferences?.dating : null;
+    }, PREVIEW_STORAGE_KEY);
+    assert.ok(areaButtonNames.some(name => name.trim() === 'Dating'),
+      `Dating should be visible in the synthetic preview; saved preference: ${String(persistedDatingPreference)}; buttons: ${JSON.stringify(areaButtonNames)}.`);
+    await page.locator('.areanav button').filter({ hasText: 'Dating' }).click();
+    await page.getByRole('tab', { name: 'Rhythms', exact: true }).click();
+
+    for (const textSize of ['small', 'medium', 'large'] as const) {
+      await setPreviewTextSize(page, textSize);
+      for (const viewportWidth of [375, 390, 430]) {
+        await page.setViewportSize({ width: viewportWidth, height: 844 });
+        await page.getByRole('button', { name: 'Suggestions', exact: true }).click();
+        const picker = page.getByRole('dialog', { name: 'Dating Rhythm suggestions' });
+        await picker.waitFor();
+        const pickerLayout = await picker.evaluate(dialog => {
+          const scroll = dialog.querySelector<HTMLElement>('.rhythm-suggestion-picker__scroll');
+          if (!scroll) throw new Error('Dating suggestions need the shared picker scroll region.');
+          const bounds = (element: Element) => {
+            const rect = element.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, width: rect.width };
+          };
+          const rows = [...dialog.querySelectorAll<HTMLElement>('.rhythm-suggestion-picker__row')];
+          return {
+            viewportWidth: document.documentElement.clientWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            dialog: bounds(dialog),
+            scrollClientWidth: scroll.clientWidth,
+            scrollWidth: scroll.scrollWidth,
+            rows: rows.map(row => {
+              const details = row.querySelector<HTMLElement>('.rhythm-suggestion-picker__details');
+              const action = row.querySelector<HTMLElement>('.rhythm-suggestion-picker__action');
+              if (!details || !action) throw new Error('A Dating suggestion row is missing its shared copy or action.');
+              const detailsRect = details.getBoundingClientRect();
+              const actionRect = action.getBoundingClientRect();
+              return {
+                ...bounds(row),
+                textFits: [...row.querySelectorAll<HTMLElement>('h4, p')]
+                  .every(text => text.scrollWidth <= text.clientWidth + 1),
+                actionOverlapsCopy: detailsRect.left < actionRect.right
+                  && detailsRect.right > actionRect.left
+                  && detailsRect.top < actionRect.bottom
+                  && detailsRect.bottom > actionRect.top
+              };
+            })
+          };
+        });
+        const pickerLabel = `Dating suggestion picker at ${viewportWidth}px / ${textSize} text`;
+        assert.equal(pickerLayout.viewportWidth, viewportWidth, `${pickerLabel} viewport`);
+        assert.equal(pickerLayout.documentWidth, viewportWidth, `${pickerLabel} must not overflow horizontally`);
+        assert.ok(pickerLayout.dialog.left >= -1 && pickerLayout.dialog.right <= viewportWidth + 1,
+          `${pickerLabel} dialog must stay inside the viewport.`);
+        assert.ok(pickerLayout.scrollWidth <= pickerLayout.scrollClientWidth + 1,
+          `${pickerLabel} scroll content must not overflow horizontally.`);
+        assert.equal(pickerLayout.rows.length, 18, `${pickerLabel} must show all 18 suggestions.`);
+        assert.ok(pickerLayout.rows.every(row =>
+          row.left >= pickerLayout.dialog.left - 1
+          && row.right <= pickerLayout.dialog.right + 1
+          && row.textFits
+          && !row.actionOverlapsCopy
+        ), `${pickerLabel} rows, descriptions, and actions must fit without overlap.`);
+
+        const customSuggestion = picker.locator('.rhythm-suggestion-picker__row')
+          .filter({ hasText: 'Check whether expectations still align' });
+        await customSuggestion.getByRole('button', { name: 'Add', exact: true }).click();
+        const editor = page.getByRole('dialog', { name: 'Add Rhythm' });
+        await editor.waitFor();
+        assert.equal(
+          await editor.getByRole('spinbutton', { name: /Repeat every/i }).inputValue(),
+          '3'
+        );
+        await editor.getByRole('combobox', { name: 'Repeat interval unit: months' }).waitFor();
+        const editorLayout = await editor.evaluate(dialog => {
+          const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface');
+          const form = dialog.querySelector<HTMLFormElement>('form.rhythm-editor');
+          const scroll = form?.querySelector<HTMLElement>('.rhythm-editor__scroll');
+          if (!surface || !form || !scroll) {
+            throw new Error('The shared Rhythm editor needs its surface, form, and scroll region.');
+          }
+          const bounds = (element: Element) => {
+            const rect = element.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, width: rect.width };
+          };
+          const surfaceBounds = bounds(surface);
+          const controls = [...form.querySelectorAll<HTMLElement>('input, textarea, button, [role="combobox"]')]
+            .filter(control => control.getClientRects().length > 0)
+            .map(control => bounds(control));
+          return {
+            viewportWidth: document.documentElement.clientWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            dialog: bounds(dialog),
+            surface: surfaceBounds,
+            formClientWidth: form.clientWidth,
+            formScrollWidth: form.scrollWidth,
+            editorClientWidth: scroll.clientWidth,
+            editorScrollWidth: scroll.scrollWidth,
+            controls
+          };
+        });
+        const editorLabel = `Dating Rhythm editor at ${viewportWidth}px / ${textSize} text`;
+        assert.equal(editorLayout.viewportWidth, viewportWidth, `${editorLabel} viewport`);
+        assert.equal(editorLayout.documentWidth, viewportWidth, `${editorLabel} must not overflow horizontally`);
+        assert.ok(editorLayout.dialog.left >= -1 && editorLayout.dialog.right <= viewportWidth + 1,
+          `${editorLabel} dialog must stay inside the viewport.`);
+        assert.ok(editorLayout.formScrollWidth <= editorLayout.formClientWidth + 1,
+          `${editorLabel} form must not overflow horizontally.`);
+        assert.ok(editorLayout.editorScrollWidth <= editorLayout.editorClientWidth + 1,
+          `${editorLabel} scroll content must not overflow horizontally.`);
+        assert.ok(editorLayout.controls.every(control =>
+          control.left >= editorLayout.surface.left - 1
+          && control.right <= editorLayout.surface.right + 1
+        ), `${editorLabel} controls must remain within the shared editor surface.`);
+
+        await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await picker.waitFor();
+        await picker.getByRole('button', { name: 'Close Dating Rhythm suggestions' }).click();
+        await picker.waitFor({ state: 'detached' });
+      }
+    }
+    const storedKeys = await page.evaluate(() => Object.keys(window.localStorage).sort());
+    assert.deepEqual(storedKeys, [PREVIEW_STORAGE_KEY],
+      'The synthetic browser fixture may persist only under the versioned preview key.');
+  } finally {
+    await context.close();
+  }
+} finally {
+  if (devServer?.pid && devServer.exitCode === null && devServer.signalCode === null) {
+    devServer.kill('SIGKILL');
+  }
+}
+}
+
+async function verifyTodayNowEmptyStateResponsiveLayout(browser: Browser): Promise<void> {
+const page = await browser.newPage({ viewport: { width: 375, height: 844 } });
+try {
+  const [tokens, styles] = await Promise.all([
+    readFile(path.resolve(previewDirectory, '..', 'brand/tend-tokens.css'), 'utf8'),
+    readFile(path.resolve(previewDirectory, 'src/styles.css'), 'utf8')
+  ]);
+  await page.setContent(`<!doctype html>
+    <html lang="en">
+      <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+      <body>
+        <div class="wrap tend-app-preview" data-text-size="small">
+          <section class="today-plan-section" aria-label="Today empty-state fixture">
+            <section class="today-plan__agenda-group today-plan__agenda-group--expanded">
+              <h4 class="today-timeframe-header today-timeframe-header--expanded">
+                <span class="today-timeframe-header__content">
+                  <span class="today-timeframe-header__title-row">
+                    <span class="today-plan__view-heading">A deliberately long custom time-block name for responsive layout verification</span>
+                    <span class="today-timeframe-header__meta">
+                      <span class="today-timeframe-header__progress">0 of 0</span>
+                    </span>
+                  </span>
+                  <span class="today-timeframe-header__range">11:30pm–1:30am · Tomorrow</span>
+                </span>
+              </h4>
+              <div class="today-plan__empty-rhythms today-plan__empty-rhythms--now" role="status">
+                <p>No active Rhythms right now.</p>
+                <button class="today-plan__empty-action" type="button">View all today</button>
+              </div>
+            </section>
+            <div class="today-plan__empty-rhythms" data-empty-view="flexible">
+              <p>No flexible Rhythms due today.</p>
+            </div>
+            <div class="today-plan__empty-rhythms" data-empty-view="all-today">
+              <p>No Rhythms due today.</p>
+            </div>
+          </section>
+        </div>
+      </body>
+    </html>`);
+  await page.addStyleTag({ content: tokens });
+  await page.addStyleTag({ content: styles });
+
+  for (const viewportWidth of [375, 390, 430] as const) {
+    await page.setViewportSize({ width: viewportWidth, height: 844 });
+    for (const textSize of ['small', 'medium', 'large'] as const) {
+      await page.evaluate(size => {
+        const mobileSize = size === 'small'
+          ? 'normal'
+          : size === 'medium' ? 'large' : 'larger';
+        document.documentElement.dataset.mobileTextSize = mobileSize;
+        document.documentElement.dataset.mobileTextSizeLevel = size;
+        const app = document.querySelector<HTMLElement>('.tend-app-preview');
+        if (!app) throw new Error('The empty-state responsive fixture is missing its app wrapper.');
+        app.dataset.textSize = size;
+      }, textSize);
+
+      const layout = await page.evaluate(() => {
+        const fixture = document.querySelector<HTMLElement>('.today-plan-section');
+        const header = fixture?.querySelector<HTMLElement>('.today-timeframe-header');
+        const title = header?.querySelector<HTMLElement>('.today-plan__view-heading');
+        const card = fixture?.querySelector<HTMLElement>('.today-plan__empty-rhythms--now');
+        const message = card?.querySelector<HTMLElement>('p');
+        const action = card?.querySelector<HTMLElement>('.today-plan__empty-action');
+        if (!fixture || !header || !title || !card || !message || !action) {
+          throw new Error('The Now empty-state browser fixture is incomplete.');
+        }
+        const bounds = (element: HTMLElement) => {
+          const rect = element.getBoundingClientRect();
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+        };
+        const headerBounds = bounds(header);
+        const titleBounds = bounds(title);
+        const cardBounds = bounds(card);
+        const messageBounds = bounds(message);
+        const actionBounds = bounds(action);
+        const emptyViews = [...fixture.querySelectorAll<HTMLElement>('[data-empty-view]')];
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          headerBounds,
+          titleBounds,
+          cardBounds,
+          messageBounds,
+          actionBounds,
+          cardPadding: getComputedStyle(card).padding,
+          messageFontSize: Number.parseFloat(getComputedStyle(message).fontSize),
+          messageLineHeight: Number.parseFloat(getComputedStyle(message).lineHeight),
+          actionWhiteSpace: getComputedStyle(action).whiteSpace,
+          actionHeight: action.getBoundingClientRect().height,
+          emptyViews: emptyViews.map(empty => {
+            const emptyMessage = empty.querySelector<HTMLElement>('p');
+            if (!emptyMessage) throw new Error('An equivalent empty-state message is missing.');
+            return {
+              padding: getComputedStyle(empty).padding,
+              fontSize: Number.parseFloat(getComputedStyle(emptyMessage).fontSize),
+              lineHeight: Number.parseFloat(getComputedStyle(emptyMessage).lineHeight)
+            };
+          })
+        };
+      });
+
+      assert.equal(layout.viewportWidth, viewportWidth);
+      assert.equal(layout.documentWidth, viewportWidth,
+        `Today empty states must not overflow at ${viewportWidth}px / ${textSize}.`);
+      assert.ok(Math.abs(layout.cardBounds.top - layout.headerBounds.bottom - 12) < 1,
+        `Now empty card must have a 12px gap after its time-block header at ${viewportWidth}px / ${textSize}.`);
+      assert.ok(Math.abs(layout.cardBounds.left - layout.headerBounds.left) < 1);
+      assert.ok(Math.abs(layout.cardBounds.right - layout.headerBounds.right) < 1);
+      assert.ok(Math.abs(layout.messageFontSize - 16 * (textSize === 'small' ? 1 : textSize === 'medium' ? 1.125 : 1.25)) < 0.1);
+      assert.ok(layout.messageLineHeight >= layout.messageFontSize * 1.45);
+      assert.equal(layout.cardPadding, '16px');
+      assert.equal(layout.actionWhiteSpace, 'nowrap');
+      assert.ok(layout.actionHeight >= 44);
+      assert.ok(layout.titleBounds.left >= layout.headerBounds.left - 1);
+      assert.ok(layout.titleBounds.right <= layout.headerBounds.right + 1);
+      for (const emptyView of layout.emptyViews) {
+        assert.equal(emptyView.padding, '16px');
+        assert.ok(Math.abs(emptyView.fontSize - layout.messageFontSize) < 0.1);
+        assert.ok(Math.abs(emptyView.lineHeight - layout.messageLineHeight) < 0.1);
+      }
+
+      const shouldStack = viewportWidth <= 400 || textSize !== 'small';
+      if (shouldStack) {
+        assert.ok(layout.actionBounds.top >= layout.messageBounds.bottom - 1,
+          `View all today must sit below the message at ${viewportWidth}px / ${textSize}.`);
+        assert.ok(Math.abs((layout.actionBounds.left + layout.actionBounds.right) / 2
+          - (layout.cardBounds.left + layout.cardBounds.right) / 2) < 1);
+      } else {
+        assert.ok(Math.abs(layout.actionBounds.top + layout.actionBounds.bottom
+          - layout.messageBounds.top - layout.messageBounds.bottom) < 2,
+        `View all today should share the message row at ${viewportWidth}px / ${textSize}.`);
+        assert.ok(layout.actionBounds.left >= layout.messageBounds.right + 8);
+      }
+    }
+  }
+} finally {
+  await page.close();
+}
+}
+
+async function verifyRhythmConnectionIndicatorLayout(browser: Browser): Promise<void> {
+  const page = await browser.newPage({ viewport: { width: 375, height: 844 } });
+  try {
+    const [tokens, styles, sharedConnectionSvg] = await Promise.all([
+      readFile(path.resolve(previewDirectory, '..', 'brand/tend-tokens.css'), 'utf8'),
+      readFile(path.resolve(previewDirectory, 'src/styles.css'), 'utf8'),
+      readFile(path.resolve(previewDirectory, 'src/assets/tend-approved-icons/foundations/connection.svg'), 'utf8')
+    ]);
+    const svgStart = sharedConnectionSvg.indexOf('>');
+    const svgEnd = sharedConnectionSvg.lastIndexOf('</svg>');
+    if (svgStart < 0 || svgEnd <= svgStart) throw new Error('Approved Connection icon SVG is malformed.');
+    const connectionIcon = `<svg class="person-link-icon" viewBox="0 0 64 64" fill="none"
+      stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"
+      aria-hidden="true" focusable="false">${sharedConnectionSvg.slice(svgStart + 1, svgEnd)}</svg>`;
+    const people = Array.from({ length: 5 }, (_, index) => `
+      <button type="button" class="rhythm-person-badge">
+        <span class="person-badge-visual">
+          <span class="person-badge-avatar">P${index + 1}</span>
+          <span class="person-badge-name">PersonWithLongName${index + 1}</span>
+        </span>
+      </button>
+    `).join('');
+    await page.setContent(`<!doctype html>
+      <html lang="en">
+        <head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;padding:16px}</style></head>
+        <body class="tend-app-preview">
+          <div class="today-rhythm-details__association-row">
+            <div class="today-rhythm-details__association-metadata-row">
+              <div class="today-rhythm-details__association-people" role="group" aria-label="People associated with a Rhythm">
+                ${people}
+                <span class="rhythm-connection-indicator" role="img" aria-label="Also logs a connection."
+                  title="Also logs a connection." data-tooltip="Also logs a connection." tabindex="0">
+                  ${connectionIcon}
+                </span>
+              </div>
+            </div>
+          </div>
+          <section class="rhythm-editor__section">
+            <h3 class="rhythm-editor__section-heading">
+              <span class="rhythm-editor__section-icon" aria-hidden="true">${connectionIcon}</span>
+              <span class="rhythm-editor__section-title">Connections</span>
+              <span class="rhythm-editor__section-divider" aria-hidden="true"></span>
+            </h3>
+          </section>
+        </body>
+      </html>`);
+    await page.addStyleTag({ content: tokens });
+    await page.addStyleTag({ content: styles });
+
+    for (const textScale of [1, 1.125, 1.25, 1.5]) {
+      for (const viewportWidth of [375, 390, 430]) {
+        await page.setViewportSize({ width: viewportWidth, height: 844 });
+        const layout = await page.evaluate(scale => {
+          document.documentElement.style.setProperty('--app-text-scale', String(scale));
+          const group = document.querySelector<HTMLElement>('.today-rhythm-details__association-people');
+          const indicator = group?.querySelector<HTMLElement>('.rhythm-connection-indicator');
+          const indicatorSvg = indicator?.querySelector<SVGSVGElement>('svg');
+          const editorIcon = document.querySelector<HTMLElement>('.rhythm-editor__section-icon');
+          const editorSvg = editorIcon?.querySelector<SVGSVGElement>('svg');
+          if (!group || !indicator || !indicatorSvg || !editorIcon || !editorSvg) {
+            throw new Error('Connection icon fixture is incomplete.');
+          }
+          const items = [...group.children].map(element => {
+            const rect = element.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, top: Math.round(rect.top) };
+          });
+          indicator.focus();
+          const iconMetrics = (svg: SVGSVGElement) => {
+            const box = svg.getBBox();
+            const bounds = svg.getBoundingClientRect();
+            return {
+              width: bounds.width,
+              height: bounds.height,
+              color: getComputedStyle(svg.parentElement!).color,
+              stroke: getComputedStyle(svg.querySelector('path')!).stroke,
+              viewBox: svg.getAttribute('viewBox'),
+              strokeWidth: svg.getAttribute('stroke-width'),
+              graphicBox: { x: box.x, y: box.y, width: box.width, height: box.height }
+            };
+          };
+          return {
+            viewportWidth: document.documentElement.clientWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            group: group.getBoundingClientRect().toJSON(),
+            itemCount: items.length,
+            rowCount: new Set(items.map(item => item.top)).size,
+            itemsInViewport: items.every(item => item.left >= 0 && item.right <= window.innerWidth),
+            tooltipVisibility: getComputedStyle(indicator, '::after').visibility,
+            indicator: {
+              ...iconMetrics(indicatorSvg),
+              bounds: indicator.getBoundingClientRect().toJSON()
+            },
+            editor: {
+              ...iconMetrics(editorSvg),
+              bounds: editorIcon.getBoundingClientRect().toJSON()
+            }
+          };
+        }, textScale);
+        const label = `${viewportWidth}px / ${textScale}x text`;
+        assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
+        assert.equal(layout.documentWidth, viewportWidth, `${label} must not overflow horizontally`);
+        assert.equal(layout.itemCount, 6, `${label} should retain all badges and the indicator`);
+        assert.ok(layout.rowCount > 1, `${label} association badges should wrap naturally`);
+        assert.ok(layout.itemsInViewport, `${label} wrapped items must stay within the viewport`);
+        assert.equal(layout.tooltipVisibility, 'visible', `${label} keyboard focus should reveal the tooltip`);
+        for (const [location, icon, expectedSize] of [
+          ['Rhythm card', layout.indicator, 18],
+          ['Rhythm editor', layout.editor, 22]
+        ] as const) {
+          assert.equal(icon.width, expectedSize, `${label} ${location} icon width`);
+          assert.equal(icon.height, expectedSize, `${label} ${location} icon height`);
+          assert.equal(icon.viewBox, '0 0 64 64', `${label} ${location} approved viewBox`);
+          assert.equal(icon.strokeWidth, '5', `${label} ${location} approved stroke width`);
+          assert.equal(icon.stroke, icon.color, `${label} ${location} currentColor inheritance`);
+          assert.ok(icon.graphicBox.x >= 0 && icon.graphicBox.y >= 0,
+            `${label} ${location} geometry must not be clipped at its origin`);
+          assert.ok(icon.graphicBox.x + icon.graphicBox.width <= 64
+            && icon.graphicBox.y + icon.graphicBox.height <= 64,
+          `${label} ${location} geometry must stay inside the approved viewBox`);
+          assert.ok(icon.bounds.left >= 0 && icon.bounds.right <= viewportWidth,
+            `${label} ${location} icon must remain in the viewport`);
+        }
+      }
+    }
+  } finally {
+    await page.close();
+  }
+}
+
+async function verifyConnectionHistoryRowResponsiveLayout(browser: Browser): Promise<void> {
+  const page = await browser.newPage({ viewport: { width: 375, height: 844 } });
+  try {
+    const [tokens, styles] = await Promise.all([
+      readFile(path.resolve(previewDirectory, '..', 'brand/tend-tokens.css'), 'utf8'),
+      readFile(path.resolve(previewDirectory, 'src/styles.css'), 'utf8')
+    ]);
+    const rows = [
+      {
+        source: 'rhythm',
+        title: 'Pray together',
+        sourceLabel: 'Rhythm',
+        date: 'Oct 21, 2026',
+        time: '10:15 AM',
+        dateTime: '2026-10-21T10:15',
+        sourceClass: 'rhythm'
+      },
+      {
+        source: 'spark',
+        title: 'Watch Backrooms Movie and discuss the ending together at length',
+        sourceLabel: 'Spark',
+        date: 'Oct 20, 2026',
+        time: null,
+        dateTime: '2026-10-20',
+        sourceClass: 'spark'
+      },
+      {
+        source: 'manual',
+        title: 'Text',
+        sourceLabel: 'Manual',
+        date: 'Oct 19, 2026',
+        time: null,
+        dateTime: '2026-10-19',
+        sourceClass: 'manual'
+      }
+    ];
+    const rowMarkup = rows.map(row => `
+      <li class="friendships-history-item">
+        <button type="button" class="tended-rhythm-done-row friendships-connection-row"
+          aria-label="${row.title}, ${row.sourceLabel} connection, ${row.date}. Open details.">
+          <span class="tended-rhythm-done-row__check friendships-connection-row__check friendships-connection-row__check--${row.sourceClass}">✓</span>
+          <span class="friendships-connection-row__content">
+            <span class="tended-rhythm-done-row__title friendships-connection-row__title">${row.title}</span>
+            <span class="friendships-connection-row__source-type">${row.sourceLabel}</span>
+          </span>
+          <span class="tended-rhythm-done-row__time friendships-connection-row__timestamp">
+            <time datetime="${row.dateTime}">${row.date}</time>
+            ${row.time
+              ? `<span aria-hidden="true">·</span><time datetime="${row.dateTime}">${row.time}</time>`
+              : ''}
+          </span>
+        </button>
+      </li>
+    `).join('');
+    await page.setContent(`<!doctype html>
+      <html lang="en">
+        <head><meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>body{margin:0;padding:16px}</style>
+        </head>
+        <body>
+          <button class="tended-rhythm-done-row" aria-label="Reference tended Rhythm">
+            <span class="tended-rhythm-done-row__check" aria-hidden="true">✓</span>
+            <span class="tended-rhythm-done-row__title">Tended Rhythm reference</span>
+            <span class="tended-rhythm-done-row__time">Oct 21, 2026</span>
+          </button>
+          <ol class="friendships-history-list">${rowMarkup}</ol>
+        </body>
+      </html>`);
+    await page.addStyleTag({ content: tokens });
+    await page.addStyleTag({ content: styles });
+
+    for (const textScale of [1, 1.125, 1.25, 1.5]) {
+      for (const viewportWidth of [375, 390, 430]) {
+        await page.setViewportSize({ width: viewportWidth, height: 844 });
+        const layout = await page.evaluate(scale => {
+          document.documentElement.style.setProperty('--app-text-scale', String(scale));
+          const reference = document.querySelector<HTMLElement>('.tended-rhythm-done-row');
+          const historyRows = [...document.querySelectorAll<HTMLElement>('.friendships-connection-row')];
+          if (!reference || historyRows.length !== 3) throw new Error('Connection row layout fixture is incomplete.');
+          const referenceStyle = getComputedStyle(reference);
+          const referenceTitleStyle = getComputedStyle(reference.querySelector('.tended-rhythm-done-row__title')!);
+          return {
+            viewportWidth: document.documentElement.clientWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            reference: {
+              border: referenceStyle.border,
+              borderRadius: referenceStyle.borderRadius,
+              padding: referenceStyle.padding,
+              gap: referenceStyle.gap,
+              fontFamily: referenceStyle.fontFamily,
+              titleFontSize: referenceTitleStyle.fontSize,
+              titleFontWeight: referenceTitleStyle.fontWeight
+            },
+            rows: historyRows.map(row => {
+              const style = getComputedStyle(row);
+              const check = row.querySelector<HTMLElement>('.friendships-connection-row__check')!;
+              const content = row.querySelector<HTMLElement>('.friendships-connection-row__content')!;
+              const title = row.querySelector<HTMLElement>('.friendships-connection-row__title')!;
+              const timestamp = row.querySelector<HTMLElement>('.friendships-connection-row__timestamp')!;
+              const source = row.querySelector<HTMLElement>('.friendships-connection-row__source-type')!;
+              const titleStyle = getComputedStyle(title);
+              return {
+                row: row.getBoundingClientRect().toJSON(),
+                check: check.getBoundingClientRect().toJSON(),
+                content: content.getBoundingClientRect().toJSON(),
+                title: title.getBoundingClientRect().toJSON(),
+                timestamp: timestamp.getBoundingClientRect().toJSON(),
+                rowBackground: style.backgroundColor,
+                border: style.border,
+                borderRadius: style.borderRadius,
+                padding: style.padding,
+                gap: style.gap,
+                fontFamily: style.fontFamily,
+                titleFontSize: titleStyle.fontSize,
+                titleFontWeight: titleStyle.fontWeight,
+                checkBackground: getComputedStyle(check).backgroundColor,
+                checkColor: getComputedStyle(check).color,
+                timestampWhiteSpace: getComputedStyle(timestamp).whiteSpace,
+                source: source.textContent,
+                timeCount: row.querySelectorAll('time').length,
+                titleText: title.textContent
+              };
+            })
+          };
+        }, textScale);
+        const label = `${viewportWidth}px / ${textScale}x text`;
+        assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
+        assert.equal(layout.documentWidth, viewportWidth, `${label} must not overflow horizontally`);
+        for (const row of layout.rows) {
+          assert.ok(row.row.left >= 0 && row.row.right <= viewportWidth,
+            `${label} Connection row must stay within the viewport.`);
+          assert.ok(row.check.left >= row.row.left && row.check.right < row.content.left,
+            `${label} checkmark must remain on the left of the title.`);
+          assert.ok(row.title.width > 0 && row.content.right <= row.timestamp.left,
+            `${label} title must shrink before the timestamp.`);
+          assert.ok(row.timestamp.right <= row.row.right - 8,
+            `${label} timestamp must stay inside the card.`);
+          assert.equal(row.timestampWhiteSpace, 'nowrap', `${label} timestamp stays compact.`);
+          assert.equal(row.rowBackground, 'rgb(255, 255, 255)', `${label} row stays white.`);
+          assert.equal(row.border, layout.reference.border, `${label} shared border.`);
+          assert.equal(row.borderRadius, layout.reference.borderRadius, `${label} shared radius.`);
+          assert.equal(row.padding, layout.reference.padding, `${label} shared spacing.`);
+          assert.equal(row.gap, layout.reference.gap, `${label} shared spacing.`);
+          assert.equal(row.fontFamily, layout.reference.fontFamily, `${label} shared typography.`);
+          assert.equal(row.titleFontSize, layout.reference.titleFontSize, `${label} shared title size.`);
+          assert.equal(row.titleFontWeight, layout.reference.titleFontWeight, `${label} shared title weight.`);
+        }
+        assert.equal(layout.rows[0]!.checkBackground, 'rgb(36, 107, 82)', `${label} Rhythm circle stays green.`);
+        assert.equal(layout.rows[0]!.checkColor, 'rgb(255, 255, 255)', `${label} Rhythm check stays white.`);
+        assert.equal(layout.rows[1]!.checkBackground, 'rgb(254, 251, 230)', `${label} Spark circle stays amber.`);
+        assert.equal(layout.rows[1]!.checkColor, 'rgb(138, 98, 0)', `${label} Spark check uses dark amber.`);
+        assert.equal(layout.rows[1]!.rowBackground, 'rgb(255, 255, 255)', `${label} Spark does not tint the row.`);
+        assert.equal(layout.rows[2]!.source, 'Manual', `${label} manual source remains neutral and explicit.`);
+        assert.equal(layout.rows[0]!.timeCount, 2, `${label} recorded time is shown.`);
+        assert.equal(layout.rows[1]!.timeCount, 1, `${label} date-only entry does not invent a time.`);
+      }
+    }
+  } finally {
+    await page.close();
+  }
+}
+
+async function verifyFocusDialogResponsiveLayout(browser: Browser): Promise<void> {
+  const page = await browser.newPage({ viewport: { width: 375, height: 844 } });
+  try {
+    const [tokens, styles] = await Promise.all([
+      readFile(path.resolve(previewDirectory, '..', 'brand/tend-tokens.css'), 'utf8'),
+      readFile(path.resolve(previewDirectory, 'src/styles.css'), 'utf8')
+    ]);
+    const blocks = Array.from({ length: 5 }, (_, index) => `
+      <article class="focus-block">
+        <header class="focus-block__header">
+          <div class="focus-block__copy">
+            <h4>${index === 0 ? 'Custom block with an exceptionally long user-defined name' : `Block ${index + 1}`}</h4>
+            <p>9:00am–11:30am</p><span class="focus-block__date">Tomorrow</span>
+          </div>
+          <span class="focus-block__count">0 of 8 tended</span>
+        </header>
+        <div class="focus-rhythm-list">
+          ${Array.from({ length: 8 }, (_, item) => `
+            <article class="rhythm-card"><h4>Rhythm ${index * 8 + item + 1}</h4><p>Sample content to exercise a full-height Focus scroll surface.</p></article>
+          `).join('')}
+        </div>
+      </article>
+    `).join('');
+    await page.setContent(`<!doctype html>
+      <html lang="en">
+        <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body><dialog class="focus-dialog" open>
+          <div class="focus-dialog__surface">
+            <header class="focus-head">
+              <div class="focus-head__copy"><h2>Focus</h2></div>
+              <button class="focus-close" aria-label="Close Focus">×</button>
+            </header>
+            <p class="focus-intro">Now and the next two blocks. Anytime Rhythms stay on Today.</p>
+            <section class="focus-horizon"><h3>Now</h3>${blocks}</section>
+            <section class="focus-horizon"><h3>Coming up</h3>${blocks}</section>
+            <section class="focus-people"><div class="focus-section-heading"><h3>People who need attention</h3><span>Health below 70</span></div>
+              <button class="focus-person"><span class="focus-avatar">AB</span><span class="focus-person__copy"><strong>Avery Brooks</strong><small>No connection logged</small></span><span class="focus-person__score">19</span><span class="focus-person__chevron">›</span></button>
+            </section>
+          </div>
+        </dialog></body>
+      </html>`);
+    await page.addStyleTag({ content: tokens });
+    await page.addStyleTag({ content: styles });
+
+    for (const textScale of [1, 1.125, 1.25]) {
+      for (const viewportWidth of [375, 390, 430]) {
+        await page.setViewportSize({ width: viewportWidth, height: 844 });
+        const layout = await page.evaluate(scale => {
+          document.documentElement.style.setProperty('--app-text-scale', String(scale));
+          const dialog = document.querySelector<HTMLElement>('.focus-dialog');
+          const focusHead = document.querySelector<HTMLElement>('.focus-head');
+          const intro = document.querySelector<HTMLElement>('.focus-intro');
+          const close = document.querySelector<HTMLElement>('.focus-close');
+          const blockHeader = document.querySelector<HTMLElement>('.focus-block__header');
+          const person = document.querySelector<HTMLElement>('.focus-person');
+          if (!dialog || !focusHead || !intro || !close || !blockHeader || !person) {
+            throw new Error('Focus layout fixture is incomplete.');
+          }
+          const bounds = (element: HTMLElement) => {
+            const rect = element.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width };
+          };
+          return {
+            viewportWidth: document.documentElement.clientWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            dialog: bounds(dialog),
+            focusHead: bounds(focusHead),
+            intro: bounds(intro),
+            close: bounds(close),
+            header: bounds(blockHeader),
+            person: bounds(person),
+            stickyPosition: getComputedStyle(focusHead).position,
+            headerBackground: getComputedStyle(focusHead).backgroundColor,
+            headerZIndex: getComputedStyle(focusHead).zIndex,
+            fontSize: getComputedStyle(document.querySelector('.focus-block__copy h4')!).fontSize,
+            scrollHeight: dialog.scrollHeight,
+            clientHeight: dialog.clientHeight,
+            maxScroll: dialog.scrollHeight - dialog.clientHeight
+          };
+        }, textScale);
+        const label = `${viewportWidth}px / ${textScale}x text`;
+        assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport width`);
+        assert.equal(layout.documentWidth, viewportWidth, `${label} must not overflow horizontally`);
+        assert.deepEqual(
+          { x: layout.dialog.left, y: layout.dialog.top, width: layout.dialog.width, height: layout.dialog.bottom - layout.dialog.top },
+          { x: 0, y: 0, width: viewportWidth, height: 844 },
+          `${label} Focus must fill the viewport`
+        );
+        assert.ok(layout.close.left >= 0 && layout.close.right <= viewportWidth,
+          `${label} Close control must remain in the viewport`);
+        assert.ok(layout.header.left >= 0 && layout.header.right <= viewportWidth,
+          `${label} long time-block header must remain in the viewport`);
+        assert.ok(layout.person.left >= 0 && layout.person.right <= viewportWidth,
+          `${label} Person card must remain in the viewport`);
+        assert.ok(layout.maxScroll > 0, `${label} Focus content must scroll within the full-screen surface`);
+        assert.ok(Number.parseFloat(layout.fontSize) >= 16,
+          `${label} time-block labels must remain readable at enlarged text sizes`);
+        await page.locator('.focus-dialog').evaluate(dialog => {
+          const element = dialog as HTMLElement;
+          element.scrollTop = element.scrollHeight;
+        });
+        const scrolled = await page.locator('.focus-dialog').evaluate(dialog => {
+          const element = dialog as HTMLElement;
+          const focusHead = element.querySelector<HTMLElement>('.focus-head');
+          const intro = element.querySelector<HTMLElement>('.focus-intro');
+          if (!focusHead || !intro) throw new Error('Focus sticky-header fixture is incomplete.');
+          return {
+            scrollTop: element.scrollTop,
+            dialogTop: element.getBoundingClientRect().top,
+            headerTop: focusHead.getBoundingClientRect().top,
+            introBottom: intro.getBoundingClientRect().bottom
+          };
+        });
+        assert.ok(scrolled.scrollTop > 0, `${label} should reach lower Focus content by scrolling`);
+        assert.ok(Math.abs(scrolled.headerTop - scrolled.dialogTop) < 1,
+          `${label} Focus heading and Close control must remain pinned after scrolling`);
+        assert.ok(scrolled.introBottom <= scrolled.dialogTop + 1,
+          `${label} supporting text should scroll out with the content`);
+        assert.equal(layout.stickyPosition, 'sticky', `${label} Focus header must use sticky positioning`);
+        assert.notEqual(layout.headerBackground, 'rgba(0, 0, 0, 0)',
+          `${label} Focus header must have an opaque background`);
+        assert.equal(layout.headerZIndex, '20', `${label} Focus header must stack above scrolling content`);
+        await page.locator('.focus-dialog').evaluate(dialog => {
+          (dialog as HTMLElement).scrollTop = 0;
+        });
+      }
+    }
+  } finally {
+    await page.close();
+  }
+}
+
+async function verifyCalendarSettingsResponsiveLayout(browser: Browser): Promise<void> {
+const page = await browser.newPage({ viewport: { width: 375, height: 844 } });
+try {
+  const [tokens, styles] = await Promise.all([
+    readFile(path.resolve(previewDirectory, '..', 'brand/tend-tokens.css'), 'utf8'),
+    readFile(path.resolve(previewDirectory, 'src/styles.css'), 'utf8')
+  ]);
+  await page.setContent(`<!doctype html>
+    <html lang="en">
+      <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+      <body>
+        <div class="wrap tend-app-preview" data-text-size="small">
+          <div class="calendar-sources-settings">
+            <label class="settings-switch settings-switch--row">
+              <span class="settings-switch__label">Show calendar on Today</span>
+              <input type="checkbox" checked>
+            </label>
+            <section class="calendar-sources-settings__setup" aria-label="Calendar setup">
+              <ol class="calendar-sources-settings__steps" aria-label="Calendar setup steps">
+                <li><span aria-hidden="true">1</span><p>Open your calendar's sharing settings on iCloud.com.</p></li>
+                <li><span aria-hidden="true">2</span><p>Turn on Public Calendar and copy its link.</p></li>
+                <li><span aria-hidden="true">3</span><p>Select Add calendar and paste the link.</p></li>
+              </ol>
+              <p class="calendar-sources-settings__capability">Supports public iCloud calendars.</p>
+            </section>
+            <p class="calendar-sources-settings__privacy">Keep your calendar link private—anyone with it may be able to view its events.</p>
+            <details class="calendar-sources-settings__disclosure calendar-sources-settings__processing">
+              <summary>About calendar processing</summary>
+              <p>Enabled sources are sent to the configured same-origin reader for event retrieval.</p>
+            </details>
+            <p class="calendar-sources-settings__empty">No calendars added yet.</p>
+            <div class="calendar-sources-settings__add-actions">
+              <button class="btn mini" type="button">Add calendar</button>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>`);
+  await page.addStyleTag({ content: tokens });
+  await page.addStyleTag({ content: styles });
+
+  for (const viewportWidth of [375, 390, 430] as const) {
+    await page.setViewportSize({ width: viewportWidth, height: 844 });
+    for (const textSize of ['small', 'medium', 'large'] as const) {
+      await page.evaluate(size => {
+        const mobileSize = size === 'small'
+          ? 'normal'
+          : size === 'medium' ? 'large' : 'larger';
+        document.documentElement.dataset.mobileTextSize = mobileSize;
+        document.documentElement.dataset.mobileTextSizeLevel = size;
+        const app = document.querySelector<HTMLElement>('.tend-app-preview');
+        if (!app) throw new Error('The Calendar settings fixture is missing its app wrapper.');
+        app.dataset.textSize = size;
+      }, textSize);
+      const layout = await page.evaluate(() => {
+        const settings = document.querySelector<HTMLElement>('.calendar-sources-settings');
+        const toggle = settings?.querySelector<HTMLElement>('.settings-switch--row');
+        const steps = settings?.querySelector<HTMLElement>('.calendar-sources-settings__steps');
+        const circles = [...(steps?.querySelectorAll<HTMLElement>('li > span') ?? [])];
+        const privacy = settings?.querySelector<HTMLElement>('.calendar-sources-settings__privacy');
+        const add = settings?.querySelector<HTMLElement>('.calendar-sources-settings__add-actions > button');
+        if (!settings || !toggle || !steps || !privacy || !add || circles.length !== 3) {
+          throw new Error('The Calendar settings responsive fixture is incomplete.');
+        }
+        const toggleBounds = toggle.getBoundingClientRect();
+        const addBounds = add.getBoundingClientRect();
+        const stepFontSizes = [...steps.querySelectorAll<HTMLElement>('li p')]
+          .map(step => Number.parseFloat(getComputedStyle(step).fontSize));
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          settingsWidth: settings.getBoundingClientRect().width,
+          toggleWidth: toggleBounds.width,
+          toggleHeight: toggleBounds.height,
+          toggleBorder: getComputedStyle(toggle).borderTopWidth,
+          circleSizes: circles.map(circle => {
+            const rect = circle.getBoundingClientRect();
+            return { width: rect.width, height: rect.height };
+          }),
+          stepFontSizes,
+          privacyBackground: getComputedStyle(privacy).backgroundColor,
+          privacyPadding: getComputedStyle(privacy).padding,
+          addHeight: addBounds.height,
+          addWidth: addBounds.width
+        };
+      });
+      const label = `Calendar Settings at ${viewportWidth}px / ${textSize} text`;
+      assert.equal(layout.viewportWidth, viewportWidth);
+      assert.equal(layout.documentWidth, viewportWidth, `${label} must not overflow horizontally.`);
+      assert.ok(layout.settingsWidth > 0 && layout.settingsWidth <= viewportWidth);
+      assert.ok(Math.abs(layout.toggleWidth - layout.settingsWidth) < 1,
+        `${label} display row should use the Settings content width.`);
+      assert.ok(layout.toggleHeight >= 44);
+      assert.equal(layout.toggleBorder, '1px');
+      assert.deepEqual(layout.circleSizes, [
+        { width: 22, height: 22 },
+        { width: 22, height: 22 },
+        { width: 22, height: 22 }
+      ]);
+      assert.ok(layout.stepFontSizes.every(size => size >= 15));
+      assert.equal(layout.privacyBackground, 'rgba(0, 0, 0, 0)');
+      assert.equal(layout.privacyPadding, '0px');
+      assert.ok(layout.addHeight >= 44);
+      assert.ok(layout.addWidth > 0 && layout.addWidth <= layout.settingsWidth);
+    }
+  }
+} finally {
+  await page.close();
+}
 }
 
 async function main() {
@@ -4596,17 +5992,19 @@ async function main() {
           const rect = dialog.getBoundingClientRect();
           return {
             width: rect.width,
+            height: rect.height,
             maxWidth: getComputedStyle(dialog).maxWidth,
             borderRadius: getComputedStyle(dialog).borderRadius,
             overflowY: getComputedStyle(dialog).overflowY
           };
         });
-        assert.deepEqual(focusDesktopLayout, {
-          width: 520,
-          maxWidth: '520px',
-          borderRadius: '24px',
-          overflowY: 'auto'
-        });
+        const desktopViewport = page.viewportSize();
+        assert.ok(desktopViewport);
+        assert.equal(focusDesktopLayout.width, desktopViewport.width);
+        assert.equal(focusDesktopLayout.height, desktopViewport.height);
+        assert.equal(focusDesktopLayout.maxWidth, 'none');
+        assert.equal(focusDesktopLayout.borderRadius, '0px');
+        assert.equal(focusDesktopLayout.overflowY, 'auto');
 
         await page.keyboard.press('Escape');
         await page.waitForFunction(() => document.querySelector('.focus-dialog') === null);
@@ -5645,8 +7043,8 @@ async function main() {
               const childRows = [...(settings?.querySelectorAll<HTMLElement>(
                 '.category-settings__children:not([hidden]) .category-settings__child'
               ) ?? [])];
-              if (!settings || !list || rows.length !== 6) {
-                throw new Error('Category Settings must show all six availability switches.');
+              if (!settings || !list || rows.length !== 7) {
+                throw new Error('Category Settings must show all seven availability switches.');
               }
               if (childRows.length !== 4) {
                 throw new Error('Expanding Health & Fitness must reveal all four child-area switches.');
@@ -9282,79 +10680,91 @@ async function main() {
           await profilePage.setViewportSize(viewport);
           const rowLayout = await compactConnectionRow.evaluate(row => {
             const title = row.querySelector<HTMLElement>('.friendships-connection-row__title');
-            const footer = row.querySelector<HTMLElement>('.friendships-connection-row__footer');
-            const icon = row.querySelector<HTMLElement>('.friendships-connection-row__icon');
-            const chevron = row.querySelector<HTMLElement>('.friendships-connection-row__chevron');
-            if (!title || !footer || !icon || !chevron) throw new Error('Connection rows need a title, date, and chevron.');
+            const timestamp = row.querySelector<HTMLElement>('.friendships-connection-row__timestamp');
+            const check = row.querySelector<HTMLElement>('.friendships-connection-row__check');
+            const source = row.querySelector<HTMLElement>('.friendships-connection-row__source-type');
+            if (!title || !timestamp || !check || !source) {
+              throw new Error('Connection rows need a title, source, checkmark, and date.');
+            }
             const rowBounds = row.getBoundingClientRect();
             const titleBounds = title.getBoundingClientRect();
-            const footerBounds = footer.getBoundingClientRect();
-            const iconBounds = icon.getBoundingClientRect();
-            const chevronBounds = chevron.getBoundingClientRect();
+            const timestampBounds = timestamp.getBoundingClientRect();
+            const checkBounds = check.getBoundingClientRect();
             return {
               documentWidth: document.documentElement.scrollWidth,
               rowWidth: row.clientWidth,
               rowScrollWidth: row.scrollWidth,
               titleWidth: title.clientWidth,
               titleScrollWidth: title.scrollWidth,
-              titleBottom: titleBounds.bottom,
-              footerTop: footerBounds.top,
-              footerRightInset: rowBounds.right - footerBounds.right,
-              footerText: footer.textContent?.trim(),
-              notes: row.querySelector('.friendships-connection-row__notes')?.textContent,
-              iconLeftInset: iconBounds.left - rowBounds.left,
-              chevronRightInset: rowBounds.right - chevronBounds.right,
+              titleRight: titleBounds.right,
+              timestampLeft: timestampBounds.left,
+              timestampRight: timestampBounds.right,
+              timestampRightInset: rowBounds.right - timestampBounds.right,
+              timestampText: timestamp.textContent?.trim(),
+              timestampCount: timestamp.querySelectorAll('time').length,
+              timestampWhiteSpace: getComputedStyle(timestamp).whiteSpace,
+              source: source.textContent?.trim(),
+              checkLeftInset: checkBounds.left - rowBounds.left,
+              checkWidth: checkBounds.width,
+              checkClass: check.className,
               radius: getComputedStyle(row).borderRadius,
-              gridColumns: getComputedStyle(row).gridTemplateColumns
+              gridColumns: getComputedStyle(row).gridTemplateColumns,
+              background: getComputedStyle(row).backgroundColor
             };
           });
           assert.equal(rowLayout.documentWidth, viewport.width,
             `Connection rows must not create page overflow at ${viewport.width}px / ${textSize} text.`);
           assert.ok(rowLayout.rowWidth > 0 && rowLayout.rowScrollWidth <= rowLayout.rowWidth + 1);
           assert.ok(rowLayout.titleWidth > 0 && rowLayout.titleScrollWidth <= rowLayout.titleWidth + 1);
-          assert.ok(rowLayout.titleBottom <= rowLayout.footerTop,
-            `Connection title must remain above its date footer at ${viewport.width}px / ${textSize} text.`);
-          assert.ok(Math.abs(rowLayout.footerRightInset - 14) <= 1,
-            'The date footer should align with the compact row’s shared 14px content inset.');
-          assert.ok(Math.abs(rowLayout.iconLeftInset - 14) <= 1,
-            'The connection icon should align with the compact row’s shared 14px content inset.');
-          assert.ok(Math.abs(rowLayout.chevronRightInset - 14) <= 1,
-            'The chevron should align with the compact row’s shared 14px content inset.');
-          assert.equal(rowLayout.notes, undefined, 'Empty descriptions should not render filler.');
-          assert.equal(rowLayout.footerText?.includes('10:15'), false, 'A missing time should not be invented.');
+          assert.ok(rowLayout.titleRight <= rowLayout.timestampLeft,
+            `Connection titles must shrink before the timestamp at ${viewport.width}px / ${textSize} text.`);
+          assert.ok(rowLayout.timestampRight <= viewport.width);
+          assert.ok(Math.abs(rowLayout.timestampRightInset - 15) <= 1,
+            'The timestamp should align with the compact row’s shared 14px content inset.');
+          assert.ok(Math.abs(rowLayout.checkLeftInset - 15) <= 1,
+            'The checkmark should align with the compact row’s shared 14px content inset.');
+          assert.equal(rowLayout.checkWidth, 24);
+          assert.ok(rowLayout.checkClass.includes('--manual'));
+          assert.equal(rowLayout.source, 'Manual');
+          assert.equal(rowLayout.timestampCount, 1, 'A missing time should not be invented.');
+          assert.equal(rowLayout.timestampText?.includes('10:15'), false);
+          assert.equal(rowLayout.timestampWhiteSpace, 'nowrap');
+          assert.equal(rowLayout.background, 'rgb(255, 255, 255)');
           assert.equal(rowLayout.radius, '14px');
-          assert.equal(rowLayout.gridColumns.split(' ').length, 2);
+          assert.equal(rowLayout.gridColumns.split(' ').length, 3);
 
-          const describedRow = personProfile.locator('.friendships-connection-row')
-            .filter({ hasText: 'Spent time together' }).last();
+          const describedRow = personProfile.getByRole('button', {
+            name: /^Time Together, Manual connection,/
+          });
           const describedLayout = await describedRow.evaluate(row => {
             const title = row.querySelector<HTMLElement>('.friendships-connection-row__title');
-            const notes = row.querySelector<HTMLElement>('.friendships-connection-row__notes');
-            const footer = row.querySelector<HTMLElement>('.friendships-connection-row__footer');
-            if (!title || !notes || !footer) throw new Error('Described Connection needs its title, notes, and footer.');
+            const source = row.querySelector<HTMLElement>('.friendships-connection-row__source-type');
+            const timestamp = row.querySelector<HTMLElement>('.friendships-connection-row__timestamp');
+            if (!title || !source || !timestamp) {
+              throw new Error('Described Connection needs its title, source, and timestamp.');
+            }
             const titleBounds = title.getBoundingClientRect();
-            const footerBounds = footer.getBoundingClientRect();
+            const timestampBounds = timestamp.getBoundingClientRect();
             return {
               title: title.textContent?.trim(),
-              titleHeight: titleBounds.height,
-              titleLineHeight: Number.parseFloat(getComputedStyle(title).lineHeight),
               titleWordBreak: getComputedStyle(title).wordBreak,
               titleOverflowWrap: getComputedStyle(title).overflowWrap,
-              notes: notes.textContent?.trim(),
-              footerText: footer.textContent?.trim(),
-              titleBottom: titleBounds.bottom,
-              footerTop: footerBounds.top,
+              source: source.textContent?.trim(),
+              timestampText: timestamp.textContent?.trim(),
+              titleRight: titleBounds.right,
+              timestampLeft: timestampBounds.left,
+              notes: row.querySelector('.friendships-connection-row__notes')?.textContent,
               rowWidth: row.clientWidth,
               rowScrollWidth: row.scrollWidth
             };
           });
           assert.equal(describedLayout.title, 'Time Together');
+          assert.equal(describedLayout.source, 'Manual');
           assert.equal(describedLayout.titleWordBreak, 'normal');
-          assert.equal(describedLayout.titleOverflowWrap, 'break-word');
-          assert.ok(describedLayout.titleHeight >= describedLayout.titleLineHeight);
-          assert.ok(describedLayout.titleBottom <= describedLayout.footerTop);
-          assert.ok(describedLayout.notes?.includes('Spent time together'));
-          assert.ok(describedLayout.footerText?.includes('2:45 PM'));
+          assert.equal(describedLayout.titleOverflowWrap, 'anywhere');
+          assert.ok(describedLayout.titleRight <= describedLayout.timestampLeft);
+          assert.equal(describedLayout.notes, undefined);
+          assert.ok(describedLayout.timestampText?.includes('2:45 PM'));
           assert.ok(describedLayout.rowScrollWidth <= describedLayout.rowWidth + 1);
           const addConnection = personProfile.getByRole('button', { name: '+ Add', exact: true });
           const originalBodyStyles = await profilePage.evaluate(() => ({
@@ -9381,7 +10791,7 @@ async function main() {
           const connectionGeometry = await connectionDialog.evaluate(dialog => {
             const form = dialog.querySelector<HTMLElement>('.friendships-connection-form');
             const actions = dialog.querySelector<HTMLElement>('.friendships-connection-form button[type="submit"]');
-            if (!form || !actions) throw new Error('The connection editor needs a scrollable form and save action.');
+            if (!form || !actions) throw new Error('The manual connection editor needs a scrollable form and save action.');
             form.scrollTop = form.scrollHeight;
             const formBounds = form.getBoundingClientRect();
             const actionsBounds = actions.getBoundingClientRect();
@@ -10072,6 +11482,13 @@ async function main() {
     }
 
     await verifyFoundationAlignmentAndDialogScrolling(browser, baseUrl);
+    await verifyDatingSuggestionPickerResponsiveLayout(browser);
+    await verifyTodayNowEmptyStateResponsiveLayout(browser);
+    await verifyFocusDialogResponsiveLayout(browser);
+    await verifyRhythmConnectionIndicatorLayout(browser);
+    await verifyConnectionHistoryRowResponsiveLayout(browser);
+    await verifyRhythmConnectionCheckboxPalette(browser);
+    await verifyCalendarSettingsResponsiveLayout(browser);
     console.log('Browser CSS contract passed: sign-in and dashboard layouts render without tend.css.');
   } finally {
     await browser?.close();

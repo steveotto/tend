@@ -2,6 +2,7 @@ import type { PersonId, PersonPickerGroup, PersonPickerGroupId } from './preview
 
 export const personCategoryPriority: readonly PersonPickerGroupId[] = [
   'marriage',
+  'dating',
   'parenting',
   'friends'
 ];

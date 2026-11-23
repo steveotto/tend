@@ -3,34 +3,32 @@ import { zonedWallTimeToInstant } from './calendar-events.ts';
 import type { DatedRhythmCompletion } from './rhythm-completion.ts';
 import type { FriendshipData } from './friendships.ts';
 import { latestValidConnectionForPerson, formatConnectionRecency } from './friendships.ts';
-import type { PersonPreview, RhythmPreview } from './preview-data.ts';
-import { localDateInTimeZone, addCalendarDays } from './rhythm-occurrences.ts';
+import { selectAvailablePersonGroups } from './category-availability.ts';
+import { defaultCategoryPreferences } from './category-availability.ts';
+import type { CategoryPreferences } from './category-availability.ts';
+import type {
+  PersonPickerGroup,
+  PersonPickerGroupId,
+  PersonPreview,
+  RhythmPreview
+} from './preview-data.ts';
+import { addCalendarDays, localDateInTimeZone } from './rhythm-occurrences.ts';
 import { rhythmScheduleForDate, rhythmTimeValueFromLabel } from './rhythm-schedule.ts';
 import type { RhythmTimeValue } from './rhythm-schedule.ts';
 import { isScheduledDate } from './rhythm-occurrences.ts';
-import { currentTimeBlock, rhythmTimeOptionsForBlocks } from './time-blocks.ts';
+import { formatTimeBlockTime, sortTimeBlocks } from './time-blocks.ts';
 import type { TimeBlockId, TimeBlockSettings } from './time-blocks.ts';
-
-export type FocusWindow = {
-  blockId: TimeBlockId;
-  name: string;
-  start: number;
-  end: number;
-  nextName: string | null;
-};
+import { rhythmHealthScore, type RhythmScoreResult } from './rhythm-scoring.ts';
 
 export type FocusRhythmItem = {
-  kind: 'rhythm';
   rhythmId: string;
   personIds: readonly string[];
-  title: string;
   time: number;
-  timeLabel: string;
-  overdueDate: string | null;
+  healthScore: number | null;
+  completed: boolean;
 };
 
 export type FocusCalendarItem = {
-  kind: 'calendar';
   id: string;
   title: string;
   time: number;
@@ -39,7 +37,17 @@ export type FocusCalendarItem = {
   sourceName: string;
 };
 
-export type FocusItem = FocusRhythmItem | FocusCalendarItem;
+export type FocusBlock = {
+  id: TimeBlockId | 'sleep';
+  name: string;
+  localDate: string;
+  startsAt: number;
+  endsAt: number;
+  rangeLabel: string;
+  dateLabel: string | null;
+  rhythms: readonly FocusRhythmItem[];
+  calendarEvents: readonly FocusCalendarItem[];
+};
 
 export type FocusPersonNotice = {
   personId: string;
@@ -48,15 +56,34 @@ export type FocusPersonNotice = {
 };
 
 export type FocusData = {
-  window: FocusWindow;
-  items: readonly FocusItem[];
+  blocks: readonly [FocusBlock, FocusBlock, FocusBlock];
   people: readonly FocusPersonNotice[];
 };
 
-function timeMinutes(value: string): number {
-  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
-  if (!match) return Number.NaN;
-  return Number(match[1]) * 60 + Number(match[2]);
+type FocusBlockSlot = Pick<
+  FocusBlock,
+  'id' | 'name' | 'localDate' | 'startsAt' | 'endsAt' | 'rangeLabel' | 'dateLabel'
+>;
+
+type MutableFocusBlock = FocusBlock & {
+  rhythms: FocusRhythmItem[];
+  calendarEvents: FocusCalendarItem[];
+};
+
+export function selectFocusRhythms(
+  rhythms: readonly RhythmPreview[],
+  availableCategoryIds: ReadonlySet<string>
+): RhythmPreview[] {
+  const seenIds = new Set<string>();
+  return rhythms.filter(rhythm => {
+    const categories = rhythm.categoryIds ?? [];
+    if (categories.length > 0 && !categories.some(categoryId => availableCategoryIds.has(categoryId))) {
+      return false;
+    }
+    if (seenIds.has(rhythm.id)) return false;
+    seenIds.add(rhythm.id);
+    return true;
+  });
 }
 
 function wallTimeInstant(date: string, time: string, timeZone: string): number {
@@ -72,79 +99,90 @@ function wallTimeInstant(date: string, time: string, timeZone: string): number {
   }, timeZone);
 }
 
-export function selectFocusWindow(
-  instant: Date,
-  settings: TimeBlockSettings,
-  timeZone: string,
-  blockId?: TimeBlockId
-): FocusWindow | null {
-  if (!settings.blocks.length) return null;
-  const sorted = [...settings.blocks].sort((a, b) => timeMinutes(a.start) - timeMinutes(b.start));
-  const current = blockId
-    ? sorted.find(block => block.id === blockId) ?? null
-    : currentTimeBlock(instant, settings) ?? sorted[0]!;
-  if (!current) return null;
-  const localDate = localDateInTimeZone(instant, timeZone);
-  const currentIndex = sorted.findIndex(block => block.id === current.id);
-  const next = sorted[currentIndex + 1] ?? null;
-  const blockStart = wallTimeInstant(localDate, current.start, timeZone);
-  const end = next
-    ? wallTimeInstant(localDate, next.start, timeZone)
-    : wallTimeInstant(addCalendarDays(localDate, 1), '00:00', timeZone);
-  return {
-    blockId: current.id,
-    name: current.name,
-    start: Math.max(instant.getTime(), blockStart),
-    end: end > instant.getTime() ? end : instant.getTime(),
-    nextName: next?.name ?? null
+function blockDateLabel(slot: Pick<FocusBlockSlot, 'localDate' | 'endsAt'>, today: string, timeZone: string) {
+  const tomorrow = addCalendarDays(today, 1);
+  const startDate = slot.localDate;
+  const endDate = localDateInTimeZone(new Date(slot.endsAt), timeZone);
+  if (startDate === tomorrow) return 'Tomorrow';
+  if (startDate === today && endDate === tomorrow) return 'Overnight · into tomorrow';
+  if (startDate !== today && endDate === today) return 'Overnight · began yesterday';
+  return null;
+}
+
+function focusSlotsForDate(date: string, today: string, settings: TimeBlockSettings, timeZone: string): FocusBlockSlot[] {
+  const blocks = sortTimeBlocks(settings.blocks);
+  if (!blocks.length) return [];
+  const slots: FocusBlockSlot[] = blocks.map((block, index) => {
+    const nextBlock = blocks[index + 1];
+    const startsAt = wallTimeInstant(date, block.start, timeZone);
+    const endsAt = wallTimeInstant(date, nextBlock?.start ?? settings.sleepStart, timeZone);
+    const slot = {
+      id: block.id,
+      name: block.name,
+      localDate: date,
+      startsAt,
+      endsAt,
+      rangeLabel: `${formatTimeBlockTime(block.start)}–${formatTimeBlockTime(nextBlock?.start ?? settings.sleepStart)}`,
+      dateLabel: null
+    };
+    return { ...slot, dateLabel: blockDateLabel(slot, today, timeZone) };
+  });
+  const firstBlock = blocks[0]!;
+  const startsAt = wallTimeInstant(date, settings.sleepStart, timeZone);
+  const endsAt = wallTimeInstant(addCalendarDays(date, 1), firstBlock.start, timeZone);
+  const sleepSlot = {
+    id: 'sleep' as const,
+    name: 'Sleep',
+    localDate: date,
+    startsAt,
+    endsAt,
+    rangeLabel: `${formatTimeBlockTime(settings.sleepStart)}–${formatTimeBlockTime(firstBlock.start)}`,
+    dateLabel: null
   };
+  slots.push({ ...sleepSlot, dateLabel: blockDateLabel(sleepSlot, today, timeZone) });
+  return slots;
 }
 
 function rhythmTimeValue(rhythm: RhythmPreview, settings: TimeBlockSettings): RhythmTimeValue | undefined {
   if (rhythm.timeOfDay) return rhythm.timeOfDay;
-  return rhythmTimeValueFromLabel(rhythm.timeLabel ?? '', rhythmTimeOptionsForBlocks(settings));
-}
-
-function formatFocusTime(instant: number, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hour: 'numeric',
-    minute: '2-digit'
-  }).format(new Date(instant)).replace(':00', '');
+  const options = [
+    { value: 'anytime' as const, label: 'Anytime' },
+    { value: 'all-day' as const, label: 'All day' },
+    ...settings.blocks.map(block => ({ value: block.id, label: block.name }))
+  ];
+  return rhythmTimeValueFromLabel(rhythm.timeLabel ?? '', options);
 }
 
 function rhythmCompletedOnDate(
   rhythmId: string,
   date: string,
-  completedRhythmIds: ReadonlySet<string>,
-  datedCompletions: readonly DatedRhythmCompletion[]
-): boolean {
-  return completedRhythmIds.has(rhythmId)
-    || datedCompletions.some(record => record.rhythmId === rhythmId && record.effectiveDate === date);
-}
-
-function overdueScheduledDate(
-  rhythm: RhythmPreview,
   today: string,
   completedRhythmIds: ReadonlySet<string>,
   datedCompletions: readonly DatedRhythmCompletion[]
-): string | null {
-  const schedule = rhythmScheduleForDate(rhythm, today);
-  if (!schedule) return null;
-  let cursor = addCalendarDays(today, -366);
-  if (rhythm.scoring?.trackingStartDate && cursor < rhythm.scoring.trackingStartDate) {
-    cursor = rhythm.scoring.trackingStartDate;
+): boolean {
+  return date === today && completedRhythmIds.has(rhythmId)
+    || datedCompletions.some(record => record.rhythmId === rhythmId && record.effectiveDate === date);
+}
+
+function finiteRhythmHealthScore(scores: ReadonlyMap<string, RhythmScoreResult>, rhythmId: string): number | null {
+  const score = rhythmHealthScore(scores.get(rhythmId));
+  return score !== null && Number.isFinite(score) ? score : null;
+}
+
+function compareRhythmItems(
+  left: FocusRhythmItem,
+  right: FocusRhythmItem,
+  rhythmById: ReadonlyMap<string, RhythmPreview>,
+  indexById: ReadonlyMap<string, number>
+): number {
+  if (left.healthScore !== null || right.healthScore !== null) {
+    if (left.healthScore === null) return 1;
+    if (right.healthScore === null) return -1;
+    if (left.healthScore !== right.healthScore) return left.healthScore - right.healthScore;
   }
-  while (cursor < today) {
-    const dateSchedule = rhythmScheduleForDate(rhythm, cursor);
-    if (dateSchedule
-      && isScheduledDate(dateSchedule, cursor)
-      && !rhythmCompletedOnDate(rhythm.id, cursor, completedRhythmIds, datedCompletions)) {
-      return cursor;
-    }
-    cursor = addCalendarDays(cursor, 1);
-  }
-  return null;
+  const titleOrder = (rhythmById.get(left.rhythmId)?.title ?? '')
+    .localeCompare(rhythmById.get(right.rhythmId)?.title ?? '');
+  return titleOrder || (indexById.get(left.rhythmId) ?? 0) - (indexById.get(right.rhythmId) ?? 0);
 }
 
 export function selectFocusData(input: {
@@ -153,100 +191,135 @@ export function selectFocusData(input: {
   settings: TimeBlockSettings;
   rhythms: readonly RhythmPreview[];
   people: readonly PersonPreview[];
+  peopleGroups?: readonly PersonPickerGroup[];
+  categoryPreferences?: CategoryPreferences;
   friendships: FriendshipData;
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   personHealthScores: ReadonlyMap<string, number | null>;
   calendarAvailable: boolean;
   calendarEvents: readonly CalendarEvent[];
   completedRhythmIds: ReadonlySet<string>;
   datedCompletions: readonly DatedRhythmCompletion[];
-  blockId?: TimeBlockId;
 }): FocusData | null {
-  const focusWindow = selectFocusWindow(input.instant, input.settings, input.timeZone, input.blockId);
-  if (!focusWindow) return null;
-
+  if (!input.settings.blocks.length) return null;
+  const instant = input.instant.getTime();
   const today = localDateInTimeZone(input.instant, input.timeZone);
-  const items: FocusItem[] = [];
-  const coveredPeople = new Set<string>();
+  const timeline = [
+    addCalendarDays(today, -1),
+    today,
+    addCalendarDays(today, 1),
+    addCalendarDays(today, 2)
+  ].flatMap(date => focusSlotsForDate(date, today, input.settings, input.timeZone));
+  const currentIndex = timeline.findIndex(slot => slot.startsAt <= instant && instant < slot.endsAt);
+  if (currentIndex < 0) return null;
+  const slots = timeline.slice(currentIndex, currentIndex + 3);
+  if (slots.length !== 3) return null;
+  const blocks: MutableFocusBlock[] = slots.map(slot => ({
+    ...slot,
+    rhythms: [],
+    calendarEvents: []
+  }));
+  const rhythmById = new Map(input.rhythms.map(rhythm => [rhythm.id, rhythm]));
+  const rhythmIndexById = new Map(input.rhythms.map((rhythm, index) => [rhythm.id, index]));
+  const peopleById = new Map(input.people.map(person => [person.id, person]));
 
-  for (const event of input.calendarAvailable ? input.calendarEvents : []) {
-    if (event.allDay || event.startsAt >= focusWindow.end || event.endsAt <= focusWindow.start) continue;
-    items.push({
-      kind: 'calendar',
-      id: event.id,
-      title: event.title,
-      time: Math.max(event.startsAt, focusWindow.start),
-      endTime: event.endsAt,
-      allDay: event.allDay,
-      sourceName: event.sourceName
-    });
-  }
-
-  for (const person of input.people) {
-    const name = person.displayName.trim();
-    if (!name) continue;
-    for (const item of items) {
-      if (item.kind === 'calendar' && item.title.toLocaleLowerCase().includes(name.toLocaleLowerCase())) {
-        coveredPeople.add(person.id);
+  if (input.calendarAvailable) {
+    const assignedCalendarIds = new Set<string>();
+    for (const block of blocks) {
+      for (const event of input.calendarEvents) {
+        if (event.allDay
+          || assignedCalendarIds.has(event.id)
+          || event.startsAt >= block.endsAt
+          || event.endsAt <= block.startsAt) continue;
+        block.calendarEvents.push({
+          id: event.id,
+          title: event.title,
+          time: Math.max(event.startsAt, block.startsAt),
+          endTime: event.endsAt,
+          allDay: event.allDay,
+          sourceName: event.sourceName
+        });
+        assignedCalendarIds.add(event.id);
       }
+      block.calendarEvents.sort((left, right) =>
+        left.time - right.time || left.title.localeCompare(right.title) || left.id.localeCompare(right.id)
+      );
     }
   }
 
+  const assignedRhythmIds = new Set<string>();
   for (const rhythm of input.rhythms) {
-    const personIds = rhythm.personIds?.filter(personId =>
-      input.people.some(person => person.id === personId)
-    ) ?? [];
+    const personIds = rhythm.personIds?.filter(personId => peopleById.has(personId)) ?? [];
     const value = rhythmTimeValue(rhythm, input.settings);
     if (value === 'anytime' || value === 'all-day' || value === undefined) continue;
-    const block = input.settings.blocks.find(candidate => candidate.id === value);
-    if (!block) continue;
-    const blockStart = wallTimeInstant(today, block.start, input.timeZone);
-    const schedule = rhythmScheduleForDate(rhythm, today);
-    const dueToday = schedule !== undefined
-      && isScheduledDate(schedule, today)
-      && !rhythmCompletedOnDate(rhythm.id, today, input.completedRhythmIds, input.datedCompletions);
-    const overdueDate = overdueScheduledDate(
-      rhythm,
-      today,
-      input.completedRhythmIds,
-      input.datedCompletions
-    );
-    if (!dueToday && !overdueDate) continue;
-    if (dueToday && value !== focusWindow.blockId) continue;
-
-    const time = dueToday ? Math.max(blockStart, focusWindow.start) : focusWindow.start;
-    items.push({
-      kind: 'rhythm',
-      rhythmId: rhythm.id,
-      personIds,
-      title: rhythm.title,
-      time,
-      timeLabel: overdueDate
-        ? `Overdue · ${formatFocusTime(time, input.timeZone)}`
-        : formatFocusTime(time, input.timeZone),
-      overdueDate
-    });
-    for (const personId of personIds) coveredPeople.add(personId);
+    for (const block of blocks) {
+      if (block.id !== value || assignedRhythmIds.has(rhythm.id)) continue;
+      const schedule = rhythmScheduleForDate(rhythm, block.localDate);
+      if (!schedule || !isScheduledDate(schedule, block.localDate)) continue;
+      const completed = rhythmCompletedOnDate(
+        rhythm.id,
+        block.localDate,
+        today,
+        input.completedRhythmIds,
+        input.datedCompletions
+      );
+      block.rhythms.push({
+        rhythmId: rhythm.id,
+        personIds,
+        time: Math.max(block.startsAt, instant),
+        healthScore: finiteRhythmHealthScore(input.rhythmScores, rhythm.id),
+        completed
+      });
+      assignedRhythmIds.add(rhythm.id);
+      break;
+    }
   }
 
-  items.sort((left, right) =>
-    left.time - right.time
-    || (left.kind === 'calendar' ? -1 : right.kind === 'calendar' ? 1 : 0)
-    || (left.kind === 'calendar' ? left.title : left.kind === 'rhythm' ? left.title : '')
-      .localeCompare(right.kind === 'calendar' ? right.title : right.kind === 'rhythm' ? right.title : '')
-  );
-
+  for (const block of blocks) {
+    block.rhythms.sort((left, right) =>
+      compareRhythmItems(left, right, rhythmById, rhythmIndexById)
+    );
+  }
+  const categoryPreferences = input.categoryPreferences ?? defaultCategoryPreferences;
+  const partnerCategory: PersonPickerGroupId | null = categoryPreferences.dating
+    ? 'dating'
+    : categoryPreferences.marriage
+      ? 'marriage'
+      : null;
+  const categoryPriority = new Map<PersonPickerGroupId, number>();
+  if (partnerCategory) categoryPriority.set(partnerCategory, 0);
+  categoryPriority.set('parenting', partnerCategory ? 1 : 0);
+  categoryPriority.set('friends', partnerCategory ? 2 : 1);
+  const personPriority = new Map<string, number>();
+  for (const group of selectAvailablePersonGroups(
+    categoryPreferences,
+    input.peopleGroups ?? []
+  )) {
+    const priority = categoryPriority.get(group.id);
+    if (priority === undefined) continue;
+    for (const personId of group.memberIds) {
+      const current = personPriority.get(personId);
+      if (current === undefined || priority < current) personPriority.set(personId, priority);
+    }
+  }
   const people = input.people
     .map(person => ({
       person,
+      priority: personPriority.get(person.id),
       score: input.personHealthScores.get(person.id)
     }))
-    .filter((entry): entry is { person: PersonPreview; score: number } =>
-      entry.score !== undefined && entry.score !== null && entry.score < 75
+    .filter((entry): entry is { person: PersonPreview; priority: number; score: number } =>
+      entry.priority !== undefined
+      && entry.score !== undefined
+      && entry.score !== null
+      && Number.isFinite(entry.score)
+      && entry.score < 70
     )
-    .filter(entry => !coveredPeople.has(entry.person.id))
     .sort((left, right) =>
-      left.score - right.score
+      left.priority - right.priority
+      || left.score - right.score
       || left.person.displayName.localeCompare(right.person.displayName)
+      || left.person.id.localeCompare(right.person.id)
     )
     .slice(0, 2)
     .map(({ person, score }) => {
@@ -260,5 +333,8 @@ export function selectFocusData(input: {
       };
     });
 
-  return { window: focusWindow, items, people };
+  return {
+    blocks: [blocks[0]!, blocks[1]!, blocks[2]!],
+    people
+  };
 }

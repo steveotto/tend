@@ -12,6 +12,12 @@ export function withPreSparkSchema<
   schemaVersion: number;
   data: TData;
 } {
-  const { personSparks: _personSparks, ...legacyData } = data as TData & { personSparks?: unknown };
+  const legacyData = { ...data } as TData & { personSparks?: unknown; peopleGroups?: unknown };
+  if (schemaVersion < 51) delete legacyData.personSparks;
+  if (schemaVersion < 54 && Array.isArray(legacyData.peopleGroups)) {
+    legacyData.peopleGroups = legacyData.peopleGroups.filter(group =>
+      typeof group !== 'object' || group === null || !('id' in group) || group.id !== 'dating'
+    );
+  }
   return { ...envelope, schemaVersion, data: legacyData as TData };
 }

@@ -40,18 +40,23 @@ function event(
   };
 }
 
-function renderCalendar(sources: CalendarSource[], readerEnabled = true) {
+function renderCalendar(
+  sources: CalendarSource[],
+  readerEnabled = true,
+  onOpenSetup?: () => void
+) {
   return render(
     <CalendarAgendaSection
       sources={sources}
       timeZone="UTC"
       readerEnabled={readerEnabled}
+      {...(onOpenSetup ? { onOpenSetup } : {})}
     />
   );
 }
 
-function expectNoCalendarSettingsShortcut() {
-  expect(screen.queryByRole('button', { name: /settings/i })).toBeNull();
+function expectNoCalendarSettingsInstructions() {
+  expect(screen.queryByText('More → Settings → Calendar.')).toBeNull();
 }
 
 function expectDiagnostic(prefix: string) {
@@ -111,21 +116,30 @@ describe('upcoming calendar agenda', () => {
     expect(screen.getByText(future.title)).toBeTruthy();
   });
 
-  it('distinguishes no calendars and disabled calendars', () => {
-    const empty = renderCalendar([]);
+  it('opens the existing Calendar settings directly when no Calendar is configured', async () => {
+    const user = userEvent.setup();
+    const onOpenSetup = vi.fn();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    renderCalendar([], false, onOpenSetup);
+
     expect(screen.getByText('Connect a calendar')).toBeTruthy();
-    expect(screen.getByText('More → Settings → Calendar.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Set up calendar' })).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Calendar date range' })).toBeNull();
     expect(screen.getByRole('status').classList.contains('calendar-event--status')).toBe(true);
-    expectNoCalendarSettingsShortcut();
+    expectNoCalendarSettingsInstructions();
     expectNoCalendarOuterCard();
-    empty.unmount();
+    await user.click(screen.getByRole('button', { name: 'Set up calendar' }));
+    expect(onOpenSetup).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
+  it('distinguishes configured but disabled calendars and hides setup', () => {
     renderCalendar([{ id: 'disabled', name: 'Disabled', url: 'https://p.icloud.com/a', enabled: false }]);
     expect(screen.getByText('Enable a calendar')).toBeTruthy();
-    expect(screen.getByText('More → Settings → Calendar.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Set up calendar' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Calendar date range' })).toBeNull();
-    expectNoCalendarSettingsShortcut();
+    expectNoCalendarSettingsInstructions();
   });
 
   it('shows loading and range-specific event-sized empty states', async () => {
@@ -144,7 +158,7 @@ describe('upcoming calendar agenda', () => {
     expect(screen.getByRole('group', { name: 'Calendar date range' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Today' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByRole('button', { name: 'Today' }).getAttribute('title')).toBe('Today');
-    expectNoCalendarSettingsShortcut();
+    expectNoCalendarSettingsInstructions();
     expectNoCalendarOuterCard();
     await act(async () => {
       resolveRead(response({ events: [], issueCount: 0 }));
@@ -157,7 +171,7 @@ describe('upcoming calendar agenda', () => {
     expect(screen.getByText('No events in the next month.')).toBeTruthy();
     expect(screen.getByRole('status').classList.contains('calendar-event--status')).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expectNoCalendarSettingsShortcut();
+    expectNoCalendarSettingsInstructions();
   });
 
   it('keeps visible events while refreshing and announces a quiet update', async () => {
@@ -296,7 +310,7 @@ describe('upcoming calendar agenda', () => {
     expect(list.textContent).toContain('Nov 8 · 11:30 AM–12:30 PM');
     expect(list.textContent).toContain('Nov 8 · 1:00 PM–1:30 PM');
     expect(list.textContent).toContain('Nov 9 · All day');
-    expectNoCalendarSettingsShortcut();
+    expectNoCalendarSettingsInstructions();
     expectNoCalendarOuterCard();
   });
 
@@ -410,7 +424,7 @@ describe('upcoming calendar agenda', () => {
     expectDiagnostic(`Code: ${code} · HTTP 422`);
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Calendar date range' })).toBeTruthy();
-    expectNoCalendarSettingsShortcut();
+    expectNoCalendarSettingsInstructions();
     expectNoCalendarOuterCard();
   });
 
@@ -423,7 +437,7 @@ describe('upcoming calendar agenda', () => {
     expect(await screen.findByText('Calendar events could not be loaded.')).toBeTruthy();
     expect(screen.getByText('The browser could not connect to the Calendar reader.')).toBeTruthy();
     expectDiagnostic('Code: reader-network-failed');
-    expectNoCalendarSettingsShortcut();
+    expectNoCalendarSettingsInstructions();
   });
 
   it('classifies a non-JSON service failure by HTTP status without exposing its body', async () => {
@@ -562,7 +576,7 @@ describe('upcoming calendar agenda', () => {
     );
 
     expect(await screen.findByText('Enable a calendar')).toBeTruthy();
-    expect(screen.getByText('More → Settings → Calendar.')).toBeTruthy();
+    expectNoCalendarSettingsInstructions();
     expect(screen.queryByText('A private synthetic appointment')).toBeNull();
   });
 });

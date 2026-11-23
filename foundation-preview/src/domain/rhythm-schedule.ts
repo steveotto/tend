@@ -58,7 +58,15 @@ export type RhythmSchedule =
   | { frequency: 'custom'; unit: 'months'; interval: number; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate }
   | { frequency: 'custom'; unit: 'years'; interval: number; month: RhythmMonth; pattern: RhythmPattern; startDate: RhythmLocalDate; endDate?: RhythmLocalDate };
 
-export type RhythmFrequencyRecommendation = 'daily' | 'weekly' | 'select-days' | 'every-two-weeks' | 'monthly' | 'quarterly' | 'yearly';
+export type RhythmFrequencyRecommendation =
+  | 'daily'
+  | 'weekly'
+  | 'select-days'
+  | 'every-two-weeks'
+  | 'monthly'
+  | 'quarterly'
+  | 'every-three-months'
+  | 'yearly';
 
 export function effectiveRhythmSchedule(
   schedule: RhythmSchedule | undefined,

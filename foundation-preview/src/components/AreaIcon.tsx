@@ -16,6 +16,7 @@ type CategoryId = (typeof areas)[number]['id'];
 const categoryIcons: Record<(typeof areas)[number]['id'], string> = {
   faith: faithIcon,
   marriage: marriageIcon,
+  dating: marriageIcon,
   parenting: parentingIcon,
   health: healthFitnessIcon,
   finances: financesIcon,

@@ -55,6 +55,12 @@ import type { TodayViewId } from './domain/today-plan.ts';
 import { HealthFitnessView } from './components/HealthFitnessView.tsx';
 import {
   connectionCadences,
+  addOrUpdateConnection,
+  detachRhythmCompletionOwnership,
+  isRhythmCompletionConnectionUnchanged,
+  reconcileDirectRhythmConnectionEdit,
+  reconcileRhythmCompletionConnection,
+  rhythmCompletionConnectionSnapshot,
   setPersonConnectionCadence
 } from './domain/friendships.ts';
 import type { FriendshipConnection } from './domain/friendships.ts';
@@ -68,7 +74,7 @@ import {
   undoPersonSparkCompletion,
   updatePersonSpark
 } from './domain/person-sparks.ts';
-import type { PersonSparkDraft } from './domain/person-sparks.ts';
+import type { PersonSpark, PersonSparkDraft } from './domain/person-sparks.ts';
 import { selectGlobalSearchResults } from './domain/global-search.ts';
 import type { GlobalSearchResult } from './domain/global-search.ts';
 import { APP_DISPLAY_VERSION } from './domain/app-version.ts';
@@ -85,6 +91,8 @@ import {
   healthFitnessRhythmSuggestions,
   parentingRhythmSuggestionGroups,
   parentingRhythmSuggestions,
+  datingRhythmSuggestionGroups,
+  datingRhythmSuggestions,
   personById,
   peopleForRhythm,
   syntheticPrayerRequests,
@@ -119,6 +127,7 @@ import type { CalendarSource } from './domain/calendar-sources.ts';
 import {
   isFoundationEnabled,
   isCategoryEnabled,
+  setCategoryPreference as setCategoryPreferenceCommand,
   selectAvailableCategories,
   selectAvailableCategoryIds,
   selectAvailableFoundationIds,
@@ -163,11 +172,15 @@ import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone, localTimeInTimeZone } from './domain/rhythm-scoring.ts';
 import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
 import { rhythmScheduleForDate } from './domain/rhythm-schedule.ts';
-import { selectFocusData } from './domain/focus.ts';
+import { selectFocusData, selectFocusRhythms } from './domain/focus.ts';
 import type { CalendarEvent } from './domain/calendar-events.ts';
 import { selectSatisfiedRhythmIds, selectTendedRhythmDisplayIds } from './domain/category-rhythms.ts';
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
-import { selectPersonOverallHealth, selectPersonRhythmHealth } from './domain/person-health.ts';
+import {
+  selectPersonOverallHealth,
+  selectPersonRhythmHealth
+} from './domain/person-health.ts';
+import { selectPersonConnectionHealth } from './domain/person-connection-health.ts';
 import { validateStrengthData } from './domain/strength.ts';
 import type { StrengthMode } from './domain/strength.ts';
 import {
@@ -267,6 +280,8 @@ import {
   loadV47RecoveryCopy,
   loadV48RecoveryCopy,
   loadV50RecoveryCopy,
+  loadV54RecoveryCopy,
+  loadV55RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
   loadStrengthRepairRecoveryCopy,
   loadPreviewImportRecovery,
@@ -280,6 +295,7 @@ const destinationLabels: Record<Exclude<Destination, 'today'>, string> = {
   more: 'More',
   faith: 'Faith',
   marriage: 'Marriage',
+  dating: 'Dating',
   parenting: 'Parenting',
   health: 'Health & Fitness',
   finances: 'Finances',
@@ -287,6 +303,16 @@ const destinationLabels: Record<Exclude<Destination, 'today'>, string> = {
 };
 const personProfileHistoryKey = 'tendPersonProfileId';
 const prayerUnavailableMessage = 'Prayer is turned off in Settings.';
+
+function isRhythmConnectionShared(data: PreviewData, connectionId: string): boolean {
+  const connection = data.friendships.connections.find(item => item.id === connectionId);
+  if (connection?.sparkId || connection?.sparkOwnerId) return true;
+  return data.personSparks.some(spark => spark.completionHistory.some(completion =>
+    completion.undone !== true
+    && completion.source === 'connection'
+    && completion.connectionId === connectionId
+  ));
+}
 
 function restorePersonProfileFocus(opener: HTMLElement | null, personId: PersonId | null): void {
   if (opener?.isConnected && !opener.closest('[hidden]')) {
@@ -344,6 +370,12 @@ const parentingSuggestionCatalogue = categorySuggestionCatalogue(
   'Parenting rhythms',
   parentingRhythmSuggestionGroups,
   parentingRhythmSuggestions
+);
+const datingSuggestionCatalogue = categorySuggestionCatalogue(
+  'dating',
+  'Dating Rhythm suggestions',
+  datingRhythmSuggestionGroups,
+  datingRhythmSuggestions
 );
 const marriageSuggestionCatalogue = createMarriageSuggestionCatalogue(marriageRhythms);
 const faithSuggestionCatalogue = categorySuggestionCatalogue(
@@ -586,6 +618,7 @@ function PreviewWorkspace({
   const [hydrated, setHydrated] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
+  const [rhythmConnectionNotice, setRhythmConnectionNotice] = useState('');
   const [rawRecoveryCopy, setRawRecoveryCopy] = useState<string | null>(null);
   const [rawRecoveryError, setRawRecoveryError] = useState<string | null>(null);
   const [cloudRestoreRecoveryCopy, setCloudRestoreRecoveryCopy] = useState<string | null>(null);
@@ -679,6 +712,8 @@ function PreviewWorkspace({
   const [v47RecoveryCopy, setV47RecoveryCopy] = useState<string | null>(null);
   const [v48RecoveryCopy, setV48RecoveryCopy] = useState<string | null>(null);
   const [v50RecoveryCopy, setV50RecoveryCopy] = useState<string | null>(null);
+  const [v54RecoveryCopy, setV54RecoveryCopy] = useState<string | null>(null);
+  const [v55RecoveryCopy, setV55RecoveryCopy] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -789,6 +824,10 @@ function PreviewWorkspace({
     setV48RecoveryCopy(v48Recovery.kind === 'loaded' ? v48Recovery.raw : null);
     const v50Recovery = loadV50RecoveryCopy(previewStorage);
     setV50RecoveryCopy(v50Recovery.kind === 'loaded' ? v50Recovery.raw : null);
+    const v54Recovery = loadV54RecoveryCopy(previewStorage);
+    setV54RecoveryCopy(v54Recovery.kind === 'loaded' ? v54Recovery.raw : null);
+    const v55Recovery = loadV55RecoveryCopy(previewStorage);
+    setV55RecoveryCopy(v55Recovery.kind === 'loaded' ? v55Recovery.raw : null);
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -880,11 +919,13 @@ function PreviewWorkspace({
     previewData.archivedRhythmIds
   );
   const marriageCategoryRhythms = rhythmsForCategory(userRhythms, 'marriage');
+  const datingCategoryRhythms = rhythmsForCategory(userRhythms, 'dating');
   const parentingCategoryRhythms = rhythmsForCategory(userRhythms, 'parenting');
   const faithCategoryRhythms = rhythmsForCategory(userRhythms, 'faith');
   const healthCategoryRhythms = rhythmsForCategory(userRhythms, 'health');
   const friendshipCategoryRhythms = rhythmsForCategory(userRhythms, 'friendships');
   const archivedMarriageRhythms = rhythmsForCategory(archivedUserRhythms, 'marriage');
+  const archivedDatingRhythms = rhythmsForCategory(archivedUserRhythms, 'dating');
   const archivedParentingRhythms = rhythmsForCategory(archivedUserRhythms, 'parenting');
   const archivedFaithRhythms = rhythmsForCategory(archivedUserRhythms, 'faith');
   const archivedHealthRhythms = rhythmsForCategory(archivedUserRhythms, 'health');
@@ -915,9 +956,16 @@ function PreviewWorkspace({
   const categoryRhythms = {
     faith: faithCategoryRhythms,
     marriage: marriageCategoryRhythms,
+    dating: datingCategoryRhythms,
     parenting: parentingCategoryRhythms,
     friendships: friendshipCategoryRhythms
   } as const;
+  const availableCategories = selectAvailableCategories(previewData.categoryPreferences);
+  const availableCategoryIds = selectAvailableCategoryIds(previewData.categoryPreferences);
+  const focusRhythms = selectFocusRhythms(
+    [...editableTodayRhythms, ...userRhythms],
+    availableCategoryIds
+  );
   const cardioCategoryScore = selectCardioCategoryScore(
     selectCardioProgress(previewData.cardio, localDateString(scoringInstant))
   );
@@ -950,11 +998,9 @@ function PreviewWorkspace({
     flexibilityCategoryScore,
     availableFoundationIds
   );
-  const availableCategories = selectAvailableCategories(previewData.categoryPreferences);
-  const availableCategoryIds = selectAvailableCategoryIds(previewData.categoryPreferences);
   const categoryHealthScores = new Map<CategoryId, number | null>(
     [
-      ...(['faith', 'marriage', 'parenting', 'friendships'] as const).map(categoryId => [
+      ...(['faith', 'marriage', 'dating', 'parenting', 'friendships'] as const).map(categoryId => [
         categoryId,
         selectCategoryHealthScore(
           availableFoundations.filter(foundation => foundation.categoryId === categoryId),
@@ -1014,6 +1060,8 @@ function PreviewWorkspace({
     : null;
   const selectedProfileSuggestionCatalogue = selectedProfileCategory === 'marriage'
     ? marriageSuggestionCatalogue
+    : selectedProfileCategory === 'dating'
+      ? datingSuggestionCatalogue
     : selectedProfileCategory === 'parenting'
       ? parentingSuggestionCatalogue
       : undefined;
@@ -1023,6 +1071,7 @@ function PreviewWorkspace({
   const archivedProfileRhythmCandidates = [...new Map(
     [...archivedRhythms, ...archivedUserRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
+  const personHealthAsOfDate = localDateString(scoringInstant);
   const personOverallHealthScores = new Map(peopleWithPhotos.map(person => {
     const active = profileRhythmCandidates.filter(rhythm =>
       rhythm.personIds?.includes(person.id) && !previewData.archivedRhythmIds.includes(rhythm.id)
@@ -1036,7 +1085,12 @@ function PreviewWorkspace({
       rhythmScoreResults,
       new Set(archived.map(rhythm => rhythm.id))
     );
-    return [person.id, selectPersonOverallHealth(rhythmHealth).health] as const;
+    const connectionHealth = selectPersonConnectionHealth(
+      previewData.friendships,
+      person.id,
+      personHealthAsOfDate
+    );
+    return [person.id, selectPersonOverallHealth(rhythmHealth, connectionHealth).health] as const;
   }));
   const personActiveRhythms = profilePersonId === null
     ? []
@@ -1073,8 +1127,11 @@ function PreviewWorkspace({
     instant: scoringInstant,
     timeZone: localTimeZone,
     settings: previewData.timeBlocks,
-    rhythms: scoredRhythms,
+    rhythms: focusRhythms,
+    rhythmScores: rhythmScoreResults,
     people: peopleWithPhotos,
+    peopleGroups: resolvedPeopleGroups,
+    categoryPreferences: previewData.categoryPreferences,
     friendships: previewData.friendships,
     personHealthScores: personOverallHealthScores,
     calendarAvailable: previewData.showCalendarOnToday
@@ -1364,6 +1421,10 @@ function PreviewWorkspace({
     setV48RecoveryCopy(v48.kind === 'loaded' ? v48.raw : null);
     const v50 = loadV50RecoveryCopy(previewStorage);
     setV50RecoveryCopy(v50.kind === 'loaded' ? v50.raw : null);
+    const v54 = loadV54RecoveryCopy(previewStorage);
+    setV54RecoveryCopy(v54.kind === 'loaded' ? v54.raw : null);
+    const v55 = loadV55RecoveryCopy(previewStorage);
+    setV55RecoveryCopy(v55.kind === 'loaded' ? v55.raw : null);
   }
 
   function refreshV10RecoveryCopy() {
@@ -1721,7 +1782,7 @@ function PreviewWorkspace({
   ) {
     const safeDestination = isCategoryEnabled(previewData.categoryPreferences, next)
       ? next
-      : next === 'faith' || next === 'marriage' || next === 'parenting'
+      : next === 'faith' || next === 'marriage' || next === 'dating' || next === 'parenting'
         || next === 'health' || next === 'finances' || next === 'friendships'
         ? 'today'
         : next;
@@ -1738,7 +1799,7 @@ function PreviewWorkspace({
     if (categoryTabDefault
       && (safeDestination === 'faith' || safeDestination === 'marriage'
         || safeDestination === 'parenting' || safeDestination === 'friendships'
-        || safeDestination === 'health')) {
+        || safeDestination === 'health' || safeDestination === 'dating')) {
       categoryTabNavigationSequence.current += 1;
       setCategoryTabNavigationRequest({
         categoryId: safeDestination,
@@ -1759,7 +1820,12 @@ function PreviewWorkspace({
   function openPersonProfileAt(
     personId: PersonId,
     tab: ProfileTab = 'rhythms',
-    targetPrayerRequestId?: string
+    targetPrayerRequestId?: string,
+    options: {
+      sparkCompletionId?: string;
+      openNotes?: boolean;
+      returnFocus?: HTMLElement | null;
+    } = {}
   ) {
     if (!previewData.prayerEnabled && tab === 'prayer') return;
     profileNavigationSequence.current += 1;
@@ -1767,13 +1833,14 @@ function PreviewWorkspace({
       personId,
       requestId: profileNavigationSequence.current,
       tab,
-      ...(targetPrayerRequestId ? { targetPrayerRequestId } : {})
+      ...(targetPrayerRequestId ? { targetPrayerRequestId } : {}),
+      ...(options.sparkCompletionId ? { sparkCompletionId: options.sparkCompletionId } : {}),
+      ...(options.openNotes ? { openNotes: true } : {})
     });
     if (profilePersonId === personId) return;
     if (profilePersonId === null) {
-      profileOpener.current = document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+      profileOpener.current = options.returnFocus
+        ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       profileReturnPersonId.current = personId;
       profileReturnRhythmId.current = activeRhythmId;
       profileReturnScrollTop.current = (document.scrollingElement ?? document.documentElement).scrollTop;
@@ -2062,10 +2129,12 @@ function PreviewWorkspace({
   }
 
   function savePersonConnection(connection: FriendshipConnection): string | null {
+    const existing = previewData.friendships.connections.find(item => item.id === connection.id);
+    const reconciledConnection = reconcileDirectRhythmConnectionEdit(existing, connection);
     const result = savePersonConnectionCommand(
       previewData.personSparks,
       previewData.friendships,
-      connection
+      reconciledConnection
     );
     if (!result.ok) return result.error;
     return persistSeasonHistory({
@@ -3194,11 +3263,24 @@ function PreviewWorkspace({
     });
   }
 
-  function saveDatedCompletion(candidate: RhythmCompletionRecord, source: 'tend' | 'history' = 'tend'): string | null {
+  function saveDatedCompletion(
+    candidate: RhythmCompletionRecord,
+    sourceOrParticipantIds: 'tend' | 'history' | readonly import('./domain/preview-data.ts').PersonId[] = 'tend',
+    explicitParticipantIds?: readonly import('./domain/preview-data.ts').PersonId[]
+  ): string | null {
+    const source = typeof sourceOrParticipantIds === 'string' ? sourceOrParticipantIds : 'tend';
+    const connectionParticipantIds = typeof sourceOrParticipantIds === 'string'
+      ? explicitParticipantIds
+      : sourceOrParticipantIds;
     if (!isDatedCompletionRecord(candidate)) {
       return 'A new completion must include its selected local time. No completion was saved.';
     }
     const record = candidate;
+    if (previewData.datedRhythmCompletions.some(item => item.id === record.id)
+      || previewData.rhythmCompletionOverrides.some(item => item.id === record.id)
+      || todayRhythms.some(rhythm => rhythm.completionHistory?.some(item => item.id === record.id))) {
+      return 'This completion is already saved. No duplicate completion or Connection was created.';
+    }
     if (source === 'history' && allTodayRhythms.some(rhythm =>
       rhythm.id === record.rhythmId && rhythm.categoryIds?.includes('health')
     )) {
@@ -3211,27 +3293,93 @@ function PreviewWorkspace({
       || (isTendAction && completedRhythms.has(record.rhythmId))) {
       return 'This Rhythm cannot be completed right now. No completion was saved.';
     }
-    setPreviewData(previous => {
-      if (isTendAction && completedRhythms.has(record.rhythmId)) return previous;
-      return {
-        ...previous,
-        datedRhythmCompletions: [...previous.datedRhythmCompletions, record],
-        rhythmHistoryIds: previous.rhythmHistoryIds.includes(record.rhythmId)
-          ? previous.rhythmHistoryIds
-          : [...previous.rhythmHistoryIds, record.rhythmId],
-        ...(isTendAction
-          ? {
-              completedRhythmIds: previous.completedRhythmIds.includes(record.rhythmId)
-                ? previous.completedRhythmIds
-                : [...previous.completedRhythmIds, record.rhythmId],
-              activeRhythmCompletions: [
-                ...previous.activeRhythmCompletions.filter(item => item.rhythmId !== record.rhythmId),
-                { rhythmId: record.rhythmId, completionId: record.id }
-              ]
-            }
-          : {})
-      };
-    });
+    if (isTendAction && completedRhythms.has(record.rhythmId)) {
+      return 'This Rhythm cannot be completed twice. No completion or Connection was saved.';
+    }
+    if (connectionParticipantIds !== undefined
+      && (connectionParticipantIds.length === 0
+        || new Set(connectionParticipantIds).size !== connectionParticipantIds.length
+        || connectionParticipantIds.some(personId => !previewData.people.some(person => person.id === personId)))) {
+      return 'Choose at least one valid participant, or skip this Connection. No completion was saved.';
+    }
+    if (previewData.friendships.connections.some(connection =>
+      connection.completionId === record.id
+    )) {
+      return 'A Connection already refers to this completion. No duplicate record was created.';
+    }
+    let nextData: PreviewData = {
+      ...previewData,
+      datedRhythmCompletions: [...previewData.datedRhythmCompletions, record],
+      rhythmHistoryIds: previewData.rhythmHistoryIds.includes(record.rhythmId)
+        ? previewData.rhythmHistoryIds
+        : [...previewData.rhythmHistoryIds, record.rhythmId],
+      ...(isTendAction
+        ? {
+            completedRhythmIds: previewData.completedRhythmIds.includes(record.rhythmId)
+              ? previewData.completedRhythmIds
+              : [...previewData.completedRhythmIds, record.rhythmId],
+            activeRhythmCompletions: [
+              ...previewData.activeRhythmCompletions.filter(item => item.rhythmId !== record.rhythmId),
+              { rhythmId: record.rhythmId, completionId: record.id }
+            ]
+          }
+        : {})
+    };
+    if (connectionParticipantIds !== undefined) {
+      const rhythm = resolveTodayRhythms(previewData.savedRhythms)
+        .find(item => item.id === record.rhythmId);
+      if (rhythm?.alsoLogConnection === true) {
+        let connectionId: string;
+        try {
+          connectionId = globalThis.crypto.randomUUID();
+        } catch {
+          return 'A secure Connection ID could not be created. No completion was saved.';
+        }
+        if (previewData.friendships.connections.some(connection => connection.id === connectionId)) {
+          return 'The generated Connection ID is already in use. No completion was saved.';
+        }
+        nextData = {
+          ...nextData,
+          friendships: addOrUpdateConnection(nextData.friendships, {
+            id: connectionId,
+            type: 'rhythm',
+            date: record.effectiveDate,
+            ...(record.localTime ? { time: record.localTime, timeZone: record.timeZone } : {}),
+            participantIds: [...connectionParticipantIds],
+            ...(record.memory ? { notes: record.memory } : {}),
+            rhythmId: record.rhythmId,
+            completionId: record.id,
+            rhythmTitleSnapshot: rhythm.title,
+            ownedByRhythmCompletion: true,
+            rhythmConnectionSnapshot: rhythmCompletionConnectionSnapshot({
+              date: record.effectiveDate,
+              ...(record.localTime ? { time: record.localTime, timeZone: record.timeZone } : {}),
+              participantIds: [...connectionParticipantIds],
+              ...(record.memory ? { notes: record.memory } : {}),
+              rhythmTitleSnapshot: rhythm.title
+            })
+          })
+        };
+      }
+    }
+    const written = writeCurrentPreview(nextData, expectedRaw.current, { currentDate });
+    if (written.kind === 'conflict') {
+      externalRaw.current = written.actualRaw;
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'conflict' });
+      return 'Preview storage changed in another tab. No completion or Connection was saved.';
+    }
+    if (written.kind === 'error') {
+      setAutoSaveEnabled(false);
+      setPersistenceStatus({ kind: 'error', message: written.message, ...(written.diagnostic ? { diagnostic: written.diagnostic } : {}) });
+      return `Preview could not save this completion. ${written.message}`;
+    }
+    expectedRaw.current = written.raw;
+    externalRaw.current = null;
+    skipNextAutosave.current = true;
+    setPreviewData(nextData);
+    setAutoSaveEnabled(true);
+    setPersistenceStatus({ kind: 'saved' });
     return null;
   }
 
@@ -3249,13 +3397,40 @@ function PreviewWorkspace({
       if (existing.rhythmId !== record.rhythmId || !isDatedCompletionRecord(record)) {
         return 'A recorded time must remain complete and valid. No changes were saved.';
       }
+      const updatedRecord = { ...record, recordedAt: existing.recordedAt };
+      const ownedConnections = previewData.friendships.connections.filter(connection =>
+        connection.ownedByRhythmCompletion === true
+        && connection.completionId === record.id
+        && connection.rhythmId === record.rhythmId
+      );
+      const preservedConnectionIds = new Set(ownedConnections
+        .filter(connection => isRhythmConnectionShared(previewData, connection.id)
+          || !isRhythmCompletionConnectionUnchanged(connection))
+        .map(connection => connection.id));
+      setRhythmConnectionNotice(preservedConnectionIds.size > 0
+        ? 'The completion was updated. A Connection that was edited, predates ownership safeguards, or is referenced by a Spark was preserved and detached.'
+        : '');
       setPreviewData(previous => ({
         ...previous,
         datedRhythmCompletions: previous.datedRhythmCompletions.map(item =>
           item.id === record.id && item.rhythmId === record.rhythmId
-            ? { ...record, recordedAt: item.recordedAt }
+            ? { ...updatedRecord, recordedAt: item.recordedAt }
             : item
-        )
+        ),
+        ...(ownedConnections.length === 0
+          ? {}
+          : {
+              friendships: {
+                ...previous.friendships,
+                connections: previous.friendships.connections.flatMap(connection => {
+                  if (!ownedConnections.some(owned => owned.id === connection.id)) return [connection];
+                  if (preservedConnectionIds.has(connection.id)) {
+                    return [detachRhythmCompletionOwnership(connection)];
+                  }
+                  return [reconcileRhythmCompletionConnection(connection, updatedRecord)];
+                })
+              }
+            })
       }));
       return null;
     }
@@ -3313,6 +3488,18 @@ function PreviewWorkspace({
       }));
       return null;
     }
+    const ownedConnections = previewData.friendships.connections.filter(connection =>
+      connection.ownedByRhythmCompletion === true
+      && connection.completionId === completionId
+      && connection.rhythmId === rhythmId
+    );
+    const preservedConnectionIds = new Set(ownedConnections
+      .filter(connection => isRhythmConnectionShared(previewData, connection.id)
+        || !isRhythmCompletionConnectionUnchanged(connection))
+      .map(connection => connection.id));
+    setRhythmConnectionNotice(preservedConnectionIds.size > 0
+      ? 'The completion was deleted. A Connection that was edited, predates ownership safeguards, or is referenced by a Spark was preserved and detached.'
+      : '');
     setPreviewData(previous => {
       const result = deleteDatedCompletion(
         previous.datedRhythmCompletions,
@@ -3324,13 +3511,45 @@ function PreviewWorkspace({
         ...previous,
         datedRhythmCompletions: result.records,
         activeRhythmCompletions: result.active,
-        completedRhythmIds: result.completedRhythmIds
+        completedRhythmIds: result.completedRhythmIds,
+        ...(ownedConnections.length === 0
+          ? {}
+          : {
+              friendships: {
+                ...previous.friendships,
+                connections: previous.friendships.connections.flatMap(connection => {
+                  if (!ownedConnections.some(owned => owned.id === connection.id)) return [connection];
+                  return preservedConnectionIds.has(connection.id)
+                    ? [detachRhythmCompletionOwnership(connection)]
+                    : [];
+                })
+              }
+            })
       };
     });
     return null;
   }
 
   function undoTend(id: string) {
+    const activeCompletionId = previewData.activeRhythmCompletions
+      .find(item => item.rhythmId === id)?.completionId;
+    if (previewData.completedRhythmIds.includes(id)
+      && resolveTodayRhythms(previewData.savedRhythms).some(rhythm => rhythm.id === id)
+      && !isFitnessLinkedCompletion(previewData, activeCompletionId)) {
+      const ownedConnections = previewData.friendships.connections.filter(connection =>
+        connection.type === 'rhythm'
+        && connection.rhythmId === id
+        && connection.ownedByRhythmCompletion === true
+        && (activeCompletionId === undefined || connection.completionId === activeCompletionId)
+      );
+      const preservedConnectionIds = new Set(ownedConnections
+        .filter(connection => isRhythmConnectionShared(previewData, connection.id)
+          || !isRhythmCompletionConnectionUnchanged(connection))
+        .map(connection => connection.id));
+      setRhythmConnectionNotice(preservedConnectionIds.size > 0
+        ? 'Tend was undone. A Connection that was edited, predates ownership safeguards, or is referenced by a Spark was preserved and detached.'
+        : '');
+    }
     setPreviewData(previous => {
       const completionIndex = previous.completedRhythmIds.indexOf(id);
       if (completionIndex === -1
@@ -3343,6 +3562,17 @@ function PreviewWorkspace({
         previous.activeRhythmCompletions,
         id
       );
+      const ownedConnections = previous.friendships.connections.filter(connection =>
+        connection.type === 'rhythm'
+        && connection.rhythmId === id
+        && connection.ownedByRhythmCompletion === true
+        && (activeCompletionId === undefined || connection.completionId === activeCompletionId)
+      );
+      const ownedConnectionIds = new Set(ownedConnections.map(connection => connection.id));
+      const preservedConnectionIds = new Set(ownedConnections
+        .filter(connection => isRhythmConnectionShared(previous, connection.id)
+          || !isRhythmCompletionConnectionUnchanged(connection))
+        .map(connection => connection.id));
       return {
         ...previous,
         datedRhythmCompletions: reversed.records,
@@ -3350,7 +3580,18 @@ function PreviewWorkspace({
         completedRhythmIds: [
           ...previous.completedRhythmIds.slice(0, completionIndex),
           ...previous.completedRhythmIds.slice(completionIndex + 1)
-        ]
+        ],
+        friendships: ownedConnectionIds.size === 0
+          ? previous.friendships
+          : {
+              ...previous.friendships,
+              connections: previous.friendships.connections.flatMap(connection => {
+                if (!ownedConnectionIds.has(connection.id)) return [connection];
+                return preservedConnectionIds.has(connection.id)
+                  ? [detachRhythmCompletionOwnership(connection)]
+                  : [];
+              })
+            }
       };
     });
   }
@@ -3368,16 +3609,26 @@ function PreviewWorkspace({
       : { ...previous, prayerEnabled });
   }
 
+  function openCalendarSettings() {
+    navigate('more');
+    setSettingsReturnTo(null);
+    setSettingsDetail('calendar');
+    setMoreSettingsOpen(true);
+  }
+
   function setCategoryPreference(categoryId: keyof PreviewData['categoryPreferences'], enabled: boolean) {
-    setPreviewData(previous => previous.categoryPreferences[categoryId] === enabled
-      ? previous
-      : {
-        ...previous,
-        categoryPreferences: {
-          ...previous.categoryPreferences,
-          [categoryId]: enabled
-        }
-      });
+    setPreviewData(previous => {
+      const categoryPreferences = setCategoryPreferenceCommand(
+        previous.categoryPreferences,
+        categoryId,
+        enabled
+      );
+      if (Object.keys(categoryPreferences).every(key =>
+        categoryPreferences[key as keyof typeof categoryPreferences]
+          === previous.categoryPreferences[key as keyof typeof previous.categoryPreferences]
+      )) return previous;
+      return { ...previous, categoryPreferences };
+    });
   }
 
   function setFoundationPreference(foundationId: string, enabled: boolean) {
@@ -4174,6 +4425,9 @@ function PreviewWorkspace({
           ? (
             <TodayView
               people={peopleWithPhotos}
+              peopleGroups={resolvedPeopleGroups}
+              personSparks={previewData.personSparks}
+              friendships={previewData.friendships}
               greeting={greeting}
               evaluationInstant={scoringInstant}
               localDate={currentDate}
@@ -4199,8 +4453,23 @@ function PreviewWorkspace({
                 setSettingsDetail('categories');
                 setMoreSettingsOpen(true);
               }}
+              onOpenCalendarSetup={openCalendarSettings}
               onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
               onPersonSelect={openPersonProfile}
+              onCreateSpark={createPersonSparkForProfile}
+              onUpdateSpark={editPersonSpark}
+              onArchiveSpark={archivePersonSpark}
+              onDeleteSpark={removePersonSpark}
+              onUndoSpark={undoSparkCompletion}
+              onCompleteSpark={(spark: PersonSpark, _opener, returnFocus) => {
+                openPersonProfileAt(spark.ownerId, 'connections', undefined, {
+                  sparkCompletionId: spark.id,
+                  returnFocus
+                });
+              }}
+              onOpenSparkPerson={(personId, returnFocus) => {
+                openPersonProfileAt(personId, 'rhythms', undefined, { returnFocus });
+              }}
               onHistory={openRhythmHistory}
               onTend={openCompletion}
               onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
@@ -4232,6 +4501,74 @@ function PreviewWorkspace({
                 archivedRhythms={archivedMarriageRhythms}
                 foundationRhythms={marriageCategoryRhythms}
                 suggestionRhythms={resolvedMarriageRhythms}
+                suggestionInstances={allTodayRhythms}
+                foundationRhythmScores={rhythmScoreResults}
+                archivedRhythmIds={previewData.archivedRhythmIds}
+                completedRhythms={completedRhythms}
+                undoableRhythms={undoableRhythms}
+                satisfiedRhythmIds={satisfiedRhythmIds}
+                tendedRhythmIds={tendedRhythmIds}
+                initializing={!hydrated}
+                onRhythmHistory={openRhythmHistory}
+                onEditRhythm={(rhythm, event, returnToSuggestions) => openRhythmEditor(event, rhythm, {
+                  ...(returnToSuggestions ? { returnToSuggestions } : {})
+                })}
+                onRestoreRhythm={restoreRhythm}
+                onTend={openCompletion}
+                onUndo={undoTend}
+                onSaveFoundationAssociations={saveFoundationAssociations}
+                foundationNavigationRequest={foundationNavigationRequest}
+                categoryTabNavigationRequest={categoryTabNavigationRequest}
+                onFoundationNavigationHandled={() => setFoundationNavigationRequest(null)}
+              />
+            )
+          : destination === 'dating'
+            ? (
+              <MarriageView
+                people={peopleWithPhotos}
+                overallHealthScore={overallHealthScore}
+                categoryConfig={{
+                  categoryId: 'dating',
+                  label: 'Dating',
+                  description: 'Build connection and shared direction at a pace that feels mutual.',
+                  foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'dating'),
+                  scoreExplanationIntro: 'Dating Health reflects follow-through on chosen Rhythms; it does not rate relationship quality.',
+                  scoreInterpretationNote: 'These scores describe selected Rhythm follow-through, not the quality or future of a relationship.',
+                  suggestionCatalogue: datingSuggestionCatalogue,
+                  categoryAction: (
+                    <button
+                      type="button"
+                      className="btn mini ghost"
+                      aria-label={`Open People filtered to Dating partners · ${resolvedPeopleGroups.find(group => group.id === 'dating')?.memberIds.length ?? 0}`}
+                      onClick={() => {
+                        setPeopleInitialFilter('dating');
+                        navigate('people');
+                      }}
+                    >
+                      Dating partners · {resolvedPeopleGroups.find(group => group.id === 'dating')?.memberIds.length ?? 0}
+                      <span aria-hidden="true">›</span>
+                    </button>
+                  )
+                }}
+                todayDate={currentDate}
+                onAddRhythm={event => openRhythmEditor(event, undefined, {
+                  initialDraft: createRhythmDraft(['dating'])
+                })}
+                onAddLinkedRhythm={(foundationId, event) => openRhythmEditor(event, undefined, {
+                  initialDraft: {
+                    ...createRhythmDraft(['dating']),
+                    primaryFoundationId: foundationId,
+                    secondaryFoundationIds: []
+                  }
+                })}
+                onAddSuggestion={openRhythmSuggestion}
+                onPersonSelect={openPersonProfile}
+                onOpenCategory={categoryId => navigate(categoryId)}
+                onHome={() => navigate('today')}
+                userRhythms={datingCategoryRhythms}
+                archivedRhythms={archivedDatingRhythms}
+                foundationRhythms={datingCategoryRhythms}
+                suggestionRhythms={datingCategoryRhythms}
                 suggestionInstances={allTodayRhythms}
                 foundationRhythmScores={rhythmScoreResults}
                 archivedRhythmIds={previewData.archivedRhythmIds}
@@ -4492,17 +4829,22 @@ function PreviewWorkspace({
                 <FocusDialog
                   data={focusData}
                   people={peopleWithPhotos}
-                  rhythms={scoredRhythms}
-                  completedRhythmIds={completedRhythms}
+                  rhythms={focusRhythms}
+                  foundations={foundationCatalogue}
+                  rhythmScores={rhythmScoreResults}
+                  categoryHealthScores={categoryHealthScores}
+                  undoableRhythmIds={undoableRhythms}
+                  todayDate={currentDate}
+                  timeZone={localTimeZone}
+                  initializing={!hydrated}
                   onClose={() => navigate('today')}
                   onPersonSelect={openPersonProfile}
-                  onRhythmSelect={(rhythm, event) => {
-                    dialogOpener.current = event.currentTarget;
-                    activeRhythmReturnTab.current = 'today';
-                    setDetailsInitialView('details');
-                    setActiveRhythmId(rhythm.id);
-                  }}
+                  onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+                  onOpenCategory={categoryId => navigate(categoryId)}
+                  onRhythmHistory={openRhythmHistory}
+                  onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
                   onTendRhythm={openCompletion}
+                  onUndoRhythm={undoTend}
                 />
               )
               : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />
@@ -4573,6 +4915,8 @@ function PreviewWorkspace({
           v47RecoveryCopy={v47RecoveryCopy}
           v48RecoveryCopy={v48RecoveryCopy}
           v50RecoveryCopy={v50RecoveryCopy}
+          v54RecoveryCopy={v54RecoveryCopy}
+          v55RecoveryCopy={v55RecoveryCopy}
         />
       )}
       {healthFitnessView}
@@ -4657,6 +5001,12 @@ function PreviewWorkspace({
               : 'Preview data needs attention. Open More → Settings → Save & sync to review recovery and storage options.'}
         </p>
       )}
+      {rhythmConnectionNotice && (
+        <p className="rhythm-connection-notice" role="status" aria-live="polite">
+          <span>{rhythmConnectionNotice}</span>
+          <button type="button" onClick={() => setRhythmConnectionNotice('')}>Dismiss</button>
+        </p>
+      )}
       {import.meta.env.MODE !== 'pages' && (
         <footer className="preview-footer">
           <a href="/preview.html">Component catalogue</a>
@@ -4695,7 +5045,10 @@ function PreviewWorkspace({
             : {})}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
             && !activeRhythm.categoryIds?.includes('health')
-            ? { onLogCompletion: record => saveDatedCompletion(record, 'history') }
+            ? {
+                onLogCompletion: (record, participants) =>
+                  saveDatedCompletion(record, 'history', participants)
+              }
             : {})}
           {...(activeRhythmIsToday && isEditableRhythmId(activeRhythm.id) && !activeRhythmIsArchived
             ? {

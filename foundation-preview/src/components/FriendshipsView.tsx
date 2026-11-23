@@ -7,6 +7,7 @@ import {
   formatConnectionRecency,
   friendConnectionStatus,
   latestValidConnection,
+  reconcileDirectRhythmConnectionEdit,
   selectFriendStatuses,
 } from '../domain/friendships.ts';
 import type {
@@ -74,6 +75,8 @@ type FriendshipsViewProps = {
   completedRhythms: ReadonlySet<string>;
   undoableRhythms: ReadonlySet<string>;
   onChange: (data: FriendshipData) => void;
+  onSaveConnection?: (connection: FriendshipConnection) => string | null;
+  onDeleteConnection?: (connectionId: string) => string | null;
   onAddRhythm: (event: MouseEvent<HTMLButtonElement>) => void;
   onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
   onRhythmHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
@@ -102,6 +105,8 @@ export function FriendshipsView({
   completedRhythms,
   undoableRhythms,
   onChange,
+  onSaveConnection,
+  onDeleteConnection,
   onAddRhythm,
   onEditRhythm,
   onRhythmHistory,
@@ -206,7 +211,12 @@ export function FriendshipsView({
   }
 
   function saveConnection(connection: FriendshipConnection): string | null {
-    const next = addOrUpdateConnection(data, connection);
+    if (onSaveConnection) return onSaveConnection(connection);
+    const existing = data.connections.find(item => item.id === connection.id);
+    const next = addOrUpdateConnection(
+      data,
+      reconcileDirectRhythmConnectionEdit(existing, connection)
+    );
     onChange(next);
     return null;
   }
@@ -392,6 +402,7 @@ export function FriendshipsView({
           today={today}
           onSave={saveConnection}
           onDelete={id => {
+            if (onDeleteConnection) return onDeleteConnection(id);
             onChange(deleteConnection(data, id));
             return null;
           }}

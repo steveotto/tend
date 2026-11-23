@@ -2,7 +2,10 @@ import { isValidDate } from './money-goals.ts';
 import type { PersonId, PersonPreview } from './preview-data.ts';
 import {
   addOrUpdateConnection,
-  deleteConnection
+  deleteConnection,
+  detachSparkCompletionOwnership,
+  isSparkCompletionConnectionUnchanged,
+  sparkCompletionConnectionSnapshot
 } from './friendships.ts';
 import type { FriendshipConnection, FriendshipData } from './friendships.ts';
 
@@ -23,6 +26,7 @@ export type PersonSpark = {
   ownerId: PersonId;
   title: string;
   description?: string;
+  dueDate?: string;
   sharedWith: PersonId[];
   archived: boolean;
   completed: boolean;
@@ -37,6 +41,7 @@ export type PersonSpark = {
 
 export type PersonSparkDraft = Pick<PersonSpark, 'title' | 'sharedWith'> & {
   description?: string;
+  dueDate?: string;
 };
 
 type SparkCommandResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -79,6 +84,8 @@ export function validatePersonSparksCollection(
       || candidate.title.length > 180
       || (candidate.description !== undefined
         && (typeof candidate.description !== 'string' || candidate.description.length > 4000))
+      || (candidate.dueDate !== undefined
+        && (typeof candidate.dueDate !== 'string' || !isValidDate(candidate.dueDate)))
       || !isUniqueKnownPeople(sharedWith, people)
       || sharedWith.includes(ownerId)
       || typeof candidate.archived !== 'boolean'
@@ -181,11 +188,15 @@ export function createPersonSpark(
   }
   const title = draft.title.trim();
   if (!title) return { ok: false, error: 'Add a title for this Spark.' };
+  if (draft.dueDate !== undefined && draft.dueDate !== '' && !isValidDate(draft.dueDate)) {
+    return { ok: false, error: 'Choose a valid due date or leave it blank.' };
+  }
   const spark: PersonSpark = {
     id,
     ownerId,
     title,
     ...(draft.description?.trim() ? { description: draft.description.trim() } : {}),
+    ...(draft.dueDate ? { dueDate: draft.dueDate } : {}),
     sharedWith: [...new Set(draft.sharedWith.filter(personId => personId !== ownerId))],
     archived: false,
     completed: false,
@@ -204,17 +215,21 @@ export function updatePersonSpark(
   if (!current) return { ok: false, error: 'This Spark is no longer available.' };
   const title = draft.title.trim();
   if (!title) return { ok: false, error: 'Add a title for this Spark.' };
+  if (draft.dueDate !== undefined && draft.dueDate !== '' && !isValidDate(draft.dueDate)) {
+    return { ok: false, error: 'Choose a valid due date or leave it blank.' };
+  }
   const known = new Set(knownPersonIds);
   const sharedWith = [...new Set(draft.sharedWith.filter(personId =>
     personId !== current.ownerId && known.has(personId)))];
   const updated = sparks.map(spark => {
     if (spark.id !== sparkId) return spark;
-    const { description: _description, ...preserved } = spark;
+    const { description: _description, dueDate: _dueDate, ...preserved } = spark;
     const description = draft.description?.trim();
     return {
       ...preserved,
       title,
       ...(description ? { description } : {}),
+      ...(draft.dueDate ? { dueDate: draft.dueDate } : {}),
       sharedWith
     };
   });
@@ -247,10 +262,17 @@ export function completePersonSpark(
   if (!isValidDate(record.date) || record.participantIds.length === 0) {
     return { ok: false, error: 'Choose a valid date and at least one actual participant.' };
   }
-  const connection: FriendshipConnection = {
+  const connectionBase: FriendshipConnection = {
     ...record,
+    type: 'spark',
     sparkId: spark.id,
-    sparkOwnerId: spark.ownerId
+    sparkOwnerId: spark.ownerId,
+    sparkTitleSnapshot: spark.title
+  };
+  const connection: FriendshipConnection = {
+    ...connectionBase,
+    ownedBySparkCompletion: true,
+    sparkConnectionSnapshot: sparkCompletionConnectionSnapshot(connectionBase)
   };
   const completion: PersonSparkCompletion = {
     id: connection.id,
@@ -280,10 +302,14 @@ export function undoPersonSparkCompletion(
   if (!spark || !spark.completed || !completion) {
     return { ok: false, error: 'This Spark has no active completion to undo.' };
   }
-  if (completion.source === 'connection'
-    && !friendships.connections.some(item => item.id === completion.connectionId)) {
+  const linkedConnection = completion.source === 'connection'
+    ? friendships.connections.find(item => item.id === completion.connectionId)
+    : undefined;
+  if (completion.source === 'connection' && !linkedConnection) {
     return { ok: false, error: 'The linked connection is missing; no data was changed.' };
   }
+  const preserveEditedConnection = linkedConnection?.ownedBySparkCompletion === true
+    && !isSparkCompletionConnectionUnchanged(linkedConnection);
   return {
     ok: true,
     value: {
@@ -296,8 +322,15 @@ export function undoPersonSparkCompletion(
               : entry)
           }
         : item),
-      friendships: completion.source === 'connection'
-        ? deleteConnection(friendships, completion.connectionId!)
+      friendships: linkedConnection
+        ? preserveEditedConnection
+          ? {
+              ...friendships,
+              connections: friendships.connections.map(item => item.id === linkedConnection.id
+                ? detachSparkCompletionOwnership(item)
+                : item)
+            }
+          : deleteConnection(friendships, linkedConnection.id)
         : friendships
     }
   };
@@ -398,7 +431,13 @@ export function deletePersonSpark(
         ...friendships,
         connections: friendships.connections.map(connection => {
           if (connection.sparkId !== sparkId) return connection;
-          const { sparkId: _sparkId, sparkOwnerId: _sparkOwnerId, ...preservedConnection } = connection;
+          const {
+            sparkId: _sparkId,
+            sparkOwnerId: _sparkOwnerId,
+            sparkConnectionSnapshot: _snapshot,
+            ownedBySparkCompletion: _owned,
+            ...preservedConnection
+          } = connection;
           return preservedConnection;
         })
       }

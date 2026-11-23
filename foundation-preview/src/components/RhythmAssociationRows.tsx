@@ -12,6 +12,7 @@ import type { Destination } from './AppNavigation.tsx';
 import { PersonBadgeList } from './PersonBadge.tsx';
 import { RhythmCategoryBadges } from './RhythmCategoryBadges.tsx';
 import { RhythmFoundationBadges } from './RhythmFoundationBadges.tsx';
+import { PersonLinkIcon } from './PersonLinkIcon.tsx';
 import { useAvailableCategories, useAreaAvailability } from './CategoryAvailabilityContext.tsx';
 import {
   selectAvailableCategoryIds,
@@ -87,6 +88,18 @@ export function RhythmAssociationRows({
                 collapsedLimit={2}
                 itemsOnly
               />
+              {rhythm.alsoLogConnection === true && rhythm.personIds?.length ? (
+                <span
+                  className="rhythm-connection-indicator"
+                  role="img"
+                  aria-label="Also logs a connection."
+                  title="Also logs a connection."
+                  data-tooltip="Also logs a connection."
+                  tabIndex={0}
+                >
+                  <PersonLinkIcon />
+                </span>
+              ) : null}
             </div>
           )}
           {categoryGroups.map(({ category, linkedFoundations }) => (

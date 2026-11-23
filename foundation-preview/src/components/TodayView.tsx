@@ -5,9 +5,19 @@ import {
   peopleForRhythm,
   type FoundationPreview,
   type PersonId,
+  type PersonPickerGroup,
   type PersonPreview,
   type RhythmPreview
 } from '../domain/preview-data.ts';
+import type { FriendshipData } from '../domain/friendships.ts';
+import type { PersonSpark, PersonSparkDraft } from '../domain/person-sparks.ts';
+import { activePersonSparkCompletion } from '../domain/person-sparks.ts';
+import {
+  selectHomePersonSparks,
+  selectPersonSparksByStatus,
+  selectSparksVisibleToPeople,
+  selectSparkVisiblePeople
+} from '../domain/home-sparks.ts';
 import type { PrayerRequestPreview } from '../domain/prayer-session.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
@@ -36,7 +46,15 @@ import { aggregateCategoryHealthScores } from '../domain/category-scoring.ts';
 import { TodayPrayerModule } from './TodayPrayerModule.tsx';
 import type { CalendarSource } from '../domain/calendar-sources.ts';
 import { CalendarAgendaSection } from './CalendarAgendaSection.tsx';
-import { useAvailableCategories, usePrayerEnabled } from './CategoryAvailabilityContext.tsx';
+import {
+  useAvailableCategories,
+  useAvailablePersonGroups,
+  useCategoryAvailability,
+  usePrayerEnabled
+} from './CategoryAvailabilityContext.tsx';
+import { PersonSparkCard } from './PersonSparkCard.tsx';
+import { PersonSparkEditorDialog } from './PersonSparkEditorDialog.tsx';
+import { SparksDialog } from './SparksDialog.tsx';
 
 const planTypes: { id: TodayViewId; label: string }[] = [
   { id: 'now', label: 'Now' },
@@ -103,6 +121,9 @@ function timeframeSubtitle(section: TodayPlanSection): string | undefined {
 
 type TodayViewProps = {
   people?: readonly PersonPreview[];
+  peopleGroups?: readonly PersonPickerGroup[];
+  personSparks?: readonly PersonSpark[];
+  friendships?: FriendshipData;
   greeting: string;
   evaluationInstant: Date;
   localDate: string;
@@ -121,7 +142,19 @@ type TodayViewProps = {
   categoryHealthScores: ReadonlyMap<string, number | null>;
   onNavigate: (destination: Destination) => void;
   onOpenSettings?: () => void;
+  onOpenCalendarSetup?: () => void;
   onPersonSelect: (personId: PersonId) => void;
+  onCreateSpark?: (ownerId: PersonId, draft: PersonSparkDraft) => string | null;
+  onUpdateSpark?: (sparkId: string, draft: PersonSparkDraft) => string | null;
+  onArchiveSpark?: (sparkId: string, archived: boolean) => string | null;
+  onDeleteSpark?: (sparkId: string, viewerId: PersonId) => string | null;
+  onUndoSpark?: (sparkId: string) => string | null;
+  onCompleteSpark?: (
+    spark: PersonSpark,
+    opener: HTMLButtonElement,
+    returnFocus: HTMLElement | null
+  ) => void;
+  onOpenSparkPerson?: (personId: PersonId, returnFocus: HTMLElement | null) => void;
   foundations: readonly FoundationPreview[];
   onOpenFoundation: (foundationId: string, openerId: string) => void;
   onHistory: (id: string, event: MouseEvent<HTMLButtonElement>) => void;
@@ -137,6 +170,9 @@ type TodayViewProps = {
 
 export function TodayView({
   people = [],
+  peopleGroups = [],
+  personSparks = [],
+  friendships,
   greeting,
   evaluationInstant,
   localDate,
@@ -157,7 +193,15 @@ export function TodayView({
   onOpenFoundation,
   onNavigate,
   onOpenSettings = () => onNavigate('more'),
+  onOpenCalendarSetup,
   onPersonSelect,
+  onCreateSpark,
+  onUpdateSpark,
+  onArchiveSpark,
+  onDeleteSpark,
+  onUndoSpark,
+  onCompleteSpark,
+  onOpenSparkPerson,
   onHistory,
   onTend,
   onEditRhythm,
@@ -171,12 +215,65 @@ export function TodayView({
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const availableCategories = useAvailableCategories();
+  const categoryPreferences = useCategoryAvailability();
+  const availablePeopleGroups = useAvailablePersonGroups(peopleGroups);
   const prayerEnabled = usePrayerEnabled();
   const timeBlocks = useTimeBlockSettings();
   const [expandedSectionIds, setExpandedSectionIds] = useState<ReadonlySet<string>>(() => new Set());
   const lastAutoExpandedContext = useRef<string | null>(null);
   const manuallyToggledSectionIds = useRef(new Set<string>());
   const sectionIdPrefix = useId();
+  const [sparksDialog, setSparksDialog] = useState<{
+    key: number;
+    initialSparkId?: string;
+    startWithAdd?: boolean;
+  } | null>(null);
+  const [sparkEditor, setSparkEditor] = useState<{
+    key: number;
+    spark: PersonSpark | null;
+  } | null>(null);
+  const sparksDialogSequence = useRef(0);
+  const sparkEditorSequence = useRef(0);
+  const sparksDialogOpener = useRef<HTMLElement | null>(null);
+  const sparkEditorOpener = useRef<HTMLElement | null>(null);
+  const sparkPeople = useMemo(
+    () => selectSparkVisiblePeople(people, availablePeopleGroups, categoryPreferences),
+    [people, availablePeopleGroups, categoryPreferences]
+  );
+  const visibleSparks = useMemo(
+    () => selectSparksVisibleToPeople(personSparks, sparkPeople),
+    [personSparks, sparkPeople]
+  );
+  const homeSparks = useMemo(
+    () => selectHomePersonSparks(visibleSparks, localDate),
+    [visibleSparks, localDate]
+  );
+  const activeVisibleSparks = useMemo(
+    () => selectPersonSparksByStatus(visibleSparks, 'active'),
+    [visibleSparks]
+  );
+  const sparkActions = onCreateSpark && onUpdateSpark && onArchiveSpark
+    && onDeleteSpark && onUndoSpark && onCompleteSpark
+    ? {
+        create: onCreateSpark,
+        update: onUpdateSpark,
+        archive: onArchiveSpark,
+        delete: onDeleteSpark,
+        undo: onUndoSpark,
+        complete: onCompleteSpark
+      }
+    : null;
+  function openSparksDialog(
+    opener: HTMLElement,
+    request: { initialSparkId?: string; startWithAdd?: boolean } = {}
+  ) {
+    sparksDialogOpener.current = opener;
+    setSparksDialog({ key: ++sparksDialogSequence.current, ...request });
+  }
+  function openSparkEditor(opener: HTMLElement, spark: PersonSpark | null = null) {
+    sparkEditorOpener.current = opener;
+    setSparkEditor({ key: ++sparkEditorSequence.current, spark });
+  }
   const eligibleRhythms = useMemo(
     () => rhythms.filter(rhythm => isRhythmEligibleForToday(rhythm, localDate)),
     [rhythms, localDate]
@@ -432,7 +529,7 @@ export function TodayView({
                             {planSections.length > 0
                               ? renderRhythms(planSections[0]!.rhythms)
                               : (
-                                <div className="today-plan__empty-rhythms" role="status">
+                                <div className="today-plan__empty-rhythms today-plan__empty-rhythms--now" role="status">
                                   <p>{emptyMessage}</p>
                                   <button type="button" className="today-plan__empty-action" onClick={() => onViewChange('all-today')}>
                                     View all today
@@ -537,6 +634,124 @@ export function TodayView({
         </TendedRhythmList>
       </section>
 
+      {sparkActions && friendships && sparkPeople.length > 0 && (
+        <section className="today-sparks-section" aria-labelledby="today-sparks-heading">
+          <header className="today-sparks-section__heading">
+            <div>
+              <h2 id="today-sparks-heading">Sparks</h2>
+            </div>
+            {visibleSparks.length > 0 && (
+              <button
+                type="button"
+                className="today-sparks-section__view-all"
+                onClick={event => openSparksDialog(event.currentTarget)}
+              >
+                View all
+              </button>
+            )}
+          </header>
+          {homeSparks.length > 0 ? (
+            <ul className="person-spark-list today-sparks-section__list">
+              {homeSparks.map(spark => {
+                const associatedPeople = [spark.ownerId, ...spark.sharedWith]
+                  .map(id => sparkPeople.find(person => person.id === id))
+                  .filter((person): person is PersonPreview => person !== undefined);
+                const completion = activePersonSparkCompletion(spark);
+                const linkedConnection = completion?.connectionId
+                  ? friendships.connections.find(connection => connection.id === completion.connectionId)
+                  : undefined;
+                return (
+                  <li
+                    key={spark.id}
+                    className="person-spark-list__item"
+                    data-person-spark-id={spark.id}
+                  >
+                    <PersonSparkCard
+                      spark={spark}
+                      associatedPeople={associatedPeople}
+                      {...(linkedConnection ? { linkedConnection } : {})}
+                      today={localDate}
+                      onComplete={(item, opener) => onCompleteSpark?.(item, opener, opener)}
+                      onEdit={(item, opener) => openSparkEditor(opener, item)}
+                      onPersonSelect={onPersonSelect}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          ) : activeVisibleSparks.length > 0 ? (
+            <div className="today-sparks-section__empty" role="status">
+              <p>Your next Sparks are saved for later.</p>
+            </div>
+          ) : (
+            <div className="today-sparks-section__empty" role="status">
+              <p>Save an idea for connecting.</p>
+              <button
+                type="button"
+                className="person-spark-panel__add"
+                onClick={event => openSparkEditor(event.currentTarget)}
+              >
+                + Add Spark
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {sparksDialog && sparkActions && friendships && sparkPeople.length > 0 && (
+        <SparksDialog
+          key={sparksDialog.key}
+          people={sparkPeople}
+          peopleGroups={peopleGroups}
+          sparks={visibleSparks}
+          friendships={friendships}
+          today={localDate}
+          {...(sparksDialog.initialSparkId ? { initialSparkId: sparksDialog.initialSparkId } : {})}
+          {...(sparksDialog.startWithAdd ? { startWithAdd: true } : {})}
+          onCreate={sparkActions.create}
+          onUpdate={sparkActions.update}
+          onArchive={sparkActions.archive}
+          onDelete={sparkActions.delete}
+          onUndo={sparkActions.undo}
+          onComplete={(spark, opener) => {
+            const returnFocus = sparksDialogOpener.current;
+            setSparksDialog(null);
+            sparkActions.complete(spark, opener, returnFocus);
+          }}
+          onPersonSelect={personId => {
+            const returnFocus = sparksDialogOpener.current;
+            setSparksDialog(null);
+            if (onOpenSparkPerson) onOpenSparkPerson(personId, returnFocus);
+            else onPersonSelect(personId);
+          }}
+          onClose={() => setSparksDialog(null)}
+        />
+      )}
+
+      {sparkEditor && sparkActions && friendships && sparkPeople.length > 0 && (
+        <PersonSparkEditorDialog
+          key={sparkEditor.key}
+          spark={sparkEditor.spark}
+          {...(sparkEditor.spark ? { initialOwnerId: sparkEditor.spark.ownerId } : {})}
+          viewerId={sparkEditor.spark?.ownerId ?? sparkPeople[0]!.id}
+          people={sparkPeople}
+          peopleGroups={peopleGroups}
+          friendships={friendships}
+          onCreate={sparkActions.create}
+          onUpdate={sparkActions.update}
+          onArchive={sparkActions.archive}
+          onDelete={sparkActions.delete}
+          onUndo={sparkActions.undo}
+          onClose={() => {
+            const returnFocus = sparkEditorOpener.current;
+            setSparkEditor(null);
+            window.requestAnimationFrame(() => {
+              if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+            });
+          }}
+        />
+      )}
+
       <TodayPrayerModule
         requests={prayerRequests}
         enabled={prayerEnabled}
@@ -548,6 +763,7 @@ export function TodayView({
           sources={calendarSources}
           timeZone={localTimeZone}
           readerEnabled={calendarReaderEnabled}
+          {...(onOpenCalendarSetup ? { onOpenSetup: onOpenCalendarSetup } : {})}
           {...(onCalendarEventsChange ? { onEventsChange: onCalendarEventsChange } : {})}
         />
       )}

@@ -53,6 +53,7 @@ describe('Classic Tend import dry run', () => {
     expect(result.candidate?.peopleGroups.map(group => [group.id, group.memberIds]))
       .toEqual([
         ['marriage', [result.candidate?.people[0]?.id]],
+        ['dating', []],
         ['parenting', ['legacy-person-two']],
         ['friends', ['legacy-person-three']]
       ]);

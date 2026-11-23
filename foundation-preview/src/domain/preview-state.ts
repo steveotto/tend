@@ -5,10 +5,11 @@ import {
   validateGoalDraft
 } from './money-goals.ts';
 import type { MoneyGoal } from './money-goals.ts';
-import { areas, goals as sampleGoals, todayRhythms } from './preview-data.ts';
+import { goals as sampleGoals, todayRhythms } from './preview-data.ts';
 import {
   createSamplePeople,
   createPersonPickerGroups,
+  migrateLegacyPersonPickerGroupsV53,
   migrateLegacyFriendIdsIntoPeopleGroups,
   validatePeopleCollection,
   validatePersonPickerGroups,
@@ -31,7 +32,8 @@ import {
   validateSavedRhythmsV17,
   validateSavedRhythmsV18,
   validateSavedRhythmsV19,
-  validateSavedRhythmsV20
+  validateSavedRhythmsV20,
+  validateSavedRhythmsV53
 } from './rhythm-editor.ts';
 import { validateSavedRhythmsV10 } from './rhythm-editor.ts';
 import type { SavedRhythm } from './rhythm-editor.ts';
@@ -102,12 +104,17 @@ import {
   defaultFoundationPreferences,
   defaultCategoryPreferences,
   isFoundationPreferences,
-  isCategoryPreferences
+  isCategoryPreferences,
+  migrateCategoryPreferences,
+  migrateFoundationPreferences,
+  normalizeCategoryPreferences,
+  isDefaultCategoryPreferencesCompatible,
+  isDefaultFoundationPreferencesCompatible
 } from './category-availability.ts';
 import type { CategoryPreferences, FoundationPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 52;
+export const PREVIEW_SCHEMA_VERSION = 57;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -150,6 +157,7 @@ export type PreviewEnvelope = {
 };
 
 export type PreviewEnvelopeV4 = PreviewEnvelope;
+export type PreviewSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57;
 
 type PreviewEnvelopeV1 = {
   format: typeof PREVIEW_BACKUP_FORMAT;
@@ -171,7 +179,7 @@ type PreviewEnvelopeV2 = {
 };
 
 export type PreviewValidationResult =
-  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52; resolvedPersonCategories: number }
+  | { valid: true; envelope: PreviewEnvelope; sourceSchemaVersion: PreviewSchemaVersion; resolvedPersonCategories: number }
   | {
       valid: false;
       kind: 'invalid' | 'unsupported';
@@ -535,11 +543,9 @@ function firstKeyWithoutCompatibleDefault(
     || key === 'showCalendarOnToday'
       && record[key] === true
     || key === 'categoryPreferences'
-      && isCategoryPreferences(record[key])
-      && areas.every(area => (record[key] as CategoryPreferences)[area.id])
+      && isDefaultCategoryPreferencesCompatible(record[key])
     || key === 'foundationPreferences'
-      && isFoundationPreferences(record[key])
-      && Object.values(record[key] as FoundationPreferences).every(enabled => enabled)
+      && isDefaultFoundationPreferencesCompatible(record[key])
     || key === 'flexibility'
       && isEmptyFlexibilityDefault(record[key])));
 }
@@ -664,7 +670,9 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
     schemaVersion: PREVIEW_SCHEMA_VERSION,
     data: {
       ...data,
-      categoryPreferences: data.categoryPreferences ?? { ...defaultCategoryPreferences },
+      categoryPreferences: normalizeCategoryPreferences(
+        data.categoryPreferences ?? { ...defaultCategoryPreferences }
+      ),
       foundationPreferences: data.foundationPreferences ?? { ...defaultFoundationPreferences },
       prayerEnabled: data.prayerEnabled ?? true,
       goals: data.goals.map(goal => {
@@ -727,7 +735,8 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
           createdLocalTime: rhythm.createdLocalTime,
           createdDueTime: rhythm.createdDueTime
         }),
-        ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed })
+        ...(rhythm.dailyBackfillAllowed === undefined ? {} : { dailyBackfillAllowed: rhythm.dailyBackfillAllowed }),
+        ...(rhythm.alsoLogConnection === undefined ? {} : { alsoLogConnection: rhythm.alsoLogConnection })
       })),
       archivedRhythmIds: [...data.archivedRhythmIds],
       datedRhythmCompletions: data.datedRhythmCompletions.map(record => ({
@@ -891,6 +900,11 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       && value.schemaVersion !== 49
       && value.schemaVersion !== 50
       && value.schemaVersion !== 51
+      && value.schemaVersion !== 52
+      && value.schemaVersion !== 53
+      && value.schemaVersion !== 54
+      && value.schemaVersion !== 55
+      && value.schemaVersion !== 56
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -925,7 +939,11 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV52 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV56 = value.schemaVersion === 56 || value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV55 = value.schemaVersion === 55 || isV56;
+  const isV54 = value.schemaVersion === 54 || isV55;
+  const isV53 = value.schemaVersion === 53 || isV54;
+  const isV52 = value.schemaVersion === 52 || isV53;
   const isV51 = value.schemaVersion === 51 || isV52;
   const isV50 = value.schemaVersion === 50 || isV51;
   const isV49 = value.schemaVersion === 49 || isV50;
@@ -992,6 +1010,20 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       || !Array.isArray(value.data.removedSeedCompletionIds)))) {
     return { valid: false, kind: 'invalid', message: 'Preview data must contain goals and completed Rhythm IDs.' };
   }
+  const categoryPreferences = isV43
+    ? isV55
+      ? isCategoryPreferences(value.data.categoryPreferences)
+        ? value.data.categoryPreferences
+        : null
+      : migrateCategoryPreferences(value.data.categoryPreferences)
+    : { ...defaultCategoryPreferences };
+  const foundationPreferences = isV47
+    ? isV54
+      ? isFoundationPreferences(value.data.foundationPreferences)
+        ? value.data.foundationPreferences
+        : null
+      : migrateFoundationPreferences(value.data.foundationPreferences)
+    : { ...defaultFoundationPreferences };
   if ((isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData) && !Array.isArray(value.data.rhythmHistoryIds)) {
     return { valid: false, kind: 'invalid', message: 'Rhythm history references must be a list.' };
   }
@@ -1016,10 +1048,10 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   if (isV42 && typeof value.data.showCalendarOnToday !== 'boolean') {
     return { valid: false, kind: 'invalid', message: 'The Show calendar on Today preference must be a boolean.' };
   }
-  if (isV43 && !isCategoryPreferences(value.data.categoryPreferences)) {
+  if (isV43 && categoryPreferences === null) {
     return { valid: false, kind: 'invalid', message: 'Category preferences must contain one enabled or disabled value for every category.' };
   }
-  if (isV47 && !isFoundationPreferences(value.data.foundationPreferences)) {
+  if (isV47 && foundationPreferences === null) {
     return { valid: false, kind: 'invalid', message: 'Foundation preferences must contain one enabled or disabled value for every Foundation, Principle, or Practice.' };
   }
   if (isV48 && typeof value.data.prayerEnabled !== 'boolean') {
@@ -1038,7 +1070,8 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const timeBlocks = timeBlockValidation.settings;
   const people: PersonPreview[] = isV32 ? value.data.people as PersonPreview[] : createSamplePeople();
   if (!isV1 && !((isV4 || isV5 || isV6 || isV7 || isV8 || isV9 || isV10 || isV11 || isV12 || isV13 || isV14 || isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData)
-    ? isV40 || isV41 ? validateSavedRhythmsV20(value.data.savedRhythms)
+    ? isV53 ? validateSavedRhythmsV53(value.data.savedRhythms)
+      : isV40 || isV41 ? validateSavedRhythmsV20(value.data.savedRhythms)
       : isV37 ? validateSavedRhythmsV19(value.data.savedRhythms)
       : isV18 || hasCurrentFriendshipsData ? validateSavedRhythmsV18(value.data.savedRhythms)
       : isV17 ? validateSavedRhythmsV17(value.data.savedRhythms)
@@ -1324,7 +1357,6 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       scoring: { ...rhythm.scoring, scheduleHistory: history }
     };
   });
-
   const sourceStrength = isV15 || isV16 || isV17 || isV18 || hasCurrentFriendshipsData
     ? value.data.strength
     : createStrengthData();
@@ -1425,8 +1457,11 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   if ((isV19 && !legacyFriendships) || !validateFriendshipData(friendships, people.map(person => person.id))) {
     return { valid: false, kind: 'invalid', message: 'Friendships contain invalid people, cadence settings, or connection records.' };
   }
-  const peopleGroupsInput = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32
-    ? value.data.peopleGroups
+  const hasSavedPeopleGroups = isV20 || isV21 || isV22 || isV23 || isV24 || isV25 || isV26 || isV27 || isV28 || isV29 || isV30 || isV31 || isV32;
+  const peopleGroupsInput = hasSavedPeopleGroups
+    ? isV54
+      ? value.data.peopleGroups
+      : migrateLegacyPersonPickerGroupsV53(value.data.peopleGroups, people)
     : migrateLegacyFriendIdsIntoPeopleGroups(
         legacyFriendships
           ? createPersonPickerGroups().map(group => ({ ...group, memberIds: [] }))
@@ -1504,12 +1539,8 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
     timeBlocks,
     showTended: isV35 ? value.data.showTended as boolean : false,
     showCalendarOnToday: isV42 ? value.data.showCalendarOnToday as boolean : true,
-    categoryPreferences: isV43
-      ? value.data.categoryPreferences as CategoryPreferences
-      : { ...defaultCategoryPreferences },
-    foundationPreferences: isV47
-      ? value.data.foundationPreferences as FoundationPreferences
-      : { ...defaultFoundationPreferences },
+    categoryPreferences: categoryPreferences as CategoryPreferences,
+    foundationPreferences: foundationPreferences as FoundationPreferences,
     prayerEnabled: isV48 ? value.data.prayerEnabled as boolean : true,
     todayView: migrateTodayViewSelection(value.data.todayView),
     textSize: isPreviewTextSize(value.data.textSize) ? value.data.textSize : 'small',

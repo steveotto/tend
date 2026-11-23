@@ -17,6 +17,13 @@ export type PreviewAuthClient = {
     onAuthStateChange(
       callback: (event: string, session: PreviewSession | null) => void
     ): { data: { subscription: { unsubscribe: () => void } } };
+    signUp(credentials: {
+      email: string;
+      password: string;
+      options: { emailRedirectTo: string };
+    }): Promise<AuthResult & {
+      data?: { session: PreviewSession | null };
+    }>;
     signInWithPassword(credentials: { email: string; password: string }): Promise<AuthResult & {
       data?: { session: PreviewSession | null };
     }>;
@@ -41,6 +48,7 @@ export type PreviewSupabaseClientFactory = (
       storageKey: typeof authStorageKey;
     };
   }
+
 ) => PreviewAuthClient;
 
 declare global {
@@ -68,6 +76,7 @@ export function PreviewIdentityHost({
   const [authMessage, setAuthMessage] = useState('');
   const [authScreen, setAuthScreen] = useState<PreviewAuthScreen>('sign-in');
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isSigningUp, setIsSigningUp] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
@@ -82,6 +91,7 @@ export function PreviewIdentityHost({
   const recoveryUserId = useRef<string | null>(null);
   const sessionGeneration = useRef(0);
   const suppressSessionCallbacks = useRef(false);
+  const signUpInFlight = useRef(false);
 
   const authUrl = validatedSupabaseUrl(supabaseUrl);
   const hasPublicConfig = authUrl !== null && supabasePublishableKey.trim().length > 0;
@@ -160,7 +170,7 @@ export function PreviewIdentityHost({
   }, [accessReady, authUrl, clientFactory, hasPublicConfig, supabasePublishableKey]);
 
   async function signIn(email: string, password: string) {
-    if (!client || isSigningOut) return;
+    if (!client || isSigningOut || isSigningUp || signUpInFlight.current) return;
     suppressSessionCallbacks.current = true;
     setIsSigningIn(true);
     setAuthMessage('');
@@ -188,13 +198,61 @@ export function PreviewIdentityHost({
     }
   }
 
+  async function signUp(email: string, password: string, confirmation: string) {
+    if (!client || isSigningIn || isSigningOut || isSigningUp || signUpInFlight.current) return;
+    if (password.length < 8) {
+      setAuthMessage('Use a password with at least 8 characters.');
+      return;
+    }
+    if (password !== confirmation) {
+      setAuthMessage('The passwords do not match. Check both fields and try again.');
+      return;
+    }
+    signUpInFlight.current = true;
+    suppressSessionCallbacks.current = true;
+    setIsSigningUp(true);
+    setAuthMessage('');
+    try {
+      const result = await client.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: previewAppReturnToUrl() }
+      });
+      if (result.error) {
+        suppressSessionCallbacks.current = false;
+        setAuthMessage('We could not create your account. This email may already be in use, or the details may be invalid.');
+      } else if (result.data?.session) {
+        suppressSessionCallbacks.current = false;
+        const userId = result.data.session.user.id;
+        if (userId !== activeUserId.current) {
+          sessionGeneration.current += 1;
+          activeUserId.current = userId;
+        }
+        setIdentity(createAuthenticatedPreviewIdentity(
+          userId,
+          sessionGeneration.current,
+          result.data.session.user.email
+        ));
+      } else {
+        suppressSessionCallbacks.current = false;
+        setAuthScreen('sign-up-success');
+      }
+    } catch {
+      suppressSessionCallbacks.current = false;
+      setAuthMessage('Account creation could not be reached. Check your connection and try again.');
+    } finally {
+      signUpInFlight.current = false;
+      setIsSigningUp(false);
+    }
+  }
+
   async function requestPasswordReset(email: string) {
     if (!client || isSigningIn || isSigningOut) return;
     setIsRequestingReset(true);
     setAuthMessage('');
     try {
       const result = await client.auth.resetPasswordForEmail(email, {
-        redirectTo: new URL('/', window.location.origin).toString()
+        redirectTo: previewAppReturnToUrl()
       });
       if (result.error) {
         setAuthMessage('We could not send a reset email right now. Try again shortly.');
@@ -250,6 +308,7 @@ export function PreviewIdentityHost({
     recoveryUserId.current = null;
     setIdentity({ kind: 'signed-out' });
     setAuthMessage('');
+    setAuthScreen('sign-in');
     if (!currentClient) return;
     setIsSigningOut(true);
     try {
@@ -365,6 +424,71 @@ export function PreviewIdentityHost({
     return <PreviewAccessNotice title="Preview sign-in is unavailable" message={identity.message} />;
   }
 
+  if (authScreen === 'sign-up-success') {
+    return (
+      <PreviewAuthLayout
+        title="Check your email"
+        description="Your Tend account is ready to be confirmed. Follow the confirmation email, then sign in."
+      >
+        <button className="preview-login__primary-action" type="button" onClick={() => {
+          setAuthMessage('');
+          setAuthScreen('sign-in');
+        }}>
+          Continue to sign in
+        </button>
+      </PreviewAuthLayout>
+    );
+  }
+
+  if (authScreen === 'sign-up') {
+    return (
+      <PreviewAuthLayout
+        title="Create your Tend account"
+        description="Use your email and a password with at least 8 characters."
+      >
+        <form
+          className="preview-login__form"
+          onSubmit={event => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            void signUp(
+              String(form.get('email') ?? '').trim(),
+              String(form.get('password') ?? ''),
+              String(form.get('confirmPassword') ?? '')
+            );
+          }}
+        >
+          <label>
+            Email address
+            <input name="email" type="email" autoComplete="email" required />
+          </label>
+          <PasswordField
+            name="password"
+            label="Password"
+            autoComplete="new-password"
+            minLength={8}
+          />
+          <PasswordField
+            name="confirmPassword"
+            label="Confirm password"
+            autoComplete="new-password"
+            minLength={8}
+          />
+          <button type="submit" disabled={!client || isSigningUp || isSigningIn || isSigningOut}>
+            {isSigningUp ? 'Creating account…' : 'Create account'}
+          </button>
+        </form>
+        {authMessage && <p className="preview-login__error" role="alert">{authMessage}</p>}
+        <button className="preview-login__text-button" type="button" disabled={isSigningUp} onClick={() => {
+          setAuthMessage('');
+          setAuthScreen('sign-in');
+        }}>
+          Back to sign in
+        </button>
+      </PreviewAuthLayout>
+    );
+  }
+
   if (authScreen === 'request-reset') {
     return (
       <PreviewAuthLayout
@@ -420,26 +544,79 @@ export function PreviewIdentityHost({
             Email address
             <input name="email" type="email" autoComplete="email" required />
           </label>
-          <label>
-            Password
-            <input name="password" type="password" autoComplete="current-password" required />
-          </label>
+          <PasswordField
+            name="password"
+            label="Password"
+            autoComplete="current-password"
+          />
           <button type="submit" disabled={!client || isSigningIn || isSigningOut}>
             {isSigningIn ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
         {authMessage && <p className="preview-login__error" role="alert">{authMessage}</p>}
-        <button className="preview-login__text-button" type="button" onClick={() => {
-          setAuthMessage('');
-          setAuthScreen('request-reset');
-        }}>
-          Forgot password?
-        </button>
+        <div className="preview-login__secondary-actions">
+          <button className="preview-login__text-button" type="button" onClick={() => {
+            setAuthMessage('');
+            setAuthScreen('sign-up');
+          }}>
+            Sign up
+          </button>
+          <button className="preview-login__text-button" type="button" onClick={() => {
+            setAuthMessage('');
+            setAuthScreen('request-reset');
+          }}>
+            Forgot password?
+          </button>
+        </div>
     </PreviewAuthLayout>
   );
 }
 
-type PreviewAuthScreen = 'sign-in' | 'request-reset' | 'recovery' | 'recovery-error' | 'password-updated';
+type PreviewAuthScreen =
+  | 'sign-in'
+  | 'sign-up'
+  | 'sign-up-success'
+  | 'request-reset'
+  | 'recovery'
+  | 'recovery-error'
+  | 'password-updated';
+
+function PasswordField({
+  name,
+  label,
+  autoComplete,
+  minLength
+}: {
+  name: string;
+  label: string;
+  autoComplete: 'current-password' | 'new-password';
+  minLength?: number;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <label className="preview-login__password-field">
+      {label}
+      <span className="preview-login__password-control">
+        <input
+          name={name}
+          type={visible ? 'text' : 'password'}
+          autoComplete={autoComplete}
+          {...(minLength ? { minLength } : {})}
+          required
+        />
+        <button
+          className="preview-login__password-toggle"
+          type="button"
+          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          aria-pressed={visible}
+          onClick={() => setVisible(current => !current)}
+        >
+          {visible ? 'Hide' : 'Show'}
+        </button>
+      </span>
+    </label>
+  );
+}
 
 function PreviewAuthLayout({
   title,
@@ -503,4 +680,11 @@ function validatedSupabaseUrl(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+function previewAppReturnToUrl(): string {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
+  return url.toString();
 }

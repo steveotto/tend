@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { localDateString } from '../domain/money-goals.ts';
 import {
@@ -10,13 +10,11 @@ import type {
   CompletionDraftErrors,
   RhythmCompletionRecord
 } from '../domain/rhythm-completion.ts';
-import type { RhythmPreview } from '../domain/preview-data.ts';
-import { TimeDial } from './TimeDial.tsx';
-
-const hours = Array.from({ length: 12 }, (_, index) => index + 1);
-const minutes = Array.from({ length: 60 }, (_, index) => index);
-const periods = ['AM', 'PM'] as const;
-const compactTimePickerBreakpoint = 400;
+import { syntheticPeople } from '../domain/preview-data.ts';
+import type { PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
+import type { PersonId } from '../domain/preview-data.ts';
+import { PeopleParticipantPicker } from './PeopleParticipantPicker.tsx';
+import { CompletionDateTimeFields } from './CompletionDateTimeFields.tsx';
 
 function localDraftAt(date: Date): CompletionDraft {
   const hour = date.getHours();
@@ -37,16 +35,18 @@ export function RhythmCompletionForm({
   initialRecord,
   onSave,
   onCancel,
-  onSaved
+  onSaved,
+  people = syntheticPeople
 }: {
   rhythm: RhythmPreview;
   embedded?: boolean;
   dialogLayout?: boolean;
   headingId?: string;
   initialRecord?: RhythmCompletionRecord;
-  onSave: (record: RhythmCompletionRecord) => string | null;
+  onSave: (record: RhythmCompletionRecord, connectionParticipantIds?: PersonId[]) => string | null;
   onCancel: () => void;
   onSaved: () => void;
+  people?: readonly PersonPreview[];
 }) {
   const [draft, setDraft] = useState(() => initialRecord
     ? draftFromRecord(initialRecord)
@@ -57,49 +57,19 @@ export function RhythmCompletionForm({
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
+  const creationId = useRef<string | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const dialsRef = useRef<HTMLDivElement>(null);
-  const preservePeriodFocus = useRef(false);
-  const [compactTimePicker, setCompactTimePicker] = useState(false);
+  const [logConnection, setLogConnection] = useState(() =>
+    !initialRecord && Boolean(rhythm.alsoLogConnection) && (rhythm.personIds?.length ?? 0) > 0
+  );
+  const [connectionParticipantIds, setConnectionParticipantIds] = useState<PersonId[]>(() =>
+    !initialRecord ? [...(rhythm.personIds ?? [])] as PersonId[] : []
+  );
+  const [connectionError, setConnectionError] = useState('');
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
   }, []);
-
-  useLayoutEffect(() => {
-    const dials = dialsRef.current;
-    if (dials === null) return;
-
-    const updateLayout = () => {
-      const width = dials.clientWidth || dials.getBoundingClientRect().width;
-      if (!width) return;
-      const nextCompact = width <= compactTimePickerBreakpoint;
-      if (nextCompact === compactTimePicker) return;
-      preservePeriodFocus.current = Boolean(dials.querySelector('.time-dial--period :focus'));
-      setCompactTimePicker(nextCompact);
-    };
-
-    const observer = typeof ResizeObserver === 'function'
-      ? new ResizeObserver(updateLayout)
-      : undefined;
-    observer?.observe(dials);
-    window.addEventListener('resize', updateLayout);
-    updateLayout();
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', updateLayout);
-    };
-  }, [compactTimePicker]);
-
-  useLayoutEffect(() => {
-    if (!preservePeriodFocus.current) return;
-    preservePeriodFocus.current = false;
-    const period = dialsRef.current?.querySelector('.time-dial--period');
-    const target = compactTimePicker
-      ? period?.querySelector<HTMLButtonElement>('.time-dial__period-option[aria-pressed="true"]')
-      : period?.querySelector<HTMLElement>('[role="spinbutton"]');
-    target?.focus({ preventScroll: true });
-  }, [compactTimePicker]);
 
   function change<K extends keyof CompletionDraft>(key: K, value: CompletionDraft[K]) {
     setDraft(current => ({ ...current, [key]: value }));
@@ -112,15 +82,19 @@ export function RhythmCompletionForm({
     event.preventDefault();
     if (submitting.current) return;
 
-    const id = initialRecord?.id;
-    let newId = id;
+    let newId = initialRecord?.id ?? creationId.current ?? undefined;
     if (!newId) {
       try {
         newId = globalThis.crypto.randomUUID();
+        creationId.current = newId;
       } catch {
         setFormError('A secure completion ID could not be created. No completion was saved.');
         return;
       }
+    }
+    if (logConnection && connectionParticipantIds.length === 0) {
+      setConnectionError('Choose at least one person, or skip the connection.');
+      return;
     }
     if (!hasTime) {
       const result = prepareUndatedRhythmCompletionEdit({
@@ -133,8 +107,15 @@ export function RhythmCompletionForm({
         setErrors(result.errors);
         return;
       }
-      const error = onSave(result.record);
+      submitting.current = true;
+      setBusy(true);
+      const error = onSave(
+        result.record,
+        logConnection ? connectionParticipantIds : undefined
+      );
       if (error) {
+        submitting.current = false;
+        setBusy(false);
         setFormError(error);
         return;
       }
@@ -169,7 +150,10 @@ export function RhythmCompletionForm({
           ...(initialRecord.recordedAt ? { recordedAt: initialRecord.recordedAt } : {})
         }
       : { ...result.record, recordedAt: generatedRecordedAt };
-    const error = onSave(record);
+    const error = onSave(
+      record,
+      logConnection ? connectionParticipantIds : undefined
+    );
     if (error) {
       submitting.current = false;
       setBusy(false);
@@ -199,70 +183,57 @@ export function RhythmCompletionForm({
         {initialRecord ? 'Edit logged moment' : 'When did you tend it?'}
       </h3>
       {embedded && <p className="rhythm-completion-form__rhythm">{rhythm.title}</p>}
-      <label className="rhythm-completion-form__date-label" htmlFor="rhythm-completion-date">Date</label>
-      <input
-        id="rhythm-completion-date"
-        className="rhythm-completion-form__date"
-        type="date"
-        value={draft.effectiveDate}
-        aria-invalid={Boolean(errors.effectiveDate)}
-        aria-describedby={errors.effectiveDate ? 'rhythm-completion-date-error' : undefined}
-        onChange={event => change('effectiveDate', event.currentTarget.value)}
+      <CompletionDateTimeFields
+        date={draft.effectiveDate}
+        hour={draft.hour}
+        minute={draft.minute}
+        period={draft.period}
+        hasTime={hasTime}
+        dateError={errors.effectiveDate}
+        timeError={errors.time}
+        idPrefix="rhythm-completion"
+        onDateChange={value => change('effectiveDate', value)}
+        onHourChange={value => change('hour', value)}
+        onMinuteChange={value => change('minute', value)}
+        onPeriodChange={value => change('period', value)}
+        onAddTime={() => {
+          setHasTime(true);
+          setErrors(current => {
+            const next = { ...current };
+            delete next.time;
+            return next;
+          });
+        }}
       />
-      {errors.effectiveDate && <p id="rhythm-completion-date-error" className="rhythm-completion-form__error">{errors.effectiveDate}</p>}
 
-      {hasTime ? (
-        <fieldset className="rhythm-completion-form__time">
-          <legend>Time</legend>
-          <div
-            ref={dialsRef}
-            className="rhythm-completion-form__dials"
-            data-layout={compactTimePicker ? 'narrow' : 'wide'}
-          >
-            <TimeDial
-              label="Hour"
-              values={hours}
-              value={draft.hour}
-              formatValue={String}
-              onChange={value => change('hour', value)}
-              className="time-dial--hour"
+      {!initialRecord && Boolean(rhythm.alsoLogConnection) && (rhythm.personIds?.length ?? 0) > 0 && (
+        <fieldset className="rhythm-completion-form__connection">
+          <legend>Connection</legend>
+          <label className="rhythm-completion-form__connection-toggle">
+            <input
+              type="checkbox"
+              checked={logConnection}
+              onChange={event => {
+                setLogConnection(event.currentTarget.checked);
+                setConnectionError('');
+              }}
             />
-            <TimeDial
-              label="Minute"
-              values={minutes}
-              value={draft.minute}
-              formatValue={value => String(value).padStart(2, '0')}
-              onChange={value => change('minute', value)}
-              shortcuts={[0, 15, 30, 45]}
-              shortcutAriaLabel={value => `Set minutes to ${String(value).padStart(2, '0')}`}
-              className="time-dial--minute"
+            <span>Also log a connection</span>
+          </label>
+          {logConnection && (
+            <PeopleParticipantPicker
+              people={people}
+              selectedIds={connectionParticipantIds}
+              onChange={(personId, selected) => {
+                setConnectionParticipantIds(current => selected
+                  ? [...new Set([...current, personId])]
+                  : current.filter(id => id !== personId));
+                setConnectionError('');
+              }}
             />
-            <TimeDial
-              label="AM / PM"
-              values={periods}
-              value={draft.period}
-              formatValue={value => value}
-              onChange={value => change('period', value)}
-              compactToggle={compactTimePicker}
-              className="time-dial--period"
-            />
-          </div>
-          {errors.time && <p className="rhythm-completion-form__error" role="alert">{errors.time}</p>}
+          )}
+          {connectionError && <p className="rhythm-completion-form__error" role="alert">{connectionError}</p>}
         </fieldset>
-      ) : (
-        <div className="rhythm-completion-form__add-time">
-          <button type="button" className="btn mini ghost" onClick={() => {
-            setHasTime(true);
-              setErrors(current => {
-                const next = { ...current };
-                delete next.time;
-                return next;
-              });
-          }}>
-            Add time
-          </button>
-          {errors.time && <p className="rhythm-completion-form__error" role="alert">{errors.time}</p>}
-        </div>
       )}
 
       <label className="rhythm-completion-form__memory-label" htmlFor="rhythm-completion-notes">Notes <span>Optional</span></label>
