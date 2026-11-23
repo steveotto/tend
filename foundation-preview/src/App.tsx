@@ -42,6 +42,7 @@ import { PersonDetailsEditor } from './components/PersonDetailsEditor.tsx';
 import { PeopleView } from './components/PeopleView.tsx';
 import { RhythmEditor } from './components/RhythmEditor.tsx';
 import { TodayView } from './components/TodayView.tsx';
+import { FocusDialog } from './components/FocusDialog.tsx';
 import { TodayWeatherSettings } from './components/TodayWeatherSettings.tsx';
 import { CalendarSourcesSettings } from './components/CalendarSourcesSettings.tsx';
 import { CategorySettings } from './components/CategorySettings.tsx';
@@ -162,6 +163,8 @@ import { resolveSeedCompletionRecords } from './domain/rhythm-history.ts';
 import { localDateInTimeZone, localTimeInTimeZone } from './domain/rhythm-scoring.ts';
 import { hasRhythmOccurrenceForCompletion } from './domain/rhythm-occurrences.ts';
 import { rhythmScheduleForDate } from './domain/rhythm-schedule.ts';
+import { selectFocusData } from './domain/focus.ts';
+import type { CalendarEvent } from './domain/calendar-events.ts';
 import { selectSatisfiedRhythmIds, selectTendedRhythmDisplayIds } from './domain/category-rhythms.ts';
 import { prepareDatedRhythmCompletion } from './domain/rhythm-completion.ts';
 import { selectPersonOverallHealth, selectPersonRhythmHealth } from './domain/person-health.ts';
@@ -565,6 +568,7 @@ function PreviewWorkspace({
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
   const [freshInitialData, setFreshInitialData] = useState<PreviewData | null>(null);
+  const [focusCalendarEvents, setFocusCalendarEvents] = useState<readonly CalendarEvent[]>([]);
   const localIsPristine = useMemo(
     () => isPreviewDataPristine(previewData, freshInitialData ?? initialPreviewData()),
     [freshInitialData, previewData]
@@ -1065,6 +1069,20 @@ function PreviewWorkspace({
   const completedRhythms = new Set(
     [...completionStates].filter(([, state]) => state.completed).map(([id]) => id)
   );
+  const focusData = selectFocusData({
+    instant: scoringInstant,
+    timeZone: localTimeZone,
+    settings: previewData.timeBlocks,
+    rhythms: scoredRhythms,
+    people: peopleWithPhotos,
+    friendships: previewData.friendships,
+    personHealthScores: personOverallHealthScores,
+    calendarAvailable: previewData.showCalendarOnToday
+      && (identity.kind === 'development' || identity.kind === 'authenticated'),
+    calendarEvents: focusCalendarEvents,
+    completedRhythmIds: completedRhythms,
+    datedCompletions: previewData.datedRhythmCompletions
+  });
   const undoableRhythms = new Set(
     [...completionStates].filter(([id, state]) => {
       if (!state.undoable) return false;
@@ -1667,7 +1685,7 @@ function PreviewWorkspace({
         if (opener.disabled) {
           const replacement = opener.closest('article')
             ?.querySelector<HTMLButtonElement>(
-              '.today-rhythm-details__history-button, .today-rhythm-card__details-toggle'
+              '.focus-rhythm-title, .today-rhythm-details__history-button, .today-rhythm-card__details-toggle'
             );
           if (replacement) replacement.focus({ preventScroll: true });
           else focusTendedTarget();
@@ -3338,6 +3356,7 @@ function PreviewWorkspace({
   }
 
   function setShowCalendarOnTodayPreference(showCalendarOnToday: boolean) {
+    if (!showCalendarOnToday) setFocusCalendarEvents([]);
     setPreviewData(previous => previous.showCalendarOnToday === showCalendarOnToday
       ? previous
       : { ...previous, showCalendarOnToday });
@@ -4187,6 +4206,7 @@ function PreviewWorkspace({
               onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
               onUndo={undoTend}
               calendarSources={previewData.calendarSources}
+              onCalendarEventsChange={setFocusCalendarEvents}
               showCalendarOnToday={previewData.showCalendarOnToday}
             />
           )
@@ -4465,6 +4485,28 @@ function PreviewWorkspace({
                 onCreatePerson={createPerson}
               />
             )
+          : destination === 'focus'
+          ? (
+            focusData
+              ? (
+                <FocusDialog
+                  data={focusData}
+                  people={peopleWithPhotos}
+                  rhythms={scoredRhythms}
+                  completedRhythmIds={completedRhythms}
+                  onClose={() => navigate('today')}
+                  onPersonSelect={openPersonProfile}
+                  onRhythmSelect={(rhythm, event) => {
+                    dialogOpener.current = event.currentTarget;
+                    activeRhythmReturnTab.current = 'today';
+                    setDetailsInitialView('details');
+                    setActiveRhythmId(rhythm.id);
+                  }}
+                  onTendRhythm={openCompletion}
+                />
+              )
+              : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />
+          )
           : <PlaceholderPage destination={destination} onToday={() => navigate('today')} />}
       </div>
       {identity.kind === 'development' && (

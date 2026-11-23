@@ -4482,6 +4482,30 @@ async function main() {
             && getComputedStyle(current).backgroundColor === 'rgb(229, 242, 235)'
             && getComputedStyle(current).color === 'rgb(36, 107, 82)';
         });
+        await page.locator('.focus-dialog').waitFor();
+        const focusMobileLayout = await page.locator('.focus-dialog').evaluate(dialog => {
+          const rect = dialog.getBoundingClientRect();
+          const close = dialog.querySelector<HTMLButtonElement>('.focus-close');
+          const closeRect = close?.getBoundingClientRect();
+          return {
+            width: rect.width,
+            height: rect.height,
+            borderRadius: getComputedStyle(dialog).borderRadius,
+            overflowY: getComputedStyle(dialog).overflowY,
+            closeLabel: close?.getAttribute('aria-label'),
+            closeWidth: closeRect?.width,
+            closeHeight: closeRect?.height
+          };
+        });
+        assert.deepEqual(focusMobileLayout, {
+          width: 375,
+          height: 812,
+          borderRadius: '0px',
+          overflowY: 'auto',
+          closeLabel: 'Close Focus',
+          closeWidth: 44,
+          closeHeight: 44
+        });
         const selectedMobileTool = await page.locator('.utility-primary-button[aria-current="page"]').evaluate(element => {
           const style = getComputedStyle(element);
           return {
@@ -4495,6 +4519,8 @@ async function main() {
           background: 'rgb(229, 242, 235)',
           color: 'rgb(36, 107, 82)'
         });
+        await page.keyboard.press('Escape');
+        await page.waitForFunction(() => document.querySelector('.focus-dialog') === null);
         await page.locator('.utility-primary-button').filter({ hasText: 'Today' }).focus();
         await page.keyboard.press('Enter');
         await page.waitForFunction(() => document.querySelector('.utility-primary-button[aria-current="page"]')?.textContent?.includes('Today'));
@@ -4565,7 +4591,25 @@ async function main() {
           element => getComputedStyle(element).backgroundColor
         );
         assert.equal(selectedToolBackground, 'rgb(229, 242, 235)');
+        await page.locator('.focus-dialog').waitFor();
+        const focusDesktopLayout = await page.locator('.focus-dialog').evaluate(dialog => {
+          const rect = dialog.getBoundingClientRect();
+          return {
+            width: rect.width,
+            maxWidth: getComputedStyle(dialog).maxWidth,
+            borderRadius: getComputedStyle(dialog).borderRadius,
+            overflowY: getComputedStyle(dialog).overflowY
+          };
+        });
+        assert.deepEqual(focusDesktopLayout, {
+          width: 520,
+          maxWidth: '520px',
+          borderRadius: '24px',
+          overflowY: 'auto'
+        });
 
+        await page.keyboard.press('Escape');
+        await page.waitForFunction(() => document.querySelector('.focus-dialog') === null);
         await page.locator('.utility-primary-button').filter({ hasText: 'Today' }).click();
         await page.locator('.home-dashboard .today-category-menu .menu-area')
           .filter({ hasText: 'Health & Fitness' })
