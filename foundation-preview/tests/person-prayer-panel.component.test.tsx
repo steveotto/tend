@@ -34,7 +34,8 @@ function PrayerHarness({
   failPray = false,
   failSaveLog = false,
   failDeleteLog = false,
-  initialRequests = []
+  initialRequests = [],
+  prayerHealthInstant
 }: {
   failCreate?: boolean;
   failUpdate?: boolean;
@@ -42,6 +43,7 @@ function PrayerHarness({
   failSaveLog?: boolean;
   failDeleteLog?: boolean;
   initialRequests?: PersonPrayerRequest[];
+  prayerHealthInstant?: Date;
 }) {
   const [requests, setRequests] = useState<PersonPrayerRequest[]>(initialRequests);
   const peopleIds = people.map(person => person.id);
@@ -54,6 +56,7 @@ function PrayerHarness({
         personId={owner}
         today="2026-10-31"
         timeZone="UTC"
+        {...(prayerHealthInstant ? { prayerHealthInstant } : {})}
         people={people}
         peopleGroups={peopleGroups}
         requests={requests}
@@ -177,7 +180,7 @@ describe('shared Person Prayer panel', () => {
 
   it('creates a shared plain-text request and exposes state-appropriate menu actions', async () => {
     const user = userEvent.setup();
-    render(<PrayerHarness />);
+    render(<PrayerHarness prayerHealthInstant={new Date('2026-10-31T12:02:00.000Z')} />);
     expect(screen.getByText('No prayer requests for Avery Brooks yet.')).toBeTruthy();
 
     const addButton = screen.getByRole('button', { name: 'Add request' });
@@ -221,6 +224,18 @@ describe('shared Person Prayer panel', () => {
       }
     ]);
 
+    await user.click(within(card).getByRole('button', {
+      name: 'View prayer history for <script>care</script>'
+    }));
+    let historyDialog = screen.getByRole('dialog', { name: 'Prayer history' });
+    const healthSummary = within(historyDialog).getByRole('region', {
+      name: 'Health, Consistency, and On Track scores for this prayer request'
+    });
+    expect(within(healthSummary).getByRole('img', {
+      name: 'Health: Not enough data'
+    })).toBeTruthy();
+    await user.click(within(historyDialog).getByRole('button', { name: 'Close prayer history' }));
+
     await user.click(within(card).getByRole('button', { name: 'Actions for <script>care</script>' }));
     let menu = screen.getByRole('menu', { name: 'Actions for <script>care</script>' });
     expect(within(menu).getByRole('menuitem', { name: 'Pray' })).toBeTruthy();
@@ -237,7 +252,13 @@ describe('shared Person Prayer panel', () => {
     });
 
     await user.click(historyButton);
-    const historyDialog = screen.getByRole('dialog', { name: 'Prayer history' });
+    historyDialog = screen.getByRole('dialog', { name: 'Prayer history' });
+    const updatedHealthSummary = within(historyDialog).getByRole('region', {
+      name: 'Health, Consistency, and On Track scores for this prayer request'
+    });
+    expect(within(updatedHealthSummary).getByRole('meter', {
+      name: 'Health score'
+    }).getAttribute('aria-valuenow')).toBe('100');
     expect(within(historyDialog).getByText('1 time prayed · last 30 days')).toBeTruthy();
     expect(historyDialog.classList.contains('dialog--phone-fullscreen')).toBe(true);
     await user.click(within(historyDialog).getByRole('button', { name: 'Close prayer history' }));

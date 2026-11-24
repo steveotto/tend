@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deletePersonPrayerLog,
   personPrayerRequestDraft,
+  recordPersonPrayer,
   savePersonPrayerLog,
   undoDeletePersonPrayerLog,
   updatePersonPrayerRequest
@@ -233,6 +234,125 @@ describe('person Prayer Health', () => {
     expect(requestHealth([undated]).health.score).toBeNull();
     expect(requestHealth([undated]).health.unavailableReason)
       .toContain('no usable date');
+  });
+
+  it('keeps legacy schedule uncertainty through a prospective revision until the new history window is covered', () => {
+    const legacy = request({
+      createdAt: '2026-10-01T00:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      prayerLogs: Array.from({ length: 31 }, (_, index) => {
+        const day = String(index + 1).padStart(2, '0');
+        return log(`legacy-prayer-${day}`, `2026-10-${day}T10:00:00.000Z`);
+      })
+    });
+    const beforeRevision = requestHealth(
+      [legacy],
+      legacy.id,
+      ownerId,
+      '2026-10-31',
+      new Date('2026-10-31T12:00:00.000Z')
+    );
+    expect(beforeRevision.health.score).toBe(100);
+
+    const revision = updatePersonPrayerRequest(
+      [legacy],
+      legacy.id,
+      legacy.updatedAt,
+      ownerId,
+      {
+        ...personPrayerRequestDraft(legacy),
+        schedule: { frequency: 'weekly', weekdays: [0] }
+      },
+      '2026-11-01T00:01:00.000Z',
+      [ownerId],
+      { currentDate: '2026-11-01', timeZone: 'UTC' }
+    );
+    expect(revision.valid).toBe(true);
+    if (!revision.valid) return;
+
+    const revised = revision.requests[0]!;
+    expect(revised.scoring?.scheduleHistory).toMatchObject([
+      { kind: 'unknown', startDate: '2026-10-01' },
+      {
+        kind: 'scheduled',
+        startDate: '2026-11-01',
+        schedule: { frequency: 'weekly', weekdays: [0] }
+      }
+    ]);
+
+    const afterRevision = requestHealth(
+      revision.requests,
+      legacy.id,
+      ownerId,
+      '2026-11-01',
+      new Date('2026-11-01T09:00:00.000Z')
+    ).health;
+    expect(afterRevision.score).toBeNull();
+    expect(afterRevision.scoreResult.kind).toBe('rhythm-score');
+    expect(afterRevision.scoreResult.consistency).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'unsupported-history'
+    });
+
+    const firstPrayer = recordPersonPrayer(
+      revision.requests,
+      legacy.id,
+      revised.updatedAt,
+      ownerId,
+      log('weekly-prayer-2026-11-01', '2026-11-01T10:00:00.000Z'),
+      [ownerId]
+    );
+    expect(firstPrayer.valid).toBe(true);
+    if (!firstPrayer.valid) return;
+
+    let currentRequest = firstPrayer.requests[0]!;
+    const afterFirstNewPrayer = requestHealth(
+      firstPrayer.requests,
+      legacy.id,
+      ownerId,
+      '2026-11-01',
+      new Date('2026-11-01T12:00:00.000Z')
+    ).health;
+    expect(afterFirstNewPrayer.score).toBeNull();
+    expect(afterFirstNewPrayer.scoreResult.kind).toBe('rhythm-score');
+    expect(afterFirstNewPrayer.scoreResult.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 100
+    });
+    expect(afterFirstNewPrayer.scoreResult.consistency).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'unsupported-history'
+    });
+
+    for (const date of [
+      '2026-11-08', '2026-11-15', '2026-11-22', '2026-11-29',
+      '2026-12-06', '2026-12-13', '2026-12-20', '2026-12-27',
+      '2027-01-03', '2027-01-10', '2027-01-17', '2027-01-24'
+    ]) {
+      const nextPrayer = recordPersonPrayer(
+        [currentRequest],
+        legacy.id,
+        currentRequest.updatedAt,
+        ownerId,
+        log(`weekly-prayer-${date}`, `${date}T10:00:00.000Z`),
+        [ownerId]
+      );
+      expect(nextPrayer.valid).toBe(true);
+      if (!nextPrayer.valid) return;
+      currentRequest = nextPrayer.requests[0]!;
+    }
+
+    const coveredHistory = requestHealth(
+      [currentRequest],
+      legacy.id,
+      ownerId,
+      '2027-01-24',
+      new Date('2027-01-24T12:00:00.000Z')
+    ).health;
+    expect(coveredHistory.score).toBe(100);
+    expect(coveredHistory.scoreResult.kind).toBe('rhythm-score');
+    expect(coveredHistory.scoreResult.consistency.kind).toBe('scored');
+    expect(coveredHistory.scoreResult.onTrack.kind).toBe('scored');
   });
 
   it('includes exact date-only history and excludes future, malformed, and pre-request logs', () => {

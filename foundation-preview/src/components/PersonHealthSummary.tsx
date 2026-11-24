@@ -177,6 +177,7 @@ export function PersonHealthComponentScores({
           {values.map(({ id, label, score, unavailableReason }) => {
             const value = score !== null && Number.isFinite(score) ? score : null;
             const available = value !== null;
+            const showReason = id !== undefined && areaDetails?.[id] !== undefined;
             const reasonId = id && unavailableReason
               ? `${detailsId}-unavailable-${id}`
               : undefined;
@@ -191,7 +192,10 @@ export function PersonHealthComponentScores({
                   {label}
                 </span>
                 {reasonId && (
-                  <span id={reasonId} className="person-health-component-score__reason">
+                  <span
+                    id={reasonId}
+                    className={`person-health-component-score__reason${showReason ? '' : ' visually-hidden'}`}
+                  >
                     {unavailableReason}
                   </span>
                 )}

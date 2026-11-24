@@ -8,6 +8,7 @@ import { CategoryAvailabilityProvider } from '../src/components/CategoryAvailabi
 import { defaultCategoryPreferences, defaultFoundationPreferences } from '../src/domain/category-availability.ts';
 import { addOrUpdateConnection, createFriendshipData, setFriendCadence } from '../src/domain/friendships.ts';
 import type { FriendshipConnection, FriendshipData } from '../src/domain/friendships.ts';
+import { recordPersonPrayer } from '../src/domain/person-prayers.ts';
 import {
   createPersonNote,
   deletePersonNote,
@@ -112,6 +113,9 @@ function ProfileHarness({
   personId = 'sample-person-avery',
   category = 'friends',
   prayerEnabled = true,
+  today = '2026-10-29',
+  prayerHealthTimeZone,
+  prayerHealthInstant,
   initialDetails = [],
   initialNotes = [],
   failNoteUpdates = false,
@@ -141,6 +145,9 @@ function ProfileHarness({
   personId?: PersonId;
   category?: 'marriage' | 'parenting' | 'friends' | null;
   prayerEnabled?: boolean;
+  today?: string;
+  prayerHealthTimeZone?: string;
+  prayerHealthInstant?: Date;
   initialDetails?: readonly PersonDetails[];
   initialNotes?: readonly PersonNote[];
   failNoteUpdates?: boolean;
@@ -169,6 +176,7 @@ function ProfileHarness({
 }) {
   const [friendships, setFriendships] = useState<FriendshipData>(initialFriendships);
   const [personNotes, setPersonNotes] = useState<PersonNote[]>([...initialNotes]);
+  const [savedPrayerRequests, setSavedPrayerRequests] = useState<PersonPrayerRequest[]>([...prayerRequests]);
   const emptyForPerson = createPersonPickerGroups().map(group => ({
     ...group,
     memberIds: group.memberIds.filter(id => id !== personId)
@@ -188,7 +196,9 @@ function ProfileHarness({
         people={people}
         peopleGroups={groups}
         friendships={friendships}
-        today="2026-10-29"
+        today={today}
+        {...(prayerHealthTimeZone ? { prayerHealthTimeZone } : {})}
+        {...(prayerHealthInstant ? { prayerHealthInstant } : {})}
         rhythms={rhythms}
         archivedRhythms={archivedRhythms}
         foundations={foundationCatalogue}
@@ -198,7 +208,20 @@ function ProfileHarness({
         onEditPerson={onEditPerson}
         personDetails={initialDetails}
         personNotes={personNotes}
-        prayerRequests={prayerRequests}
+        prayerRequests={savedPrayerRequests}
+        onPrayForRequest={(requestId, expectedUpdatedAt, actorId) => {
+          const result = recordPersonPrayer(
+            savedPrayerRequests,
+            requestId,
+            expectedUpdatedAt,
+            actorId,
+            { id: 'profile-first-prayer', prayedAt: '2026-10-31T12:01:00.000Z' },
+            syntheticPeople.map(person => person.id)
+          );
+          if (!result.valid) return result.error;
+          setSavedPrayerRequests(result.requests);
+          return null;
+        }}
         personSparks={personSparks}
         onCreatePersonSpark={onCreatePersonSpark}
         onUpdatePersonSpark={onUpdatePersonSpark}
@@ -687,6 +710,54 @@ describe('shared person profile', () => {
     rerender(<ProfileHarness personId="sample-person-morgan" />);
     expect(screen.getByRole('button', { name: 'Show Overall Health component scores breakdown' })
       .getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('updates overall and Prayer Health immediately after the first logged prayer', async () => {
+    const user = userEvent.setup();
+    const prayerRequest: PersonPrayerRequest = {
+      id: 'first-prayer-health-refresh',
+      personId: 'sample-person-avery',
+      title: 'First prayer',
+      status: 'active',
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'anytime',
+      createdAt: '2026-10-31T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      prayerLogs: []
+    };
+    render(
+      <ProfileHarness
+        rhythms={[]}
+        rhythmScores={new Map()}
+        prayerRequests={[prayerRequest]}
+        today="2026-10-31"
+        prayerHealthTimeZone="UTC"
+        prayerHealthInstant={new Date('2026-10-31T12:02:00.000Z')}
+      />
+    );
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    expect(within(overall).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuetext')).toBe('Score unavailable');
+    await user.click(within(overall).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    }));
+    const areas = within(overall).getByRole('group', { name: 'Health by area' });
+    expect(within(areas).getByRole('img', {
+      name: 'Prayer Health score: unavailable'
+    })).toBeTruthy();
+
+    await user.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+    const card = screen.getByRole('article', { name: 'First prayer' });
+    await user.click(within(card).getByRole('button', { name: 'Actions for First prayer' }));
+    await user.click(within(screen.getByRole('menu', { name: 'Actions for First prayer' }))
+      .getByRole('menuitem', { name: 'Pray' }));
+
+    expect(within(card).getByText('Prayed 1 time')).toBeTruthy();
+    expect(within(overall).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuenow')).toBe('100');
+    expect(within(areas).getByRole('meter', { name: 'Prayer Health score' })
+      .getAttribute('aria-valuenow')).toBe('100');
   });
 
   it('keeps scored zero distinct from unavailable in compact and expanded summaries', async () => {
@@ -1335,14 +1406,20 @@ describe('shared person profile', () => {
     expect(within(areas).getByRole('img', {
       name: 'Connections Health score: unavailable'
     })).toBeTruthy();
-    expect(within(areas).getByText(
+    const compactConnectionReason = within(areas).getByText(
       'Set a connection frequency in Person settings to calculate Connection Health.'
-    )).toBeTruthy();
+    );
+    expect(compactConnectionReason.classList.contains('visually-hidden')).toBe(true);
 
     await user.click(within(overall).getByRole('button', {
       name: 'Show Overall Health scoring explanation'
     }));
     const overallDetails = screen.getByRole('dialog', { name: 'Avery’s Overall Health details' });
+    const detailsAreas = within(overallDetails).getByRole('group', { name: 'Health by area' });
+    const detailsConnectionReason = within(detailsAreas).getByText(
+      'Set a connection frequency in Person settings to calculate Connection Health.'
+    );
+    expect(detailsConnectionReason.classList.contains('visually-hidden')).toBe(false);
     await user.click(within(overallDetails).getByRole('button', {
       name: 'Connections Health unavailable'
     }));
