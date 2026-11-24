@@ -4606,12 +4606,37 @@ async function main() {
 
       if (identity === 'signed-out') {
         await page.getByRole('heading', { name: 'Sign in with Tend' }).waitFor();
+        await page.setViewportSize({ width: 375, height: 812 });
+        await page.getByRole('button', { name: 'Sign in' }).waitFor({ state: 'visible' });
+        await page.getByRole('button', { name: 'Sign up' }).waitFor({ state: 'visible' });
+        await page.getByRole('button', { name: 'Forgot password?' }).waitFor({ state: 'visible' });
+        await page.getByText(/^Build /).waitFor({ state: 'visible' });
+
+        const verifyCompactAuthCard = async () => {
+          const layout = await page.evaluate(() => {
+            const card = document.querySelector('.preview-login__card');
+            const buildLabel = card?.querySelector('.preview-login__build');
+            if (!card || !buildLabel) {
+              throw new Error('The authentication card or build label is missing.');
+            }
+            const cardStyle = getComputedStyle(card);
+            return {
+              classicFooterPresent: Boolean(card.querySelector('.preview-login__classic')),
+              bottomGap: card.getBoundingClientRect().bottom - buildLabel.getBoundingClientRect().bottom,
+              expectedBottomGap: Number.parseFloat(cardStyle.paddingBottom)
+                + Number.parseFloat(cardStyle.borderBottomWidth)
+            };
+          });
+          assert.equal(layout.classicFooterPresent, false);
+          assert.ok(Math.abs(layout.bottomGap - layout.expectedBottomGap) < 1,
+            'The build label should be the last auth-card content, without leftover footer spacing.');
+        };
+
         const styles = await page.evaluate(() => {
           const body = getComputedStyle(document.body);
           const heading = document.querySelector('.preview-login__card h1');
-          const button = document.querySelector('.preview-login__form button');
-          const classicLink = document.querySelector('.preview-login__classic a');
-          if (!heading || !button || !classicLink) {
+          const button = document.querySelector('.preview-login__form button[type="submit"]');
+          if (!heading || !button) {
             throw new Error('Sign-in view is missing expected elements.');
           }
           return {
@@ -4619,11 +4644,7 @@ async function main() {
             bodyFontFamily: body.fontFamily,
             bodyLineHeight: body.lineHeight,
             headingLetterSpacing: getComputedStyle(heading).letterSpacing,
-            buttonCursor: getComputedStyle(button).cursor,
-            classicLinkColor: getComputedStyle(classicLink).color,
-            classicLinkWeight: getComputedStyle(classicLink).fontWeight,
-            classicLinkDecoration: getComputedStyle(classicLink).textDecorationLine,
-            classicLinkUnderlineOffset: getComputedStyle(classicLink).textUnderlineOffset
+            buttonCursor: getComputedStyle(button).cursor
           };
         });
         assert.equal(styles.bodyBackground, 'rgb(247, 249, 247)');
@@ -4631,10 +4652,21 @@ async function main() {
         assert.notEqual(styles.bodyLineHeight, 'normal');
         assert.notEqual(styles.headingLetterSpacing, 'normal');
         assert.equal(styles.buttonCursor, 'pointer');
-        assert.equal(styles.classicLinkColor, 'rgb(36, 107, 82)');
-        assert.equal(styles.classicLinkWeight, '600');
-        assert.equal(styles.classicLinkDecoration, 'underline');
-        assert.equal(styles.classicLinkUnderlineOffset, '3px');
+        await verifyCompactAuthCard();
+
+        await page.getByRole('button', { name: 'Sign up' }).click();
+        await page.getByRole('heading', { name: 'Create your Tend account' }).waitFor();
+        await page.getByRole('button', { name: 'Create account' }).waitFor({ state: 'visible' });
+        await page.getByText(/^Build /).waitFor({ state: 'visible' });
+        await verifyCompactAuthCard();
+
+        await page.getByRole('button', { name: 'Back to sign in' }).click();
+        await page.getByRole('heading', { name: 'Sign in with Tend' }).waitFor();
+        await page.getByRole('button', { name: 'Forgot password?' }).click();
+        await page.getByRole('heading', { name: 'Reset your password' }).waitFor();
+        await page.getByRole('button', { name: 'Send reset link' }).waitFor({ state: 'visible' });
+        await page.getByText(/^Build /).waitFor({ state: 'visible' });
+        await verifyCompactAuthCard();
       } else {
         await page.locator('.home-dashboard').waitFor();
         await page.setViewportSize({ width: 375, height: 812 });

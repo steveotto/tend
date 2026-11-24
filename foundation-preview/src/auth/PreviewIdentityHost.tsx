@@ -637,9 +637,6 @@ function PreviewAuthLayout({
         <p>{description}</p>
         {children}
         <PreviewBuildLabel className="preview-login__build" />
-        <p className="preview-login__classic">
-          Need account help? <a href={classicUrl}>Open Tend Classic</a>
-        </p>
       </section>
     </main>
   );
