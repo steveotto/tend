@@ -11743,7 +11743,7 @@ async function main() {
           startDate: '2026-01-05',
           endDate: '2026-12-31'
         },
-        timeOfDay: 'afternoon'
+        timeOfDay: 'anytime'
       }];
       const prayerEnvelope = createPreviewEnvelope(prayerFixture);
       const prayerValidation = parsePreviewBackup(JSON.stringify(prayerEnvelope), prayerToday);

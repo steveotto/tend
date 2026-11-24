@@ -28,6 +28,7 @@ export type CanonicalAccountSupabaseClient = {
 };
 
 export const CANONICAL_PREVIEW_ENVELOPE_KEY = 'tend2AuthenticatedEnvelope';
+const CANONICAL_ACCOUNT_SCHEMA_VERSION = 1;
 
 export class CanonicalAccountSaveError extends Error {
   constructor(
@@ -199,6 +200,35 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
     });
   }
 
+  const canonicalPersonIds = new Set(data.people.map(person => person.id));
+  const referencedPersonIds = new Set<string>();
+  if (Array.isArray(state.prayers)) {
+    for (const prayer of state.prayers) {
+      if (!isRecord(prayer)) continue;
+      if (typeof prayer.personId === 'string') referencedPersonIds.add(prayer.personId);
+      if (Array.isArray(prayer.sharedWith)) {
+        prayer.sharedWith.forEach(id => {
+          if (typeof id === 'string') referencedPersonIds.add(id);
+        });
+      }
+    }
+  }
+  const previousPeople = previousEnvelope?.data.people;
+  if (Array.isArray(previousPeople)) {
+    for (const person of previousPeople) {
+      if (!isRecord(person)
+        || typeof person.id !== 'string'
+        || typeof person.displayName !== 'string'
+        || canonicalPersonIds.has(person.id)
+        || !referencedPersonIds.has(person.id)) continue;
+      data.people.push({
+        id: person.id as PersonPreview['id'],
+        displayName: person.displayName,
+        ...(typeof person.avatarUrl === 'string' ? { avatarUrl: person.avatarUrl } : {})
+      });
+    }
+  }
+
   if (Array.isArray(state.prayers)) {
     data.prayerRequests = state.prayers.flatMap((prayer): PersonPrayerRequest[] => {
       if (!isRecord(prayer) || typeof prayer.id !== 'string') return [];
@@ -207,7 +237,12 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
         : Array.isArray(prayer.sharedWith) && typeof prayer.sharedWith[0] === 'string'
           ? prayer.sharedWith[0]
           : null;
-      if (!personId || !data.people.some(person => person.id === personId)) return [];
+      if (personId === null) return [];
+      if (!data.people.some(person => person.id === personId)) {
+        throw new Error(
+          'A canonical Prayer request references a Person missing from the account and its saved Prayer metadata. No data was changed.'
+        );
+      }
 
       let logs: PersonPrayerRequest['prayerLogs'] = [];
       if (Array.isArray(prayer.prayerLogs)) {
@@ -496,11 +531,15 @@ export function createCanonicalAccountApi(
       || !(data.updated_at === null || typeof data.updated_at === 'string')) {
       throw new Error('The canonical Tend account state is incomplete or invalid.');
     }
+    if (data.schema_version !== CANONICAL_ACCOUNT_SCHEMA_VERSION) {
+      throw new Error('The canonical Tend account schema is not supported. No data was changed.');
+    }
 
+    const document = convertClassicStateToPreviewEnvelope(data.state);
     return {
-      document: convertClassicStateToPreviewEnvelope(data.state),
+      document,
       revision: data.revision as number,
-      schemaVersion: data.schema_version as number,
+      schemaVersion: document.schemaVersion,
       updatedAt: data.updated_at as string | null
     };
   }
@@ -528,10 +567,19 @@ export function createCanonicalAccountApi(
         'The canonical Tend account state could not be loaded before saving.'
       );
       if (data !== null) {
-        if (!isRecord(data) || !Number.isSafeInteger(data.revision)) {
+        if (!isRecord(data)
+          || !Number.isSafeInteger(data.revision)
+          || !isRecord(data.state)
+          || !Number.isSafeInteger(data.schema_version)) {
           throw new CanonicalAccountSaveError(
             'invalid',
-            'The canonical Tend account revision is invalid.'
+            'The canonical Tend account state is incomplete or invalid. No data was changed.'
+          );
+        }
+        if (data.schema_version !== CANONICAL_ACCOUNT_SCHEMA_VERSION) {
+          throw new CanonicalAccountSaveError(
+            'unsupported',
+            'The canonical Tend account schema is not supported. No data was changed.'
           );
         }
         if (Number(data.revision) !== expectedRevision) {
@@ -551,7 +599,7 @@ export function createCanonicalAccountApi(
       const result = await client.rpc('tend_save_user_state', {
         p_state: nextState,
         p_expected_revision: expectedRevision,
-        p_schema_version: 1
+        p_schema_version: CANONICAL_ACCOUNT_SCHEMA_VERSION
       });
       if (result.error) {
         if (errorCode(result.error) === '40001'

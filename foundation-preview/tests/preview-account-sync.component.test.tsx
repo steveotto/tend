@@ -29,6 +29,11 @@ import {
   validatePreviewAccountBackup
 } from '../src/storage/preview-account-backup.ts';
 import {
+  createCanonicalAccountApi,
+  mergePrayerRequestsIntoClassicState
+} from '../src/storage/canonical-account.ts';
+import type { CanonicalAccountSupabaseClient } from '../src/storage/canonical-account.ts';
+import {
   browserPreviewStorage,
   PREVIEW_CLOUD_RESTORE_RECOVERY_KEY,
   PREVIEW_IMPORT_RECOVERY_KEY,
@@ -1570,6 +1575,117 @@ describe('Preview account sync', () => {
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toContain('"people":[]');
     expect(screen.getAllByText('Saved to your account').length).toBeGreaterThan(0);
     view.unmount();
+  });
+
+  it('keeps an unchanged local Person and Prayer when the canonical account is reloaded', async () => {
+    const data = createEmptyPreviewData();
+    data.people = [
+      { id: 'avery', displayName: 'Avery' },
+      { id: 'beta-test', displayName: 'Beta Test' }
+    ];
+    data.prayerRequests = [{
+      id: 'test-prayer',
+      personId: 'beta-test',
+      title: 'Test Prayer',
+      status: 'active',
+      schedule: { frequency: 'daily' },
+      createdAt: '2026-11-20T00:00:00.000Z',
+      updatedAt: '2026-11-24T12:00:00.000Z',
+      prayerLogs: [{
+        id: 'test-prayer-log',
+        prayedAt: '2026-11-21T12:00:00.000Z',
+        notes: 'Synthetic fixture only'
+      }]
+    }];
+    const document = createPreviewEnvelope(data);
+    const canonicalState = mergePrayerRequestsIntoClassicState({
+      people: [{ id: 'avery', name: 'Avery', privateField: { preserve: true } }],
+      prayers: [],
+      tasks: [{ id: 'keep-task', title: 'Unrelated' }]
+    }, document);
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({
+        maybeSingle: vi.fn(async () => ({
+          data: {
+            state: canonicalState,
+            schema_version: 1,
+            revision: 2,
+            updated_at: '2026-11-24T12:00:00.000Z'
+          },
+          error: null
+        }))
+      }))
+    }));
+    const rpc = vi.fn(async () => ({
+      data: [{ revision: 3, updated_at: '2026-11-24T13:00:00.000Z' }],
+      error: null
+    }));
+    const api = createCanonicalAccountApi({
+      from,
+      rpc
+    } satisfies CanonicalAccountSupabaseClient);
+    const cloud = await api.read();
+    expect(cloud?.document).toEqual(document);
+    const storage = makeStorage(data);
+    const localRaw = storage.values.get(PREVIEW_STORAGE_KEY);
+    storage.values.set(`${PREVIEW_STORAGE_KEY}:account-sync-state`, JSON.stringify({
+      accountId,
+      revision: 2,
+      syncedEnvelope: document,
+      syncedAt: '2026-11-24T12:00:00.000Z'
+    }));
+    const onRestoreCall = vi.fn();
+
+    const view = render(
+      <Browser
+        api={api}
+        storage={storage.storage}
+        initialData={data}
+        onRestoreCall={onRestoreCall}
+      />
+    );
+
+    await screen.findByText('Saved to your account');
+    expect(onRestoreCall).not.toHaveBeenCalled();
+    expect(storage.values.get(PREVIEW_STORAGE_KEY)).toBe(localRaw);
+    expect(rpc).not.toHaveBeenCalled();
+    expect(canonicalState.people).toEqual([
+      { id: 'avery', name: 'Avery', privateField: { preserve: true } }
+    ]);
+    expect(canonicalState.tasks).toEqual([{ id: 'keep-task', title: 'Unrelated' }]);
+    view.unmount();
+
+    const destinationStorage = makeStorage(createEmptyPreviewData());
+    const destinationRestore = vi.fn();
+    const destination = render(
+      <Browser
+        api={api}
+        storage={destinationStorage.storage}
+        initialData={createEmptyPreviewData()}
+        localIsPristine
+        onRestoreCall={destinationRestore}
+      />
+    );
+    await screen.findByText('Saved to your account');
+    const restoredRaw = destinationStorage.values.get(PREVIEW_STORAGE_KEY);
+    expect(restoredRaw).toBeDefined();
+    const restored = parsePreviewBackup(restoredRaw!, currentDate);
+    expect(restored.valid).toBe(true);
+    if (!restored.valid) throw new Error('Canonical account reload fixture must validate.');
+    expect(restored.envelope.data.people).toContainEqual({ id: 'beta-test', displayName: 'Beta Test' });
+    expect(restored.envelope.data.prayerRequests).toMatchObject([{
+      id: 'test-prayer',
+      personId: 'beta-test',
+      schedule: { frequency: 'daily' },
+      prayerLogs: [{
+        id: 'test-prayer-log',
+        prayedAt: '2026-11-21T12:00:00.000Z',
+        notes: 'Synthetic fixture only'
+      }]
+    }]);
+    expect(destinationRestore).toHaveBeenCalledOnce();
+    expect(rpc).not.toHaveBeenCalled();
+    destination.unmount();
   });
 
   it('keeps a non-default local edit in conflict when sync metadata is absent', async () => {

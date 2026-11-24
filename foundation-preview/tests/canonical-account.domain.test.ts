@@ -62,6 +62,7 @@ describe('canonical authenticated account adapter', () => {
     const api = createCanonicalAccountApi(client);
     const record = await api.read();
     expect(record).not.toBeNull();
+    expect(record?.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
     expect(record?.document).toMatchObject({
       format: 'tend.synthetic-preview',
       schemaVersion: PREVIEW_SCHEMA_VERSION,
@@ -81,6 +82,45 @@ describe('canonical authenticated account adapter', () => {
         }]
       }
     });
+  });
+
+  it('rejects unsupported canonical state schemas without attempting a save', async () => {
+    const rpc = vi.fn(async () => ({ data: null, error: null }));
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({
+        maybeSingle: vi.fn(async () => ({
+          data: {
+            state: { people: [], prayers: [] },
+            schema_version: 2,
+            revision: 1,
+            updated_at: '2026-11-24T12:00:00.000Z'
+          },
+          error: null
+        }))
+      }))
+    }));
+    const api = createCanonicalAccountApi({
+      from,
+      rpc
+    } satisfies CanonicalAccountSupabaseClient);
+
+    await expect(api.read()).rejects.toThrow('canonical Tend account schema is not supported');
+    await expect(api.save(createPreviewEnvelope(createEmptyPreviewData()), 1))
+      .rejects.toMatchObject({ kind: 'unsupported' });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an unresolved canonical Prayer owner instead of silently omitting the request', () => {
+    expect(() => convertClassicStateToPreviewEnvelope({
+      people: [{ id: 'avery', name: 'Avery' }],
+      prayers: [{
+        id: 'orphan-prayer',
+        personId: 'missing-person',
+        text: 'Unresolved Prayer',
+        added: '2026-11-20',
+        prayerLogs: []
+      }]
+    })).toThrow('references a Person missing');
   });
 
   it('preserves unscheduled requests as unset and does not invent a frequency', async () => {
@@ -161,6 +201,154 @@ describe('canonical authenticated account adapter', () => {
     const savedState = rpc.mock.calls[0]?.[1].p_state as Record<string, unknown>;
     expect(convertClassicStateToPreviewEnvelope(savedState).data.prayerRequests[0]?.scoring)
       .toEqual(data.prayerRequests[0]?.scoring);
+  });
+
+  it('preserves a Preview-created Prayer owner through canonical log and frequency saves', async () => {
+    const existingPeople = [
+      { id: 'avery', name: 'Avery', existingField: { keep: true } },
+      { id: 'morgan', name: 'Morgan' }
+    ];
+    let revision = 1;
+    let canonicalState: Record<string, unknown> = {
+      people: structuredClone(existingPeople),
+      prayers: [],
+      tasks: [{ id: 'keep-task', title: 'Unrelated' }]
+    };
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({
+        maybeSingle: vi.fn(async () => ({
+          data: {
+            state: canonicalState,
+            schema_version: 1,
+            revision,
+            updated_at: '2026-11-24T12:00:00.000Z'
+          },
+          error: null
+        }))
+      }))
+    }));
+    const rpc = vi.fn(async (_functionName: string, parameters: Record<string, unknown>) => {
+      if (parameters.p_expected_revision !== revision) {
+        return { data: null, error: { code: '40001', message: 'Stale revision' } };
+      }
+      canonicalState = parameters.p_state as Record<string, unknown>;
+      revision += 1;
+      return {
+        data: [{ revision, updated_at: `2026-11-24T12:0${revision}:00.000Z` }],
+        error: null
+      };
+    });
+    const api = createCanonicalAccountApi({
+      from,
+      rpc
+    } satisfies CanonicalAccountSupabaseClient);
+    const data = createEmptyPreviewData();
+    data.people = [
+      { id: 'avery', displayName: 'Avery' },
+      { id: 'morgan', displayName: 'Morgan' },
+      { id: 'beta-test', displayName: 'Beta Test' }
+    ];
+    const request: PersonPrayerRequest = {
+      id: 'test-prayer',
+      personId: 'beta-test',
+      title: 'Test Prayer',
+      status: 'active',
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'anytime',
+      createdAt: '2026-11-20T00:00:00.000Z',
+      updatedAt: '2026-11-20T00:00:00.000Z',
+      prayerLogs: []
+    };
+
+    await expect(api.save(createPreviewEnvelope(data), 1)).resolves.toBe(2);
+    expect(canonicalState.people).toEqual(existingPeople);
+    expect(canonicalState.tasks).toEqual([{ id: 'keep-task', title: 'Unrelated' }]);
+    expect((canonicalState[CANONICAL_PREVIEW_ENVELOPE_KEY] as PreviewEnvelope).data.people)
+      .toContainEqual({ id: 'beta-test', displayName: 'Beta Test' });
+
+    const prayerCreated = createPreviewEnvelope({
+      ...data,
+      prayerRequests: [request]
+    });
+    await expect(api.save(prayerCreated, 2)).resolves.toBe(3);
+    expect((canonicalState.prayers as unknown[])).toHaveLength(1);
+    expect(canonicalState.people).toEqual(existingPeople);
+
+    const afterCreate = await api.read();
+    expect(afterCreate).not.toBeNull();
+    const createdEnvelope = afterCreate!.document as PreviewEnvelope;
+    expect(createdEnvelope.data.people).toContainEqual({ id: 'beta-test', displayName: 'Beta Test' });
+    expect(createdEnvelope.data.prayerRequests).toMatchObject([{
+      id: 'test-prayer',
+      personId: 'beta-test',
+      schedule: { frequency: 'daily' },
+      prayerLogs: []
+    }]);
+
+    const logResult = savePersonPrayerLog(
+      createdEnvelope.data.prayerRequests,
+      'test-prayer',
+      request.updatedAt,
+      'beta-test',
+      {
+        id: 'test-prayer-log',
+        prayedAt: '2026-11-21T12:00:00.000Z',
+        notes: 'Synthetic fixture only'
+      },
+      '2026-11-24T12:01:00.000Z',
+      createdEnvelope.data.people.map(person => person.id)
+    );
+    expect(logResult.valid).toBe(true);
+    if (!logResult.valid) return;
+    await expect(api.save(createPreviewEnvelope({
+      ...createdEnvelope.data,
+      prayerRequests: logResult.requests
+    }), afterCreate!.revision)).resolves.toBe(4);
+    expect((canonicalState.prayers as unknown[])).toHaveLength(1);
+
+    const afterLog = await api.read();
+    expect(afterLog).not.toBeNull();
+    const loggedEnvelope = afterLog!.document as PreviewEnvelope;
+    expect(loggedEnvelope.data.prayerRequests[0]?.prayerLogs).toEqual([{
+      id: 'test-prayer-log',
+      prayedAt: '2026-11-21T12:00:00.000Z',
+      notes: 'Synthetic fixture only'
+    }]);
+
+    const frequencyEdit = createPreviewEnvelope({
+      ...loggedEnvelope.data,
+      prayerRequests: loggedEnvelope.data.prayerRequests.map(request => ({
+        ...request,
+        schedule: { frequency: 'weekly', weekdays: [2] },
+        updatedAt: '2026-11-24T12:02:00.000Z'
+      }))
+    });
+    await expect(api.save(frequencyEdit, afterLog!.revision)).resolves.toBe(5);
+    expect(canonicalState.people).toEqual(existingPeople);
+    expect(canonicalState.tasks).toEqual([{ id: 'keep-task', title: 'Unrelated' }]);
+    expect((canonicalState.prayers as unknown[])).toHaveLength(1);
+    expect((canonicalState.prayers as Array<Record<string, unknown>>)[0]).toMatchObject({
+      id: 'test-prayer',
+      personId: 'beta-test',
+      freq: 'weekly',
+      weekdays: [2],
+      prayerLogs: [Date.parse('2026-11-21T12:00:00.000Z')]
+    });
+
+    const afterFrequencyEdit = await api.read();
+    expect(afterFrequencyEdit).not.toBeNull();
+    const reloaded = afterFrequencyEdit!.document as PreviewEnvelope;
+    expect(reloaded.data.people).toContainEqual({ id: 'beta-test', displayName: 'Beta Test' });
+    expect(reloaded.data.prayerRequests).toMatchObject([{
+      id: 'test-prayer',
+      personId: 'beta-test',
+      schedule: { frequency: 'weekly', weekdays: [2] },
+      prayerLogs: [{
+        id: 'test-prayer-log',
+        prayedAt: '2026-11-21T12:00:00.000Z',
+        notes: 'Synthetic fixture only'
+      }]
+    }]);
   });
 
   it('round-trips Prayer log identity, notes, date precision, deletion, and Undo in the canonical document', () => {
