@@ -125,6 +125,7 @@ type PreviewDataControlsProps = {
   v50RecoveryCopy?: string | null;
   v54RecoveryCopy?: string | null;
   v55RecoveryCopy?: string | null;
+  v58RecoveryCopy?: string | null;
 };
 
 export function PreviewDataControls({
@@ -228,7 +229,8 @@ export function PreviewDataControls({
   v48RecoveryCopy = null,
   v50RecoveryCopy = null,
   v54RecoveryCopy = null,
-  v55RecoveryCopy = null
+  v55RecoveryCopy = null,
+  v58RecoveryCopy = null
 }: PreviewDataControlsProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [legacyDryRun, setLegacyDryRun] = useState<LegacyImportDryRun | null>(null);
@@ -900,6 +902,16 @@ export function PreviewDataControls({
               'application/json'
             ) ?? 'Original v55 recovery backup downloaded.')}>
             Download original v55 recovery backup
+          </button>
+        )}
+        {v58RecoveryCopy !== null && (
+          <button type="button" className="btn mini ghost"
+            onClick={() => setMessage(downloadText(
+              'tend-synthetic-preview-original-v58-recovery.json',
+              v58RecoveryCopy,
+              'application/json'
+            ) ?? 'Original v58 recovery backup downloaded.')}>
+            Download original v58 recovery backup
           </button>
         )}
         {showImportControls && (

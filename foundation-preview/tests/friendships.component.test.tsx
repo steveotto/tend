@@ -3,9 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ConnectionHistoryList } from '../src/components/FriendshipConnectionControls.tsx';
 import { FriendshipsView } from '../src/components/FriendshipsView.tsx';
 import { addOrUpdateConnection, createFriendshipData, setFriendCadence } from '../src/domain/friendships.ts';
-import type { FriendshipData } from '../src/domain/friendships.ts';
+import type { FriendshipConnection, FriendshipData } from '../src/domain/friendships.ts';
 import type { PersonDetails } from '../src/domain/person-details.ts';
 import { foundationCatalogue, createPersonPickerGroups, setPersonGroupMembership } from '../src/domain/preview-data.ts';
 import type { PersonId, PersonPickerGroup, RhythmPreview } from '../src/domain/preview-data.ts';
@@ -505,6 +506,41 @@ describe('Friendships view', () => {
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Rhythms' }));
   });
 
+  it('shows compact local dates without inventing time or a date for malformed history', () => {
+    const connections: FriendshipConnection[] = [
+      {
+        id: 'current-year',
+        type: 'text',
+        date: '2026-11-23',
+        time: '10:15',
+        participantIds: ['sample-person-morgan']
+      },
+      {
+        id: 'prior-year',
+        type: 'call',
+        date: '2025-11-23',
+        participantIds: ['sample-person-morgan']
+      },
+      {
+        id: 'invalid-date',
+        type: 'time-together',
+        date: '2026-99-99',
+        participantIds: ['sample-person-morgan']
+      }
+    ];
+    render(<ConnectionHistoryList connections={connections} today="2026-12-01" onEdit={vi.fn()} />);
+
+    const rows = screen.getAllByRole('button');
+    expect(rows[0]?.getAttribute('aria-label')).toContain('Nov 23.');
+    expect(rows[0]?.textContent).toContain('Nov 23');
+    expect(rows[0]?.textContent).not.toContain('10:15');
+    expect(rows[0]?.querySelector('time')?.getAttribute('datetime')).toBe('2026-11-23');
+    expect(rows[1]?.textContent).toContain('Nov 23, 2025');
+    expect(rows[1]?.querySelector('time')?.getAttribute('datetime')).toBe('2025-11-23');
+    expect(rows[2]?.textContent).toContain('Date not recorded');
+    expect(rows[2]?.querySelector('time')?.getAttribute('datetime')).toBeNull();
+  });
+
   it('sets cadence, logs one shared connection for actual participants, and updates history and due status on edit/delete', async () => {
     const user = userEvent.setup();
     render(<FriendshipsHarness />);
@@ -519,11 +555,15 @@ describe('Friendships view', () => {
     expect(within(editor).getByRole('combobox', { name: 'Connection type: Call' })).toBeTruthy();
     await user.type(within(editor).getByLabelText('Time (optional)'), '10:15');
     await user.type(within(editor).getByLabelText('Notes (optional)'), 'Talked about the weekend.');
-    const participantCheckboxes = within(editor).getAllByRole('checkbox');
-    expect(participantCheckboxes).toHaveLength(3);
-    expect((participantCheckboxes[0] as HTMLInputElement).checked).toBe(false);
-    expect((participantCheckboxes[1] as HTMLInputElement).checked).toBe(true);
-    await user.click(participantCheckboxes[0]!);
+    const peopleRow = within(editor).getByRole('button', { name: 'Choose people, Morgan Reed' });
+    await user.click(peopleRow);
+    const peoplePicker = screen.getByRole('dialog', { name: 'Choose people' });
+    await user.click(within(peoplePicker).getByRole('button', { name: 'Avery Brooks' }));
+    await user.click(within(peoplePicker).getByRole('button', { name: 'Done' }));
+    expect(document.activeElement).toBe(peopleRow);
+    expect(within(editor).getByRole('button', {
+      name: 'Choose people, Avery Brooks and Morgan Reed'
+    })).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
 
     await user.click(screen.getByRole('button', { name: 'View connections (1)' }));
@@ -532,13 +572,14 @@ describe('Friendships view', () => {
     expect(within(connectionRow).getByText('Call')).toBeTruthy();
     expect(within(connectionRow).getByText('Manual')).toBeTruthy();
     expect(within(connectionRow).queryByText('Talked about the weekend.')).toBeNull();
-    expect(within(connectionRow).getByText('10:15 AM')).toBeTruthy();
-    expect(within(connectionRow).getByText('Oct 21, 2026')).toBeTruthy();
+    expect(within(connectionRow).queryByText('10:15 AM')).toBeNull();
+    expect(within(connectionRow).getByText('Oct 21')).toBeTruthy();
     expect(connectionRow.querySelector('.friendships-connection-row__check')?.textContent).toBe('✓');
     expect(connectionRow.querySelector('.friendships-connection-row__check')?.classList.contains(
       'friendships-connection-row__check--manual'
     )).toBe(true);
     expect(connectionRow.querySelector('.friendships-connection-row__timestamp')).toBeTruthy();
+    expect(connectionRow.querySelector('.friendships-connection-row__calendar-icon')).toBeTruthy();
     expect(within(connectionRow).queryByText('Avery')).toBeNull();
     expect(within(connectionRow).queryByText('Morgan')).toBeNull();
     expect(within(connectionRow).queryByRole('button')).toBeNull();
@@ -556,19 +597,30 @@ describe('Friendships view', () => {
     connectionRow.focus();
     await user.keyboard('{Enter}');
     const edit = screen.getByRole('dialog', { name: 'Connection details' });
+    const editPeopleRow = within(edit).getByRole('button', {
+      name: 'Choose people, Avery Brooks and Morgan Reed'
+    });
+    await user.click(editPeopleRow);
+    const editPeoplePicker = screen.getByRole('dialog', { name: 'Choose people' });
+    expect(within(editPeoplePicker).getByRole('button', { name: 'Avery Brooks' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    expect(within(editPeoplePicker).getByRole('button', { name: 'Morgan Reed' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    await user.click(within(editPeoplePicker).getByRole('button', { name: 'Avery Brooks' }));
+    await user.click(within(editPeoplePicker).getByRole('button', { name: 'Done' }));
+    expect(document.activeElement).toBe(editPeopleRow);
     await user.clear(within(edit).getByLabelText('Date'));
     await user.type(within(edit).getByLabelText('Date'), '2026-10-14');
     await user.clear(within(edit).getByLabelText('Time (optional)'));
     await user.clear(within(edit).getByLabelText('Notes (optional)'));
-    await user.click(within(edit).getAllByRole('checkbox')[0]!);
     await user.click(within(edit).getByRole('button', { name: 'Save changes' }));
     expect(document.activeElement).toBe(connectionRow);
     const updatedRow = within(history).getByRole('button', {
-      name: /^Call, Manual connection, Oct 14, 2026/
+      name: /^Call, Manual connection, Oct 14/
     });
     expect(within(updatedRow).getByText('Call')).toBeTruthy();
     expect(within(updatedRow).getByText('Manual')).toBeTruthy();
-    expect(within(updatedRow).getByText('Oct 14, 2026')).toBeTruthy();
+    expect(within(updatedRow).getByText('Oct 14')).toBeTruthy();
     expect(within(updatedRow).queryByText('Talked about the weekend.')).toBeNull();
     expect(within(history).queryByText('Talked about the weekend.')).toBeNull();
     expect(within(history).queryByText('10:15 AM')).toBeNull();
@@ -631,8 +683,15 @@ describe('Friendships view', () => {
       await user.click(opener);
       const dialog = screen.getByRole('dialog', { name: 'Log connection' });
       expect(within(dialog).getByRole('combobox', { name: `Connection type: ${label}` })).toBeTruthy();
-      const participants = within(dialog).getAllByRole('checkbox') as HTMLInputElement[];
-      expect(participants.map(input => input.checked)).toEqual([false, true, false]);
+      const peopleRow = within(dialog).getByRole('button', { name: 'Choose people, Morgan Reed' });
+      await user.click(peopleRow);
+      const picker = screen.getByRole('dialog', { name: 'Choose people' });
+      expect(within(picker).getByRole('button', { name: 'Morgan Reed' }).getAttribute('aria-pressed'))
+        .toBe('true');
+      expect(within(picker).getByRole('button', { name: 'Avery Brooks' }).getAttribute('aria-pressed'))
+        .toBe('false');
+      await user.click(within(picker).getByRole('button', { name: 'Cancel' }));
+      expect(document.activeElement).toBe(peopleRow);
       await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
       expect(document.activeElement).toBe(opener);
       expect(screen.getByRole('button', { name: 'View connections' })).toBeTruthy();
@@ -646,7 +705,11 @@ describe('Friendships view', () => {
     const opener = screen.getByRole('button', { name: 'Text Morgan Reed' });
     await user.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Log connection' });
-    await user.click(within(dialog).getAllByRole('checkbox')[1]!);
+    const peopleRow = within(dialog).getByRole('button', { name: 'Choose people, Morgan Reed' });
+    await user.click(peopleRow);
+    const picker = screen.getByRole('dialog', { name: 'Choose people' });
+    await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
+    await user.click(within(picker).getByRole('button', { name: 'Done' }));
     await user.click(within(dialog).getByRole('button', { name: 'Save connection' }));
     expect(within(dialog).getByRole('alert').textContent).toContain('Choose at least one participant.');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));

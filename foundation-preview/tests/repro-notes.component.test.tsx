@@ -25,10 +25,10 @@ test('preserves a shared Person note and its owner across a reload', async () =>
   await screen.findByText('Preview data saved in this browser.');
   await openPerson('Avery Brooks');
   await user.click(screen.getByRole('button', { name: 'Notes (0)' }));
-  await user.click(screen.getByRole('button', { name: 'Add note' }));
+  await user.click(screen.getByRole('button', { name: /Add note/ }));
   const editor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });
   await user.type(within(editor).getByRole('textbox', { name: 'Note' }), 'App integration first line{Enter}second line');
-  await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+  await user.click(within(editor).getByRole('button', { name: 'Choose people, Avery Brooks' }));
   const picker = screen.getByRole('dialog', { name: 'Share note' });
   await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
   await user.click(within(picker).getByRole('button', { name: 'Done' }));
@@ -62,6 +62,6 @@ test('preserves a shared Person note and its owner across a reload', async () =>
   await screen.findByText('Preview data saved in this browser.');
   await openPerson('Avery Brooks');
   await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
-  expect(screen.getByRole('heading', { name: 'Notes (1)' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Notes' })).toBeTruthy();
   expect(screen.getByText('Edited from the shared profile')).toBeTruthy();
 });

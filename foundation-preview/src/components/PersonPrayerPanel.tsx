@@ -8,6 +8,8 @@ import {
 import type {
   PersonPrayerRequest,
   PersonPrayerRequestDraft,
+  PersonPrayerLog,
+  PersonPrayerLogUndo,
   PrayerRequestTransition
 } from '../domain/person-prayers.ts';
 import { personById } from '../domain/preview-data.ts';
@@ -15,18 +17,26 @@ import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/previ
 import { PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 import { PersonPrayerCard } from './PersonPrayerCard.tsx';
+import { PersonProfileTabHeader } from './PersonProfileTabHeader.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
+import { RhythmScheduleFields } from './RhythmScheduleFields.tsx';
+import { StyledSelect } from './StyledSelect.tsx';
+import { useRhythmTimeOptions, useTimeBlockSettings } from './TimeBlocksContext.tsx';
+import { selectPersonPrayerHealth } from '../domain/person-prayer-health.ts';
+import type { PersonPrayerHealthSelection } from '../domain/person-prayer-health.ts';
 
 type EditorState = {
   request?: PersonPrayerRequest;
   draft: PersonPrayerRequestDraft;
   error: string;
+  onReturn?: () => void;
 };
 
 export function PersonPrayerPanel({
   personId,
   enabled = true,
   today,
+  prayerHealthInstant = new Date(),
   timeZone: requestedTimeZone,
   people,
   peopleGroups,
@@ -36,11 +46,15 @@ export function PersonPrayerPanel({
   onUpdate,
   onTransition,
   onPray,
+  onSaveLog,
+  onDeleteLog,
+  onUndoDeleteLog,
   onRemove
 }: {
   personId: PersonId;
   enabled?: boolean;
   today: string;
+  prayerHealthInstant?: Date;
   timeZone?: string;
   people: readonly PersonPreview[];
   peopleGroups: readonly PersonPickerGroup[];
@@ -60,12 +74,26 @@ export function PersonPrayerPanel({
     transition: PrayerRequestTransition
   ) => string | null;
   onPray: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
+  onSaveLog?: (
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    log: PersonPrayerLog
+  ) => string | null;
+  onDeleteLog?: (
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    logId: string
+  ) => PersonPrayerLogUndo | string;
+  onUndoDeleteLog?: (undo: PersonPrayerLogUndo, actorId: PersonId) => string | null;
   onRemove: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
 }) {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmRequest, setConfirmRequest] = useState<PersonPrayerRequest | null>(null);
   const [actionError, setActionError] = useState('');
+  const [deletedLogUndo, setDeletedLogUndo] = useState<PersonPrayerLogUndo | null>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const returnTarget = useRef<HTMLButtonElement | null>(null);
   const pickerOpener = useRef<HTMLButtonElement | null>(null);
@@ -74,8 +102,18 @@ export function PersonPrayerPanel({
   const personRequests = personPrayerRequestsForPerson(requests, personId);
   const activeCount = activePrayerRequestCount(requests, personId);
   const person = personById(people, personId);
+  const timeOptions = useRhythmTimeOptions();
+  const timeBlockSettings = useTimeBlockSettings();
   const timeZone = requestedTimeZone
     ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const personPrayerHealth: PersonPrayerHealthSelection = selectPersonPrayerHealth(
+    requests,
+    personId,
+    today,
+    timeZone,
+    prayerHealthInstant,
+    timeBlockSettings
+  );
   const groups = [
     { status: 'active' as const, label: 'Active' },
     { status: 'answered' as const, label: 'Answered' },
@@ -113,11 +151,20 @@ export function PersonPrayerPanel({
     }
   }, [pickerOpen]);
 
-  function openEditor(opener: HTMLButtonElement, request?: PersonPrayerRequest) {
+  function openEditor(
+    opener: HTMLButtonElement,
+    request?: PersonPrayerRequest,
+    onReturn?: () => void
+  ) {
     returnTarget.current = opener;
     setActionError('');
     setPickerOpen(false);
-    setEditor({ ...(request ? { request } : {}), draft: personPrayerRequestDraft(request), error: '' });
+    setEditor({
+      ...(request ? { request } : {}),
+      ...(onReturn ? { onReturn } : {}),
+      draft: personPrayerRequestDraft(request),
+      error: ''
+    });
   }
 
   function updateDraft(patch: Partial<PersonPrayerRequestDraft>) {
@@ -134,7 +181,14 @@ export function PersonPrayerPanel({
       setEditor(current => current ? { ...current, error: result } : current);
       return;
     }
+    editor.onReturn?.();
     setEditor(null);
+  }
+
+  function closeEditor() {
+    const onReturn = editor?.onReturn;
+    setEditor(null);
+    onReturn?.();
   }
 
   function changeStatus(request: PersonPrayerRequest, transition: PrayerRequestTransition) {
@@ -145,6 +199,28 @@ export function PersonPrayerPanel({
   function pray(request: PersonPrayerRequest) {
     if (!enabled) return;
     setActionError(onPray(request.id, request.updatedAt, personId) ?? '');
+  }
+
+  function deleteLog(
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    logId: string
+  ): PersonPrayerLogUndo | string {
+    if (!enabled) return 'Prayer logging is unavailable.';
+    if (!onDeleteLog) return 'Prayer log deletion is unavailable.';
+    const result = onDeleteLog(requestId, expectedUpdatedAt, actorId, logId);
+    if (typeof result === 'string') return result;
+    setDeletedLogUndo(result);
+    return result;
+  }
+
+  function undoDeleteLog(undo: PersonPrayerLogUndo, actorId: PersonId): string | null {
+    if (!enabled) return 'Prayer logging is unavailable.';
+    if (!onUndoDeleteLog) return 'Prayer log Undo is unavailable.';
+    const error = onUndoDeleteLog(undo, actorId);
+    if (!error) setDeletedLogUndo(null);
+    return error;
   }
 
   function removeRequest() {
@@ -164,15 +240,15 @@ export function PersonPrayerPanel({
 
   return (
     <section className="person-prayer-panel prayer-theme" aria-labelledby={`person-prayer-heading-${personId}`} hidden={!enabled}>
-      <header className="person-profile__section-heading">
-        <div>
-          <h3 id={`person-prayer-heading-${personId}`}>Prayer</h3>
-          <p>{activeCount} active {activeCount === 1 ? 'request' : 'requests'}</p>
-        </div>
-        <button ref={addButtonRef} type="button" className="btn mini" onClick={event => openEditor(event.currentTarget)}>
-          Add prayer request
-        </button>
-      </header>
+      <PersonProfileTabHeader
+        headingId={`person-prayer-heading-${personId}`}
+        title="Prayer"
+        subtitle={`${activeCount} active ${activeCount === 1 ? 'request' : 'requests'}`}
+        actionLabel="Add request"
+        actionRef={addButtonRef}
+        theme="prayer"
+        onAction={event => openEditor(event.currentTarget)}
+      />
       {actionError && <p className="person-prayer-panel__error" role="alert">{actionError}</p>}
       {personRequests.length === 0 ? (
         <p className="friendships-empty">No prayer requests for {personById(people, personId).displayName} yet.</p>
@@ -208,9 +284,15 @@ export function PersonPrayerPanel({
                       sharedPeople={sharedPeople}
                       today={today}
                       timeZone={timeZone}
+                      personPrayerHealth={personPrayerHealth}
                       onPray={pray}
                       onTransition={changeStatus}
-                      onEdit={(selectedRequest, opener) => openEditor(opener, selectedRequest)}
+                      onEdit={(selectedRequest, opener, onReturn) =>
+                        openEditor(opener, selectedRequest, onReturn)}
+                      {...(onSaveLog ? { onSaveLog } : {})}
+                      {...(onDeleteLog ? { onDeleteLog: deleteLog } : {})}
+                      {...(onUndoDeleteLog ? { onUndoDeleteLog: undoDeleteLog } : {})}
+                      undoLog={deletedLogUndo?.requestId === request.id ? deletedLogUndo : null}
                     />
                   </li>
                 );
@@ -238,6 +320,7 @@ export function PersonPrayerPanel({
           <PeopleBadgeSelectionPicker
             people={people}
             groups={peopleGroups}
+            theme="prayer"
             selectedIds={editor.draft.sharedWith}
             excludedIds={[editor.request?.personId ?? personId]}
             onToggle={id => updateDraft({
@@ -271,7 +354,7 @@ export function PersonPrayerPanel({
           scrollableBody
           stopEscapePropagation
           closeOnEscape
-          onClose={() => setEditor(null)}
+          onClose={closeEditor}
         >
           <form className="person-prayer-form" onSubmit={saveEditor}>
             <label>
@@ -293,6 +376,23 @@ export function PersonPrayerPanel({
                 onChange={event => updateDraft({ details: event.currentTarget.value })}
               />
             </label>
+            <RhythmScheduleFields
+              schedule={editor.draft.schedule}
+              onChange={schedule => updateDraft({ schedule })}
+              {...(editor.request && !editor.request.schedule
+                ? { frequencyGuidance: 'Set prayer frequency to include this request in Prayer Health.' }
+                : {})}
+            >
+              <div className="goal-field rhythm-schedule-fields__time">
+                <label>Time of day</label>
+                <StyledSelect
+                  label="Time of day"
+                  options={timeOptions}
+                  value={editor.draft.timeOfDay ?? 'anytime'}
+                  onChange={timeOfDay => updateDraft({ timeOfDay })}
+                />
+              </div>
+            </RhythmScheduleFields>
             <div className="person-prayer-form__sharing">
               <span>Shared with</span>
               <span>{editor.draft.sharedWith.length} {editor.draft.sharedWith.length === 1 ? 'person' : 'people'}</span>
@@ -307,7 +407,7 @@ export function PersonPrayerPanel({
             </div>
             {editor.error && <p className="person-prayer-panel__error" role="alert">{editor.error}</p>}
             <div className="person-prayer-form__actions">
-              <button type="button" className="btn mini ghost" onClick={() => setEditor(null)}>Cancel</button>
+              <button type="button" className="btn mini ghost" onClick={closeEditor}>Cancel</button>
               <button type="submit" className="btn mini">{editor.request ? 'Save changes' : 'Save request'}</button>
             </div>
             {editor.request && (

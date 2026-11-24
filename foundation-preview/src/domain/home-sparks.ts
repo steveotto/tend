@@ -1,6 +1,7 @@
 import { selectAvailablePersonGroups } from './category-availability.ts';
 import type { CategoryPreferences } from './category-availability.ts';
 import type { PersonPickerGroup, PersonPreview } from './preview-data.ts';
+import { selectOpenPersonSparks } from './person-sparks.ts';
 import type { PersonSpark } from './person-sparks.ts';
 
 export type PersonSparkListStatus = 'active' | 'completed' | 'archived';
@@ -34,9 +35,8 @@ export function selectHomePersonSparks(
   today: string,
   limit = 3
 ): PersonSpark[] {
-  const active = sparks
+  const active = selectOpenPersonSparks(sparks)
     .map((spark, index) => ({ spark, index }))
-    .filter(({ spark }) => !spark.archived && !spark.completed);
   const due = active
     .filter(({ spark }) => spark.dueDate !== undefined && spark.dueDate <= today)
     .sort(compareDatedSparks);
@@ -50,13 +50,11 @@ export function selectPersonSparksByStatus(
   sparks: readonly PersonSpark[],
   status: PersonSparkListStatus
 ): PersonSpark[] {
-  return sparks
+  const candidates = status === 'active'
+    ? selectOpenPersonSparks(sparks)
+    : sparks.filter(spark => status === 'archived' ? spark.archived : !spark.archived && spark.completed);
+  return candidates
     .map((spark, index) => ({ spark, index }))
-    .filter(({ spark }) => status === 'archived'
-      ? spark.archived
-      : status === 'completed'
-        ? !spark.archived && spark.completed
-        : !spark.archived && !spark.completed)
     .sort(compareDatedSparks)
     .map(({ spark }) => spark);
 }

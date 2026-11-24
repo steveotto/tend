@@ -32,6 +32,7 @@ export type HealthInfoIdentity = {
     | { kind: 'category'; id: CategoryId }
     | { kind: 'foundation'; id: string }
     | { kind: 'rhythm' }
+    | { kind: 'prayer' }
     | { kind: 'person' };
   person?: PersonPreview;
 };

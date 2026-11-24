@@ -1742,16 +1742,19 @@ export function rhythmLastActivityLabel(
     record.effectiveDate <= asOfDate
   ))[0];
   if (!latest) return 'Never';
-  if (latest.effectiveDate === asOfDate) return 'Today';
+  return formatRhythmActivityDate(latest.effectiveDate, asOfDate);
+}
 
-  const activityYear = Number(latest.effectiveDate.slice(0, 4));
+export function formatRhythmActivityDate(activityDate: string, asOfDate: string): string {
+  if (activityDate === asOfDate) return 'Today';
+  const activityYear = Number(activityDate.slice(0, 4));
   const evaluationYear = Number(asOfDate.slice(0, 4));
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     ...(activityYear !== evaluationYear ? { year: 'numeric' as const } : {}),
     timeZone: 'UTC'
-  }).format(new Date(`${latest.effectiveDate}T12:00:00Z`));
+  }).format(new Date(`${activityDate}T12:00:00Z`));
 }
 
 export function rhythmLastTendedLabel(

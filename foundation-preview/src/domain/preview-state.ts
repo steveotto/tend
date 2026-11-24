@@ -114,7 +114,7 @@ import {
 import type { CategoryPreferences, FoundationPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 57;
+export const PREVIEW_SCHEMA_VERSION = 59;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -157,7 +157,7 @@ export type PreviewEnvelope = {
 };
 
 export type PreviewEnvelopeV4 = PreviewEnvelope;
-export type PreviewSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57;
+export type PreviewSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57 | 58 | 59;
 
 type PreviewEnvelopeV1 = {
   format: typeof PREVIEW_BACKUP_FORMAT;
@@ -824,6 +824,7 @@ export function createPreviewEnvelope(data: PreviewData): PreviewEnvelope {
       prayerRequests: data.prayerRequests.map(request => ({
         ...request,
         ...(request.sharedWith === undefined ? {} : { sharedWith: [...request.sharedWith] }),
+        ...(request.scoring === undefined ? {} : { scoring: cloneRhythmScoring(request.scoring) }),
         prayerLogs: request.prayerLogs.map(log => ({ ...log }))
       })),
       timeBlocks: {
@@ -905,6 +906,8 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       && value.schemaVersion !== 54
       && value.schemaVersion !== 55
       && value.schemaVersion !== 56
+      && value.schemaVersion !== 57
+      && value.schemaVersion !== 58
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -939,7 +942,10 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV56 = value.schemaVersion === 56 || value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV59 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV58 = value.schemaVersion === 58 || isV59;
+  const isV57 = value.schemaVersion === 57 || isV58;
+  const isV56 = value.schemaVersion === 56 || isV57;
   const isV55 = value.schemaVersion === 55 || isV56;
   const isV54 = value.schemaVersion === 54 || isV55;
   const isV53 = value.schemaVersion === 53 || isV54;
@@ -1036,7 +1042,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   if (isV32 && !validatePeopleCollection(value.data.people)) {
     return { valid: false, kind: 'invalid', message: 'People must contain unique stable IDs and non-empty names.' };
   }
-  if (isV33 && !validatePersonPrayerRequestsCollection(value.data.prayerRequests)) {
+  if (isV33 && !validatePersonPrayerRequestsCollection(value.data.prayerRequests, undefined, isV58)) {
     return { valid: false, kind: 'invalid', message: 'Prayer requests contain invalid fields, history, or Person references.' };
   }
   if (isV35 && typeof value.data.showTended !== 'boolean') {
@@ -1486,7 +1492,12 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   }
   const knownPersonIds = new Set(people.map(person => person.id));
   const prayerRequests = isV33 ? value.data.prayerRequests as PersonPrayerRequest[] : [];
-  if (!validatePersonPrayerRequestsCollection(prayerRequests, people.map(person => person.id))) {
+  if (!validatePersonPrayerRequestsCollection(
+    prayerRequests,
+    people.map(person => person.id),
+    isV58,
+    isV59
+  )) {
     return { valid: false, kind: 'invalid', message: 'Prayer requests contain invalid fields, history, or unresolved Person IDs.' };
   }
   const personSparks = isV51 ? value.data.personSparks as PersonSpark[] : [];

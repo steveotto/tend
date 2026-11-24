@@ -44,6 +44,7 @@ import type {
 import { RhythmCard } from './Cards.tsx';
 import { RhythmSeasonCard } from './RhythmSeasonCard.tsx';
 import { RhythmMetadataIcon } from './RhythmMetadataIcon.tsx';
+import { CollapsibleHistorySection } from './CollapsibleHistorySection.tsx';
 import { HealthScoreBreakdown, HealthScoreInfoButton } from './HealthScoreBreakdown.tsx';
 import { HealthScoreDetailsDialog } from './HealthScoreDetailsDialog.tsx';
 export { HealthScoreMeter } from './HealthScoreBreakdown.tsx';
@@ -831,30 +832,15 @@ export function RhythmHistoryView({
           </div>
         )}
       </section>
-      <details
+      <CollapsibleHistorySection
         className="rhythm-history-view__logged-moments rhythm-history-view__card"
-        open={loggedMomentsExpanded}
-        onToggle={event => setLoggedMomentsExpanded(event.currentTarget.open)}
+        label="Logged moments"
+        accessibleLabel={`Logged moments (${completions.kind === 'unavailable' ? 'unavailable' : completionCount})`}
+        count={loggedMomentsCount}
+        expanded={loggedMomentsExpanded}
+        onExpandedChange={setLoggedMomentsExpanded}
+        summaryRef={loggedMomentsSummaryRef}
       >
-        <summary
-          ref={loggedMomentsSummaryRef}
-          role="button"
-          aria-label={`Logged moments (${completions.kind === 'unavailable' ? 'unavailable' : completionCount})`}
-          aria-expanded={loggedMomentsExpanded}
-        >
-          <span className="rhythm-history-view__logged-heading">Logged moments</span>
-          <span className="rhythm-history-view__logged-count" aria-hidden="true">
-            {loggedMomentsCount}
-          </span>
-          <svg
-            className={`disclosure-chevron${loggedMomentsExpanded ? ' disclosure-chevron--expanded' : ''}`}
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path d="m3 6 5 5 5-5" />
-          </svg>
-        </summary>
         {onSaveCompletion && (
           <div className="rhythm-history-view__log-moment-row">
             <button
@@ -954,7 +940,7 @@ export function RhythmHistoryView({
         ) : (
           <p>{completions.kind === 'unavailable' ? 'Dated moments are unavailable.' : 'No logged moments.'}</p>
         )}
-      </details>
+      </CollapsibleHistorySection>
       {logAnnouncement && (
         <p className="visually-hidden" role="status" aria-live="polite">{logAnnouncement}</p>
       )}

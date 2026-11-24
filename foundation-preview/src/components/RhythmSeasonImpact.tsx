@@ -223,9 +223,11 @@ function OnTrackDetailsPanel({
               ? `No qualifying Tend yet · tracking began ${formatDate(details.trackingStartDate)}`
               : 'No qualifying completion or tracking baseline is recorded.'}</span>
           <b>{details.missed} missed {countedUnit(details.unit, details.missed)}</b>
-          <span>{details.missed > 10
-            ? `max(0, 100 − 10 × ${details.missed}) = ${details.score}`
-            : `100 − 10 × ${details.missed} = ${details.score}`}</span>
+          <span>{details.lastCompletionDate === null
+            ? `0 until the first qualifying Tend`
+            : details.missed > 10
+              ? `max(0, 100 − 10 × ${details.missed}) = ${details.score}`
+              : `100 − 10 × ${details.missed} = ${details.score}`}</span>
           {details.pendingToday && (
             <span>Today’s scheduled occurrence is pending and is not a miss.</span>
           )}

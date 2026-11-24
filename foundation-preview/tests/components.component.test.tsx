@@ -181,6 +181,7 @@ describe('shared preview components', () => {
     );
 
     const picker = screen.getByRole('dialog', { name: 'Faith practice suggestions' });
+    expect(picker.classList.contains('dialog--phone-fullscreen')).toBe(true);
     const row = within(picker).getByRole('heading', { name: 'Prayer', level: 4 }).closest('li')!;
     expect(within(row).getByText('2 added')).toBeTruthy();
     expect(within(row).getByRole('button', { name: 'Add' })).toBeTruthy();
@@ -968,9 +969,9 @@ describe('shared preview components', () => {
     });
 
     expect(scoreButton.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('43');
-    expect(scoreButton.querySelector('.today-rhythm-details__history-content')).toBeTruthy();
+    expect(scoreButton.querySelector('.rhythm-card__history-content')).toBeTruthy();
     expect(scoreButton.querySelectorAll('svg.rhythm-metadata-icon--history rect')).toHaveLength(3);
-    expect(scoreButton.querySelector('.today-rhythm-details__history-content')
+    expect(scoreButton.querySelector('.rhythm-card__history-content')
       ?.lastElementChild?.classList.contains('today-rhythm-details__history-score')).toBe(true);
     for (const { score, tone } of toneCases) {
       const toneButton = screen.getByRole('button', {
@@ -980,9 +981,9 @@ describe('shared preview components', () => {
       expect(toneButton?.getAttribute('data-score-tone')).toBe(tone);
       expect(toneButton?.querySelector('.today-rhythm-details__history-score')?.textContent)
         .toBe(formatScore(score));
-      expect(toneButton.querySelector('.today-rhythm-details__history-content')).toBeTruthy();
+      expect(toneButton.querySelector('.rhythm-card__history-content')).toBeTruthy();
       expect(toneButton.querySelectorAll('svg.rhythm-metadata-icon--history rect')).toHaveLength(3);
-      expect(toneButton.querySelector('.today-rhythm-details__history-content')
+      expect(toneButton.querySelector('.rhythm-card__history-content')
         ?.lastElementChild?.classList.contains('today-rhythm-details__history-score')).toBe(true);
       expect(toneButton.querySelectorAll('svg')).toHaveLength(1);
     }

@@ -1,10 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import {
-  syntheticPeople,
-  syntheticPersonPickerGroups
-} from '../domain/preview-data.ts';
-import type { PersonId, PersonPickerGroup } from '../domain/preview-data.ts';
+import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import {
   createPrayerSession,
   endPrayerSession,
@@ -15,6 +11,8 @@ import {
   selectActivePrayerRequests
 } from '../domain/prayer-session.ts';
 import type { PrayerRequestPreview, PrayerSession, PrayerTimeframeId } from '../domain/prayer-session.ts';
+import { toggleBadgeGroup } from './BadgeSelectionPicker.tsx';
+import { PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
 import { PersonBadgeVisual } from './PersonBadge.tsx';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
@@ -24,51 +22,125 @@ type SelectionDraft = {
   showingTimeframes: boolean;
 };
 
-type TodayPrayerModuleProps = {
+function PrayerSelectionActionButtons({
+  disabled,
+  onCancel,
+  onPray
+}: {
+  disabled: boolean;
+  onCancel: () => void;
+  onPray: () => void;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        className="btn mini ghost prayer-selection-cancel"
+        onClick={onCancel}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        className="btn mini prayer-selection-pray"
+        data-prayer-selection-start
+        disabled={disabled}
+        onClick={onPray}
+      >
+        Pray
+      </button>
+    </>
+  );
+}
+
+export type PrayerDataStatus = 'loading' | 'ready' | 'error';
+
+export type TodayPrayerModuleProps = {
+  people: readonly PersonPreview[];
+  peopleGroups: readonly PersonPickerGroup[];
   requests: readonly PrayerRequestPreview[];
+  dataStatus?: PrayerDataStatus;
+  dataError?: string;
   enabled?: boolean;
   evaluationInstant?: Date;
   timeZone?: string;
-  onPray: (requestId: string) => string | null;
+  onPray: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
 };
 
 export function TodayPrayerModule({
+  people,
+  peopleGroups,
   requests,
+  dataStatus = 'ready',
+  dataError,
   enabled = true,
   evaluationInstant = new Date(),
   timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   onPray
 }: TodayPrayerModuleProps) {
   const [selectedPeople, setSelectedPeople] = useState<PersonId[]>(() =>
-    syntheticPeople.map(person => person.id));
+    dataStatus === 'ready' ? people.map(person => person.id) : []);
   const [timeframe, setTimeframe] = useState<PrayerTimeframeId>('now');
   const [selection, setSelection] = useState<SelectionDraft | null>(null);
   const [session, setSession] = useState<PrayerSession | null>(null);
   const [sessionError, setSessionError] = useState('');
   const sessionCardRef = useRef<HTMLElement>(null);
-  const activeRequests = useMemo(() => selectActivePrayerRequests(
-    requests,
-    selectedPeople,
-    timeframe,
-    evaluationInstant,
-    timeZone
-  ), [requests, selectedPeople, timeframe, evaluationInstant, timeZone]);
-  const timeframeOptions = useMemo(() => prayerTimeframeOptions(
-    requests,
-    selectedPeople,
-    evaluationInstant,
-    timeZone
-  ), [requests, selectedPeople, evaluationInstant, timeZone]);
+  const previousPeopleScope = useRef<{
+    peopleKey: string;
+    dataStatus: PrayerDataStatus;
+  } | null>(null);
+  const peopleKey = JSON.stringify(people.map(person => person.id));
+  const peopleById = useMemo(() => new Map(people.map(person => [person.id, person])), [people]);
+  const availablePeopleIds = useMemo(() => new Set(people.map(person => person.id)), [peopleKey]);
+  const selectedPeopleInAccount = useMemo(
+    () => selectedPeople.filter(id => availablePeopleIds.has(id)),
+    [selectedPeople, availablePeopleIds]
+  );
+
+  useEffect(() => {
+    const previous = previousPeopleScope.current;
+    previousPeopleScope.current = { peopleKey, dataStatus };
+    if (dataStatus !== 'ready') {
+      setSelectedPeople([]);
+      setSelection(null);
+      setSession(null);
+      setSessionError('');
+      return;
+    }
+
+    const personIds = people.map(person => person.id);
+    setSelectedPeople(current => {
+      if (!previous
+        || previous.dataStatus !== 'ready'
+        || previous.peopleKey === JSON.stringify([]) && personIds.length > 0) {
+        return personIds;
+      }
+      return current.filter(id => availablePeopleIds.has(id));
+    });
+    setSelection(current => current
+      ? { ...current, people: current.people.filter(id => availablePeopleIds.has(id)) }
+      : current);
+  }, [dataStatus, peopleKey, availablePeopleIds]);
+
+  const activeRequests = useMemo(() => dataStatus === 'ready'
+    ? selectActivePrayerRequests(
+        requests,
+        selectedPeopleInAccount,
+        timeframe,
+        evaluationInstant,
+        timeZone
+      )
+    : [], [dataStatus, requests, selectedPeopleInAccount, timeframe, evaluationInstant, timeZone]);
+  const timeframeOptions = useMemo(() => dataStatus === 'ready'
+    ? prayerTimeframeOptions(requests, selectedPeopleInAccount, evaluationInstant, timeZone)
+    : [], [dataStatus, requests, selectedPeopleInAccount, evaluationInstant, timeZone]);
   const selectedTimeframeName = timeframeOptions.find(option => option.id === timeframe)?.label ?? 'Now';
-  const draftRequests = selection
+  const draftRequests = selection && dataStatus === 'ready'
     ? selectActivePrayerRequests(requests, selection.people, selection.timeframe, evaluationInstant, timeZone)
     : [];
-  const draftTimeframeOptions = prayerTimeframeOptions(
-    requests,
-    selection?.people ?? [],
-    evaluationInstant,
-    timeZone
-  );
+  const draftTimeframeOptions = selection && dataStatus === 'ready'
+    ? prayerTimeframeOptions(requests, selection.people, evaluationInstant, timeZone)
+    : [];
   const selectedDraftTimeframe = selection
     ? draftTimeframeOptions.find(option => option.id === selection.timeframe)
     : undefined;
@@ -79,7 +151,7 @@ export function TodayPrayerModule({
   const sessionComplete = session !== null
     && (session.ended || session.index >= session.requestIds.length);
   const currentPerson = currentRequest
-    ? syntheticPeople.find(person => person.id === currentRequest.personId)
+    ? peopleById.get(currentRequest.personId)
     : undefined;
 
   useEffect(() => {
@@ -119,7 +191,8 @@ export function TodayPrayerModule({
   }, [session?.index, session?.ended, sessionComplete, enabled]);
 
   function openSelection() {
-    setSelection({ people: [...selectedPeople], timeframe, showingTimeframes: false });
+    if (dataStatus !== 'ready' || people.length === 0) return;
+    setSelection({ people: [...selectedPeopleInAccount], timeframe, showingTimeframes: false });
   }
 
   function selectedRequests(draft: SelectionDraft) {
@@ -133,7 +206,7 @@ export function TodayPrayerModule({
   }
 
   function startSession(draft: SelectionDraft) {
-    if (!enabled) return;
+    if (!enabled || dataStatus !== 'ready') return;
     const nextSession = createPrayerSession(selectedRequests(draft));
     if (!nextSession) return;
     setSelectedPeople([...draft.people]);
@@ -144,6 +217,7 @@ export function TodayPrayerModule({
   }
 
   function togglePerson(personId: PersonId) {
+    if (!availablePeopleIds.has(personId)) return;
     setSelection(current => {
       if (!current) return current;
       return {
@@ -155,23 +229,25 @@ export function TodayPrayerModule({
     });
   }
 
-  function toggleGroup(group: PersonPickerGroup) {
+  function toggleGroup(ids: readonly PersonId[]) {
     setSelection(current => {
       if (!current) return current;
-      const selected = new Set(current.people);
-      const memberIds = group.memberIds.filter(id => syntheticPeople.some(person => person.id === id));
-      const allSelected = memberIds.length > 0 && memberIds.every(id => selected.has(id));
-      for (const id of memberIds) {
-        if (allSelected) selected.delete(id);
-        else selected.add(id);
-      }
-      return { ...current, people: [...selected] };
+      return {
+        ...current,
+        people: toggleBadgeGroup(current.people, ids.filter(id => availablePeopleIds.has(id)))
+      };
     });
   }
 
   function markCurrentPrayed() {
     if (!enabled || !session || !currentRequest || session.prayedIds.includes(currentRequest.id)) return;
-    const error = onPray(currentRequest.id);
+    const actorId = selectedPeopleInAccount.find(id =>
+      id === currentRequest.personId || currentRequest.sharedWith?.includes(id) === true);
+    if (!actorId || !currentRequest.updatedAt) {
+      setSessionError('This saved request is no longer available for prayer recording. Reload the current data and try again.');
+      return;
+    }
+    const error = onPray(currentRequest.id, currentRequest.updatedAt, actorId);
     if (error) {
       setSessionError(error);
       return;
@@ -182,64 +258,77 @@ export function TodayPrayerModule({
     setSessionError('');
   }
 
-  const orderedPeople = [...syntheticPeople].sort((left, right) => {
-    const groupIndex = (id: PersonId) => {
-      const index = syntheticPersonPickerGroups.findIndex(group => group.memberIds.includes(id));
-      return index < 0 ? syntheticPersonPickerGroups.length : index;
-    };
-    return groupIndex(left.id) - groupIndex(right.id)
-      || left.displayName.localeCompare(right.displayName);
-  });
+  const emptyMessage = people.length === 0
+    ? requests.length === 0
+      ? 'No people or prayer requests are available yet.'
+      : 'No people are available to select.'
+    : requests.some(request => request.status === 'active')
+      ? 'No active requests match this selection.'
+      : 'No active prayer requests are saved for these people.';
 
   return (
     <>
       <section className="today-prayer-section" aria-labelledby="today-prayer-title" hidden={!enabled}>
         <div className="sectiontitle"><h2 id="today-prayer-title">Prayer</h2></div>
-        <section className="prayer-entry-module" aria-label="Focused Prayer">
+        <section className="prayer-entry-module" aria-label="Pray">
           <div className="prayer-entry-summary">
             <div className="prayer-entry-summary-line">
               <strong>
-                {selectedPeople.length} {selectedPeople.length === 1 ? 'person' : 'people'} selected
+                {selectedPeopleInAccount.length} {selectedPeopleInAccount.length === 1 ? 'person' : 'people'} selected
                 {' · '}{selectedTimeframeName}
               </strong>
             </div>
-            {activeRequests.length === 0 && (
-              <span className="prayer-entry-empty">No active requests match this selection.</span>
+            {dataStatus === 'loading' && (
+              <span className="prayer-entry-empty" role="status">Loading saved Prayer data…</span>
+            )}
+            {dataStatus === 'error' && (
+              <span className="prayer-entry-empty" role="alert">
+                {dataError ?? 'Saved Prayer data could not be loaded. No example data is shown.'}
+              </span>
+            )}
+            {dataStatus === 'ready' && activeRequests.length === 0 && (
+              <span className="prayer-entry-empty">{emptyMessage}</span>
             )}
           </div>
           <div className="prayer-entry-actions">
-            <button type="button" className="btn mini ghost" data-prayer-selection-open onClick={openSelection}>
+            <button
+              type="button"
+              className="btn mini ghost"
+              data-prayer-selection-open
+              disabled={dataStatus !== 'ready' || people.length === 0}
+              onClick={openSelection}
+            >
               Customize
             </button>
             <button
               type="button"
               className="btn mini faith-start-prayer"
               data-prayer-session-start
-              aria-label={`Start focused prayer for ${activeRequests.length} ${
+              aria-label={`Pray for ${activeRequests.length} ${
                 activeRequests.length === 1 ? 'request' : 'requests'
               }`}
-              disabled={activeRequests.length === 0}
+              disabled={dataStatus !== 'ready' || activeRequests.length === 0}
               onClick={() => startSession({
-                people: [...selectedPeople],
+                people: [...selectedPeopleInAccount],
                 timeframe,
                 showingTimeframes: false
               })}
             >
-              <span>Focused Prayer</span>
+              <span>Pray</span>
               <span className="prayer-entry-count" aria-hidden="true">{activeRequests.length}</span>
             </button>
           </div>
         </section>
       </section>
 
-      {enabled && (
+      {enabled && dataStatus === 'ready' && (
         <PrayerDialog
-          open={selection !== null}
-          className="prayer-selection-dialog"
+          open={selection !== null && dataStatus === 'ready'}
+          className="prayer-selection-dialog prayer-theme"
           titleId="today-prayer-selection-title"
           onDismiss={() => setSelection(null)}
         >
-          {selection && (
+          {selection && dataStatus === 'ready' && (
             <>
             <header className="prayer-selection-header">
               <h3 id="today-prayer-selection-title" tabIndex={-1}>
@@ -293,7 +382,7 @@ export function TodayPrayerModule({
                 </div>
               ) : (
                 <div className="prayer-selection-people-view">
-                  <section className="prayer-selection-section">
+                  <section className="prayer-selection-section" aria-label="Prayer timeframe">
                     <h4>Timeframe</h4>
                     <button
                       type="button"
@@ -313,16 +402,23 @@ export function TodayPrayerModule({
                       <span className="prayer-timeframe-picker__chevron" aria-hidden="true">›</span>
                     </button>
                   </section>
-                  <section className="prayer-selection-section">
-                    <div className="prayer-selection-people-heading">
-                      <h4>People</h4>
+                  <PeopleBadgeSelectionPicker
+                    title="People"
+                    theme="prayer"
+                    people={people}
+                    groups={peopleGroups}
+                    selectedIds={selection.people}
+                    onToggle={togglePerson}
+                    onToggleGroup={toggleGroup}
+                    emptyMessage="No people are available to select."
+                    description={(
                       <div className="prayer-selection-bulk">
                         <button
                           type="button"
                           className="btn mini ghost"
                           data-prayer-selection-people="all"
                           onClick={() => setSelection(current => current
-                            ? { ...current, people: syntheticPeople.map(person => person.id) }
+                            ? { ...current, people: people.map(person => person.id) }
                             : current)}
                         >
                           Select all
@@ -336,93 +432,52 @@ export function TodayPrayerModule({
                           Clear
                         </button>
                       </div>
-                    </div>
-                    <div className="prayer-selection-groups" role="group" aria-label="People categories">
-                      {syntheticPersonPickerGroups.map(group => {
-                        const memberIds = group.memberIds.filter(id =>
-                          syntheticPeople.some(person => person.id === id));
-                        const count = memberIds.filter(id => selection.people.includes(id)).length;
-                        const checked = count === 0 ? 'false' : count === memberIds.length ? 'true' : 'mixed';
-                        return (
-                          <button
-                            key={group.id}
-                            type="button"
-                            className={`prayer-selection-group${checked === 'true'
-                              ? ' is-selected'
-                              : checked === 'mixed' ? ' is-mixed' : ''}`}
-                            role="checkbox"
-                            aria-checked={checked}
-                            disabled={memberIds.length === 0}
-                            data-prayer-selection-group={group.id}
-                            onClick={() => toggleGroup(group)}
-                          >
-                            {group.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="prayer-selection-people" role="group" aria-label="Select people">
-                      {orderedPeople.map(person => {
-                        const selected = selection.people.includes(person.id);
-                        return (
-                          <button
-                            key={person.id}
-                            type="button"
-                            className={`prayer-selection-person${selected ? ' is-selected' : ''}`}
-                            data-prayer-selection-person={person.id}
-                            aria-pressed={selected}
-                            aria-label={`${selected ? 'Deselect' : 'Select'} ${person.displayName}`}
-                            onClick={() => togglePerson(person.id)}
-                          >
-                            <PersonBadgeVisual person={person} />
-                            <span className="prayer-selection-check" aria-hidden="true">✓</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
+                    )}
+                    status={(
+                      <span className="prayer-selection-count" aria-live="polite">
+                        {draftRequests.length} {draftRequests.length === 1 ? 'request' : 'requests'} selected
+                      </span>
+                    )}
+                    actionButtons={(
+                      <PrayerSelectionActionButtons
+                        disabled={draftRequests.length === 0}
+                        onCancel={() => setSelection(null)}
+                        onPray={() => startSession(selection)}
+                      />
+                    )}
+                    onDone={() => setSelection(null)}
+                    onCancel={() => setSelection(null)}
+                  />
                   {draftRequests.length === 0 && (
                     <p className="prayer-selection-empty" aria-live="polite">
-                      No active requests match these selections.
+                      No active requests match this selection. Choose different people or a different timeframe to pray.
                     </p>
                   )}
                 </div>
               )}
             </div>
-            <footer className="prayer-selection-footer">
-              <p className="prayer-selection-count" aria-live="polite">
+            {selection.showingTimeframes && (
+              <div className="prayer-selection-count" aria-live="polite">
                 {draftRequests.length} {draftRequests.length === 1 ? 'request' : 'requests'} selected
-              </p>
-              <div className="prayer-selection-footer-actions">
-                <button
-                  type="button"
-                  className="btn mini ghost"
-                  data-prayer-selection-done
-                  onClick={() => {
-                    setSelectedPeople([...selection.people]);
-                    setTimeframe(selection.timeframe);
-                    setSelection(null);
-                  }}
-                >
-                  Done
-                </button>
-                <button
-                  type="button"
-                  className="btn mini faith-start-prayer"
-                  data-prayer-selection-start
-                  disabled={draftRequests.length === 0}
-                  onClick={() => startSession(selection)}
-                >
-                  Start prayer
-                </button>
               </div>
-            </footer>
+            )}
+            {selection.showingTimeframes && (
+              <footer className="prayer-selection-footer">
+                <div className="prayer-selection-footer-actions">
+                  <PrayerSelectionActionButtons
+                    disabled={draftRequests.length === 0}
+                    onCancel={() => setSelection(null)}
+                    onPray={() => startSession(selection)}
+                  />
+                </div>
+              </footer>
+            )}
             </>
           )}
         </PrayerDialog>
       )}
 
-      {enabled && (
+      {enabled && dataStatus === 'ready' && (
         <PrayerDialog
           open={session !== null}
           className="faith-page faith-prayer-session"

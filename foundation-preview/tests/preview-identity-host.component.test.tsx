@@ -106,7 +106,10 @@ function fakeAuth(
       maybeSingle: vi.fn(async () => ({ data: null, error: null }))
     }))
   }));
-  const rpc = vi.fn(async () => ({ data: 1, error: null }));
+  const rpc = vi.fn(async () => ({
+    data: [{ revision: 1, updated_at: '2026-11-24T12:00:00Z' }],
+    error: null
+  }));
   const client: PreviewAuthClient = {
     auth: {
       onAuthStateChange(nextCallback) {
@@ -422,10 +425,10 @@ describe('PreviewIdentityHost', () => {
       friendships: { cadenceSettings: [], connections: [] }
     });
     await waitFor(() => expect(auth.rpc).toHaveBeenCalledWith(
-      'tend_save_preview_backup',
+      'tend_save_user_state',
       expect.objectContaining({
         p_expected_revision: 0,
-        p_schema_version: PREVIEW_SCHEMA_VERSION
+        p_schema_version: 1
       })
     ));
     expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(anonymousRaw);
@@ -500,16 +503,19 @@ describe('PreviewIdentityHost', () => {
     expect(screen.queryByRole('button', { name: 'Reset sample data' })).toBeNull();
     expect(screen.queryByText(/does not sync across devices/)).toBeNull();
     expect(screen.queryByRole('link', { name: 'Component catalogue' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await screen.findByRole('heading', { name: 'Settings' });
+    expect(screen.queryByRole('link', { name: 'Component catalogue' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Backup & recovery' }));
     expect(screen.getByLabelText('Import backup')).toBeTruthy();
     await user.click(screen.getByText('Advanced recovery'));
     await user.click(screen.getByRole('button', { name: /Account recovery/ }));
     await user.click(screen.getByRole('button', { name: /Save this device’s copy to account/ }));
     await screen.findByText('This device’s data was saved to your account.');
-    expect(auth.from).toHaveBeenCalledWith('tend_preview_backups');
+    expect(auth.from).toHaveBeenCalledWith('tend_user_state');
     expect(auth.rpc).toHaveBeenCalledWith(
-      'tend_save_preview_backup',
-      expect.objectContaining({ p_expected_revision: 0, p_schema_version: PREVIEW_SCHEMA_VERSION })
+      'tend_save_user_state',
+      expect.objectContaining({ p_expected_revision: 0, p_schema_version: 1 })
     );
     expect(JSON.stringify(auth.rpc.mock.calls)).not.toContain(accountId);
   });

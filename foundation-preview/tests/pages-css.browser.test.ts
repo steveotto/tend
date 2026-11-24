@@ -8,7 +8,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import type { Browser, Page } from 'playwright';
+import type { Browser, Locator, Page } from 'playwright';
 import {
   createEmptyPreviewData,
   createPreviewEnvelope,
@@ -328,6 +328,168 @@ async function setPreviewTextSize(page: Page, target: PreviewTextSize): Promise<
       expected => document.querySelector('.mobile-display-toggle')?.getAttribute('data-text-size') === expected,
       sizes[(currentIndex + index + 1) % sizes.length]
     );
+  }
+}
+
+async function waitForDialValue(dial: Locator, expected: string, label: string): Promise<void> {
+  const viewport = dial.locator('.time-dial__viewport');
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (await viewport.getAttribute('aria-valuetext') === expected) return;
+    await delay(20);
+  }
+  assert.equal(await viewport.getAttribute('aria-valuetext'), expected,
+    `${label} should select ${expected}.`);
+}
+
+async function assertRenderedDialSelection(
+  dial: Locator,
+  expected: string,
+  label: string
+): Promise<void> {
+  const viewport = dial.locator('.time-dial__viewport');
+  const selected = dial.locator('.time-dial__value.is-selected');
+  const rendered = await selected.evaluate(element => {
+    const scrollport = element.closest<HTMLElement>('.time-dial__viewport');
+    if (!scrollport) throw new Error('The selected time value has no scrollport.');
+    const valueBounds = element.getBoundingClientRect();
+    const viewportBounds = scrollport.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      text: element.textContent?.trim() ?? '',
+      color: style.color,
+      background: style.backgroundColor,
+      fullyVisible: valueBounds.top >= viewportBounds.top - 1
+        && valueBounds.bottom <= viewportBounds.bottom + 1
+    };
+  });
+  assert.equal(rendered.text, expected, `${label} should render the selected value.`);
+  assert.equal(rendered.color, 'rgb(23, 61, 44)', `${label} selected text should remain dark green.`);
+  assert.equal(rendered.background, 'rgb(217, 244, 232)', `${label} should keep the pale-green selection.`);
+  assert.equal(rendered.fullyVisible, true, `${label} selected value must not be clipped.`);
+  assert.equal(await dial.locator('.time-dial__selection').count(), 0,
+    `${label} must not cover the value with a separate selection overlay.`);
+  assert.equal(await viewport.getAttribute('aria-valuetext'), expected,
+    `${label} accessibility value should match the visible selection.`);
+}
+
+async function scrollTimeDialTo(dial: Locator, value: string, label: string): Promise<void> {
+  const viewport = dial.locator('.time-dial__viewport');
+  await viewport.evaluate(() => new Promise<void>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  const rowHeight = await viewport.locator('.time-dial__value').first()
+    .evaluate(element => element.getBoundingClientRect().height);
+  const options = (await viewport.locator('.time-dial__value').allTextContents())
+    .map(option => option.trim());
+  const index = options.indexOf(value);
+  assert.ok(index >= 0, `${label} should contain ${value}.`);
+  await viewport.evaluate((element, target) => {
+    const scrollport = element as HTMLElement;
+    scrollport.scrollTop = target.index * target.rowHeight;
+    scrollport.dispatchEvent(new Event('scroll', { bubbles: true }));
+  }, { index, rowHeight });
+  await waitForDialValue(dial, value, label);
+  await assertRenderedDialSelection(dial, value, label);
+}
+
+async function verifyDialScrolling(dial: Locator, label: string): Promise<void> {
+  const viewport = dial.locator('.time-dial__viewport');
+  const initialValue = await viewport.getAttribute('aria-valuetext');
+  assert.ok(initialValue, `${label} should expose its current selection.`);
+  await assertRenderedDialSelection(dial, initialValue, `${label} before scrolling`);
+  const options = (await viewport.locator('.time-dial__value').allTextContents())
+    .map(option => option.trim());
+  const initialIndex = options.indexOf(initialValue);
+  assert.ok(initialIndex >= 0, `${label} current value should be in its rendered options.`);
+  const nextValue = options[(initialIndex + 1) % options.length];
+  assert.ok(nextValue);
+  await scrollTimeDialTo(dial, nextValue, `${label} after scrolling`);
+  await scrollTimeDialTo(dial, initialValue, `${label} after restoring the selection`);
+}
+
+async function verifyCompletionTimePicker(
+  dialog: Locator,
+  label: string
+): Promise<void> {
+  const hourDial = dialog.locator('.time-dial--hour');
+  const minuteDial = dialog.locator('.time-dial--minute');
+  const periodDial = dialog.locator('.time-dial--period');
+  await verifyDialScrolling(hourDial, `${label} hour`);
+  const initialMinute = await minuteDial.locator('.time-dial__viewport')
+    .getAttribute('aria-valuetext');
+  assert.ok(initialMinute);
+  await verifyDialScrolling(minuteDial, `${label} minute`);
+  const quarterHour = dialog.getByRole('button', { name: 'Set minutes to 45' });
+  await quarterHour.click();
+  await waitForDialValue(minuteDial, '45', `${label} minute shortcut`);
+  assert.equal(await quarterHour.getAttribute('aria-pressed'), 'true');
+  await assertRenderedDialSelection(minuteDial, '45', `${label} selected minute shortcut`);
+  await scrollTimeDialTo(minuteDial, initialMinute, `${label} restored minute`);
+
+  const periodViewport = periodDial.locator('.time-dial__viewport');
+  if (await periodViewport.count() > 0) {
+    await verifyDialScrolling(periodDial, `${label} AM/PM`);
+    return;
+  }
+
+  const periodToggle = dialog.getByRole('group', { name: 'AM / PM' });
+  const selectedPeriod = periodToggle.locator('.time-dial__period-option[aria-pressed="true"]');
+  const originalValue = (await selectedPeriod.textContent())?.trim();
+  assert.ok(originalValue === 'AM' || originalValue === 'PM');
+  const original = periodToggle.getByRole('button', { name: originalValue, exact: true });
+  const alternateValue = originalValue === 'AM' ? 'PM' : 'AM';
+  const alternate = periodToggle.getByRole('button', { name: alternateValue, exact: true });
+  await alternate.click();
+  assert.equal(await alternate.getAttribute('aria-pressed'), 'true');
+  const selectedStyle = await alternate.evaluate(element => ({
+    color: getComputedStyle(element).color,
+    background: getComputedStyle(element).backgroundColor
+  }));
+  assert.deepEqual(selectedStyle, {
+    color: 'rgb(23, 61, 44)',
+    background: 'rgb(217, 244, 232)'
+  }, `${label} selected AM/PM should remain visible on its pale-green background.`);
+  await original.click();
+  assert.equal(await original.getAttribute('aria-pressed'), 'true');
+}
+
+async function verifyParticipantGrid(
+  page: Page,
+  dialog: Locator,
+  expectedNames: readonly string[],
+  label: string,
+  exerciseControls: boolean,
+  expectedColumns = 2
+): Promise<void> {
+  void expectedColumns;
+  const opener = dialog.getByRole('button', { name: /^Choose people,/ });
+  await opener.waitFor({ state: 'visible' });
+  const rowLayout = await opener.evaluate(button => {
+    const bounds = button.getBoundingClientRect();
+    return {
+      viewportWidth: document.documentElement.clientWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      width: bounds.width,
+      chevron: button.querySelector('.rhythm-editor__association-row-chevron')?.textContent?.trim()
+    };
+  });
+  assert.equal(rowLayout.viewportWidth, rowLayout.documentWidth,
+    `${label} should not create horizontal page scrolling.`);
+  assert.ok(rowLayout.width > 0);
+  assert.equal(rowLayout.chevron, '›');
+  void expectedNames;
+
+  if (exerciseControls) {
+    await opener.click();
+    const picker = page.getByRole('dialog', { name: 'Choose people' });
+    await picker.waitFor({ state: 'visible' });
+    const lee = picker.getByRole('button', { name: 'Lee', exact: true });
+    await lee.click();
+    assert.equal(await lee.getAttribute('aria-pressed'), 'true');
+    await lee.focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await lee.getAttribute('aria-pressed'), 'false');
+    await picker.getByRole('button', { name: 'Cancel' }).click();
   }
 }
 
@@ -1723,9 +1885,14 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
   const today = localDateString(new Date());
   const personId = 'sample-person-avery';
   const sparkPersonId = 'layout-spark-person';
+  const shortPersonId = 'layout-short-person';
+  const secondShortPersonId = 'layout-second-short-person';
   const recentConnectionDate = new Date();
   recentConnectionDate.setDate(recentConnectionDate.getDate() - 7);
   const recentConnection = localDateString(recentConnectionDate);
+  const completedConnectionDate = new Date();
+  completedConnectionDate.setDate(completedConnectionDate.getDate() - 30);
+  const completedConnectionDateOnly = localDateString(completedConnectionDate);
   const futureDueDate = new Date();
   futureDueDate.setDate(futureDueDate.getDate() + 7);
   previewData.people = [{
@@ -1734,10 +1901,18 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
   }, {
     id: sparkPersonId,
     displayName: 'Jordan-Example-With-A-Deliberately-Long-Synthetic-Name'
+  }, {
+    id: shortPersonId,
+    displayName: 'Lee'
+  }, {
+    id: secondShortPersonId,
+    displayName: 'Pat'
   }];
   previewData.peopleGroups = previewData.peopleGroups.map(group => ({
     ...group,
-    memberIds: group.id === 'marriage' ? [personId] : []
+    memberIds: group.id === 'marriage'
+      ? [personId, sparkPersonId, shortPersonId, secondShortPersonId]
+      : []
   }));
   previewData.personDetails = [{
     personId,
@@ -1751,6 +1926,12 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
     time: '14:45',
     notes: 'Spent time together and talked about a meaningful family event during the long walk.',
     participantIds: [personId]
+  }, {
+    id: 'synthetic-unlinked-spark-title-match',
+    type: 'spark',
+    date: completedConnectionDateOnly,
+    participantIds: [personId],
+    sparkTitleSnapshot: 'Watch Backrooms'
   }];
   previewData.personNotes = [1, 2].map(index => ({
     id: `layout-person-note-${index}`,
@@ -1771,7 +1952,8 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
   }, {
     id: 'layout-completed-spark',
     ownerId: personId,
-    title: 'Remember the completed one-off Spark with a deliberately long title',
+    title: 'Watch Backrooms',
+    description: 'A completed synthetic idea retained in the Completed library.',
     dueDate: localDateString(futureDueDate),
     sharedWith: [],
     archived: false,
@@ -1897,7 +2079,9 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
         })
       }
     });
-    window.localStorage.setItem(key, value);
+    if (window.localStorage.getItem(key) === null) {
+      window.localStorage.setItem(key, value);
+    }
   }, {
     key: storageKey,
     value: JSON.stringify(envelope)
@@ -2943,9 +3127,13 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
 await peopleCardButton.click();
 await page.getByRole('tab', { name: 'Connections' }).click();
 const sparkCard = page.locator('.person-spark-card').first();
-const completedSparkCard = page.locator('.person-spark-card').nth(1);
 await sparkCard.waitFor({ state: 'visible' });
-await completedSparkCard.waitFor({ state: 'visible' });
+assert.equal(await page.locator('.person-spark-card').count(), 13,
+  'The Person Sparks section should show its open Sparks but not the completed record.');
+assert.equal(await page.locator('.person-spark-card').filter({ hasText: 'Watch Backrooms' }).count(), 0,
+  'The completed same-title Spark must not appear in the Person open list.');
+assert.equal(await page.getByRole('button', { name: /Watch Backrooms, Spark connection/ }).count(), 1,
+  'A same-title Connection remains visible in history without making a completed Spark appear open.');
 const sparkDisclosure = sparkCard.getByRole('button', {
   name: 'Expand Spark Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
 });
@@ -3003,9 +3191,6 @@ assert.ok(compactSparkStyle.centerDifference < 1,
 assert.equal(await sparkCard.locator('.person-spark-card__description').count(), 0,
   'Collapsed Spark rows must not show the expanded description.');
 await sparkDisclosure.click();
-await completedSparkCard.getByRole('button', {
-  name: 'Expand Spark Remember the completed one-off Spark with a deliberately long title'
-}).click();
 assert.equal(await sparkCard.locator('.person-spark-card__title').textContent(),
   'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes');
 assert.equal(await sparkCard.locator('.person-spark-card__people .person-badge-visual').count(), 2);
@@ -3013,13 +3198,6 @@ assert.match((await sparkCard.locator('.person-spark-card__footer').innerText())
 assert.equal(await sparkCard.getByRole('button', { name: /Notes/ }).count(), 0,
   'Expanded Spark cards should not expose a Notes action.');
 assert.equal(await sparkCard.locator('.person-spark-card__description').count(), 1);
-assert.equal(await completedSparkCard.locator('.person-spark-card__description').count(), 0);
-assert.match(
-  (await completedSparkCard.locator('.person-spark-card__due-date').innerText()).trim(),
-  /^Due [A-Z][a-z]+ \d{1,2}, \d{4}$/
-);
-assert.equal(await completedSparkCard.getByRole('button', { name: /Notes/ }).count(), 0,
-  'Completed Spark cards should not expose a Notes action.');
 assert.equal(await sparkCard.getByRole('button', { name: /Actions for/ }).count(), 0);
 for (const textSize of ['small', 'medium', 'large'] as const) {
   await setPreviewTextSize(page, textSize);
@@ -3109,6 +3287,10 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
         edit,
         collapse,
         dueDate,
+        collapseBackground: getComputedStyle(
+          element.querySelector<HTMLElement>('.person-spark-card__collapse')!,
+          '::before'
+        ).backgroundColor,
         footer: rect('.person-spark-card__footer'),
         cardRadius: getComputedStyle(element).borderRadius,
         cardPadding: getComputedStyle(element).padding,
@@ -3144,8 +3326,8 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
       `${label} footer should have a light divider.`);
     assert.equal(layout.dueDateColor, 'rgb(148, 107, 0)');
     assert.ok(Number(layout.dueDateWeight) >= 600);
-    assert.notEqual(layout.dueDateBackground, 'rgba(0, 0, 0, 0)',
-      `${label} due-date/Someday should use an amber pill surface.`);
+    assert.equal(layout.dueDateBackground, layout.collapseBackground,
+      `${label} due-date/Someday badge should match the Spark chevron surface.`);
     assert.ok(contrastRatio(layout.dueDateColor, 'rgb(255, 255, 255)') >= 4.5,
       `${label} due-date label contrast against the white card must meet 4.5:1.`);
     assert.equal(layout.editColor, 'rgb(94, 107, 99)');
@@ -3200,31 +3382,6 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
       `${label} the footer should remain below the action row.`);
     assert.ok(layout.title.right <= layout.collapse.left,
       `${label} title should use the available width up to the collapse control.`);
-
-    const completedLayout = await completedSparkCard.evaluate(card => {
-      const element = card as HTMLElement;
-      const title = element.querySelector<HTMLElement>('.person-spark-card__title');
-      const footer = element.querySelector<HTMLElement>('.person-spark-card__footer');
-      if (!title || !footer) throw new Error('Completed Spark is missing its shared card layout.');
-      return {
-        cardWidth: element.clientWidth,
-        cardScrollWidth: element.scrollWidth,
-        titleFits: title.scrollWidth <= title.clientWidth + 1,
-        footerFits: footer.scrollWidth <= footer.clientWidth + 1,
-        hasEdit: element.querySelector('.person-spark-card__edit') !== null,
-        hasDoIt: element.querySelector('.person-spark-card__do-it') !== null,
-        hasNotes: element.querySelector('.person-spark-card__notes') !== null,
-        hasDescription: element.querySelector('.person-spark-card__description') !== null,
-      };
-    });
-    assert.ok(completedLayout.cardScrollWidth <= completedLayout.cardWidth + 1,
-      `${label} completed Spark should not overflow its card.`);
-    assert.ok(completedLayout.titleFits && completedLayout.footerFits,
-      `${label} completed Spark title and completion footer should wrap without clipping.`);
-    assert.equal(completedLayout.hasEdit, true);
-    assert.equal(completedLayout.hasDoIt, false);
-    assert.equal(completedLayout.hasDescription, false);
-    assert.equal(completedLayout.hasNotes, false);
 
     if (textSize === 'small' && viewportWidth === 375) {
       await page.setViewportSize({ width: 375, height: 520 });
@@ -3483,6 +3640,40 @@ for (const textSize of ['small', 'medium', 'large'] as const) {
     assert.equal(await library.getByRole('tab', { name: 'Active (13)' }).count(), 1);
     assert.equal(await library.getByRole('tab', { name: 'Completed (1)' }).count(), 1);
     assert.equal(await library.getByRole('tab', { name: 'Archived (0)' }).count(), 1);
+    if (textSize === 'small' && viewportWidth === 375) {
+      await library.getByRole('tab', { name: 'Completed (1)' }).click();
+      const completedSparkCard = library.locator('.person-spark-card').filter({ hasText: 'Watch Backrooms' });
+      assert.equal(await completedSparkCard.count(), 1,
+        'Completed Sparks remain available in the Completed library tab.');
+      await completedSparkCard.getByRole('button', { name: 'Expand Spark Watch Backrooms' }).click();
+      assert.equal(
+        await completedSparkCard.locator('.person-spark-card__description').textContent(),
+        'A completed synthetic idea retained in the Completed library.'
+      );
+      assert.match(
+        (await completedSparkCard.locator('.person-spark-card__due-date').innerText()).trim(),
+        /^Due [A-Z][a-z]+ \d{1,2}, \d{4}$/
+      );
+      const completedLayout = await completedSparkCard.evaluate(card => ({
+        cardWidth: card.clientWidth,
+        cardScrollWidth: card.scrollWidth,
+        hasDescription: card.querySelector('.person-spark-card__description') !== null,
+        hasEdit: card.querySelector('.person-spark-card__edit') !== null,
+        hasDoIt: card.querySelector('.person-spark-card__do-it') !== null
+      }));
+      assert.ok(completedLayout.cardScrollWidth <= completedLayout.cardWidth + 1,
+        'Completed Spark details should fit within the shared library card.');
+      assert.equal(completedLayout.hasDescription, true);
+      assert.equal(completedLayout.hasEdit, true);
+      assert.equal(completedLayout.hasDoIt, false);
+      assert.equal(await completedSparkCard.getByRole('button', { name: /Notes/ }).count(), 0,
+        'Completed Spark cards should preserve their existing supported actions.');
+      await completedSparkCard.getByRole('button', { name: 'Edit Spark' }).click();
+      const completedEditor = page.getByRole('dialog', { name: 'Edit Spark' });
+      assert.equal(await completedEditor.getByRole('button', { name: 'Undo completion' }).count(), 1);
+      await completedEditor.getByRole('button', { name: 'Cancel' }).click();
+      await library.getByRole('tab', { name: 'Active (13)' }).click();
+    }
     const firstSpark = library.locator('.person-spark-card').first();
     const firstDisclosure = firstSpark.locator('.person-spark-card__disclosure');
     assert.equal(await firstDisclosure.getAttribute('aria-expanded'), 'false',
@@ -3556,70 +3747,260 @@ await page.getByRole('tab', { name: 'Connections' }).click();
 await page.locator('.person-spark-card').first().getByRole('button', {
   name: 'Expand Spark Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
 }).click();
-await doItButton.click();
-await sparkConnectionDialog.waitFor({ state: 'visible' });
-for (const viewportWidth of [375, 390, 430]) {
-  await page.setViewportSize({ width: viewportWidth, height: 520 });
-  const sparkScroll = await sparkConnectionDialog.evaluate(dialog => {
-    const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
-    const actions = dialog.querySelector<HTMLElement>('.friendships-connection-form .money-goal-dialog__actions');
-    const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
-    if (!region || !actions || !close) throw new Error('Spark completion is missing its shared scroll region.');
-    region.scrollTop = region.scrollHeight;
-    const regionBounds = region.getBoundingClientRect();
-    const actionBounds = actions.getBoundingClientRect();
-    return {
-      scrollTop: region.scrollTop,
-      maximum: region.scrollHeight - region.clientHeight,
-      regionTop: regionBounds.top,
-      regionBottom: regionBounds.bottom,
-      actionTop: actionBounds.top,
-      actionBottom: actionBounds.bottom,
-      closeTop: close.getBoundingClientRect().top
-    };
-  });
-  assert.ok(sparkScroll.scrollTop >= sparkScroll.maximum - 1,
-    `Spark completion must scroll to the save action at ${viewportWidth}px.`);
-  assert.ok(sparkScroll.actionTop >= sparkScroll.regionTop);
-  assert.ok(sparkScroll.actionBottom <= sparkScroll.regionBottom + 1);
-  assert.ok(sparkScroll.closeTop >= 0);
+const participantNames = [
+ 'Alexandria-Brooks-Williams-ExtremelyLong Synthetic Person',
+ 'Jordan-Example-With-A-Deliberately-Long-Synthetic-Name',
+ 'Lee',
+ 'Pat'
+];
+for (const textSize of ['small', 'medium', 'large'] as const) {
+ await setPreviewTextSize(page, textSize);
+ await doItButton.click();
+ await sparkConnectionDialog.waitFor({ state: 'visible' });
+ for (const viewportWidth of [375, 390, 430]) {
+   await page.setViewportSize({ width: viewportWidth, height: 520 });
+   const label = `Spark completion at ${viewportWidth}px / ${textSize} text`;
+   await verifyCompletionTimePicker(sparkConnectionDialog, label);
+   await verifyParticipantGrid(
+     page,
+     sparkConnectionDialog,
+     participantNames,
+     label,
+     textSize === 'small' && viewportWidth === 375
+   );
+   const sparkScroll = await sparkConnectionDialog.evaluate(dialog => {
+     const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+     const actions = dialog.querySelector<HTMLElement>('.friendships-connection-form .money-goal-dialog__actions');
+     const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+     if (!region || !actions || !close) throw new Error('Spark completion is missing its shared scroll region.');
+     region.scrollTop = region.scrollHeight;
+     const regionBounds = region.getBoundingClientRect();
+     const actionBounds = actions.getBoundingClientRect();
+     return {
+       scrollTop: region.scrollTop,
+       maximum: region.scrollHeight - region.clientHeight,
+       regionTop: regionBounds.top,
+       regionBottom: regionBounds.bottom,
+       actionTop: actionBounds.top,
+       actionBottom: actionBounds.bottom,
+       closeTop: close.getBoundingClientRect().top
+     };
+   });
+   assert.ok(sparkScroll.scrollTop >= sparkScroll.maximum - 1,
+     `Spark completion must scroll to the save action at ${viewportWidth}px / ${textSize}.`);
+   assert.ok(sparkScroll.actionTop >= sparkScroll.regionTop);
+   assert.ok(sparkScroll.actionBottom <= sparkScroll.regionBottom + 1);
+   assert.ok(sparkScroll.closeTop >= 0);
+ }
+ if (textSize === 'large') {
+   await page.setViewportSize({ width: 320, height: 520 });
+   await verifyParticipantGrid(
+     page,
+     sparkConnectionDialog,
+     participantNames,
+     'Spark completion at 320px / large text',
+     false,
+     1
+   );
+ }
+ await sparkConnectionDialog.getByRole('button', { name: 'Cancel' }).click();
+ await sparkConnectionDialog.waitFor({ state: 'detached' });
+ assert.equal(await doItButton.evaluate(element => document.activeElement === element),
+   true, `Cancelling Do it should return focus at ${textSize} text size.`);
 }
-await sparkConnectionDialog.getByRole('button', { name: 'Cancel' }).click();
-assert.equal(await doItButton.evaluate(element => document.activeElement === element),
-  true, 'Cancelling Do it should return focus to the primary action.');
 
 await page.getByRole('tab', { name: 'Rhythms' }).click();
 const tendButton = page.getByRole('button', { name: /^Tend / }).first();
 const rhythmCompletionDialog = page.getByRole('dialog', { name: 'When did you tend it?' });
-await tendButton.click();
-await rhythmCompletionDialog.waitFor({ state: 'visible' });
-for (const viewportWidth of [375, 390, 430]) {
-  await page.setViewportSize({ width: viewportWidth, height: 520 });
-  const rhythmScroll = await rhythmCompletionDialog.evaluate(dialog => {
-    const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
-    const actions = dialog.querySelector<HTMLElement>('.rhythm-completion-form__actions');
-    const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
-    if (!region || !actions || !close) throw new Error('Rhythm completion is missing its shared scroll region.');
-    region.scrollTop = region.scrollHeight;
-    const regionBounds = region.getBoundingClientRect();
-    const actionBounds = actions.getBoundingClientRect();
-    return {
-      scrollTop: region.scrollTop,
-      maximum: region.scrollHeight - region.clientHeight,
-      regionTop: regionBounds.top,
-      regionBottom: regionBounds.bottom,
-      actionTop: actionBounds.top,
-      actionBottom: actionBounds.bottom,
-      closeTop: close.getBoundingClientRect().top
-    };
-  });
-  assert.ok(rhythmScroll.scrollTop >= rhythmScroll.maximum - 1,
-    `Rhythm completion must scroll to the save action at ${viewportWidth}px.`);
-  assert.ok(rhythmScroll.actionTop >= rhythmScroll.regionTop);
-  assert.ok(rhythmScroll.actionBottom <= rhythmScroll.regionBottom + 1);
-  assert.ok(rhythmScroll.closeTop >= 0);
+for (const textSize of ['small', 'medium', 'large'] as const) {
+ await setPreviewTextSize(page, textSize);
+ await tendButton.click();
+ await rhythmCompletionDialog.waitFor({ state: 'visible' });
+ for (const viewportWidth of [375, 390, 430]) {
+   await page.setViewportSize({ width: viewportWidth, height: 520 });
+   const label = `Rhythm completion at ${viewportWidth}px / ${textSize} text`;
+   await verifyCompletionTimePicker(rhythmCompletionDialog, label);
+   const rhythmScroll = await rhythmCompletionDialog.evaluate(dialog => {
+     const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+     const actions = dialog.querySelector<HTMLElement>('.rhythm-completion-form__actions');
+     const close = dialog.querySelector<HTMLElement>('.money-goal-dialog__close');
+     if (!region || !actions || !close) throw new Error('Rhythm completion is missing its shared scroll region.');
+     region.scrollTop = region.scrollHeight;
+     const regionBounds = region.getBoundingClientRect();
+     const actionBounds = actions.getBoundingClientRect();
+     return {
+       scrollTop: region.scrollTop,
+       maximum: region.scrollHeight - region.clientHeight,
+       regionTop: regionBounds.top,
+       regionBottom: regionBounds.bottom,
+       actionTop: actionBounds.top,
+       actionBottom: actionBounds.bottom,
+       closeTop: close.getBoundingClientRect().top
+     };
+   });
+   assert.ok(rhythmScroll.scrollTop >= rhythmScroll.maximum - 1,
+     `Rhythm completion must scroll to the save action at ${viewportWidth}px / ${textSize}.`);
+   assert.ok(rhythmScroll.actionTop >= rhythmScroll.regionTop);
+   assert.ok(rhythmScroll.actionBottom <= rhythmScroll.regionBottom + 1);
+   assert.ok(rhythmScroll.closeTop >= 0);
+ }
+ await rhythmCompletionDialog.getByRole('button', { name: 'Close completion' }).click();
+ await rhythmCompletionDialog.waitFor({ state: 'detached' });
 }
-await rhythmCompletionDialog.getByRole('button', { name: 'Close completion' }).click();
+
+await page.getByRole('tab', { name: 'Connections' }).click();
+const personSparkPanel = page.locator('.person-spark-panel');
+await personSparkPanel.waitFor({ state: 'visible' });
+const completionSpark = personSparkPanel.locator('.person-spark-card').filter({
+ hasText: 'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+});
+assert.equal(await completionSpark.count(), 1,
+ `The open Spark should still be in the Person panel: ${await personSparkPanel.innerText()}`);
+const completionExpand = completionSpark.getByRole('button', {
+ name: 'Expand Spark Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+});
+if (await completionExpand.count() > 0) {
+ await completionExpand.click();
+}
+await completionSpark.getByRole('button', { name: 'Do it' }).click();
+await sparkConnectionDialog.waitFor({ state: 'visible' });
+await page.setViewportSize({ width: 375, height: 520 });
+await sparkConnectionDialog.getByLabel('Date').fill(today);
+await sparkConnectionDialog.getByLabel('Notes (optional)').fill('Synthetic browser retry note.');
+await sparkConnectionDialog.getByRole('button', { name: /^Choose people,/ }).click();
+const retryPeoplePicker = page.getByRole('dialog', { name: 'Choose people' });
+await retryPeoplePicker.waitFor({ state: 'visible' });
+await retryPeoplePicker.getByRole('button', { name: 'Lee', exact: true }).click();
+await retryPeoplePicker.getByRole('button', { name: 'Done' }).click();
+const minuteShortcut = sparkConnectionDialog.getByRole('button', { name: 'Set minutes to 45' });
+await minuteShortcut.click();
+const periodToggle = sparkConnectionDialog.getByRole('group', { name: 'AM / PM' });
+if (await periodToggle.count() > 0) {
+ const selectedPeriod = periodToggle.locator('.time-dial__period-option[aria-pressed="true"]');
+ const currentPeriod = (await selectedPeriod.textContent())?.trim();
+ assert.ok(currentPeriod === 'AM' || currentPeriod === 'PM');
+ await periodToggle.getByRole('button', {
+   name: currentPeriod === 'AM' ? 'PM' : 'AM',
+   exact: true
+ }).click();
+} else {
+ const periodDial = sparkConnectionDialog.locator('.time-dial--period');
+ const currentPeriod = await periodDial.locator('.time-dial__viewport').getAttribute('aria-valuetext');
+ assert.ok(currentPeriod === 'AM' || currentPeriod === 'PM');
+ await scrollTimeDialTo(periodDial, currentPeriod === 'AM' ? 'PM' : 'AM', 'Spark save AM/PM');
+}
+const readSparkCompletionValues = () => sparkConnectionDialog.evaluate(dialog => {
+ const date = dialog.querySelector<HTMLInputElement>('input[type="date"]');
+ const notes = dialog.querySelector<HTMLTextAreaElement>('textarea');
+ if (!date || !notes) throw new Error('Spark completion is missing its date or notes field.');
+ return {
+   date: date.value,
+   notes: notes.value,
+   participants: dialog.querySelector('.rhythm-editor__association-row-selection')?.textContent?.trim() ?? '',
+   hour: dialog.querySelector('.time-dial--hour .time-dial__viewport')?.getAttribute('aria-valuetext') ?? null,
+   minute: dialog.querySelector('.time-dial--minute .time-dial__viewport')?.getAttribute('aria-valuetext') ?? null,
+   period: dialog.querySelector('.time-dial--period .time-dial__viewport')?.getAttribute('aria-valuetext')
+     ?? dialog.querySelector('.time-dial__period-option[aria-pressed="true"]')?.textContent?.trim()
+     ?? null
+ };
+});
+const submittedValues = await readSparkCompletionValues();
+await page.evaluate(key => {
+ const storage = window.localStorage;
+ const originalSetItem = storage.setItem.bind(storage);
+ let shouldFail = true;
+ Object.defineProperty(storage, 'setItem', {
+   configurable: true,
+   value: (candidateKey: string, value: string) => {
+     if (shouldFail && candidateKey === key) {
+       shouldFail = false;
+       throw new DOMException('Synthetic browser storage failure', 'QuotaExceededError');
+     }
+     originalSetItem(candidateKey, value);
+   }
+ });
+}, storageKey);
+await sparkConnectionDialog.getByRole('button', { name: 'Save connection' }).click();
+assert.match(await sparkConnectionDialog.locator('[role="alert"]').innerText(), /Preview could not save/i,
+ 'A failed browser save should report its error without closing the form.');
+assert.deepEqual(await readSparkCompletionValues(), submittedValues,
+ 'A failed browser save should retain date, time, notes, and participant selections.');
+assert.equal(await completionSpark.count(), 1, 'A failed save should leave the Spark open.');
+assert.equal(await page.getByRole('button', { name: /Plan a deliberately long one-off Spark title.*Spark connection/ }).count(), 0,
+ 'A failed save must not create a Connection-history row.');
+await sparkConnectionDialog.getByRole('button', { name: 'Save connection' }).click();
+await sparkConnectionDialog.waitFor({ state: 'detached' });
+assert.equal(await completionSpark.count(), 0,
+ 'Successful completion should immediately remove the Spark from the Person open list.');
+assert.equal(await page.getByRole('button', { name: /Plan a deliberately long one-off Spark title.*Spark connection/ }).count(), 1,
+ 'Successful completion should preserve its Connection-history entry.');
+const savedRaw = await page.evaluate(key => window.localStorage.getItem(key), storageKey);
+assert.ok(savedRaw);
+const savedPreview = parsePreviewBackup(savedRaw, today);
+if (!savedPreview.valid) throw new Error(`Synthetic completed Spark is invalid: ${savedPreview.message}`);
+const savedSpark = savedPreview.envelope.data.personSparks.find(item => item.id === 'layout-long-spark');
+assert.equal(savedSpark?.completed, true);
+const savedSparkConnection = savedPreview.envelope.data.friendships.connections.find(
+ item => item.sparkId === 'layout-long-spark'
+);
+assert.ok(savedSparkConnection);
+assert.deepEqual(savedSparkConnection.participantIds, [
+ personId,
+ sparkPersonId,
+ shortPersonId
+]);
+assert.equal(savedSparkConnection.notes, 'Synthetic browser retry note.');
+assert.equal(savedSparkConnection.date, today);
+assert.ok(submittedValues.hour && submittedValues.minute && submittedValues.period);
+const hour12 = Number(submittedValues.hour);
+const hour24 = (hour12 % 12) + (submittedValues.period === 'PM' ? 12 : 0);
+assert.equal(savedSparkConnection.time,
+ `${String(hour24).padStart(2, '0')}:${String(Number(submittedValues.minute)).padStart(2, '0')}`,
+ 'Successful save should persist the selected time unchanged.');
+
+await page.reload();
+await page.locator('.home-dashboard').waitFor();
+const reloadedHomeSparks = page.locator('.today-sparks-section');
+assert.equal(await reloadedHomeSparks.locator('.person-spark-card').filter({
+ hasText: 'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+}).count(), 0, 'Reload should retain the completed Spark state on Home.');
+await reloadedHomeSparks.getByRole('button', { name: 'View all' }).click();
+const persistedLibrary = page.getByRole('dialog', { name: 'Sparks' });
+assert.equal(await persistedLibrary.getByRole('tab', { name: 'Active (12)' }).count(), 1);
+assert.equal(await persistedLibrary.getByRole('tab', { name: 'Completed (2)' }).count(), 1);
+await persistedLibrary.getByRole('tab', { name: 'Completed (2)' }).click();
+const persistedSparkCard = persistedLibrary.locator('.person-spark-card').filter({
+ hasText: 'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+});
+assert.equal(await persistedSparkCard.count(), 1,
+ 'Reload should retain the completed Spark in the Completed library tab.');
+await persistedSparkCard.getByRole('button', {
+ name: 'Expand Spark Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+}).click();
+assert.equal(await persistedSparkCard.locator('.person-spark-card__description').textContent(),
+ 'A long but optional description that should wrap inside the white card without pushing its controls beyond the card or viewport.');
+await persistedSparkCard.getByRole('button', { name: 'Edit Spark' }).click();
+const completedSparkEditor = page.getByRole('dialog', { name: 'Edit Spark' });
+await completedSparkEditor.getByRole('button', { name: 'Undo completion' }).click();
+const undoConfirmation = page.getByRole('dialog', { name: 'Undo this Spark completion?' });
+await undoConfirmation.getByRole('button', { name: 'Undo completion' }).click();
+assert.equal(await persistedLibrary.getByRole('tab', { name: 'Active (13)' }).count(), 1);
+assert.equal(await persistedLibrary.getByRole('tab', { name: 'Completed (1)' }).count(), 1);
+assert.equal(await persistedLibrary.locator('.person-spark-card').filter({
+ hasText: 'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+}).count(), 1, 'Undo should restore the Spark to the Active library tab.');
+const undoneRaw = await page.evaluate(key => window.localStorage.getItem(key), storageKey);
+assert.ok(undoneRaw);
+const undonePreview = parsePreviewBackup(undoneRaw, today);
+if (!undonePreview.valid) throw new Error(`Synthetic undone Spark is invalid: ${undonePreview.message}`);
+assert.equal(undonePreview.envelope.data.personSparks.find(item => item.id === 'layout-long-spark')?.completed, false);
+assert.equal(undonePreview.envelope.data.friendships.connections.some(
+ item => item.sparkId === 'layout-long-spark'
+), false, 'Undo should remove its unchanged completion-owned Connection.');
+await persistedLibrary.getByRole('button', { name: 'Close Sparks' }).click();
+assert.equal(await page.locator('.today-sparks-section .person-spark-card').filter({
+ hasText: 'Plan a deliberately long one-off Spark title that wraps naturally at mobile sizes'
+}).count(), 1, 'Undo should restore the Spark to Home open lists.');
 await context.close();
 }
 
@@ -4084,17 +4465,15 @@ async function verifyConnectionHistoryRowResponsiveLayout(browser: Browser): Pro
         source: 'rhythm',
         title: 'Pray together',
         sourceLabel: 'Rhythm',
-        date: 'Oct 21, 2026',
-        time: '10:15 AM',
-        dateTime: '2026-10-21T10:15',
+        date: 'Oct 21',
+        dateTime: '2026-10-21',
         sourceClass: 'rhythm'
       },
       {
         source: 'spark',
         title: 'Watch Backrooms Movie and discuss the ending together at length',
         sourceLabel: 'Spark',
-        date: 'Oct 20, 2026',
-        time: null,
+        date: 'Oct 20',
         dateTime: '2026-10-20',
         sourceClass: 'spark'
       },
@@ -4102,8 +4481,7 @@ async function verifyConnectionHistoryRowResponsiveLayout(browser: Browser): Pro
         source: 'manual',
         title: 'Text',
         sourceLabel: 'Manual',
-        date: 'Oct 19, 2026',
-        time: null,
+        date: 'Oct 19',
         dateTime: '2026-10-19',
         sourceClass: 'manual'
       }
@@ -4118,10 +4496,11 @@ async function verifyConnectionHistoryRowResponsiveLayout(browser: Browser): Pro
             <span class="friendships-connection-row__source-type">${row.sourceLabel}</span>
           </span>
           <span class="tended-rhythm-done-row__time friendships-connection-row__timestamp">
+            <svg class="friendships-connection-row__calendar-icon" viewBox="0 0 20 20" aria-hidden="true">
+              <rect x="2.75" y="4.25" width="14.5" height="13" rx="2"></rect>
+              <path d="M6 2.75v3M14 2.75v3M3 8h14"></path>
+            </svg>
             <time datetime="${row.dateTime}">${row.date}</time>
-            ${row.time
-              ? `<span aria-hidden="true">·</span><time datetime="${row.dateTime}">${row.time}</time>`
-              : ''}
           </span>
         </button>
       </li>
@@ -4135,7 +4514,7 @@ async function verifyConnectionHistoryRowResponsiveLayout(browser: Browser): Pro
           <button class="tended-rhythm-done-row" aria-label="Reference tended Rhythm">
             <span class="tended-rhythm-done-row__check" aria-hidden="true">✓</span>
             <span class="tended-rhythm-done-row__title">Tended Rhythm reference</span>
-            <span class="tended-rhythm-done-row__time">Oct 21, 2026</span>
+            <span class="tended-rhythm-done-row__time">Oct 21</span>
           </button>
           <ol class="friendships-history-list">${rowMarkup}</ol>
         </body>
@@ -4187,11 +4566,13 @@ async function verifyConnectionHistoryRowResponsiveLayout(browser: Browser): Pro
                 fontFamily: style.fontFamily,
                 titleFontSize: titleStyle.fontSize,
                 titleFontWeight: titleStyle.fontWeight,
+                titleColor: titleStyle.color,
                 checkBackground: getComputedStyle(check).backgroundColor,
                 checkColor: getComputedStyle(check).color,
                 timestampWhiteSpace: getComputedStyle(timestamp).whiteSpace,
                 source: source.textContent,
                 timeCount: row.querySelectorAll('time').length,
+                calendarCount: row.querySelectorAll('.friendships-connection-row__calendar-icon').length,
                 titleText: title.textContent
               };
             })
@@ -4218,6 +4599,9 @@ async function verifyConnectionHistoryRowResponsiveLayout(browser: Browser): Pro
           assert.equal(row.fontFamily, layout.reference.fontFamily, `${label} shared typography.`);
           assert.equal(row.titleFontSize, layout.reference.titleFontSize, `${label} shared title size.`);
           assert.equal(row.titleFontWeight, layout.reference.titleFontWeight, `${label} shared title weight.`);
+          assert.equal(row.titleColor, 'rgb(32, 39, 35)', `${label} connection titles use primary text.`);
+          assert.equal(row.calendarCount, 1, `${label} date uses the shared calendar icon.`);
+          assert.equal(row.timeCount, 1, `${label} compact row shows one date and no time.`);
         }
         assert.equal(layout.rows[0]!.checkBackground, 'rgb(36, 107, 82)', `${label} Rhythm circle stays green.`);
         assert.equal(layout.rows[0]!.checkColor, 'rgb(255, 255, 255)', `${label} Rhythm check stays white.`);
@@ -4225,8 +4609,6 @@ async function verifyConnectionHistoryRowResponsiveLayout(browser: Browser): Pro
         assert.equal(layout.rows[1]!.checkColor, 'rgb(138, 98, 0)', `${label} Spark check uses dark amber.`);
         assert.equal(layout.rows[1]!.rowBackground, 'rgb(255, 255, 255)', `${label} Spark does not tint the row.`);
         assert.equal(layout.rows[2]!.source, 'Manual', `${label} manual source remains neutral and explicit.`);
-        assert.equal(layout.rows[0]!.timeCount, 2, `${label} recorded time is shown.`);
-        assert.equal(layout.rows[1]!.timeCount, 1, `${label} date-only entry does not invent a time.`);
       }
     }
   } finally {
@@ -4541,7 +4923,6 @@ async function main() {
     await waitForPreview(`${baseUrl}/app-preview.html`, previewServer);
     browser = await chromium.launch({ headless: true });
     await verifyClassicSparkPalette(browser);
-
     await run(process.execPath, [
       viteCli,
       'build',
@@ -4554,15 +4935,43 @@ async function main() {
       catalogServer.listen(catalogPort, '127.0.0.1', resolve);
     });
 
+    const dashboardPrayerFixture = createSamplePreviewData();
+    const dashboardPrayerNow = new Date().toISOString();
+    dashboardPrayerFixture.prayerRequests = [{
+      id: 'browser-active-prayer-request',
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan'],
+      title: 'Synthetic responsive Prayer request',
+      details: 'Synthetic account request used to verify the rendered active-prayer dialog.',
+      status: 'active',
+      createdAt: new Date(Date.parse(dashboardPrayerNow) - 86_400_000).toISOString(),
+      updatedAt: dashboardPrayerNow,
+      prayerLogs: []
+    }];
+    const dashboardPrayerEnvelope = createPreviewEnvelope(dashboardPrayerFixture);
+    const dashboardPrayerKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:c0000000-0000-4000-8000-000000000003`;
+    const dashboardPrayerValue = JSON.stringify(dashboardPrayerEnvelope);
+
     for (const identity of ['signed-out', 'dashboard'] as const) {
       const context = await browser.newContext({
         viewport: { width: 1280, height: 900 },
         hasTouch: identity === 'dashboard'
       });
-      await context.addInitScript((initialIdentity: string) => {
+      await context.addInitScript(({
+        initialIdentity,
+        prayerKey,
+        prayerValue
+      }: {
+        initialIdentity: string;
+        prayerKey: string;
+        prayerValue: string;
+      }) => {
         const session = initialIdentity === 'dashboard'
           ? { user: { id: 'c0000000-0000-4000-8000-000000000003', email: 'browser-test@example.test' } }
           : null;
+        if (initialIdentity === 'dashboard') {
+          window.localStorage.setItem(prayerKey, prayerValue);
+        }
         Object.assign(window, {
           supabase: {
             createClient: () => ({
@@ -4579,7 +4988,11 @@ async function main() {
             })
           }
         });
-      }, identity);
+      }, {
+        initialIdentity: identity,
+        prayerKey: dashboardPrayerKey,
+        prayerValue: dashboardPrayerValue
+      });
 
       const page = await context.newPage();
       const classicCssRequests: string[] = [];
@@ -6098,7 +6511,7 @@ async function main() {
           assert.equal(await timeframeSizeToggle.getAttribute('data-text-size'), textSize);
           for (const viewportWidth of [375, 390, 430]) {
             await page.setViewportSize({ width: viewportWidth, height: 844 });
-            await page.getByRole('button', { name: /^Start focused prayer for/ }).focus();
+            await page.getByRole('button', { name: /^Pray for/ }).focus();
             await page.keyboard.press('Enter');
             const prayerDialog = page.locator('dialog.faith-prayer-session');
             await prayerDialog.waitFor();
@@ -6398,7 +6811,7 @@ async function main() {
             await prayerDialog.waitFor({ state: 'detached' });
             assert.equal(await page.evaluate(() => (
               document.activeElement instanceof HTMLElement
-              && document.activeElement.matches('[data-prayer-session-start]')
+              &&               document.activeElement.matches('[data-prayer-session-start]')
             )), true);
             for (const viewName of ['Now', 'Flexible', 'All today'] as const) {
               const tab = page.getByRole('tab', { name: viewName, exact: true });
@@ -7303,8 +7716,8 @@ async function main() {
                 assert.deepEqual(layout.dividers, ['0px', ...Array.from({ length: layout.count - 1 }, () => '1px')],
                   `Column divider layout at ${viewportWidth}px / ${textSize}: ${JSON.stringify(layout)}`);
                 assert.ok(layout.items.every(item =>
-                  Math.abs(item.gap - 8) < 0.5
-                  && item.verticalSeparation >= 7.5
+                  Math.abs(item.gap - 6) < 0.5
+                  && item.verticalSeparation >= 5.5
                   && item.badgeCenterOffset < 1
                   && item.labelCenterOffset < 1
                   && item.labelHeight > 0
@@ -7493,9 +7906,9 @@ async function main() {
                   && caption.textRects.length >= 1
                   && caption.textRects.every(rect => rect.left >= 0 && rect.right <= viewportWidth)
                 ), `Health measure captions should wrap naturally without clipping at ${viewportWidth}px / ${textSize}: ${JSON.stringify(expandedLayout.captionLayout)}.`);
-                assert.equal(expandedLayout.backgroundColor, 'rgb(36, 107, 82)');
-                assert.equal(expandedLayout.borderColor, 'rgb(36, 107, 82)');
-                assert.equal(expandedLayout.iconStroke, 'rgb(255, 255, 255)');
+                assert.equal(expandedLayout.backgroundColor, 'rgb(255, 255, 255)');
+                assert.equal(expandedLayout.borderColor, 'rgb(220, 228, 222)');
+                assert.equal(expandedLayout.iconStroke, 'rgb(94, 107, 99)');
                 assert.match(expandedLayout.iconTransform, /matrix\(-1, 0, 0, -1/);
                 assert.equal(expandedLayout.viewportWidth, viewportWidth);
                 assert.equal(expandedLayout.documentWidth, viewportWidth);
@@ -10442,6 +10855,17 @@ async function main() {
       await profilePage.getByRole('button', { name: 'Open synthetic profile for Avery Brooks' }).click();
       const personProfile = profilePage.getByRole('main', { name: 'Avery Brooks' });
       const overallHealth = personProfile.getByRole('region', { name: 'Overall Health summary' });
+      const notesDock = personProfile.locator('.person-profile__notes-dock-button');
+      assert.equal(await notesDock.count(), 1);
+      for (const tabName of ['Rhythms', 'Connections', 'Prayer']) {
+        const tab = personProfile.getByRole('tab', { name: tabName });
+        if (await tab.count()) {
+          await tab.click();
+          assert.equal(await personProfile.locator('.person-profile__notes-dock-button').count(), 1,
+            `One person-level Notes dock should remain across ${tabName}.`);
+        }
+      }
+      await personProfile.getByRole('tab', { name: 'Rhythms' }).click();
       assert.equal(await overallHealth.getByRole('button', {
         name: 'Show Overall Health component scores breakdown'
       }).count(), 1);
@@ -10678,11 +11102,11 @@ async function main() {
       }
       await personProfile.getByRole('tab', { name: 'Connections' }).click();
       await profilePage.setViewportSize({ width: 375, height: 844 });
-      await personProfile.getByRole('button', { name: '+ Add', exact: true }).click();
+      await personProfile.getByRole('button', { name: 'Add connection' }).click();
       const createConnectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
       await createConnectionDialog.getByRole('button', { name: 'Save connection' }).click();
       await createConnectionDialog.waitFor({ state: 'detached' });
-      await personProfile.getByRole('button', { name: '+ Add', exact: true }).click();
+      await personProfile.getByRole('button', { name: 'Add connection' }).click();
       const describedConnectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
       await describedConnectionDialog.getByRole('combobox', { name: 'Connection type: Text' }).click();
       await profilePage.getByRole('listbox', { name: 'Connection type' })
@@ -10695,6 +11119,7 @@ async function main() {
       const compactConnectionRow = personProfile.locator('.friendships-connection-row')
         .filter({ hasText: 'Text' }).last();
       await compactConnectionRow.waitFor();
+      await profilePage.mouse.move(0, 0);
       let checkedKeyboardSelect = false;
       let checkedTouchSelect = false;
       for (const textSize of ['small', 'medium', 'large'] as const) {
@@ -10796,9 +11221,10 @@ async function main() {
           assert.equal(describedLayout.titleOverflowWrap, 'anywhere');
           assert.ok(describedLayout.titleRight <= describedLayout.timestampLeft);
           assert.equal(describedLayout.notes, undefined);
-          assert.ok(describedLayout.timestampText?.includes('2:45 PM'));
+          assert.equal(describedLayout.timestampText?.includes('2:45 PM'), false,
+            'Compact Connection rows keep full timestamps in details, not the row.');
           assert.ok(describedLayout.rowScrollWidth <= describedLayout.rowWidth + 1);
-          const addConnection = personProfile.getByRole('button', { name: '+ Add', exact: true });
+          const addConnection = personProfile.getByRole('button', { name: 'Add connection' });
           const originalBodyStyles = await profilePage.evaluate(() => ({
             overflow: document.body.style.overflow,
             position: document.body.style.position,
@@ -10859,7 +11285,8 @@ async function main() {
           if (!checkedKeyboardSelect) {
             await profilePage.keyboard.press('Escape');
             await connectionDialog.waitFor({ state: 'detached' });
-            await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+            await profilePage.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Add connection'
+              || document.activeElement?.textContent?.trim() === 'Add connection');
             await profilePage.keyboard.press('Enter');
             await connectionDialog.waitFor();
             const keyboardFocus = await typeSelect.evaluate(trigger => ({
@@ -10886,7 +11313,9 @@ async function main() {
           }
 
           await connectionDialog.getByRole('button', { name: 'Close connection editor' }).click();
-          await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+          await profilePage.waitForFunction(() =>
+            document.activeElement?.getAttribute('aria-label') === 'Add connection'
+            || document.activeElement?.textContent?.trim() === 'Add connection');
           if (!checkedTouchSelect) {
             const bounds = await addConnection.boundingBox();
             if (!bounds) throw new Error('The Connection type opener must remain visible for touch verification.');
@@ -10904,7 +11333,9 @@ async function main() {
             assert.equal(touchFocus.outlineStyle, 'none');
             assert.equal(touchFocus.boxShadow, 'none');
             await connectionDialog.getByRole('button', { name: 'Close connection editor' }).click();
-            await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+            await profilePage.waitForFunction(() =>
+              document.activeElement?.getAttribute('aria-label') === 'Add connection'
+              || document.activeElement?.textContent?.trim() === 'Add connection');
             checkedTouchSelect = true;
           }
           assert.deepEqual(await profilePage.evaluate(() => ({
@@ -10936,7 +11367,7 @@ async function main() {
       await profilePage.waitForFunction(() => document.activeElement?.classList.contains('friendships-connection-row'));
 
       await profilePage.setViewportSize({ width: 430, height: 390 });
-      await personProfile.getByRole('button', { name: '+ Add', exact: true }).click();
+      await personProfile.getByRole('button', { name: 'Add connection' }).click();
       const landscapeConnectionDialog = profilePage.getByRole('dialog', { name: 'Log connection' });
       const landscapeForm = landscapeConnectionDialog.locator('.friendships-connection-form');
       const landscapeScroll = await landscapeForm.evaluate(form => ({
@@ -10951,11 +11382,338 @@ async function main() {
       assert.equal(await landscapeConnectionDialog.getByRole('button', { name: 'Save connection' }).isVisible(), true);
       assert.equal(await landscapeConnectionDialog.getByRole('button', { name: 'Cancel' }).isVisible(), true);
       await landscapeConnectionDialog.getByRole('button', { name: 'Cancel' }).click();
-      await profilePage.waitForFunction(() => document.activeElement?.textContent?.trim() === '+ Add');
+      await profilePage.waitForFunction(() =>
+        document.activeElement?.getAttribute('aria-label') === 'Add connection'
+        || document.activeElement?.textContent?.trim() === 'Add connection');
       assert.deepEqual(profileClassicCssRequests, [], 'Person profile React pages must not request tend.css.');
       await profileContext.close();
 
+      const drawerFixture = createSamplePreviewData();
+      const drawerToday = localDateString(new Date());
+      const longNotePersonId = 'browser-note-person-long-name';
+      drawerFixture.people = [
+        ...drawerFixture.people,
+        { id: longNotePersonId, displayName: 'Alexandria Longsurname-Person-With-A-Very-Long-Name' }
+      ];
+      drawerFixture.personNotes = Array.from({ length: 8 }, (_, index) => ({
+        id: `browser-drawer-note-${index + 1}`,
+        personId: 'sample-person-avery',
+        ...(index === 0 ? { sharedWith: ['sample-person-morgan', longNotePersonId] } : {}),
+        content: `Synthetic drawer scroll note ${index + 1}. `.repeat(24),
+        createdAt: `${drawerToday}T12:00:00.000Z`,
+        updatedAt: `${drawerToday}T12:00:00.000Z`
+      }));
+      const drawerContext = await browser.newContext({
+        viewport: { width: 375, height: 844 },
+        hasTouch: true
+      });
+      const drawerAccountId = 'c0000000-0000-4000-8000-000000000003';
+      const drawerStorageKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${drawerAccountId}`;
+      await drawerContext.addInitScript(
+        ({ key, value, userId }) => {
+          const session = { user: { id: userId, email: 'notes-drawer-test@example.test' } };
+          window.localStorage.setItem(key, value);
+          Object.assign(window, {
+            supabase: {
+              createClient: () => ({
+                auth: {
+                  onAuthStateChange(callback: (event: string, value: typeof session) => void) {
+                    callback('INITIAL_SESSION', session);
+                    return { data: { subscription: { unsubscribe() {} } } };
+                  },
+                  async signInWithPassword() { return { error: null, data: { session } }; },
+                  async resetPasswordForEmail() { return { error: null }; },
+                  async updateUser() { return { error: null }; },
+                  async signOut() { return { error: null }; }
+                }
+              })
+            }
+          });
+        },
+        {
+          key: drawerStorageKey,
+          value: JSON.stringify(createPreviewEnvelope(drawerFixture)),
+          userId: drawerAccountId
+        }
+      );
+      const drawerPage = await drawerContext.newPage();
+      drawerPage.setDefaultTimeout(5_000);
+      await drawerPage.route('**/*', route => {
+        const origin = new URL(route.request().url()).origin;
+        if (origin === baseUrl) return route.continue();
+        return route.abort();
+      });
+      await drawerPage.goto(`${baseUrl}/app-preview.html?identity=dashboard`);
+      await drawerPage.getByRole('navigation', { name: 'Tools and navigation' })
+        .getByRole('button', { name: 'People' }).click();
+      await drawerPage.getByRole('button', { name: 'Open profile for Avery Brooks' }).click();
+      const drawerProfile = drawerPage.getByRole('main', { name: 'Avery Brooks' });
+      const drawerDock = drawerProfile.getByRole('button', { name: 'Notes (8)' });
+      await drawerDock.click();
+      const notesDrawer = drawerPage.getByRole('dialog', { name: 'Notes' });
+      await notesDrawer.waitFor({ state: 'visible' });
+      await notesDrawer.evaluate(async dialog => {
+        await Promise.all(dialog.getAnimations().map(animation => animation.finished));
+      });
+      assert.equal(await notesDrawer.evaluate(dialog => dialog.matches(':modal')), true,
+        'The Notes drawer must remain a native modal so the page behind it is inert.');
+      await drawerPage.keyboard.press('Tab');
+      assert.equal(await notesDrawer.evaluate(dialog => dialog.contains(document.activeElement)), true,
+        'Keyboard focus should remain inside the Notes modal.');
+      assert.equal(await drawerPage.evaluate(() => {
+        const dock = document.querySelector<HTMLButtonElement>('.person-profile__notes-dock-button');
+        dock?.focus();
+        return document.activeElement === dock;
+      }), false, 'The modal must prevent programmatic focus from escaping to the page.');
+      await notesDrawer.evaluate(dialog => {
+        dialog.querySelector<HTMLButtonElement>('.person-notes-drawer__close')?.focus();
+      });
+      assert.equal(await notesDrawer.getByRole('button', { name: /Open note updated/ }).count(), 8);
+      const notesScrollRegion = notesDrawer.locator('.person-notes-drawer__scroll-region');
+      const notesScrollMetrics = await notesScrollRegion.evaluate(region => ({
+        clientHeight: region.clientHeight,
+        scrollHeight: region.scrollHeight,
+        overflowY: getComputedStyle(region).overflowY
+      }));
+      assert.equal(notesScrollMetrics.overflowY, 'auto');
+      assert.ok(notesScrollMetrics.scrollHeight > notesScrollMetrics.clientHeight,
+        'The Notes list should scroll independently when it contains many notes.');
+      const pencil = notesDrawer.getByRole('button', { name: /Edit note updated/ }).first();
+      const pencilBounds = await pencil.boundingBox();
+      assert.equal(pencilBounds?.width, 44);
+      assert.equal(pencilBounds?.height, 44);
+      await pencil.focus();
+      await drawerPage.keyboard.press('Tab');
+      await drawerPage.keyboard.press('Shift+Tab');
+      const pencilFocus = await pencil.evaluate(button => ({
+        visible: button.matches(':focus-visible'),
+        outlineStyle: getComputedStyle(button).outlineStyle,
+        outlineWidth: getComputedStyle(button).outlineWidth
+      }));
+      assert.deepEqual(pencilFocus, {
+        visible: true,
+        outlineStyle: 'solid',
+        outlineWidth: '3px'
+      });
+      const scrollBounds = await notesScrollRegion.boundingBox();
+      if (!scrollBounds) throw new Error('The Notes list needs a visible scroll region.');
+      await drawerPage.mouse.move(scrollBounds.x + scrollBounds.width / 2, scrollBounds.y + scrollBounds.height / 2);
+      await drawerPage.mouse.wheel(0, 240);
+      await drawerPage.waitForFunction(() => {
+        const region = document.querySelector<HTMLElement>('.person-notes-drawer__scroll-region');
+        return region !== null && region.scrollTop > 0;
+      });
+      assert.equal(await notesDrawer.isVisible(), true,
+        'Scrolling note rows must not dismiss the drawer.');
+      await notesDrawer.getByRole('button', { name: /Add note/ }).click();
+      const noteEditor = drawerPage.getByRole('dialog', { name: 'Add note for Avery Brooks' });
+      await noteEditor.waitFor({ state: 'visible' });
+      await noteEditor.getByRole('button', { name: 'Cancel' }).click();
+      await notesDrawer.waitFor({ state: 'visible' });
+      await notesDrawer.evaluate(async dialog => {
+        await Promise.all(dialog.getAnimations().map(animation => animation.finished));
+      });
+      await notesDrawer.getByRole('button', { name: 'Collapse notes drawer' }).click();
+      await notesDrawer.waitFor({ state: 'hidden' });
+      await drawerDock.click();
+      await notesDrawer.waitFor({ state: 'visible' });
+      await notesDrawer.evaluate(async dialog => {
+        await Promise.all(dialog.getAnimations().map(animation => animation.finished));
+      });
+      const dragBounds = await notesDrawer.locator('.person-notes-drawer__drag-region').boundingBox();
+      if (!dragBounds) throw new Error('The Notes drawer needs a visible handle/header drag region.');
+      await drawerPage.mouse.move(dragBounds.x + dragBounds.width / 2, dragBounds.y + 8);
+      await drawerPage.mouse.down();
+      await drawerPage.mouse.move(dragBounds.x + dragBounds.width / 2, dragBounds.y + 100, { steps: 4 });
+      await drawerPage.mouse.up();
+      await notesDrawer.waitFor({ state: 'hidden' });
+      for (const safeAreaBottom of ['0px', '24px'] as const) {
+        await drawerPage.evaluate(value => {
+          document.documentElement.style.setProperty('--tend-mobile-safe-area-bottom', value);
+        }, safeAreaBottom);
+        for (const tabName of ['Rhythms', 'Connections', 'Prayer'] as const) {
+          await drawerProfile.getByRole('tab', { name: tabName }).click();
+          for (const textSize of ['small', 'medium', 'large'] as const) {
+            await drawerPage.evaluate(size => {
+              document.documentElement.dataset.mobileTextSize = size === 'small'
+                ? 'normal'
+                : size === 'medium' ? 'large' : 'larger';
+              document.documentElement.dataset.mobileTextSizeLevel = size === 'large' ? 'larger' : size;
+            }, textSize);
+            for (const width of [375, 390, 430]) {
+              await drawerPage.setViewportSize({ width, height: 844 });
+              const dockLayout = await drawerDock.evaluate(button => {
+                const dock = button.getBoundingClientRect();
+                const navigationElement = document.querySelector<HTMLElement>('.sticky-nav');
+                const navigation = navigationElement?.getBoundingClientRect();
+                const dockStyle = getComputedStyle(button);
+                return {
+                  documentWidth: document.documentElement.scrollWidth,
+                  viewportWidth: document.documentElement.clientWidth,
+                  dockLeft: dock.left,
+                  dockRight: dock.right,
+                  dockBottom: dock.bottom,
+                  dockBackground: dockStyle.backgroundColor,
+                  dockLabel: button.querySelector('.person-profile__notes-dock-label span')?.textContent?.trim() ?? null,
+                  dockColor: dockStyle.color,
+                  dockTopRadius: dockStyle.borderTopLeftRadius,
+                  dockBottomBorderWidth: dockStyle.borderBottomWidth,
+                  dockBorderColor: dockStyle.borderTopColor,
+                  navigationTop: navigation?.top ?? null,
+                  navigationBorderColor: navigationElement
+                    ? getComputedStyle(navigationElement).borderTopColor
+                    : null,
+                  pageBackground: getComputedStyle(document.body).backgroundColor,
+                  buttonVisible: dock.width > 0 && dock.height > 0
+                };
+              });
+              assert.equal(dockLayout.documentWidth, width,
+                `The Notes dock must not cause horizontal overflow at ${width}px / ${textSize} text.`);
+              assert.equal(dockLayout.viewportWidth, width);
+              assert.equal(dockLayout.buttonVisible, true);
+              assert.equal(dockLayout.dockLabel, 'Notes');
+              assert.equal(dockLayout.dockColor, 'rgb(94, 107, 99)');
+              assert.notEqual(dockLayout.navigationTop, null);
+              assert.equal(dockLayout.dockLeft, 0,
+                `The mobile Notes dock must be edge-to-edge at ${width}px / ${textSize} text.`);
+              assert.equal(dockLayout.dockRight, width);
+              assert.ok(Math.abs(dockLayout.dockBottom - dockLayout.navigationTop!) <= 0.5,
+                `The Notes dock must meet navigation with no gap at ${width}px / ${textSize} text (dock bottom ${dockLayout.dockBottom}, nav top ${dockLayout.navigationTop}).`);
+              assert.equal(dockLayout.dockBackground, dockLayout.pageBackground);
+              assert.equal(dockLayout.dockTopRadius, '16px');
+              assert.equal(dockLayout.dockBottomBorderWidth, '0px');
+              assert.equal(dockLayout.dockBorderColor, dockLayout.navigationBorderColor);
+              await drawerDock.click();
+              await notesDrawer.waitFor({ state: 'visible' });
+              await notesDrawer.evaluate(async dialog => {
+                await Promise.all(dialog.getAnimations().map(animation => animation.finished));
+              });
+              const drawerLayout = await notesDrawer.locator('.person-notes-drawer__surface').evaluate(surface => {
+                const bounds = surface.getBoundingClientRect();
+                const navigation = document.querySelector<HTMLElement>('.sticky-nav')?.getBoundingClientRect();
+                const header = surface.querySelector<HTMLElement>('.person-notes-drawer__header');
+                const scrollRegion = surface.querySelector<HTMLElement>('.person-notes-drawer__scroll-region');
+                const note = surface.querySelector<HTMLElement>('.person-notes-row');
+                return {
+                  top: bounds.top,
+                  bottom: bounds.bottom,
+                  navigationTop: navigation?.top ?? null,
+                  surfaceBackground: getComputedStyle(surface).backgroundColor,
+                  headerBackground: header ? getComputedStyle(header).backgroundColor : null,
+                  bodyBackground: scrollRegion ? getComputedStyle(scrollRegion).backgroundColor : null,
+                  pageBackground: getComputedStyle(document.body).backgroundColor,
+                  backdropBackground: getComputedStyle(surface.closest('dialog')!, '::backdrop').backgroundColor,
+                  sheetShadow: getComputedStyle(surface).boxShadow,
+                  headerTitleColor: header
+                    ? getComputedStyle(header.querySelector('h2')!).color
+                    : null,
+                  headerTitleWeight: header
+                    ? getComputedStyle(header.querySelector('h2')!).fontWeight
+                    : null,
+                  closeControlWidth: header
+                    ? header.querySelector<HTMLElement>('.person-notes-drawer__close')?.getBoundingClientRect().width
+                    : null,
+                  noteBackground: note ? getComputedStyle(note).backgroundColor : null,
+                  noteBorderColor: note ? getComputedStyle(note).borderTopColor : null,
+                  noteRadius: note ? getComputedStyle(note).borderRadius : null,
+                  notePadding: note ? getComputedStyle(note).padding : null,
+                  noteShadow: note ? getComputedStyle(note).boxShadow : null,
+                  noteBadgeNames: note
+                    ? Array.from(note.querySelectorAll<HTMLElement>('.person-notes-row__people [role="img"]'))
+                        .map(badge => badge.getAttribute('aria-label'))
+                    : [],
+                  noteDateBackground: note
+                    ? getComputedStyle(note.querySelector('.person-notes-row__date')!).backgroundColor
+                    : null
+                };
+              });
+              assert.ok(drawerLayout.top >= 0);
+              assert.notEqual(drawerLayout.navigationTop, null);
+              assert.ok(Math.abs(drawerLayout.bottom - drawerLayout.navigationTop!) <= 0.5,
+                `The Notes drawer must meet navigation without covering it at ${width}px / ${textSize} text.`);
+              assert.equal(drawerLayout.surfaceBackground, drawerLayout.pageBackground);
+              assert.equal(drawerLayout.headerBackground, drawerLayout.pageBackground);
+              assert.equal(drawerLayout.bodyBackground, drawerLayout.pageBackground);
+              assert.equal(drawerLayout.backdropBackground, 'rgba(247, 249, 247, 0.45)');
+              assert.equal((drawerLayout.sheetShadow?.match(/rgba\(/g) ?? []).length, 1,
+                'The sheet should have one soft upward shadow rather than stacked shadows.');
+              assert.equal(drawerLayout.headerTitleColor, 'rgb(32, 39, 35)');
+              assert.equal(drawerLayout.headerTitleWeight, '600');
+              assert.equal(drawerLayout.closeControlWidth, 44);
+              assert.equal(drawerLayout.noteBackground, 'rgb(255, 255, 255)');
+              assert.equal(drawerLayout.noteBorderColor, 'rgb(220, 228, 222)');
+              assert.equal(drawerLayout.noteRadius, '15px');
+              assert.equal(drawerLayout.notePadding, '11px 14px');
+              assert.equal(drawerLayout.noteShadow, 'none');
+              assert.equal(drawerLayout.noteDateBackground, 'rgba(0, 0, 0, 0)');
+              if (width === 375 && textSize === 'small' && safeAreaBottom === '0px') {
+                assert.deepEqual(drawerLayout.noteBadgeNames, [
+                  'Morgan Reed',
+                  'Alexandria Longsurname-Person-With-A-Very-Long-Name'
+                ]);
+              }
+              await notesDrawer.getByRole('button', { name: 'Close notes' }).click();
+              await notesDrawer.waitFor({ state: 'hidden' });
+            }
+          }
+        }
+      }
+      const lastPanelVisibility = await drawerProfile.locator('[role="tabpanel"]:not([hidden])')
+        .evaluate(panel => {
+          window.scrollTo(0, document.documentElement.scrollHeight);
+          const panelBottom = panel.getBoundingClientRect().bottom;
+          const dockTop = document.querySelector<HTMLElement>('.person-profile__notes-dock-button')
+            ?.getBoundingClientRect().top;
+          return { panelBottom, dockTop };
+        });
+      assert.notEqual(lastPanelVisibility.dockTop, undefined);
+      assert.ok(lastPanelVisibility.panelBottom <= lastPanelVisibility.dockTop!,
+        'The last person-page panel must remain reachable above the fixed Notes dock.');
+      await drawerPage.evaluate(() => window.scrollTo(0, 0));
+      await drawerPage.evaluate(() => {
+        document.documentElement.style.removeProperty('--tend-mobile-safe-area-bottom');
+        delete document.documentElement.dataset.mobileTextSize;
+        delete document.documentElement.dataset.mobileTextSizeLevel;
+      });
+      await drawerPage.setViewportSize({ width: 1280, height: 900 });
+      const desktopDockLayout = await drawerDock.evaluate(button => {
+        const dock = button.getBoundingClientRect();
+        const content = button.closest('.person-profile__content')?.getBoundingClientRect();
+        return {
+          left: dock.left,
+          right: dock.right,
+          contentLeft: content?.left ?? null,
+          contentRight: content?.right ?? null
+        };
+      });
+      assert.notEqual(desktopDockLayout.contentLeft, null);
+      assert.notEqual(desktopDockLayout.contentRight, null);
+      assert.ok(Math.abs(desktopDockLayout.left - desktopDockLayout.contentLeft!) <= 1);
+      assert.ok(Math.abs(desktopDockLayout.right - desktopDockLayout.contentRight!) <= 1,
+        'The desktop Notes dock should align to the person-page content width.');
+      await drawerDock.click();
+      await notesDrawer.waitFor({ state: 'visible' });
+      await notesDrawer.evaluate(async dialog => {
+        await Promise.all(dialog.getAnimations().map(animation => animation.finished));
+      });
+      const desktopDrawerLayout = await notesDrawer.locator('.person-notes-drawer__surface').evaluate(surface => {
+        const bounds = surface.getBoundingClientRect();
+        const navigation = document.querySelector<HTMLElement>('.sticky-nav')?.getBoundingClientRect();
+        return { top: bounds.top, bottom: bounds.bottom, navigationBottom: navigation?.bottom ?? null };
+      });
+      assert.ok(desktopDrawerLayout.top >= 0);
+      assert.ok(desktopDrawerLayout.bottom <= 900);
+      assert.notEqual(desktopDrawerLayout.navigationBottom, null);
+      assert.ok(desktopDrawerLayout.top >= desktopDrawerLayout.navigationBottom!);
+      await notesDrawer.getByRole('button', { name: 'Close notes' }).click();
+      await notesDrawer.waitFor({ state: 'hidden' });
+      await drawerContext.close();
+
       const prayerFixture = createSamplePreviewData();
+      prayerFixture.peopleGroups = prayerFixture.peopleGroups.map(group => ({
+        ...group,
+        memberIds: group.id === 'friends' ? [] : group.memberIds
+      }));
       const prayerToday = localDateString(new Date());
       const prayerNow = new Date().toISOString();
       const prayerCreatedAt = new Date(Date.parse(prayerNow) - 60 * 86_400_000).toISOString();
@@ -10976,7 +11734,16 @@ async function main() {
           { id: 'browser-prayer-today', prayedAt: prayerNow },
           { id: 'browser-prayer-older', prayedAt: new Date(Date.parse(prayerNow) - 45 * 86_400_000).toISOString() },
           { id: 'browser-prayer-undated' }
-        ]
+        ],
+        schedule: {
+          frequency: 'custom',
+          unit: 'weeks',
+          interval: 2,
+          weekdays: [1, 3, 5],
+          startDate: '2026-01-05',
+          endDate: '2026-12-31'
+        },
+        timeOfDay: 'afternoon'
       }];
       const prayerEnvelope = createPreviewEnvelope(prayerFixture);
       const prayerValidation = parsePreviewBackup(JSON.stringify(prayerEnvelope), prayerToday);
@@ -11025,6 +11792,319 @@ async function main() {
       await prayerPage.goto(`${baseUrl}/app-preview.html?identity=dashboard`);
       const prayerNavigation = prayerPage.getByRole('navigation', { name: 'Tools and navigation' });
       await prayerNavigation.waitFor();
+      const todayPrayer = prayerPage.getByRole('region', { name: 'Pray' });
+      await prayerPage.getByRole('button', { name: 'Pray for 1 request' }).waitFor();
+      assert.equal(await todayPrayer.locator('.prayer-entry-count').textContent(), '1');
+      assert.equal(await todayPrayer.locator('.prayer-entry-empty').count(), 0);
+
+      const prayerSelectionGridTracks = new Map<string, number>();
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await setPreviewTextSize(prayerPage, textSize);
+        for (const viewportWidth of [375, 390, 430] as const) {
+          await prayerPage.setViewportSize({ width: viewportWidth, height: 844 });
+          await todayPrayer.getByRole('button', { name: 'Customize' }).click();
+          const selection = prayerPage.getByRole('dialog', { name: 'Prayer selection' });
+          const layout = await selection.evaluate(dialog => {
+            const body = dialog.querySelector<HTMLElement>('[data-prayer-selection-body]');
+            const picker = dialog.querySelector<HTMLElement>('.rhythm-association-picker');
+            const groups = dialog.querySelector<HTMLElement>('.rhythm-association-picker__groups');
+            const peopleGrid = dialog.querySelector<HTMLElement>('.rhythm-association-picker__option-grid');
+            const person = dialog.querySelector<HTMLElement>('.rhythm-association-picker__option');
+            const timeframe = dialog.querySelector<HTMLElement>('.prayer-timeframe-picker__trigger');
+            if (!body || !picker || !groups || !peopleGrid || !person || !timeframe) {
+              throw new Error('Today Prayer must render its shared People picker and styled timeframe controls.');
+            }
+            const rect = dialog.getBoundingClientRect();
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              dialog: { left: rect.left, right: rect.right, width: rect.width },
+              bodyOverflow: getComputedStyle(body).overflowY,
+              pickerDisplay: getComputedStyle(picker).display,
+              groupsDisplay: getComputedStyle(groups).display,
+              peopleGridDisplay: getComputedStyle(peopleGrid).display,
+              peopleGridColumns: getComputedStyle(peopleGrid).gridTemplateColumns,
+              personBorderStyle: getComputedStyle(person).borderTopStyle,
+              timeframeBorderStyle: getComputedStyle(timeframe).borderTopStyle,
+              pickerScrollWidth: picker.scrollWidth,
+              pickerClientWidth: picker.clientWidth,
+              selectedPeople: dialog.querySelectorAll(
+                '.rhythm-association-picker__option[aria-pressed="true"]'
+              ).length,
+              selectedRow: (() => {
+                const row = dialog.querySelector<HTMLElement>(
+                  '.rhythm-association-picker__option[aria-pressed="true"]'
+                );
+                const badge = row?.querySelector<HTMLElement>('.person-badge-visual');
+                const avatar = row?.querySelector<HTMLElement>('.person-badge-avatar');
+                const indicator = row?.querySelector<HTMLElement>('.rhythm-association-picker__selection-indicator');
+                if (!row || !badge || !avatar || !indicator) {
+                  throw new Error('Prayer-selected people need themed badges and a selection indicator.');
+                }
+                return {
+                  border: getComputedStyle(row).borderTopColor,
+                  background: getComputedStyle(row).backgroundColor,
+                  color: getComputedStyle(row).color,
+                  badgeClass: badge.className,
+                  badgeColor: getComputedStyle(badge).color,
+                  avatarBackground: getComputedStyle(avatar).backgroundColor,
+                  indicatorColor: getComputedStyle(indicator).color,
+                  indicatorBackground: getComputedStyle(indicator).backgroundColor
+                };
+              })(),
+              selectedGroup: (() => {
+                const group = dialog.querySelector<HTMLElement>(
+                  '.rhythm-association-picker__group[data-selected="true"] .rhythm-association-picker__group-badge'
+                );
+                if (!group) throw new Error('The saved selected Prayer category is missing.');
+                return {
+                  border: getComputedStyle(group).borderTopColor,
+                  background: getComputedStyle(group).backgroundColor,
+                  color: getComputedStyle(group).color,
+                  indicator: getComputedStyle(group, '::after').content
+                };
+              })(),
+              disabledGroup: (() => {
+                const group = dialog.querySelector<HTMLElement>(
+                  '.rhythm-association-picker__group:disabled .rhythm-association-picker__group-badge'
+                );
+                if (!group) throw new Error('The empty Prayer category should remain disabled.');
+                return {
+                  background: getComputedStyle(group).backgroundColor,
+                  color: getComputedStyle(group).color
+                };
+              })(),
+              primaryAction: (() => {
+                const button = dialog.querySelector<HTMLElement>('[data-prayer-selection-start]');
+                if (!button) throw new Error('The Prayer primary action is missing.');
+                const bounds = button.getBoundingClientRect();
+                return {
+                  background: getComputedStyle(button).backgroundColor,
+                  color: getComputedStyle(button).color,
+                  bounds: { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
+                };
+              })(),
+              prayerFooter: (() => {
+                const actions = dialog.querySelector<HTMLElement>('.rhythm-association-picker__actions');
+                const cancel = dialog.querySelector<HTMLElement>('.prayer-selection-cancel');
+                const pray = dialog.querySelector<HTMLElement>('.prayer-selection-pray');
+                const count = dialog.querySelector<HTMLElement>('.rhythm-association-picker__status');
+                    const countBadge = count?.querySelector<HTMLElement>('.prayer-selection-count');
+                    if (!actions || !cancel || !pray || !count || !countBadge) {
+                  throw new Error('The Prayer footer needs a count line and Cancel/Pray actions.');
+                }
+                const cancelBounds = cancel.getBoundingClientRect();
+                const prayBounds = pray.getBoundingClientRect();
+                const countBounds = count.getBoundingClientRect();
+                return {
+                  actionCount: actions.querySelectorAll('button').length,
+                  countBackground: getComputedStyle(countBadge).backgroundColor,
+                  countBorder: getComputedStyle(countBadge).borderTopColor,
+                  countColor: getComputedStyle(countBadge).color,
+                  cancel: {
+                    left: cancelBounds.left,
+                    top: cancelBounds.top,
+                    width: cancelBounds.width,
+                    height: cancelBounds.height
+                  },
+                  pray: {
+                    left: prayBounds.left,
+                    top: prayBounds.top,
+                    width: prayBounds.width,
+                    height: prayBounds.height
+                  },
+                  count: { top: countBounds.top, bottom: countBounds.bottom }
+                };
+              })(),
+              secondaryAction: (() => {
+                const button = dialog.querySelector<HTMLElement>('[data-prayer-selection-people="all"]');
+                if (!button) throw new Error('The Prayer secondary action is missing.');
+                return {
+                  border: getComputedStyle(button).borderTopColor,
+                  color: getComputedStyle(button).color,
+                  background: getComputedStyle(button).backgroundColor
+                };
+              })()
+            };
+          });
+          const label = `Today Prayer picker at ${viewportWidth}px / ${textSize} text`;
+          prayerSelectionGridTracks.set(
+            `${viewportWidth}:${textSize}`,
+            layout.peopleGridColumns.trim().split(/\s+/).length
+          );
+          assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
+          assert.equal(layout.documentWidth, viewportWidth, `${label} must not create horizontal page scrolling`);
+          assert.ok(layout.dialog.left >= -1 && layout.dialog.right <= viewportWidth + 1,
+            `${label} dialog must fit the viewport`);
+          assert.equal(layout.bodyOverflow, 'auto', `${label} body must remain scrollable`);
+          assert.equal(layout.pickerDisplay, 'grid', `${label} must use the shared picker layout`);
+          assert.equal(layout.groupsDisplay, 'flex', `${label} category controls must be styled`);
+          assert.equal(layout.peopleGridDisplay, 'grid', `${label} people options must be styled`);
+          assert.ok(layout.peopleGridColumns.length > 0, `${label} uses the shared people-grid layout`);
+          assert.equal(layout.personBorderStyle, 'solid', `${label} people options need visible boundaries`);
+          assert.equal(layout.timeframeBorderStyle, 'solid', `${label} timeframe control needs a visible boundary`);
+          assert.ok(layout.pickerScrollWidth <= layout.pickerClientWidth + 1,
+            `${label} picker must not overflow horizontally`);
+          assert.ok(layout.selectedPeople > 0, `${label} must show saved account people, not a fallback list`);
+          assert.equal(layout.selectedRow.border, 'rgb(210, 197, 223)', `${label} selected row border`);
+          assert.equal(layout.selectedRow.background, 'rgb(240, 234, 245)', `${label} selected row background`);
+          assert.equal(layout.selectedRow.color, 'rgb(112, 90, 141)', `${label} selected row text`);
+          assert.match(layout.selectedRow.badgeClass, /person-badge-visual--prayer/);
+          assert.equal(layout.selectedRow.badgeColor, 'rgb(112, 90, 141)', `${label} avatar badge theme`);
+          assert.equal(layout.selectedRow.avatarBackground, 'rgb(240, 234, 245)', `${label} selected initials surface`);
+          assert.equal(layout.selectedRow.indicatorColor, 'rgb(112, 90, 141)', `${label} selection indicator`);
+          assert.equal(layout.selectedRow.indicatorBackground, 'rgb(220, 206, 232)', `${label} indicator background`);
+          assert.equal(layout.selectedGroup.border, 'rgb(210, 197, 223)', `${label} selected category border`);
+          assert.equal(layout.selectedGroup.background, 'rgb(240, 234, 245)', `${label} selected category surface`);
+          assert.equal(layout.selectedGroup.color, 'rgb(112, 90, 141)', `${label} selected category text`);
+          assert.equal(layout.selectedGroup.indicator, 'none', `${label} group chip keeps the shared Rhythm appearance`);
+          assert.equal(layout.disabledGroup.background, 'rgb(250, 248, 252)', `${label} disabled category surface`);
+          assert.equal(layout.disabledGroup.color, 'rgb(143, 125, 161)', `${label} disabled category text`);
+          assert.equal(layout.primaryAction.background, 'rgb(128, 98, 154)', `${label} primary action surface`);
+          assert.equal(layout.primaryAction.color, 'rgb(255, 255, 255)', `${label} primary action text`);
+          assert.equal(layout.secondaryAction.border, 'rgb(210, 197, 223)', `${label} secondary action border`);
+          assert.equal(layout.secondaryAction.color, 'rgb(112, 90, 141)', `${label} secondary action text`);
+          assert.equal(layout.prayerFooter.actionCount, 2, `${label} footer contains only Cancel and Pray`);
+          assert.equal(layout.prayerFooter.countBackground, 'rgb(240, 234, 245)', `${label} request count has a purple surface`);
+          assert.equal(layout.prayerFooter.countBorder, 'rgb(210, 197, 223)', `${label} request count has a purple border`);
+          assert.equal(layout.prayerFooter.countColor, 'rgb(112, 90, 141)', `${label} request count uses purple text`);
+          assert.equal(layout.prayerFooter.cancel.top, layout.prayerFooter.pray.top, `${label} footer buttons share a row`);
+          assert.equal(layout.prayerFooter.cancel.height, layout.prayerFooter.pray.height, `${label} footer button heights match`);
+          assert.equal(layout.prayerFooter.cancel.left < layout.prayerFooter.pray.left, true,
+            `${label} Cancel appears to the left of Pray`);
+          assert.ok(layout.prayerFooter.count.bottom <= layout.prayerFooter.cancel.top,
+            `${label} request count has its own line above the actions`);
+          assert.ok(Math.abs(layout.prayerFooter.cancel.width - layout.prayerFooter.pray.width) <= 1,
+            `${label} footer buttons use matching widths`);
+
+          await selection.getByRole('button', { name: /Change timeframe/ }).click();
+          const timeframeDialog = prayerPage.getByRole('dialog', { name: 'Prayer timeframe' });
+          const timeframeFooter = await timeframeDialog.evaluate(dialog => {
+            const footer = dialog.querySelector<HTMLElement>('.prayer-selection-footer');
+            const count = dialog.querySelector<HTMLElement>('.prayer-selection-count');
+            const actions = footer?.querySelector<HTMLElement>('.prayer-selection-footer-actions');
+            const cancel = actions?.querySelector<HTMLElement>('.prayer-selection-cancel');
+            const pray = actions?.querySelector<HTMLElement>('.prayer-selection-pray');
+            if (!footer || !count || !actions || !cancel || !pray) {
+              throw new Error('The timeframe view needs a request count and Cancel/Pray actions.');
+            }
+            const countBounds = count.getBoundingClientRect();
+            const footerBounds = footer.getBoundingClientRect();
+            const cancelBounds = cancel.getBoundingClientRect();
+            const prayBounds = pray.getBoundingClientRect();
+            return {
+              labels: [...actions.querySelectorAll('button')].map(button => button.textContent?.trim()),
+              cancel: {
+                left: cancelBounds.left,
+                top: cancelBounds.top,
+                width: cancelBounds.width,
+                height: cancelBounds.height
+              },
+              pray: {
+                left: prayBounds.left,
+                top: prayBounds.top,
+                width: prayBounds.width,
+                height: prayBounds.height
+              },
+              count: { top: countBounds.top, bottom: countBounds.bottom },
+              footerTop: footerBounds.top
+            };
+          });
+          assert.deepEqual(timeframeFooter.labels, ['Cancel', 'Pray'],
+            `${label} timeframe footer has no Done or Start prayer actions`);
+          assert.equal(timeframeFooter.cancel.top, timeframeFooter.pray.top,
+            `${label} timeframe footer buttons share a row`);
+          assert.equal(timeframeFooter.cancel.height, timeframeFooter.pray.height,
+            `${label} timeframe footer button heights match`);
+          assert.ok(timeframeFooter.cancel.left < timeframeFooter.pray.left,
+            `${label} timeframe Cancel appears to the left of Pray`);
+          assert.ok(timeframeFooter.count.bottom <= timeframeFooter.footerTop,
+            `${label} timeframe request count sits above the footer divider`);
+          assert.ok(Math.abs(timeframeFooter.cancel.width - timeframeFooter.pray.width) <= 1,
+            `${label} timeframe footer buttons use matching widths`);
+          await timeframeDialog.getByRole('button', { name: 'Back' }).click();
+
+          const avery = selection.getByRole('button', { name: 'Avery Brooks' });
+          assert.equal(await avery.getAttribute('aria-pressed'), 'true');
+          await avery.hover();
+          assert.equal(await avery.evaluate(element => getComputedStyle(element).backgroundColor),
+            'rgb(230, 220, 238)', `${label} selected hover background`);
+          const emptyGroup = selection.getByRole('button', { name: 'Select Friends people' });
+          assert.equal(await emptyGroup.isDisabled(), true, `${label} empty group remains disabled`);
+          const prayButton = selection.getByRole('button', { name: 'Pray', exact: true });
+          await selection.locator('[data-prayer-selection-people="clear"]').click();
+          assert.equal(await prayButton.isDisabled(), true, `${label} Pray disables without eligible requests`);
+          assert.ok(await selection.getByText(/Choose different people or a different timeframe/).isVisible());
+          await prayerPage.waitForFunction(() => {
+            const button = document.querySelector<HTMLElement>('[data-prayer-selection-start]');
+            return button !== null
+              && getComputedStyle(button).backgroundColor === 'rgb(250, 248, 252)';
+          }, undefined, { timeout: 1000 });
+          assert.equal(await prayButton.evaluate(element => getComputedStyle(element).backgroundColor),
+            'rgb(250, 248, 252)', `${label} disabled Pray uses the accessible neutral treatment`);
+          await selection.locator('[data-prayer-selection-people="all"]').click();
+          assert.equal(await prayButton.isDisabled(), false, `${label} selecting eligible people re-enables Pray`);
+          await avery.click();
+          assert.equal(await avery.getAttribute('aria-pressed'), 'false');
+          await prayerPage.mouse.move(0, 0);
+          await prayerPage.waitForFunction(() => {
+            const row = document.querySelector<HTMLElement>(
+              '.rhythm-association-picker__option[aria-pressed="false"]'
+            );
+            return row !== null
+              && getComputedStyle(row).borderTopColor === 'rgb(220, 228, 222)';
+          }, undefined, { timeout: 1000 });
+          const unselectedStyle = await avery.evaluate(element => ({
+            border: getComputedStyle(element).borderTopColor,
+            background: getComputedStyle(element).backgroundColor,
+            color: getComputedStyle(element).color,
+            avatarBackground: getComputedStyle(element.querySelector('.person-badge-avatar')!).backgroundColor
+          }));
+          assert.equal(unselectedStyle.border, 'rgb(220, 228, 222)', `${label} unselected row border stays neutral`);
+          assert.equal(unselectedStyle.background, 'rgb(255, 255, 255)', `${label} unselected row stays neutral`);
+          assert.equal(unselectedStyle.color, 'rgb(32, 39, 35)', `${label} unselected text stays readable`);
+          assert.equal(unselectedStyle.avatarBackground, 'rgb(240, 234, 245)',
+            `${label} unselected avatar initials keep the Prayer purple treatment`);
+          await avery.click();
+          await selection.locator('.rhythm-association-picker__group').first().focus();
+          await prayerPage.keyboard.press('Tab');
+          const focusedGroup = selection.locator('.rhythm-association-picker__group:focus-visible');
+          await focusedGroup.waitFor();
+          assert.equal(await focusedGroup.evaluate(element => getComputedStyle(element).outlineColor),
+            'rgb(112, 90, 141)', `${label} keyboard focus uses the accessible Prayer purple`);
+          const cancel = selection.getByRole('button', { name: 'Cancel' });
+          await cancel.hover();
+          await prayerPage.waitForFunction(() => {
+            const button = document.querySelector<HTMLElement>('.prayer-selection-cancel');
+            return button !== null
+              && getComputedStyle(button).backgroundColor === 'rgb(240, 234, 245)';
+          }, undefined, { timeout: 1000 });
+          assert.equal(await cancel.evaluate(element => getComputedStyle(element).backgroundColor),
+            'rgb(240, 234, 245)', `${label} Cancel hover uses the Prayer purple surface`);
+          await selection.getByRole('button', { name: /Change timeframe/ }).click();
+          await prayerPage.getByRole('dialog', { name: 'Prayer timeframe' })
+            .locator('[data-prayer-time-option="allday"]').click();
+          assert.ok(await selection.getByRole('button', { name: /currently All Day/ }).isVisible());
+          await selection.getByRole('button', { name: 'Close prayer selection' }).click();
+        }
+      }
+
+      await prayerPage.setViewportSize({ width: 375, height: 520 });
+      await todayPrayer.getByRole('button', { name: 'Customize' }).click();
+      const shortPrayerSelection = prayerPage.getByRole('dialog', { name: 'Prayer selection' });
+      const prayerScroll = shortPrayerSelection.locator('[data-prayer-selection-body]');
+      const shortLayout = await prayerScroll.evaluate(body => ({
+        clientHeight: body.clientHeight,
+        scrollHeight: body.scrollHeight,
+        overflowY: getComputedStyle(body).overflowY
+      }));
+      assert.equal(shortLayout.overflowY, 'auto');
+      assert.ok(shortLayout.scrollHeight > shortLayout.clientHeight,
+        'The Prayer picker must scroll within a short mobile viewport.');
+      await prayerScroll.evaluate(body => { body.scrollTop = body.scrollHeight; });
+      assert.equal(await shortPrayerSelection.getByRole('button', { name: 'Pray', exact: true }).isVisible(), true);
+      await shortPrayerSelection.getByRole('button', { name: 'Close prayer selection' }).click();
+
       await prayerNavigation.getByRole('button', { name: 'People' }).click();
       await prayerPage.getByRole('button', { name: 'Open profile for Avery Brooks' }).click();
       const prayerProfile = prayerPage.getByRole('main', { name: 'Avery Brooks' });
@@ -11041,8 +12121,15 @@ async function main() {
             const details = card.querySelector<HTMLElement>('.person-prayer-card__details');
             const actions = card.querySelector<HTMLElement>('.person-prayer-card__actions-trigger');
             const history = card.querySelector<HTMLElement>('.person-prayer-card__history');
+            const actionsRow = card.querySelector<HTMLElement>('.person-prayer-card__actions');
+            const countBadge = card.querySelector<HTMLElement>('.person-prayer-card__prayer-count');
             const footer = card.querySelector<HTMLElement>('.person-prayer-card__footer');
-            if (!title || !details || !actions || !history || !footer) {
+            const historyIcon = history?.querySelector<SVGElement>('svg');
+            const footerContent = footer?.querySelector<HTMLElement>('.rhythm-metadata-footer');
+            const scheduleMetadata = footerContent?.querySelector<HTMLElement>('.rhythm-metadata-schedule-group');
+            const lastPrayed = footerContent?.querySelector<HTMLElement>('.person-prayer-card__last-prayed');
+            if (!title || !details || !actions || !history || !actionsRow || !countBadge || !footer
+              || !historyIcon || !footerContent || !scheduleMetadata || !lastPrayed) {
               throw new Error('Prayer cards need the request title, details, Actions, history, and footer.');
             }
             const bounds = (element: Element) => {
@@ -11064,10 +12151,73 @@ async function main() {
               detailsWhiteSpace: detailsStyle.whiteSpace,
               actions: bounds(actions),
               history: bounds(history),
+              historyIcon: bounds(historyIcon),
+              actionsRow: bounds(actionsRow),
+              countBadge: bounds(countBadge),
               footer: bounds(footer),
+              footerContent: bounds(footerContent),
+              scheduleMetadata: bounds(scheduleMetadata),
+              scheduleTextWidth: scheduleMetadata.scrollWidth,
+              scheduleTextClientWidth: scheduleMetadata.clientWidth,
+              lastPrayed: bounds(lastPrayed),
+              historyColor: getComputedStyle(history).color,
+              historyFill: getComputedStyle(history.querySelector('svg')!).fill,
               actionForeground: actionStyle.color,
-              actionBackground: actionStyle.backgroundColor
+              actionBackground: actionStyle.backgroundColor,
+              actionFontFamily: actionStyle.fontFamily,
+              actionFontSize: actionStyle.fontSize,
+              actionFontWeight: actionStyle.fontWeight,
+              actionLineHeight: actionStyle.lineHeight,
+              actionPadding: actionStyle.padding,
+              footerPadding: getComputedStyle(footer).padding,
+              headingGap: getComputedStyle(card.querySelector('.person-prayer-card__heading-main')!).rowGap
             };
+          });
+          const rhythmLayout = await prayerPage.evaluate(() => {
+            const rhythm = document.querySelector<HTMLElement>('.today-rhythm-details-dialog--inline');
+            const rhythmPanel = rhythm?.closest<HTMLElement>('[role="tabpanel"]');
+            if (!rhythm || !rhythmPanel) throw new Error('The active person profile needs a shared Rhythm card.');
+            const wasHidden = rhythmPanel.hidden;
+            rhythmPanel.hidden = false;
+            try {
+              const title = rhythm.querySelector<HTMLElement>('.today-rhythm-details__title-group h3');
+              const description = rhythm.querySelector<HTMLElement>('.today-rhythm-details__description');
+              const history = rhythm.querySelector<HTMLElement>('.today-rhythm-details__history-button');
+              const historyIcon = history?.querySelector<SVGElement>('svg');
+              const actions = rhythm.querySelector<HTMLElement>('.today-rhythm-details__actions--inline');
+              const tend = actions?.querySelector<HTMLElement>('.rhythm-card__tend');
+              const footer = rhythm.querySelector<HTMLElement>('.today-rhythm-details__footer');
+              const footerContent = footer?.querySelector<HTMLElement>('.rhythm-metadata-footer');
+              if (!title || !description || !history || !historyIcon || !actions || !tend || !footer || !footerContent) {
+                throw new Error('The shared Rhythm card needs its header, Tend action, and footer.');
+              }
+              const bounds = (element: Element) => {
+                const rect = element.getBoundingClientRect();
+                return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width };
+              };
+              const tendStyle = getComputedStyle(tend);
+              return {
+                viewportWidth: document.documentElement.clientWidth,
+                documentWidth: document.documentElement.scrollWidth,
+                card: bounds(rhythm),
+                title: bounds(title),
+                description: bounds(description),
+                history: bounds(history),
+                historyIcon: bounds(historyIcon),
+                tend: bounds(tend),
+                footer: bounds(footer),
+                footerContent: bounds(footerContent),
+                tendFontFamily: tendStyle.fontFamily,
+                tendFontSize: tendStyle.fontSize,
+                tendFontWeight: tendStyle.fontWeight,
+                tendLineHeight: tendStyle.lineHeight,
+                tendPadding: tendStyle.padding,
+                footerPadding: getComputedStyle(footer).padding,
+                headingGap: getComputedStyle(rhythm.querySelector('.today-rhythm-details__title-group')!).rowGap
+              };
+            } finally {
+              rhythmPanel.hidden = wasHidden;
+            }
           });
           const label = `Prayer card at ${viewportWidth}px / ${textSize} text`;
           assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
@@ -11079,10 +12229,80 @@ async function main() {
           assert.ok(layout.details.clientWidth > 0 && layout.details.scrollWidth <= layout.details.clientWidth + 1,
             `${label} details must wrap rather than clip`);
           assert.equal(layout.detailsWhiteSpace, 'pre-wrap');
-          assert.ok(layout.title.right <= layout.actions.left + 1,
-            `${label} title and Actions control must not overlap`);
+          assert.ok(layout.title.right <= layout.history.left + 1,
+            `${label} title and history icon must not overlap`);
+          assert.ok(Math.abs((layout.title.left - layout.card.left)
+            - (rhythmLayout.title.left - rhythmLayout.card.left)) <= 1,
+          `${label} Prayer title uses the Rhythm card's left content inset`);
+          assert.ok(layout.history.width >= 44 && layout.history.bottom - layout.history.top >= 44,
+            `${label} history icon must retain a comfortable touch target`);
+          assert.ok(Math.abs((layout.history.right - layout.card.right)
+            - (rhythmLayout.history.right - rhythmLayout.card.right)) <= 1,
+          `${label} Prayer history touch target matches the Rhythm header's right inset`);
+          assert.ok(Math.abs((layout.history.top - layout.card.top)
+            - (rhythmLayout.history.top - rhythmLayout.card.top)) <= 1,
+          `${label} Prayer history touch target matches the Rhythm header's top inset`);
+          assert.ok(Math.abs((layout.historyIcon.right - layout.card.right)
+            - (rhythmLayout.historyIcon.right - rhythmLayout.card.right)) <= 1,
+          `${label} visible Prayer chart glyph aligns with the Rhythm header glyph`);
+          assert.ok(Math.abs((layout.historyIcon.top - layout.card.top)
+            - (rhythmLayout.historyIcon.top - rhythmLayout.card.top)) <= 1,
+          `${label} visible Prayer chart glyph top inset: Prayer ${layout.historyIcon.top - layout.card.top}px, Rhythm ${rhythmLayout.historyIcon.top - rhythmLayout.card.top}px`);
+          assert.equal(layout.historyColor, 'rgb(128, 98, 154)', `${label} chart icon uses Prayer purple`);
+          assert.equal(layout.historyFill, 'rgb(128, 98, 154)', `${label} chart glyph is solid Prayer purple`);
+          assert.ok(Math.abs(layout.actions.right - layout.actionsRow.right) <= 1,
+            `${label} Actions must be right-aligned in their own row`);
+          assert.ok(layout.countBadge.left >= layout.actionsRow.left
+            && layout.countBadge.right + 8 <= layout.actions.left,
+          `${label} count badge stays left of Actions without overlap`);
+          assert.ok(Math.abs(layout.actions.right - rhythmLayout.tend.right) <= 1,
+            `${label} Actions matches the Rhythm Tend button's right content inset`);
+          assert.equal(layout.actions.bottom - layout.actions.top, rhythmLayout.tend.bottom - rhythmLayout.tend.top,
+            `${label} Actions matches the Rhythm Tend control height`);
+          assert.equal(layout.actionFontFamily, rhythmLayout.tendFontFamily,
+            `${label} Actions uses the Rhythm Tend font family`);
+          assert.equal(layout.actionFontSize, rhythmLayout.tendFontSize,
+            `${label} Actions uses the Rhythm Tend font size`);
+          assert.equal(layout.actionFontWeight, rhythmLayout.tendFontWeight,
+            `${label} Actions uses the Rhythm Tend font weight`);
+          assert.equal(layout.actionLineHeight, rhythmLayout.tendLineHeight,
+            `${label} Actions uses the Rhythm Tend line height`);
+          assert.equal(layout.actionPadding, rhythmLayout.tendPadding,
+            `${label} Actions uses the Rhythm Tend padding`);
+          assert.ok(layout.actions.bottom <= layout.footer.top + 1,
+            `${label} Actions must sit above the footer divider`);
+          assert.ok(Math.abs((layout.footer.top - layout.actions.bottom)
+            - (rhythmLayout.footer.top - rhythmLayout.tend.bottom)) <= 1,
+          `${label} Actions-to-divider gap matches the Rhythm Tend-to-divider spacing`);
           assert.ok(layout.footer.left >= layout.card.left && layout.footer.right <= layout.card.right,
             `${label} footer divider must remain within the card`);
+          assert.ok(Math.abs((layout.footer.left - layout.card.left)
+            - (rhythmLayout.footer.left - rhythmLayout.card.left)) <= 1,
+          `${label} Prayer divider uses the Rhythm card's horizontal inset`);
+          assert.ok(Math.abs((layout.footer.right - layout.card.right)
+            - (rhythmLayout.footer.right - rhythmLayout.card.right)) <= 1,
+          `${label} Prayer divider spans the same width as the Rhythm divider`);
+          assert.equal(layout.footerPadding, rhythmLayout.footerPadding,
+            `${label} Prayer footer uses the Rhythm card's padding`);
+          assert.ok(Math.abs((layout.footerContent.left - layout.card.left)
+            - (rhythmLayout.footerContent.left - rhythmLayout.card.left)) <= 1,
+          `${label} Prayer footer contents use the Rhythm metadata inset`);
+          assert.ok(Math.abs((layout.footerContent.right - layout.card.right)
+            - (rhythmLayout.footerContent.right - rhythmLayout.card.right)) <= 1,
+          `${label} Prayer footer contents use the Rhythm metadata right inset`);
+          assert.ok(layout.scheduleMetadata.width > 0 && layout.scheduleTextWidth <= layout.scheduleTextClientWidth + 1,
+            `${label} long schedule metadata wraps within its footer group`);
+          const scheduleAndDateShareRow = layout.scheduleMetadata.top < layout.lastPrayed.bottom
+            && layout.lastPrayed.top < layout.scheduleMetadata.bottom;
+          if (scheduleAndDateShareRow) {
+            assert.ok(layout.scheduleMetadata.right <= layout.lastPrayed.left
+              || layout.lastPrayed.right <= layout.scheduleMetadata.left,
+            `${label} schedule metadata and last-prayed date do not overlap`);
+          }
+          assert.equal(layout.headingGap, rhythmLayout.headingGap,
+            `${label} Prayer title/description spacing uses the Rhythm heading token`);
+          assert.equal(rhythmLayout.viewportWidth, viewportWidth, `${label} Rhythm comparison viewport`);
+          assert.equal(rhythmLayout.documentWidth, viewportWidth, `${label} Rhythm comparison must not overflow`);
           assert.ok(layout.history.left >= layout.card.left && layout.history.right <= layout.card.right);
           const actionContrast = contrastRatio(layout.actionForeground, layout.actionBackground);
           assert.ok(actionContrast >= 4.5,
@@ -11091,8 +12311,122 @@ async function main() {
             `${label} should retain the Prayer surface treatment`);
           assert.notEqual(layout.borderColor, 'rgba(0, 0, 0, 0)',
             `${label} should retain the Prayer border`);
+
+          await prayerCard.getByRole('button', { name: `View prayer history for ${prayerTitle}` }).hover();
+          const historyHover = await prayerCard.locator('.person-prayer-card__history').evaluate(button => ({
+            background: getComputedStyle(button).backgroundColor,
+            color: getComputedStyle(button).color
+          }));
+          assert.equal(historyHover.background, 'rgba(0, 0, 0, 0)',
+            `${label} chart control stays transparent on hover`);
+          assert.equal(historyHover.color, 'rgb(128, 98, 154)',
+            `${label} chart control retains Prayer purple on hover`);
+          const chartControl = prayerCard.locator('.person-prayer-card__history');
+          await chartControl.focus();
+          await prayerPage.keyboard.press('Tab');
+          await prayerPage.keyboard.press('Shift+Tab');
+          const historyFocus = await chartControl.evaluate(button => ({
+            style: getComputedStyle(button).outlineStyle,
+            width: getComputedStyle(button).outlineWidth,
+            color: getComputedStyle(button).outlineColor
+          }));
+          assert.equal(historyFocus.style, 'solid', `${label} chart control retains visible keyboard focus`);
+          assert.equal(historyFocus.width, '3px');
+          assert.equal(historyFocus.color, 'rgb(112, 90, 141)');
+
+          const longContent = await prayerCard.evaluate(card => {
+            const title = card.querySelector<HTMLElement>('.person-prayer-card__title');
+            const details = card.querySelector<HTMLElement>('.person-prayer-card__details');
+            const history = card.querySelector<HTMLElement>('.person-prayer-card__history');
+            if (!title || !details || !history) throw new Error('Prayer cards need title, details, and history controls.');
+            const savedTitle = title.textContent;
+            const savedDetails = details.textContent;
+            try {
+              title.textContent = 'A very long prayer request title that must wrap without colliding with its history control';
+              details.textContent = 'A longer synthetic description checks responsive wrapping, enlarged text, and card width without changing any saved request.';
+              const titleBounds = title.getBoundingClientRect();
+              const historyBounds = history.getBoundingClientRect();
+              return {
+                viewportWidth: document.documentElement.clientWidth,
+                documentWidth: document.documentElement.scrollWidth,
+                cardWidth: card.getBoundingClientRect().width,
+                cardScrollWidth: card.scrollWidth,
+                titleWidth: title.clientWidth,
+                titleScrollWidth: title.scrollWidth,
+                titleRight: titleBounds.right,
+                detailsWidth: details.clientWidth,
+                detailsScrollWidth: details.scrollWidth,
+                historyLeft: historyBounds.left
+              };
+            } finally {
+              title.textContent = savedTitle;
+              details.textContent = savedDetails;
+            }
+          });
+          assert.equal(longContent.documentWidth, viewportWidth,
+            `${label} long content must not create page overflow`);
+          assert.ok(longContent.cardScrollWidth <= longContent.cardWidth + 1,
+            `${label} long content must not overflow the Prayer card`);
+          assert.ok(longContent.titleWidth > 0 && longContent.titleScrollWidth <= longContent.titleWidth + 1,
+            `${label} long title wraps instead of clipping`);
+          assert.ok(longContent.detailsWidth > 0 && longContent.detailsScrollWidth <= longContent.detailsWidth + 1,
+            `${label} long description wraps instead of clipping`);
+          assert.ok(longContent.titleRight <= longContent.historyLeft + 1,
+            `${label} long title does not collide with the chart control`);
         }
       }
+
+      await setPreviewTextSize(prayerPage, 'medium');
+      await prayerPage.setViewportSize({ width: 1024, height: 844 });
+      const sideBySideLayout = await prayerPage.evaluate(() => {
+        const content = document.querySelector<HTMLElement>('.person-profile__content');
+        const rhythm = document.querySelector<HTMLElement>('.today-rhythm-details-dialog--inline');
+        const prayer = document.querySelector<HTMLElement>('.person-prayer-card');
+        const rhythmPanel = rhythm?.closest<HTMLElement>('[role="tabpanel"]');
+        const prayerPanel = prayer?.closest<HTMLElement>('[role="tabpanel"]');
+        if (!content || !rhythm || !prayer || !rhythmPanel || !prayerPanel) {
+          throw new Error('Side-by-side comparison requires the real Rhythm and Prayer profile panels.');
+        }
+        const originalContentStyle = content.getAttribute('style');
+        const originalRhythmStyle = rhythmPanel.getAttribute('style');
+        const originalPrayerStyle = prayerPanel.getAttribute('style');
+        const rhythmWasHidden = rhythmPanel.hidden;
+        const prayerWasHidden = prayerPanel.hidden;
+        try {
+          content.style.display = 'grid';
+          content.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+          content.style.alignItems = 'start';
+          content.style.gap = '16px';
+          rhythmPanel.hidden = false;
+          prayerPanel.hidden = false;
+          rhythmPanel.style.gridColumn = '1';
+          rhythmPanel.style.gridRow = '1';
+          prayerPanel.style.gridColumn = '2';
+          prayerPanel.style.gridRow = '1';
+          const rhythmBounds = rhythm.getBoundingClientRect();
+          const prayerBounds = prayer.getBoundingClientRect();
+          return {
+            viewportWidth: document.documentElement.clientWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            rhythm: { left: rhythmBounds.left, right: rhythmBounds.right, width: rhythmBounds.width },
+            prayer: { left: prayerBounds.left, right: prayerBounds.right, width: prayerBounds.width }
+          };
+        } finally {
+          if (originalContentStyle === null) content.removeAttribute('style');
+          else content.setAttribute('style', originalContentStyle);
+          if (originalRhythmStyle === null) rhythmPanel.removeAttribute('style');
+          else rhythmPanel.setAttribute('style', originalRhythmStyle);
+          if (originalPrayerStyle === null) prayerPanel.removeAttribute('style');
+          else prayerPanel.setAttribute('style', originalPrayerStyle);
+          rhythmPanel.hidden = rhythmWasHidden;
+          prayerPanel.hidden = prayerWasHidden;
+        }
+      });
+      assert.equal(sideBySideLayout.viewportWidth, 1024);
+      assert.ok(sideBySideLayout.documentWidth <= 1024, 'Side-by-side cards must not overflow the page.');
+      assert.ok(sideBySideLayout.rhythm.right < sideBySideLayout.prayer.left,
+        'The shared Rhythm and Prayer cards render side by side for direct comparison.');
+      assert.ok(sideBySideLayout.rhythm.width > 0 && sideBySideLayout.prayer.width > 0);
 
       await prayerPage.setViewportSize({ width: 375, height: 650 });
       const prayerActions = prayerCard.getByRole('button', { name: `Actions for ${prayerTitle}` });
@@ -11116,22 +12450,287 @@ async function main() {
 
       await prayerActions.click();
       await prayerMenu.waitFor({ state: 'visible' });
-      await prayerMenu.getByRole('menuitem', { name: 'Details/Edit' }).click();
-      const prayerEditor = prayerPage.getByRole('dialog', { name: 'Prayer request details' });
+      assert.equal(await prayerMenu.getByRole('menuitem', { name: 'Details/Edit' }).count(), 0,
+        'Prayer Actions no longer exposes Details/Edit.');
+      await prayerActions.click();
+      const requestHistoryTrigger = prayerCard.getByRole('button', {
+        name: `View prayer history for ${prayerTitle}`
+      });
+      await requestHistoryTrigger.click();
+      const requestHistory = prayerPage.getByRole('dialog', { name: 'Prayer history' });
+      await requestHistory.getByRole('button', { name: `Edit prayer request ${prayerTitle}` }).click();
+      let prayerEditor = prayerPage.getByRole('dialog', { name: 'Prayer request details' });
       assert.equal(await prayerEditor.evaluate(dialog => dialog.classList.contains('dialog--phone-fullscreen')), true);
       const deleteAction = prayerEditor.locator('.person-prayer-form__delete');
       assert.equal(await deleteAction.isVisible(), true);
       assert.equal(await deleteAction.evaluate(element => getComputedStyle(element).borderTopStyle), 'solid');
-      await prayerEditor.getByRole('button', { name: 'Close prayer request details' }).click();
+      await prayerEditor.getByRole('button', { name: 'Cancel' }).click();
+      await requestHistory.waitFor({ state: 'visible' });
+      await requestHistory.getByRole('button', { name: 'Close prayer history' }).click();
 
+      for (const viewportWidth of [375, 390, 430] as const) {
+        await prayerPage.setViewportSize({ width: viewportWidth, height: 844 });
+        await requestHistoryTrigger.scrollIntoViewIfNeeded();
+        await requestHistoryTrigger.click();
+        const editorHistory = prayerPage.getByRole('dialog', { name: 'Prayer history' });
+        await editorHistory.getByRole('button', { name: `Edit prayer request ${prayerTitle}` }).click();
+        prayerEditor = prayerPage.getByRole('dialog', { name: 'Prayer request details' });
+        const formMetrics = await prayerEditor.evaluate(dialog => {
+          const primary = dialog.querySelector<HTMLElement>('.person-prayer-form__actions > [type="submit"]');
+          const cancel = dialog.querySelector<HTMLElement>('.person-prayer-form__actions > [type="button"]');
+          const choosePeople = dialog.querySelector<HTMLElement>('.person-prayer-form__sharing > .btn');
+          if (!primary || !cancel || !choosePeople) throw new Error('Prayer form actions are missing.');
+          const measure = (element: HTMLElement) => ({
+            height: element.getBoundingClientRect().height,
+            color: getComputedStyle(element).color,
+            background: getComputedStyle(element).backgroundColor,
+            border: getComputedStyle(element).borderTopColor
+          });
+          return {
+            viewportWidth: document.documentElement.clientWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            primary: measure(primary),
+            cancel: measure(cancel),
+            choosePeople: measure(choosePeople)
+          };
+        });
+        const label = `Prayer Edit form at ${viewportWidth}px / enlarged text`;
+        assert.equal(formMetrics.viewportWidth, viewportWidth);
+        assert.equal(formMetrics.documentWidth, viewportWidth, `${label} must not overflow`);
+        assert.equal(formMetrics.primary.background, 'rgb(128, 98, 154)', `${label} primary action is purple`);
+        assert.equal(formMetrics.primary.color, 'rgb(255, 255, 255)', `${label} primary action text is white`);
+        assert.ok(formMetrics.primary.height >= 44 && formMetrics.cancel.height >= 44
+          && formMetrics.choosePeople.height >= 44, `${label} controls retain touch targets`);
+        for (const control of [formMetrics.cancel, formMetrics.choosePeople]) {
+          assert.equal(control.color, 'rgb(112, 90, 141)', `${label} secondary action text is purple`);
+          assert.equal(control.border, 'rgb(210, 197, 223)', `${label} secondary action border is purple`);
+        }
+        await prayerEditor.getByRole('button', { name: 'Close prayer request details' }).click();
+        await editorHistory.waitFor({ state: 'visible' });
+        await editorHistory.getByRole('button', { name: 'Close prayer history' }).click();
+      }
+
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await setPreviewTextSize(prayerPage, textSize);
+        await prayerProfile.getByRole('button', { name: 'Add request' }).click();
+        const prayerAddEditor = prayerPage.getByRole('dialog', { name: 'Add prayer request' });
+        for (const viewportWidth of [375, 390, 430] as const) {
+          await prayerPage.setViewportSize({ width: viewportWidth, height: 844 });
+          assert.equal(await prayerAddEditor.locator('.person-prayer-form__actions > [type="submit"]')
+            .evaluate(button => getComputedStyle(button).backgroundColor), 'rgb(128, 98, 154)');
+          const endDateToggle = prayerAddEditor.getByRole('checkbox', { name: 'Set an end date' });
+          await prayerAddEditor.getByRole('combobox', { name: /Time of day/ }).focus();
+          await prayerPage.keyboard.press('Tab');
+          const endDateFocus = await endDateToggle.evaluate(element => ({
+            focused: element === document.activeElement && element.matches(':focus-visible'),
+            outlineColor: getComputedStyle(element).outlineColor,
+            outlineWidth: getComputedStyle(element).outlineWidth
+          }));
+          assert.equal(endDateFocus.focused, true,
+            `Prayer end-date checkbox is keyboard reachable at ${viewportWidth}px / ${textSize} text.`);
+          assert.equal(endDateFocus.outlineColor, 'rgb(112, 90, 141)');
+          assert.equal(endDateFocus.outlineWidth, '2px');
+          const endDateRow = prayerAddEditor.locator('.rhythm-schedule-fields__end-date-row');
+          const uncheckedLayout = await endDateRow.evaluate(row => {
+            const toggle = row.querySelector<HTMLInputElement>('.rhythm-schedule-fields__end-toggle input');
+            const label = row.querySelector<HTMLElement>('.rhythm-schedule-fields__end-toggle');
+            const text = label?.querySelector<HTMLElement>('span');
+            if (!toggle || !label || !text) throw new Error('Prayer end-date toggle is incomplete.');
+            const toggleBounds = toggle.getBoundingClientRect();
+            const textBounds = text.getBoundingClientRect();
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              toggleWidth: toggleBounds.width,
+              toggleHeight: toggleBounds.height,
+              labelTextWidth: textBounds.width,
+              labelTextScrollWidth: text.scrollWidth,
+              labelTextHeight: textBounds.height,
+              labelLineHeight: Number.parseFloat(getComputedStyle(text).lineHeight)
+            };
+          });
+          const endDateLabel = `Prayer end-date control at ${viewportWidth}px / ${textSize} text`;
+          assert.equal(uncheckedLayout.viewportWidth, viewportWidth, `${endDateLabel} viewport`);
+          assert.equal(uncheckedLayout.documentWidth, viewportWidth, `${endDateLabel} no page overflow`);
+          assert.equal(uncheckedLayout.toggleWidth, 18, `${endDateLabel} checkbox width`);
+          assert.equal(uncheckedLayout.toggleHeight, 18, `${endDateLabel} checkbox height`);
+          assert.ok(uncheckedLayout.labelTextWidth > 0
+            && uncheckedLayout.labelTextScrollWidth <= uncheckedLayout.labelTextWidth + 1,
+          `${endDateLabel} label must wrap naturally without clipping`);
+          if (textSize !== 'large') {
+            assert.ok(uncheckedLayout.labelTextHeight <= uncheckedLayout.labelLineHeight * 1.5,
+              `${endDateLabel} label stays on one line at normal text sizes`);
+          }
+          await endDateToggle.check();
+          const endDateInput = prayerAddEditor.getByRole('textbox', { name: 'End date' });
+          await endDateInput.fill('2026-12-31');
+          const checkedLayout = await endDateRow.evaluate(row => {
+            const toggle = row.querySelector<HTMLInputElement>('.rhythm-schedule-fields__end-toggle input');
+            const label = row.querySelector<HTMLElement>('.rhythm-schedule-fields__end-toggle');
+            const date = row.querySelector<HTMLElement>('.rhythm-schedule-fields__end-date');
+            if (!toggle || !label || !date) throw new Error('Checked Prayer end-date fields are incomplete.');
+            const labelBounds = label.getBoundingClientRect();
+            const dateBounds = date.getBoundingClientRect();
+            return {
+              checked: toggle.checked,
+              accentColor: getComputedStyle(toggle).accentColor,
+              dateBelowToggle: dateBounds.top >= labelBounds.bottom - 1
+            };
+          });
+          assert.equal(checkedLayout.checked, true);
+          assert.equal(checkedLayout.accentColor, 'rgb(128, 98, 154)');
+          assert.equal(checkedLayout.dateBelowToggle, true,
+            `${endDateLabel} date input is placed below the toggle`);
+          await endDateToggle.uncheck();
+          assert.equal(await prayerAddEditor.getByRole('textbox', { name: 'End date' }).count(), 0);
+          await endDateToggle.check();
+          assert.equal(await endDateInput.inputValue(), '2026-12-31',
+            `${endDateLabel} preserves the date while temporarily unchecked`);
+          await endDateToggle.uncheck();
+          await prayerAddEditor.getByRole('button', { name: 'Choose people' }).click();
+          const prayerPeoplePicker = prayerPage.getByRole('dialog', {
+            name: 'Choose people to share this request with'
+          });
+          const pickerLayout = await prayerPeoplePicker.evaluate(dialog => {
+            const picker = dialog.querySelector<HTMLElement>('.rhythm-association-picker--prayer');
+            const peopleGrid = dialog.querySelector<HTMLElement>('.rhythm-association-picker__option-grid');
+            const firstPerson = dialog.querySelector<HTMLElement>('.rhythm-association-picker__option');
+            if (!picker || !peopleGrid || !firstPerson) {
+              throw new Error('Prayer Add/Edit must render the shared themed People picker.');
+            }
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              gridTracks: getComputedStyle(peopleGrid).gridTemplateColumns.trim().split(/\s+/).length,
+              pickerWidth: picker.clientWidth,
+              gridScrollWidth: peopleGrid.scrollWidth,
+              unselectedBorder: getComputedStyle(firstPerson).borderTopColor,
+              unselectedAvatar: getComputedStyle(firstPerson.querySelector('.person-badge-avatar')!).backgroundColor
+            };
+          });
+          const label = `Prayer Add/Edit people picker at ${viewportWidth}px / ${textSize} text`;
+          assert.equal(pickerLayout.viewportWidth, viewportWidth, `${label} viewport`);
+          assert.equal(pickerLayout.documentWidth, viewportWidth, `${label} must not create horizontal page scrolling`);
+          assert.ok(pickerLayout.gridScrollWidth <= pickerLayout.pickerWidth + 1,
+            `${label} shared people layout must not overflow`);
+          assert.equal(pickerLayout.gridTracks, prayerSelectionGridTracks.get(`${viewportWidth}:${textSize}`),
+            `${label} must use the same responsive grid as Prayer selection`);
+          assert.equal(pickerLayout.unselectedBorder, 'rgb(220, 228, 222)', `${label} keeps neutral unselected rows`);
+          assert.equal(pickerLayout.unselectedAvatar, 'rgb(240, 234, 245)', `${label} uses Prayer initials styling`);
+          await prayerPeoplePicker.locator('.rhythm-association-picker__group').first().focus();
+          await prayerPage.keyboard.press('Tab');
+          const focusedGroup = prayerPeoplePicker.locator('.rhythm-association-picker__group:focus-visible');
+          await focusedGroup.waitFor();
+          assert.equal(await focusedGroup.evaluate(element => getComputedStyle(element).outlineColor),
+            'rgb(112, 90, 141)', `${label} keyboard focus uses Prayer purple`);
+          await prayerPeoplePicker.locator('.rhythm-association-picker__option').first().click();
+          await prayerPage.mouse.move(0, 0);
+          const selectedStyle = await prayerPeoplePicker.locator(
+            '.rhythm-association-picker__option[aria-pressed="true"]'
+          ).first().evaluate(option => ({
+            border: getComputedStyle(option).borderTopColor,
+            background: getComputedStyle(option).backgroundColor,
+            color: getComputedStyle(option).color,
+            avatarBackground: getComputedStyle(option.querySelector('.person-badge-avatar')!).backgroundColor
+          }));
+          assert.equal(selectedStyle.border, 'rgb(210, 197, 223)', `${label} selected row border`);
+          assert.equal(selectedStyle.background, 'rgb(240, 234, 245)', `${label} selected row surface`);
+          assert.equal(selectedStyle.color, 'rgb(112, 90, 141)', `${label} selected row text`);
+          assert.equal(selectedStyle.avatarBackground, 'rgb(240, 234, 245)', `${label} selected avatar surface`);
+          await prayerPeoplePicker.locator('.rhythm-association-picker__option[aria-pressed="true"]').first().click();
+          await prayerPage.mouse.move(0, 0);
+          const unselectedStyle = await prayerPeoplePicker.locator(
+            '.rhythm-association-picker__option[aria-pressed="false"]'
+          ).first().evaluate(option => ({
+            border: getComputedStyle(option).borderTopColor,
+            background: getComputedStyle(option).backgroundColor,
+            color: getComputedStyle(option).color,
+            avatarBackground: getComputedStyle(option.querySelector('.person-badge-avatar')!).backgroundColor
+          }));
+          assert.equal(unselectedStyle.border, 'rgb(220, 228, 222)', `${label} unselected row stays neutral`);
+          assert.equal(unselectedStyle.background, 'rgb(255, 255, 255)', `${label} unselected row stays neutral`);
+          assert.equal(unselectedStyle.color, 'rgb(32, 39, 35)', `${label} unselected text stays readable`);
+          assert.equal(unselectedStyle.avatarBackground, 'rgb(240, 234, 245)', `${label} avatar initials stay themed`);
+          await prayerPeoplePicker.getByRole('button', { name: 'Cancel' }).click();
+        }
+        await prayerAddEditor.getByRole('button', { name: 'Close prayer request details' }).click();
+      }
+
+      await prayerPage.setViewportSize({ width: 375, height: 844 });
       const historyTrigger = prayerCard.getByRole('button', {
-        name: `Prayer history for ${prayerTitle}: 3 prayers recorded`
+        name: `View prayer history for ${prayerTitle}`
       });
       await historyTrigger.scrollIntoViewIfNeeded();
       const scrollBeforeHistory = await prayerPage.evaluate(() => window.scrollY);
       await historyTrigger.click();
       const prayerHistory = prayerPage.getByRole('dialog', { name: 'Prayer history' });
       const historyScroll = prayerHistory.locator('.money-goal-dialog__scroll-region');
+      const prayerHealth = prayerHistory.getByRole('region', {
+        name: 'Health, Consistency, and On Track scores for this prayer request'
+      });
+      assert.equal(await prayerHealth.getByRole('heading', { name: 'Health' }).count(), 1);
+      assert.equal(await prayerHealth.getByText(/Avery Brooks.*Prayer Health/).count(), 0);
+      assert.equal(await prayerHistory.getByRole('button', {
+        name: 'Show Consistency and On Track score details'
+      }).count(), 1);
+      await prayerHistory.getByRole('button', { name: 'Close prayer history' }).click();
+      for (const textSize of ['small', 'medium', 'large'] as const) {
+        await setPreviewTextSize(prayerPage, textSize);
+        for (const viewportWidth of [375, 390, 430] as const) {
+          await prayerPage.setViewportSize({ width: viewportWidth, height: 844 });
+          await historyTrigger.click();
+          await prayerHistory.getByRole('button', { name: 'Logged prayers (3)' }).click();
+          assert.equal(await prayerHistory.locator('.rhythm-history-view__logged-entry').count(), 3);
+          const lifecycleLayout = await prayerHistory.evaluate(dialog => {
+            const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
+            const summary = dialog.querySelector<HTMLElement>('.person-prayer-history__summary');
+            const entries = [...dialog.querySelectorAll<HTMLElement>('.rhythm-history-view__logged-entry')];
+            const actionButtons = [...dialog.querySelectorAll<HTMLElement>(
+              '.person-prayer-history__logged .rhythm-history-view__entry-action'
+            )];
+            if (!region || !summary || entries.length !== 3 || actionButtons.length < 6) {
+              throw new Error('Prayer detail needs its Health card and saved entry actions.');
+            }
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              scrollHeight: region.scrollHeight,
+              clientHeight: region.clientHeight,
+              summaryScrollWidth: summary.scrollWidth,
+              summaryClientWidth: summary.clientWidth,
+              entryWidths: entries.map(entry => ({
+                scroll: entry.scrollWidth,
+                client: entry.clientWidth
+              })),
+              actions: actionButtons.map(button => {
+                const bounds = button.getBoundingClientRect();
+                return {
+                  left: bounds.left,
+                  right: bounds.right,
+                  width: bounds.width,
+                  height: bounds.height
+                };
+              })
+            };
+          });
+          const label = `Prayer history at ${viewportWidth}px / ${textSize} text`;
+          assert.equal(lifecycleLayout.viewportWidth, viewportWidth);
+          assert.equal(lifecycleLayout.documentWidth, viewportWidth, `${label} must not overflow horizontally`);
+          assert.ok(lifecycleLayout.scrollHeight > lifecycleLayout.clientHeight,
+            `${label} remains vertically scrollable`);
+          assert.ok(lifecycleLayout.summaryScrollWidth <= lifecycleLayout.summaryClientWidth + 1,
+            `${label} summary must not clip`);
+          assert.ok(lifecycleLayout.entryWidths.every(entry => entry.scroll <= entry.client + 1),
+            `${label} logged-prayer text must wrap without clipping`);
+          assert.ok(lifecycleLayout.actions.every(action =>
+            action.width >= 44 && action.height >= 44 && action.left >= 0 && action.right <= viewportWidth
+          ), `${label} log controls remain reachable touch targets`);
+          await prayerHistory.getByRole('button', { name: 'Close prayer history' }).click();
+        }
+      }
+      await prayerPage.setViewportSize({ width: 375, height: 844 });
+      await setPreviewTextSize(prayerPage, 'large');
+      await historyTrigger.click();
       const historyScrollMetrics = await historyScroll.evaluate(region => ({
         clientHeight: region.clientHeight,
         scrollHeight: region.scrollHeight
@@ -11147,6 +12746,60 @@ async function main() {
       }));
       assert.ok(chartScrollMetrics.scrollWidth > chartScrollMetrics.clientWidth,
         'Prayer chart should provide horizontal access to older history.');
+      const prayerChartColors = await prayerHistory.evaluate(dialog => {
+        const section = dialog.querySelector<HTMLElement>('.rhythm-history-view__chart-section');
+        const chart = section?.querySelector<HTMLOListElement>('.rhythm-history-view__chart');
+        const today = chart?.querySelector<HTMLElement>('li[data-today="true"]');
+        const todayTrack = today?.querySelector<HTMLElement>('.rhythm-history-view__completion-track');
+        const todayBar = today?.querySelector<HTMLElement>('.rhythm-history-view__completion-bar');
+        const zero = chart?.querySelector<HTMLElement>(
+          'li:not([data-today="true"]) .rhythm-history-view__completion-zero'
+        );
+        const neutralTrack = chart?.querySelector<HTMLElement>(
+          'li:not([data-today="true"]) .rhythm-history-view__completion-track'
+        );
+        if (!section || !today || !todayTrack || !todayBar || !zero || !neutralTrack) {
+          throw new Error('Prayer history must show Today, a recorded bar, a zero marker, and other-day tracks.');
+        }
+        return {
+          theme: section.dataset.theme,
+          today: {
+            border: getComputedStyle(todayTrack).borderTopColor,
+            labelColor: getComputedStyle(today.querySelector('time')!).color,
+            bar: getComputedStyle(todayBar).backgroundColor
+          },
+          neutralTrack: getComputedStyle(neutralTrack).backgroundColor,
+          zero: {
+            background: getComputedStyle(zero).backgroundColor,
+            color: getComputedStyle(zero).color
+          }
+        };
+      });
+      assert.equal(prayerChartColors.theme, 'prayer');
+      assert.equal(prayerChartColors.today.border, 'rgb(112, 90, 141)');
+      assert.equal(prayerChartColors.today.labelColor, 'rgb(112, 90, 141)');
+      assert.equal(prayerChartColors.today.bar, 'rgb(128, 98, 154)');
+      assert.equal(prayerChartColors.neutralTrack, 'rgb(240, 234, 245)');
+      assert.equal(prayerChartColors.zero.background, 'rgb(222, 213, 231)');
+      assert.equal(prayerChartColors.zero.color, 'rgb(143, 125, 161)');
+      const responsiveChart = await chartScroll.evaluate(region => {
+        const bounds = region.getBoundingClientRect();
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          clientWidth: region.clientWidth,
+          scrollWidth: region.scrollWidth,
+          left: bounds.left,
+          right: bounds.right
+        };
+      });
+      assert.equal(responsiveChart.viewportWidth, 375);
+      assert.equal(responsiveChart.documentWidth, 375,
+        'Prayer chart at 375px must not overflow the page at enlarged text.');
+      assert.ok(responsiveChart.scrollWidth > responsiveChart.clientWidth,
+        'Prayer chart retains horizontal access to older dates at enlarged text.');
+      assert.ok(responsiveChart.left >= 0 && responsiveChart.right <= 375,
+        'Prayer chart remains within a 375px viewport.');
       await chartScroll.evaluate(region => { region.scrollLeft = 0; });
       assert.ok(await chartScroll.getByRole('listitem', { name: /prayer/ }).count() > 0);
       await historyScroll.evaluate(region => { region.scrollTop = region.scrollHeight; });
@@ -11158,6 +12811,204 @@ async function main() {
           && document.body.style.top === '',
         scrollBeforeHistory
       );
+
+      async function verifySuggestionDialog({
+        title,
+        closeLabel,
+        opener,
+        listSelector,
+        lastItemSelector,
+        open
+      }: {
+        title: string;
+        closeLabel: string;
+        opener: Locator;
+        listSelector: string;
+        lastItemSelector: string;
+        open: () => Promise<void>;
+      }) {
+        const openerElement = await opener.elementHandle();
+        if (!openerElement) throw new Error(`${title} must have a connected opener before browser verification.`);
+        let mobileListScrollable = false;
+        for (const textSize of ['small', 'medium', 'large'] as const) {
+          await setPreviewTextSize(prayerPage, textSize);
+          for (const width of [375, 390, 430, 1024, 1440] as const) {
+            await prayerPage.setViewportSize({ width, height: 844 });
+            await open();
+            const dialog = prayerPage.getByRole('dialog', { name: title });
+            await dialog.waitFor({ state: 'visible' });
+            const layout = await dialog.evaluate((element, selectors) => {
+              const list = element.querySelector<HTMLElement>(selectors.listSelector);
+              const lastItem = element.querySelector<HTMLElement>(selectors.lastItemSelector);
+              const heading = element.querySelector<HTMLElement>('.money-goal-dialog__surface > h2');
+              const close = element.querySelector<HTMLElement>('.money-goal-dialog__close');
+              const surface = element.querySelector<HTMLElement>('.money-goal-dialog__surface');
+              if (!list || !lastItem || !heading || !close || !surface) {
+                throw new Error('Suggestion dialog must expose its heading, close control, list, and final item.');
+              }
+              const bounds = (target: Element) => {
+                const rect = target.getBoundingClientRect();
+                return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
+              };
+              const headingBefore = bounds(heading);
+              const closeBefore = bounds(close);
+              const scrollable = list.scrollHeight > list.clientHeight + 1;
+              if (scrollable) list.scrollTop = list.scrollHeight;
+              const listBounds = bounds(list);
+              const lastItemBounds = bounds(lastItem);
+              const headingAfter = bounds(heading);
+              const closeAfter = bounds(close);
+              const dialogBounds = bounds(element);
+              const style = getComputedStyle(element);
+              const surfaceStyle = getComputedStyle(surface);
+              return {
+                viewportWidth: document.documentElement.clientWidth,
+                viewportHeight: document.documentElement.clientHeight,
+                documentWidth: document.documentElement.scrollWidth,
+                dialog: {
+                  ...dialogBounds,
+                  width: dialogBounds.right - dialogBounds.left,
+                  height: dialogBounds.bottom - dialogBounds.top,
+                  radius: Number.parseFloat(style.borderTopLeftRadius)
+                },
+                surfacePadding: {
+                  top: Number.parseFloat(surfaceStyle.paddingTop),
+                  right: Number.parseFloat(surfaceStyle.paddingRight),
+                  bottom: Number.parseFloat(surfaceStyle.paddingBottom),
+                  left: Number.parseFloat(surfaceStyle.paddingLeft)
+                },
+                list: {
+                  top: listBounds.top,
+                  bottom: listBounds.bottom,
+                  scrollable,
+                  scrollTop: list.scrollTop
+                },
+                lastItemVisible: lastItemBounds.top >= listBounds.top - 1
+                  && lastItemBounds.bottom <= listBounds.bottom + 1,
+                headingStable: Math.abs(headingBefore.top - headingAfter.top) <= 1
+                  && Math.abs(headingBefore.bottom - headingAfter.bottom) <= 1,
+                closeStable: Math.abs(closeBefore.top - closeAfter.top) <= 1
+                  && Math.abs(closeBefore.bottom - closeAfter.bottom) <= 1,
+                headingAtTop: headingAfter.top >= dialogBounds.top,
+                closeAtTop: closeAfter.top >= dialogBounds.top
+                  && closeAfter.bottom <= dialogBounds.top + 88
+              };
+            }, { listSelector, lastItemSelector });
+
+            assert.equal(layout.viewportWidth, width);
+            assert.equal(layout.documentWidth, width,
+              `${title} at ${width}px and ${textSize} text must not create page overflow.`);
+            assert.ok(layout.lastItemVisible,
+              `${title} must keep its final suggestion reachable after scrolling at ${width}px.`);
+            assert.ok(layout.headingStable && layout.closeStable,
+              `${title} heading and close control must remain fixed while its list scrolls.`);
+            if (width <= 700) {
+              assert.equal(layout.dialog.left, 0, `${title} should meet the left viewport edge on mobile.`);
+              assert.equal(layout.dialog.top, 0, `${title} should start at the top of the mobile viewport.`);
+              assert.equal(layout.dialog.width, width, `${title} should fill the mobile viewport width.`);
+              assert.equal(layout.dialog.height, 844, `${title} should fill the mobile viewport height.`);
+              assert.equal(layout.dialog.radius, 0, `${title} should have square outer corners on mobile.`);
+              assert.ok(layout.surfacePadding.top >= 18 && layout.surfacePadding.left >= 16
+                && layout.surfacePadding.right >= 16 && layout.surfacePadding.bottom >= 12,
+              `${title} should keep its safe-area content insets.`);
+              mobileListScrollable ||= layout.list.scrollable;
+            } else {
+              assert.ok(layout.dialog.left > 0 && layout.dialog.width < width,
+                `${title} should retain its centered desktop panel.`);
+              assert.ok(layout.dialog.radius > 0, `${title} should retain rounded desktop corners.`);
+            }
+
+            await dialog.getByRole('button', { name: closeLabel }).click();
+            await dialog.waitFor({ state: 'detached' });
+            await prayerPage.waitForFunction(target => document.activeElement === target, openerElement);
+          }
+        }
+        assert.ok(mobileListScrollable, `${title} should provide a scrollable list on mobile.`);
+      }
+
+      await prayerPage.goto(`${baseUrl}/app-preview.html?identity=dashboard`);
+      await prayerPage.setViewportSize({ width: 1280, height: 900 });
+      const areasNavigation = prayerPage.getByRole('navigation', { name: 'Areas' });
+      await areasNavigation.waitFor();
+      await areasNavigation.getByRole('button', { name: 'Faith' }).click();
+      await prayerPage.getByRole('tab', { name: 'Rhythms' }).click();
+      await verifySuggestionDialog({
+        title: 'Faith practice suggestions',
+        closeLabel: 'Close Faith practice suggestions',
+        opener: prayerPage.getByRole('button', { name: 'Suggestions' }),
+        listSelector: '.rhythm-suggestion-picker__scroll',
+        lastItemSelector: '.rhythm-suggestion-picker__group:last-child .rhythm-suggestion-picker__row:last-child',
+        open: () => prayerPage.getByRole('button', { name: 'Suggestions' }).click()
+      });
+
+      await setPreviewTextSize(prayerPage, 'large');
+      const previewBeforeFaithDraft = await prayerPage.evaluate(key =>
+        window.localStorage.getItem(key), prayerStorageKey);
+      await prayerPage.setViewportSize({ width: 375, height: 520 });
+      const faithSuggestionsOpener = prayerPage.getByRole('button', { name: 'Suggestions' });
+      await faithSuggestionsOpener.click();
+      const faithPicker = prayerPage.getByRole('dialog', { name: 'Faith practice suggestions' });
+      const faithList = faithPicker.locator('.rhythm-suggestion-picker__scroll');
+      const initialFaithScroll = await faithList.evaluate(list => {
+        list.scrollTop = list.scrollHeight;
+        return list.scrollTop;
+      });
+      assert.ok(initialFaithScroll > 0, 'Faith suggestions should scroll to the final item in a keyboard-constrained viewport.');
+      const finalFaithRow = faithList.locator(
+        '.rhythm-suggestion-picker__group:last-child .rhythm-suggestion-picker__row:last-child'
+      );
+      await finalFaithRow.getByRole('button', { name: 'Add' }).click();
+      const faithEditor = prayerPage.getByRole('dialog', { name: 'Add Rhythm' });
+      await faithEditor.waitFor({ state: 'visible' });
+      const cancelRhythm = faithEditor.getByRole('button', { name: 'Cancel' }).last();
+      await cancelRhythm.scrollIntoViewIfNeeded();
+      const cancelBounds = await cancelRhythm.evaluate(button => {
+        const rect = button.getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom, viewportHeight: document.documentElement.clientHeight };
+      });
+      assert.ok(cancelBounds.top >= 0 && cancelBounds.bottom <= cancelBounds.viewportHeight,
+        'Rhythm editor footer actions should remain reachable in a reduced-height mobile viewport.');
+      await cancelRhythm.click();
+      await faithEditor.waitFor({ state: 'detached' });
+      await faithPicker.waitFor({ state: 'visible' });
+      const restoredFaithScroll = await faithList.evaluate(list => list.scrollTop);
+      assert.ok(restoredFaithScroll > 0,
+        'Canceling the Rhythm editor should restore the Faith suggestion list and its scroll position.');
+      await faithPicker.getByRole('button', { name: 'Close Faith practice suggestions' }).click();
+      await faithPicker.waitFor({ state: 'detached' });
+      await prayerPage.waitForFunction(() =>
+        document.activeElement instanceof HTMLElement
+          && document.activeElement.textContent?.includes('Suggestions'));
+      assert.equal(await prayerPage.evaluate(key => window.localStorage.getItem(key), prayerStorageKey),
+        previewBeforeFaithDraft,
+        'Opening and canceling synthetic suggestion drafts must not change the stored fixture.');
+
+      await prayerPage.setViewportSize({ width: 1280, height: 900 });
+      await areasNavigation.getByRole('button', { name: 'Health & Fitness' }).click();
+      await prayerPage.getByRole('tab', { name: 'Foundations' }).click();
+      await prayerPage.getByRole('button', { name: /Open Strength .* details/ }).click();
+      await prayerPage.getByRole('tab', { name: 'Workouts' }).click();
+      await verifySuggestionDialog({
+        title: 'Add workout',
+        closeLabel: 'Close Add workout',
+        opener: prayerPage.getByRole('button', { name: 'Add workout' }),
+        listSelector: '.strength-workout-suggestions__list',
+        lastItemSelector: '.strength-workout-suggestions__list .strength-workout-suggestion:last-child',
+        open: () => prayerPage.getByRole('button', { name: 'Add workout' }).click()
+      });
+
+      await prayerPage.getByRole('button', { name: 'All Foundations' }).click();
+      await prayerPage.getByRole('button', { name: /Open Flexibility .* details/ }).click();
+      await prayerPage.getByRole('tab', { name: 'Routines' }).click();
+      await verifySuggestionDialog({
+        title: 'Add routine',
+        closeLabel: 'Close Add routine',
+        opener: prayerPage.getByRole('button', { name: 'Add routine' }),
+        listSelector: '.strength-workout-suggestions__list',
+        lastItemSelector: '.strength-workout-suggestions__list .strength-workout-suggestion:last-child',
+        open: () => prayerPage.getByRole('button', { name: 'Add routine' }).click()
+      });
+
       assert.deepEqual(prayerClassicRequests, [], 'Prayer React pages must not request tend.css.');
       await prayerContext.close();
 
@@ -11266,8 +13117,7 @@ async function main() {
         const fixtureState = await donePage.evaluate(key => ({
           bodyText: document.body.innerText.slice(0, 1600),
           storedFixture: window.localStorage.getItem(key) !== null,
-          todayText: document.querySelector('.today-plan-section')?.textContent?.slice(0, 500) ?? null,
-          savedText: document.querySelector('.preview-footer')?.textContent ?? null
+          todayText: document.querySelector('.today-plan-section')?.textContent?.slice(0, 500) ?? null
         }), doneRowsStorageKey);
         throw new Error(`Synthetic done-row fixture did not render two rows: ${JSON.stringify(fixtureState)}`);
       }

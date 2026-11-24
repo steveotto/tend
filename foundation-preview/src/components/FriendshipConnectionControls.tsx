@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
-import { personById, syntheticPeople } from '../domain/preview-data.ts';
-import type { PersonId, PersonPreview } from '../domain/preview-data.ts';
-import { localDateString } from '../domain/money-goals.ts';
+import { personById, syntheticPeople, syntheticPersonPickerGroups } from '../domain/preview-data.ts';
+import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
+import { isValidDate, localDateString } from '../domain/money-goals.ts';
 import { setPersonConnectionCadence } from '../domain/friendships.ts';
 import type {
   ConnectionCadence,
@@ -11,11 +11,13 @@ import type {
   FriendshipData
 } from '../domain/friendships.ts';
 import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
-import { PeopleParticipantPicker } from './PeopleParticipantPicker.tsx';
+import { PeopleAssociationRow, PeopleBadgeSelectionPicker } from './PeopleAssociationControls.tsx';
+import { toggleBadgeGroup } from './BadgeSelectionPicker.tsx';
 import { PersonConnectionCadenceSelect } from './PersonConnectionCadenceSelect.tsx';
 import { StyledSelect } from './StyledSelect.tsx';
 import type { StyledSelectOption } from './StyledSelect.tsx';
 import { CompletionDateTimeFields } from './CompletionDateTimeFields.tsx';
+import { RhythmCalendarIcon } from './RhythmCalendarIcon.tsx';
 
 export const connectionTypeLabels: Record<ConnectionType, string> = {
   text: 'Text',
@@ -83,9 +85,11 @@ export function FriendshipCadenceControl({
 
 export function ConnectionHistoryList({
   connections,
+  today,
   onEdit
 }: {
   connections: readonly FriendshipConnection[];
+  today: string;
   onEdit: (connection: FriendshipConnection, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const emptyHistoryMessage = useRef<HTMLParagraphElement>(null);
@@ -117,8 +121,7 @@ export function ConnectionHistoryList({
             ? connection.rhythmTitleSnapshot
             : undefined;
         const title = sourceTitle?.trim() || connectionTypeLabels[connection.type];
-        const formattedDate = formatLocalDate(connection.date);
-        const formattedTime = connection.time ? formatLocalTime(connection.time) : null;
+        const formattedDate = formatLocalDate(connection.date, today);
         const accessibleTitle = title === sourceLabel || title === `${sourceLabel} connection`
           ? `${sourceLabel} connection`
           : `${title}, ${sourceLabel} connection`;
@@ -127,7 +130,7 @@ export function ConnectionHistoryList({
             <button
               type="button"
               className="tended-rhythm-done-row friendships-connection-row"
-              aria-label={`${accessibleTitle}, ${formattedDate}${formattedTime ? ` at ${formattedTime}` : ''}. Open details.`}
+              aria-label={`${accessibleTitle}, ${formattedDate}. Open details.`}
               onClick={event => onEdit(connection, event)}
             >
               <span
@@ -143,20 +146,10 @@ export function ConnectionHistoryList({
                 <span className="friendships-connection-row__source-type">{sourceLabel}</span>
               </span>
               <span className="tended-rhythm-done-row__time friendships-connection-row__timestamp">
-                <time dateTime={connection.time
-                  ? `${connection.date}T${connection.time}`
-                  : connection.date}
-                >
+                <RhythmCalendarIcon className="friendships-connection-row__calendar-icon" />
+                <time dateTime={isValidDate(connection.date) ? connection.date : undefined}>
                   {formattedDate}
                 </time>
-                {formattedTime && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <time dateTime={`${connection.date}T${connection.time}`}>
-                      {formattedTime}
-                    </time>
-                  </>
-                )}
               </span>
             </button>
           </li>
@@ -170,12 +163,14 @@ export function ConnectionHistoryDialog({
   personId,
   people = syntheticPeople,
   connections,
+  today,
   onEdit,
   onClose
 }: {
   personId: PersonId;
   people?: readonly PersonPreview[];
   connections: readonly FriendshipConnection[];
+  today: string;
   onEdit: (connection: FriendshipConnection, event: MouseEvent<HTMLButtonElement>) => void;
   onClose: () => void;
 }) {
@@ -191,6 +186,7 @@ export function ConnectionHistoryDialog({
     >
       <ConnectionHistoryList
         connections={connections}
+        today={today}
         onEdit={onEdit}
       />
     </MoneyGoalDialog>
@@ -200,6 +196,7 @@ export function ConnectionHistoryDialog({
 export function ConnectionEditor({
   record,
   people = syntheticPeople,
+  peopleGroups = syntheticPersonPickerGroups,
   initialParticipantIds,
   initialType,
   initialDate,
@@ -211,6 +208,7 @@ export function ConnectionEditor({
 }: {
   record?: FriendshipConnection;
   people?: readonly PersonPreview[];
+  peopleGroups?: readonly PersonPickerGroup[];
   initialParticipantIds: PersonId[];
   initialType?: ConnectionType;
   initialDate?: string;
@@ -220,6 +218,7 @@ export function ConnectionEditor({
   onDelete?: (connectionId: string) => string | null;
   onClose: () => void;
 }) {
+  const peoplePickerTitleId = useId();
   const sparkInitialDateTime = useRef<{
     date: string;
     hour: number;
@@ -265,6 +264,8 @@ export function ConnectionEditor({
     ? record ? Boolean(record.time) : true
     : true);
   const [participantIds, setParticipantIds] = useState<PersonId[]>(initialParticipantIds);
+  const [peoplePickerOpen, setPeoplePickerOpen] = useState(false);
+  const [peoplePickerSelection, setPeoplePickerSelection] = useState<PersonId[]>([]);
   const [notes, setNotes] = useState(record?.notes ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -274,7 +275,9 @@ export function ConnectionEditor({
   const [deleteError, setDeleteError] = useState('');
   const deleteTrigger = useRef<HTMLButtonElement>(null);
   const deleteCancel = useRef<HTMLButtonElement>(null);
+  const peoplePickerOpener = useRef<HTMLButtonElement>(null);
   const returnToDelete = useRef(false);
+  const wasPeoplePickerOpen = useRef(false);
   const isOwnedRhythmConnection = record?.ownedByRhythmCompletion === true;
   const sourceTitle = record?.sparkTitleSnapshot ?? record?.rhythmTitleSnapshot;
   const sourceLabel = record?.sparkTitleSnapshot !== undefined || record?.sparkId !== undefined
@@ -282,6 +285,10 @@ export function ConnectionEditor({
     : record?.rhythmTitleSnapshot !== undefined || record?.rhythmId !== undefined
       ? 'Rhythm'
       : null;
+  const availablePeopleIds = new Set(people.map(person => person.id));
+  const selectedPeople = people.filter(person => participantIds.includes(person.id));
+  const unavailableParticipantIds = participantIds.filter(id => !availablePeopleIds.has(id));
+  const unavailablePickerIds = peoplePickerSelection.filter(id => !availablePeopleIds.has(id));
 
   useEffect(() => {
     if (confirmingDelete) {
@@ -291,6 +298,17 @@ export function ConnectionEditor({
       deleteTrigger.current?.focus();
     }
   }, [confirmingDelete]);
+
+  useEffect(() => {
+    if (peoplePickerOpen) {
+      wasPeoplePickerOpen.current = true;
+      return;
+    }
+    if (wasPeoplePickerOpen.current) {
+      wasPeoplePickerOpen.current = false;
+      peoplePickerOpener.current?.focus({ preventScroll: true });
+    }
+  }, [peoplePickerOpen]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -362,7 +380,22 @@ export function ConnectionEditor({
     onClose();
   }
 
+  function openPeoplePicker() {
+    setPeoplePickerSelection([...new Set(participantIds)]);
+    setPeoplePickerOpen(true);
+  }
+
+  function closePeoplePicker(commit: boolean) {
+    if (commit) setParticipantIds([...new Set(peoplePickerSelection)]);
+    setPeoplePickerOpen(false);
+  }
+
+  function togglePeopleGroup(personIds: readonly PersonId[]) {
+    setPeoplePickerSelection(current => toggleBadgeGroup(current, personIds));
+  }
+
   return (
+    <>
     <MoneyGoalDialog
       title={sparkTitle ? 'Log a connection for this Spark' : record ? 'Connection details' : 'Log connection'}
       titleId="friendship-connection-title"
@@ -439,12 +472,11 @@ export function ConnectionEditor({
             </label>
           </div>
         )}
-        <PeopleParticipantPicker
-          people={people}
-          selectedIds={participantIds}
-          onChange={(personId, selected) => setParticipantIds(current => selected
-            ? current.includes(personId) ? current : [...current, personId]
-            : current.filter(id => id !== personId))}
+        <PeopleAssociationRow
+          selectedPeople={selectedPeople}
+          unavailableIds={unavailableParticipantIds}
+          openerRef={peoplePickerOpener}
+          onChoose={openPeoplePicker}
         />
         {isOwnedRhythmConnection && (
           <p className="friendships-connection-form__ownership-note">
@@ -535,6 +567,36 @@ export function ConnectionEditor({
         )}
       </form>
     </MoneyGoalDialog>
+    {peoplePickerOpen && (
+      <MoneyGoalDialog
+        title="Choose people"
+        titleId={`${peoplePickerTitleId}-title`}
+        labelledBy={`${peoplePickerTitleId}-title`}
+        initialFocusId="rhythm-association-picker-title"
+        dialogClassName="money-goal-dialog--association-picker money-goal-dialog--people-picker"
+        phoneFullScreen
+        scrollableBody
+        closeLabel="Close people picker"
+        closeOnEscape
+        stopEscapePropagation
+        portalToBody
+        onClose={() => closePeoplePicker(false)}
+      >
+        <PeopleBadgeSelectionPicker
+          people={people}
+          groups={peopleGroups}
+          selectedIds={peoplePickerSelection}
+          unavailableSelectedIds={unavailablePickerIds}
+          onToggle={personId => setPeoplePickerSelection(current => current.includes(personId)
+            ? current.filter(id => id !== personId)
+            : [...current, personId])}
+          onToggleGroup={togglePeopleGroup}
+          onDone={() => closePeoplePicker(true)}
+          onCancel={() => closePeoplePicker(false)}
+        />
+      </MoneyGoalDialog>
+    )}
+    </>
   );
 }
 
@@ -569,19 +631,14 @@ function ConnectionTypeIcon({ type }: { type: ConnectionType }) {
   );
 }
 
-function formatLocalDate(value: string): string {
+function formatLocalDate(value: string, today: string): string {
+  if (!isValidDate(value)) return 'Date not recorded';
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year!, month! - 1, day!, 12).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
-  });
-}
-
-function formatLocalTime(value: string): string {
-  const [hour, minute] = value.split(':').map(Number);
-  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit'
+    ...(isValidDate(today) && year === Number(today.slice(0, 4))
+      ? {}
+      : { year: 'numeric' as const })
   });
 }

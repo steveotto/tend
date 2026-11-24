@@ -202,8 +202,12 @@ function MetadataIcon({ kind }: { kind: 'recurrence' | 'time' | 'last-tended' })
       </svg>
     );
   }
+  return <RhythmCalendarIcon />;
+}
+
+export function RhythmCalendarIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <rect x="3.5" y="5" width="17" height="16" rx="2" />
       <path d="M7.5 3v4M16.5 3v4M3.5 9h17M8 14l2.5 2.5L16 12" />
     </svg>

@@ -388,6 +388,7 @@ export function FriendshipsView({
           personId={historyPersonId}
           people={people}
           connections={activeHistory}
+          today={today}
           onEdit={openEditConnection}
           onClose={() => setHistoryPersonId(null)}
         />
@@ -397,6 +398,7 @@ export function FriendshipsView({
           key={connectionEditor.record?.id ?? connectionEditor.participantId ?? 'new'}
           {...(connectionEditor.record ? { record: connectionEditor.record } : {})}
           people={people}
+          peopleGroups={peopleGroups}
           initialParticipantIds={editorParticipantIds}
           {...(connectionEditor.type ? { initialType: connectionEditor.type } : {})}
           today={today}

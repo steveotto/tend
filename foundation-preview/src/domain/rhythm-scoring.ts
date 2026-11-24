@@ -2,6 +2,7 @@ import { isValidDate } from './money-goals.ts';
 import type { RhythmCompletionRecord } from './rhythm-completion.ts';
 import {
   consistencyWindowForSchedule,
+  rhythmOpportunityGraceExpired,
   scoreClockStartDateForSchedule,
   scoreRhythm
 } from '../../../src/scoring/engine.ts';
@@ -716,7 +717,8 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
         let zeroScoreSpanCount = 0;
         let zeroScoreSpanRecentDates: string[] = [];
         let missedOccurrenceCount = 0;
-        let previousScore = 100;
+        let previousScore = 0;
+        let hasQualifyingCompletion = false;
         const flushZeroScoreSpan = () => {
           if (zeroScoreSpanStart && zeroScoreSpanEnd && zeroScoreSpanCount > 0) {
             repeatedZeroScoreSpans.push({
@@ -736,6 +738,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           | { kind: 'schedule-change'; date: string };
         const events: TrackEvent[] = [];
         for (const occurrence of scoringOccurrences) {
+          const occurrenceSchedule = scheduleForDate(occurrence.date);
           if (occurrence.status === 'completed') {
             events.push({
               kind: 'occurrence',
@@ -743,7 +746,14 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
               occurrence,
               status: 'completed'
             });
-          } else if (occurrence.eligibleEndDate < input.asOfDate) {
+          } else if (occurrenceSchedule
+            && rhythmOpportunityGraceExpired({
+              schedule: occurrenceSchedule,
+              opportunityEndDate: occurrence.eligibleEndDate,
+              asOfDate: input.asOfDate,
+              ...(input.asOfTime === undefined ? {} : { asOfTime: input.asOfTime }),
+              ...(input.dueTime === undefined ? {} : { dueTime: input.dueTime })
+            })) {
             events.push({
               kind: 'occurrence',
               date: occurrence.eligibleEndDate,
@@ -778,6 +788,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             flushZeroScoreSpan();
             missedOccurrenceCount = 0;
             previousScore = 100;
+            hasQualifyingCompletion = true;
             const shouldRecordCompletion = occurrence.onceWeeklyPeriod
               ? occurrence.completionDate !== input.asOfDate
               : occurrence.date !== input.asOfDate || occurrence.completionDate !== input.asOfDate;
@@ -798,8 +809,10 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
             continue;
           }
           missedOccurrenceCount += 1;
-          const nextScore = Math.max(0, 100 - missedOccurrenceCount * deductionPerMissedOccurrence);
-          if (nextScore === 0 && previousScore === 0) {
+          const nextScore = hasQualifyingCompletion
+            ? Math.max(0, 100 - missedOccurrenceCount * deductionPerMissedOccurrence)
+            : 0;
+          if (nextScore === 0 && previousScore === 0 && missedOccurrenceCount > 1) {
             zeroScoreSpanStart ??= occurrence.date;
             zeroScoreSpanEnd = occurrence.date;
             zeroScoreSpanCount += 1;
@@ -828,7 +841,9 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
         if (dueTodayCompleted) {
           occurrences[occurrences.length - 1] = { date: input.asOfDate, status: 'completed', score };
         }
-        const deduction = Math.min(100, missedOccurrenceCount * deductionPerMissedOccurrence);
+        const deduction = lastQualifyingCompletionDate === null
+          ? 0
+          : Math.min(100, missedOccurrenceCount * deductionPerMissedOccurrence);
         onTrack = lastQualifyingCompletionDate === null
           && missedOccurrenceCount === 0
           ? unscored('ready-for-first-tend', 'Starts with your first Tend.')
@@ -978,7 +993,7 @@ function sharedEngineOnTrackMetric(
       lastQualifyingCompletionDate,
       missedOccurrenceCount,
       pointsPerMissedOccurrence: deductionPerMissedOccurrence,
-      deduction: 100 - onTrackScore,
+      deduction: lastQualifyingCompletionDate === null ? 0 : 100 - onTrackScore,
       occurrences,
       repeatedZeroScoreSpans: [],
       scheduleChanges: []

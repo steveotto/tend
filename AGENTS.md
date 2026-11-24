@@ -1,6 +1,14 @@
 # Tend foundation contribution rules
 
-- Keep live accounts, application checkout and database unchanged in this foundation slice.
+## Narrow authenticated Prayer implementation authorization
+
+- The repository owner has explicitly approved a separate, narrow implementation phase for authenticated Prayer scheduling and person Prayer Health in the deployed Tend React application.
+- This authorization permits application code, account-document adapters, migration/recovery logic, mocked/local integration tests, and production build verification for this feature.
+- It does not authorize reading or modifying live user records, destructive cleanup, production database changes, or weakening authentication/RLS.
+- If a database migration or RLS change is genuinely required, stop and provide the exact proposal, reason, rollback, and verification plan for separate approval.
+- Keep live credentials, prayer contents, private account data, and real sessions out of source, logs, fixtures, tests, and exports.
+
+- Keep live accounts, application checkout and database unchanged outside this narrowly authorized Prayer implementation; live-record reads/writes and database changes remain prohibited.
 - Use synthetic fixtures only. Never commit personal state, auth/session data, tokens or keys.
 - Keep the existing `index.html` app shell intact. The React Today preview is served from `foundation-preview/app-preview.html`, and the component catalogue remains at `foundation-preview/preview.html`.
 - Domain readers and selectors must be pure: no browser storage, network or implicit saves.

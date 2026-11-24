@@ -382,9 +382,9 @@ describe('shared Season correction score preview', () => {
     expect(within(impact).getByRole('group', { name: 'Before Consistency' })
       .querySelector('.rhythm-season-impact__score strong')?.textContent).toBe('0');
     expect(within(impact).getByRole('group', { name: 'Before On Track' })
-      .querySelector('.rhythm-season-impact__score strong')?.textContent).toBe('20');
+      .querySelector('.rhythm-season-impact__score strong')?.textContent).toBe('0');
     expect(within(impact).getByRole('group', { name: 'Before Health' })
-      .querySelector('.rhythm-season-impact__score strong')?.textContent).toBe('5');
+      .querySelector('.rhythm-season-impact__score strong')?.textContent).toBe('0');
     for (const metric of ['Consistency', 'On Track', 'Health']) {
       expect(within(impact).getByRole('group', { name: `After ${metric}` }).textContent)
         .toContain('Proposed schedule is invalid.');

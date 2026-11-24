@@ -112,8 +112,12 @@ import {
   PREVIEW_V47_RECOVERY_KEY,
   PREVIEW_V55_RECOVERY_KEY,
   PREVIEW_V56_RECOVERY_KEY,
+  PREVIEW_V57_RECOVERY_KEY,
+  PREVIEW_V58_RECOVERY_KEY,
   loadV47RecoveryCopy,
   loadV56RecoveryCopy,
+  loadV57RecoveryCopy,
+  loadV58RecoveryCopy,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -175,6 +179,8 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V47_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V55_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V56_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V57_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V58_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -727,6 +733,138 @@ describe('synthetic preview storage adapter and envelope', () => {
     expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
   });
 
+  it('preserves the exact schema-57 source before writing the Prayer schedule schema', () => {
+    const data = createSamplePreviewData();
+    const personId = data.people[0]!.id;
+    data.prayerRequests = [{
+      id: 'legacy-unscheduled-request',
+      personId,
+      title: 'Legacy request',
+      status: 'active',
+      createdAt: '2026-10-01T00:00:00.000Z',
+      updatedAt: '2026-10-01T00:00:00.000Z',
+      prayerLogs: [{ id: 'legacy-log', prayedAt: '2026-10-31T12:00:00.000Z' }]
+    }];
+    const sourceEnvelope = createPreviewEnvelope(data);
+    const raw = JSON.stringify({ ...sourceEnvelope, schemaVersion: 57 });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-11-23');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(loaded.data.prayerRequests[0]).toMatchObject({
+      id: 'legacy-unscheduled-request',
+      prayerLogs: [{ id: 'legacy-log', prayedAt: '2026-10-31T12:00:00.000Z' }]
+    });
+    expect(loaded.data.prayerRequests[0]?.schedule).toBeUndefined();
+    expect(loaded.data.prayerRequests[0]?.timeOfDay).toBeUndefined();
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-11-23' }).kind)
+      .toBe('saved');
+    expect(values.get(PREVIEW_V57_RECOVERY_KEY)).toBe(raw);
+    expect(loadV57RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    const savedEnvelope = JSON.parse(values.get(PREVIEW_STORAGE_KEY)!) as {
+      schemaVersion: number;
+      data: { prayerRequests: Array<Record<string, unknown>> };
+    };
+    expect(savedEnvelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(savedEnvelope.data.prayerRequests[0]).not.toHaveProperty('schedule');
+    expect(savedEnvelope.data.prayerRequests[0]).not.toHaveProperty('timeOfDay');
+  });
+
+  it('migrates schema 58 only after exact recovery is verified and preserves Prayer history', () => {
+    const data = createSamplePreviewData();
+    data.prayerRequests = [{
+      id: 'schema-58-prayer',
+      personId: 'sample-person-avery',
+      title: 'Existing prayer',
+      status: 'active',
+      createdAt: '2026-11-01T10:00:00.000Z',
+      updatedAt: '2026-11-01T10:00:00.000Z',
+      prayerLogs: [{ id: 'schema-58-log', prayedAt: '2026-11-22T12:34:56.789Z' }]
+    }];
+    const raw = ` \n${JSON.stringify({ ...createPreviewEnvelope(data), schemaVersion: 58 })}\n`;
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+    const loaded = loadPreview(storage, '2026-11-23');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(parsePreviewBackup(raw, '2026-11-23')).toMatchObject({
+      valid: true,
+      sourceSchemaVersion: 58
+    });
+
+    const attempted = { ...loaded.data, showTended: true };
+    const saved = writePreview(storage, attempted, loaded.raw, { currentDate: '2026-11-23' });
+
+    expect(saved.kind).toBe('saved');
+    expect(values.get(PREVIEW_V58_RECOVERY_KEY)).toBe(raw);
+    expect(loadV58RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    const reloaded = loadPreview(storage, '2026-11-23');
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    const savedEnvelope = parsePreviewBackup(values.get(PREVIEW_STORAGE_KEY)!, '2026-11-23');
+    expect(savedEnvelope.valid).toBe(true);
+    if (savedEnvelope.valid) expect(savedEnvelope.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+    expect(reloaded.data.showTended).toBe(true);
+    expect(reloaded.data.prayerRequests).toEqual(data.prayerRequests);
+  });
+
+  it('does not replace schema 58 active data when recovery conflicts or fails, and safely retries', () => {
+    const data = createSamplePreviewData();
+    data.prayerRequests = [{
+      id: 'schema-58-prayer',
+      personId: 'sample-person-avery',
+      title: 'Existing prayer',
+      status: 'active',
+      createdAt: '2026-11-01T10:00:00.000Z',
+      updatedAt: '2026-11-01T10:00:00.000Z',
+      prayerLogs: [{ id: 'schema-58-log', prayedAt: '2026-11-22T12:34:56.789Z' }]
+    }];
+    const raw = ` \n${JSON.stringify({ ...createPreviewEnvelope(data), schemaVersion: 58 })}\n`;
+    const attempted = { ...data, showTended: true };
+
+    const conflictingArchive = 'different schema-58 recovery';
+    const conflict = storageFixture({
+      [PREVIEW_STORAGE_KEY]: raw,
+      [PREVIEW_V58_RECOVERY_KEY]: conflictingArchive
+    });
+    const conflictResult = writePreview(conflict.storage, attempted, raw, { currentDate: '2026-11-23' });
+    expect(conflictResult).toMatchObject({
+      kind: 'error',
+      diagnostic: { rejectedRule: 'immutable-recovery-copy-conflict' }
+    });
+    expect(conflict.values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(conflict.values.get(PREVIEW_V58_RECOVERY_KEY)).toBe(conflictingArchive);
+
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+    const failingStorage = {
+      getItem: storage.getItem,
+      setItem: (key: string, value: string) => {
+        if (key === PREVIEW_V58_RECOVERY_KEY) throw new Error('schema-58 recovery write blocked');
+        storage.setItem(key, value);
+      }
+    };
+    const failed = writePreview(failingStorage, attempted, raw, { currentDate: '2026-11-23' });
+    expect(failed).toMatchObject({
+      kind: 'error',
+      diagnostic: {
+        rejectedRule: 'immutable-recovery-copy-failed',
+        failureDetail: 'schema-58 recovery write blocked'
+      }
+    });
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
+    expect(values.has(PREVIEW_V58_RECOVERY_KEY)).toBe(false);
+
+    const retried = writePreview(storage, attempted, raw, { currentDate: '2026-11-23' });
+    expect(retried.kind).toBe('saved');
+    expect(values.get(PREVIEW_V58_RECOVERY_KEY)).toBe(raw);
+    const active = loadPreview(storage, '2026-11-23');
+    expect(active.kind).toBe('loaded');
+    if (active.kind === 'loaded') {
+      expect(active.data.showTended).toBe(true);
+      expect(active.data.prayerRequests).toEqual(data.prayerRequests);
+    }
+  });
+
   it('writes a new schema-40 Rhythm over a stored schema-39 preview and preserves the exact source', () => {
     const data = createSamplePreviewData();
     const existingRhythm: PreviewData['savedRhythms'][number] = {
@@ -1177,6 +1315,28 @@ describe('synthetic preview storage adapter and envelope', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Download original v40 recovery backup' }));
+    expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
+  });
+
+  it('offers exact schema-58 recovery bytes through the shared preview data controls', async () => {
+    const user = userEvent.setup();
+    const raw = ' \n{"schemaVersion":58,"data":{"synthetic":"recovery"}}\n ';
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={createSamplePreviewData()}
+        status={{ kind: 'saved' }}
+        currentDate="2026-11-23"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+        v58RecoveryCopy={raw}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Download original v58 recovery backup' }));
     expect(await createObjectURL.mock.calls[0]![0].text()).toBe(raw);
   });
 
@@ -3911,10 +4071,10 @@ describe('preview backup controls', () => {
     await screen.findByText('Preview data saved in this browser.');
     await openPerson('Avery Brooks');
     await user.click(screen.getByRole('button', { name: 'Notes (0)' }));
-    await user.click(screen.getByRole('button', { name: 'Add note' }));
+    await user.click(screen.getByRole('button', { name: /Add note/ }));
     const editor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });
     await user.type(within(editor).getByRole('textbox', { name: 'Note' }), 'App integration first line{Enter}second line');
-    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    await user.click(within(editor).getByRole('button', { name: 'Choose people, Avery Brooks' }));
     const picker = screen.getByRole('dialog', { name: 'Share note' });
     await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
     await user.click(within(picker).getByRole('button', { name: 'Done' }));
@@ -3985,7 +4145,7 @@ describe('preview backup controls', () => {
     }
     await openPerson('Avery Brooks');
     await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
-    expect(screen.getByRole('heading', { name: 'Notes (1)' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Notes' })).toBeTruthy();
     expect(screen.getByText('Edited from the shared profile')).toBeTruthy();
   });
 
@@ -4034,11 +4194,22 @@ describe('preview backup controls', () => {
       await user.click(screen.getByRole('button', { name: `Actions for ${title}` }));
       return screen.getByRole('menu', { name: `Actions for ${title}` });
     };
+    const openRequestEditor = async (title: string) => {
+      const card = screen.getByRole('article', { name: title });
+      await user.click(within(card).getByRole('button', {
+        name: `View prayer history for ${title}`
+      }));
+      const history = screen.getByRole('dialog', { name: 'Prayer history' });
+      await user.click(within(history).getByRole('button', {
+        name: `Edit prayer request ${title}`
+      }));
+      return screen.getByRole('dialog', { name: 'Prayer request details' });
+    };
 
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
     await openPerson('Avery Brooks');
-    await user.click(screen.getByRole('button', { name: 'Add prayer request' }));
+    await user.click(screen.getByRole('button', { name: 'Add request' }));
     const editor = screen.getByRole('dialog', { name: 'Add prayer request' });
     await user.type(within(editor).getByRole('textbox', { name: 'Title' }), 'Pray about school');
     await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
@@ -4086,9 +4257,7 @@ describe('preview backup controls', () => {
     await openPerson('Morgan Reed');
     expect(screen.getByRole('tabpanel', { name: 'Prayer' })).toBeTruthy();
     expect(screen.getByRole('listitem')).toBeTruthy();
-    actions = await openActions('Pray about school');
-    await user.click(within(actions).getByRole('menuitem', { name: 'Details/Edit' }));
-    const details = screen.getByRole('dialog', { name: 'Prayer request details' });
+    const details = await openRequestEditor('Pray about school');
     await user.click(within(details).getByRole('button', {
       name: 'Remove Pray about school from this profile'
     }));
@@ -4104,9 +4273,7 @@ describe('preview backup controls', () => {
 
     await user.click(screen.getByRole('button', { name: 'Back to People' }));
     await openPerson('Avery Brooks');
-    actions = await openActions('Pray about school');
-    await user.click(within(actions).getByRole('menuitem', { name: 'Details/Edit' }));
-    const ownerDetails = screen.getByRole('dialog', { name: 'Prayer request details' });
+    const ownerDetails = await openRequestEditor('Pray about school');
     await user.click(within(ownerDetails).getByRole('button', { name: 'Delete Pray about school' }));
     const deletion = screen.getByRole('dialog', { name: 'Delete this request?' });
     await user.click(within(deletion).getByRole('button', { name: 'Delete request' }));
@@ -4216,7 +4383,8 @@ describe('preview backup controls', () => {
     const user = userEvent.setup();
     vi.spyOn(MemoryStorage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage access denied'); });
     render(<App />);
-    expect(await screen.findByRole('alert')).toBeTruthy();
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts.some(alert => alert.textContent?.includes('Storage access denied'))).toBe(true);
     await openPreviewSettings(user);
     expect(screen.getByText(/Browser storage is unavailable/)).toBeTruthy();
     expect(screen.queryByText('Preview data saved in this browser.')).toBeNull();

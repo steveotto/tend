@@ -73,7 +73,7 @@ describe('shared badge selection picker', () => {
     expect(friends.dataset.selected).toBe('false');
     expect(emptyGroup.hasAttribute('disabled')).toBe(true);
     expect(document.getElementById(emptyGroup.getAttribute('aria-describedby')!)?.textContent)
-      .toContain('No people belong to Empty');
+      .toContain('No available items belong to Empty');
     expect(within(picker).queryByRole('searchbox')).toBeNull();
     expect(within(picker).queryByText(/^\d+ selected$/)).toBeNull();
 

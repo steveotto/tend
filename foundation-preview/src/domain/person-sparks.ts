@@ -61,6 +61,10 @@ export function personSparksForPerson(
   return sparks.filter(spark => spark.ownerId === personId || spark.sharedWith.includes(personId));
 }
 
+export function selectOpenPersonSparks(sparks: readonly PersonSpark[]): PersonSpark[] {
+  return sparks.filter(spark => !spark.archived && !spark.completed);
+}
+
 export function validatePersonSparksCollection(
   value: unknown,
   knownPersonIds: readonly PersonId[]

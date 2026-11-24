@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import {
   addOrUpdateConnection,
@@ -29,6 +29,7 @@ import { BackButton } from './BackButton.tsx';
 import { SettingsGearButton } from './SettingsGearButton.tsx';
 import { ConnectionEditor, ConnectionHistoryList } from './FriendshipConnectionControls.tsx';
 import { PersonAvatar, personFirstName } from './PersonBadge.tsx';
+import { PersonProfileTabHeader } from './PersonProfileTabHeader.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { selectPersonRhythmsDueToday } from '../domain/person-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
@@ -38,7 +39,7 @@ import {
   personWithSavedPhoto
 } from '../domain/person-details.ts';
 import type { PersonDetails } from '../domain/person-details.ts';
-import { PersonNotesPanel } from './PersonNotesPanel.tsx';
+import { PersonNotesIcon, PersonNotesPanel } from './PersonNotesPanel.tsx';
 import { ArchivedRhythmsControl } from './ArchivedRhythmsControl.tsx';
 import { personNotesForPerson } from '../domain/person-notes.ts';
 import type { PersonNote, PersonNoteDraft } from '../domain/person-notes.ts';
@@ -59,6 +60,8 @@ import { useAvailablePersonGroups, usePrayerEnabled } from './CategoryAvailabili
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { PersonSparkPanel } from './PersonSparkPanel.tsx';
 import { selectPersonOverallHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
+import { selectPersonPrayerHealth } from '../domain/person-prayer-health.ts';
+import { useTimeBlockSettings } from './TimeBlocksContext.tsx';
 import {
   PERSON_CONNECTION_HEALTH_SCORING_EXPLANATION,
   selectPersonConnectionHealth
@@ -67,6 +70,8 @@ import { personPrayerRequestsForPerson } from '../domain/person-prayers.ts';
 import type { PersonSparkDraft, PersonSpark } from '../domain/person-sparks.ts';
 import { connectionCadenceOptions } from './PersonConnectionCadenceSelect.tsx';
 import type {
+  PersonPrayerLog,
+  PersonPrayerLogUndo,
   PersonPrayerRequest,
   PersonPrayerRequestDraft,
   PrayerRequestTransition
@@ -106,6 +111,8 @@ export function PersonProfileView({
   peopleGroups,
   friendships,
   today,
+  prayerHealthTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  prayerHealthInstant = new Date(),
   rhythms,
   archivedRhythms,
   foundations,
@@ -125,6 +132,9 @@ export function PersonProfileView({
   onUpdatePrayerRequest,
   onPrayerRequestTransition,
   onPrayForRequest,
+  onSavePrayerLog,
+  onDeletePrayerLog,
+  onUndoDeletePrayerLog,
   onRemovePrayerRequest,
   personSparks = [],
   onCreatePersonSpark,
@@ -156,6 +166,8 @@ export function PersonProfileView({
   peopleGroups: readonly PersonPickerGroup[];
   friendships: FriendshipData;
   today: string;
+  prayerHealthTimeZone?: string;
+  prayerHealthInstant?: Date;
   rhythms: readonly RhythmPreview[];
   archivedRhythms: readonly RhythmPreview[];
   foundations: readonly FoundationPreview[];
@@ -185,6 +197,19 @@ export function PersonProfileView({
     transition: PrayerRequestTransition
   ) => string | null;
   onPrayForRequest?: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
+  onSavePrayerLog?: (
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    log: PersonPrayerLog
+  ) => string | null;
+  onDeletePrayerLog?: (
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    logId: string
+  ) => PersonPrayerLogUndo | string;
+  onUndoDeletePrayerLog?: (undo: PersonPrayerLogUndo, actorId: PersonId) => string | null;
   onRemovePrayerRequest?: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
   personSparks?: readonly PersonSpark[];
   onCreatePersonSpark?: (ownerId: PersonId, draft: PersonSparkDraft) => string | null;
@@ -211,6 +236,7 @@ export function PersonProfileView({
   navigationRequest?: PersonProfileNavigationRequest | null;
   onClose: () => void;
 }) {
+  const timeBlockSettings = useTimeBlockSettings();
   const tendedRhythmIds = savedTendedRhythmIds
     ?? selectTendedRhythmDisplayIds(completedRhythms, satisfiedRhythmIds);
   const details = personDetailsForId(personDetails, personId);
@@ -221,6 +247,12 @@ export function PersonProfileView({
   const prayerEnabled = usePrayerEnabled();
   const visibleProfileTabs = prayerEnabled ? profileTabs : profileTabs.filter(item => item.id !== 'prayer');
   const lastHandledNavigationRequest = useRef<number | null>(null);
+  const previousProfilePersonId = useRef(personId);
+
+  useLayoutEffect(() => {
+    if (previousProfilePersonId.current !== personId) setNotesOpen(false);
+    previousProfilePersonId.current = personId;
+  }, [personId]);
 
   useEffect(() => {
     if (!navigationRequest || navigationRequest.personId !== personId) return;
@@ -248,7 +280,7 @@ export function PersonProfileView({
   const [showArchived, setShowArchived] = useState(false);
   const [archivedPersonId, setArchivedPersonId] = useState<PersonId | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const notesAccessRef = useRef<HTMLButtonElement | null>(null);
+  const notesDockOpener = useRef<HTMLButtonElement | null>(null);
   const connectionOpener = useRef<HTMLButtonElement | null>(null);
   const wasEditorOpen = useRef(false);
   const archiveOpener = useRef<HTMLElement | null>(null);
@@ -278,9 +310,18 @@ export function PersonProfileView({
     archivedRhythmIds
   );
   const personConnectionHealth = selectPersonConnectionHealth(friendships, personId, today);
+  const personPrayerHealth = selectPersonPrayerHealth(
+    prayerRequests,
+    personId,
+    today,
+    prayerHealthTimeZone,
+    prayerHealthInstant,
+    timeBlockSettings
+  );
   const overallHealth = selectPersonOverallHealth(
     personRhythmHealth,
     personConnectionHealth,
+    personPrayerHealth,
     prayerEnabled
   );
   const componentScores = [
@@ -293,7 +334,14 @@ export function PersonProfileView({
         ? { unavailableReason: personConnectionHealth.unavailableReason }
         : {})
     },
-    ...(prayerEnabled ? [{ id: 'prayer' as const, label: 'Prayer', score: null }] : [])
+    ...(prayerEnabled ? [{
+      id: 'prayer' as const,
+      label: 'Prayer',
+      score: personPrayerHealth.score,
+      ...(personPrayerHealth.score === null && personPrayerHealth.unavailableReason
+        ? { unavailableReason: personPrayerHealth.unavailableReason }
+        : {})
+    }] : [])
   ] as const;
   const connectionCadenceLabel = personConnectionStatus.cadence
     ? connectionCadenceOptions.find(option => option.value === personConnectionStatus.cadence)?.label
@@ -360,7 +408,7 @@ export function PersonProfileView({
     },
     prayer: {
       label: 'Prayer' as const,
-      health: { consistency: null, onTrack: null, health: null },
+      health: { consistency: null, onTrack: null, health: personPrayerHealth.score },
       supportsMeasures: false
     }
   };
@@ -368,9 +416,11 @@ export function PersonProfileView({
   const latestConnectionLabel = latestConnection
     ? formatConnectionRecency(latestConnection.date, today)
     : null;
-  const latestPrayerDate = personPrayerRecords
-    .flatMap(request => request.prayerLogs.flatMap(log => log.prayedAt ? [log.prayedAt] : []))
-    .sort((left, right) => Date.parse(left) - Date.parse(right))
+  const activePrayerRequestIds = new Set(personPrayerHealth.activeRequestIds);
+  const latestPrayerDate = personPrayerHealth.requests
+    .filter(request => activePrayerRequestIds.has(request.requestId))
+    .flatMap(request => request.latestPrayerDate ? [request.latestPrayerDate] : [])
+    .sort()
     .at(-1);
 
   function healthDetailsFor(area: ProfileTab) {
@@ -387,6 +437,10 @@ export function PersonProfileView({
       : area === 'prayer'
         ? [
             ['Prayer requests', String(personPrayerRecords.length)],
+            ['Active requests', String(personPrayerHealth.activeRequestIds.length)],
+            ['Requests with Health', String(personPrayerHealth.scoredRequestIds.length)],
+            ['Missing frequency', String(personPrayerHealth.missingFrequencyRequestIds.length)],
+            ['No eligible history', String(personPrayerHealth.noHistoryRequestIds.length)],
             ['Prayer logs', String(personPrayerLogCount)],
             ['Most recent prayer', latestPrayerDate ?? '—']
           ] as const
@@ -411,10 +465,14 @@ export function PersonProfileView({
         {...(!config.supportsMeasures ? {
           ...(area === 'connections' && personConnectionHealth.score !== null
             ? { scoringExplanation: PERSON_CONNECTION_HEALTH_SCORING_EXPLANATION }
+            : area === 'prayer' && personPrayerHealth.score !== null
+              ? { scoringExplanation: personPrayerHealth.unavailableReason ?? 'Available active prayer request Health scores are averaged equally.' }
             : {
                 unavailableExplanation: area === 'connections'
                   ? personConnectionHealth.unavailableReason ?? 'Connection Health is unavailable.'
-                  : `${config.label} Health is unavailable in this preview.`
+                  : area === 'prayer'
+                    ? personPrayerHealth.unavailableReason ?? 'Prayer Health is unavailable.'
+                    : `${config.label} Health is unavailable in this preview.`
               }),
           ...(unavailableInputs ? { unavailableInputs } : {})
         } : {})}
@@ -685,26 +743,16 @@ export function PersonProfileView({
             aria-labelledby="person-profile-tab-rhythms"
             hidden={notesOpen || tab !== 'rhythms'}
           >
-            <div className="person-profile__section-heading">
-              <div className="person-profile__queue-heading">
-                <h3>Today with {personFirstName(person.displayName)}</h3>
-                <span
-                  className="person-profile__queue-count"
-                  aria-label={`${duePersonRhythms.length} ${duePersonRhythms.length === 1 ? 'Rhythm' : 'Rhythms'} in queue`}
-                >
-                  {duePersonRhythms.length} in queue
-                </span>
-              </div>
-              {showAddRhythm && (
-                <button
-                  type="button"
-                  className="btn mini"
-                  onClick={event => onAddRhythm(event, personId)}
-                >
-                  Add Rhythm
-                </button>
-              )}
-            </div>
+            <PersonProfileTabHeader
+              title="Rhythms"
+              subtitle={`${duePersonRhythms.length} in queue`}
+              {...(showAddRhythm
+                ? {
+                    actionLabel: 'Add rhythm',
+                    onAction: (event: MouseEvent<HTMLButtonElement>) => onAddRhythm(event, personId)
+                  }
+                : {})}
+            />
             <TendedRhythmList
               rhythms={duePersonRhythms}
               tendedRhythmIds={tendedRhythmIds}
@@ -777,19 +825,16 @@ export function PersonProfileView({
             aria-labelledby="person-profile-tab-connections"
             hidden={notesOpen || tab !== 'connections'}
           >
-            <div className="person-profile__section-heading">
-              <h3>Connections</h3>
-              <button
-                type="button"
-                className="btn mini ghost"
-                ref={connectionOpener}
-                onClick={openConnectionDraft}
-              >
-                + Add
-              </button>
-            </div>
+            <PersonProfileTabHeader
+              title="Connections"
+              subtitle={`${connectionHistory.length} ${connectionHistory.length === 1 ? 'connection' : 'connections'}`}
+              actionLabel="Add connection"
+              actionRef={connectionOpener}
+              onAction={openConnectionDraft}
+            />
             <ConnectionHistoryList
               connections={connectionHistory}
+              today={today}
               onEdit={openEditConnection}
             />
             <PersonSparkPanel
@@ -829,6 +874,7 @@ export function PersonProfileView({
               personId={personId}
               enabled={prayerEnabled}
               today={today}
+              prayerHealthInstant={prayerHealthInstant}
               people={people}
               peopleGroups={peopleGroups}
               requests={prayerRequests}
@@ -845,63 +891,64 @@ export function PersonProfileView({
               onPray={(requestId, expectedUpdatedAt, actorId) => onPrayForRequest
                 ? onPrayForRequest(requestId, expectedUpdatedAt, actorId)
                 : 'Prayer logging is unavailable.'}
+              {...(onSavePrayerLog ? { onSaveLog: onSavePrayerLog } : {})}
+              {...(onDeletePrayerLog ? { onDeleteLog: onDeletePrayerLog } : {})}
+              {...(onUndoDeletePrayerLog ? { onUndoDeleteLog: onUndoDeletePrayerLog } : {})}
               onRemove={(requestId, expectedUpdatedAt, actorId) => onRemovePrayerRequest
                 ? onRemovePrayerRequest(requestId, expectedUpdatedAt, actorId)
                 : 'Prayer requests are unavailable.'}
             />
           </section>
-          <div className="person-profile__notes-access">
+          <div className="person-profile__notes-dock">
             <button
-              ref={notesAccessRef}
+              ref={notesDockOpener}
               type="button"
-              className="btn mini ghost"
-              aria-controls={`person-profile-notes-view-${personId}`}
+              className="person-profile__notes-dock-button"
+              aria-label={`Notes (${profileNotes.length})`}
+              aria-controls={`person-profile-notes-drawer-${personId}`}
               aria-expanded={notesOpen}
               onClick={() => setNotesOpen(true)}
             >
-              Notes ({profileNotes.length})
+              <span className="person-profile__notes-dock-label">
+                <PersonNotesIcon />
+                <span>Notes</span>
+              </span>
+              <span className="person-profile__notes-dock-actions">
+                {profileNotes.length > 0 && (
+                  <span className="person-profile__notes-count">{profileNotes.length}</span>
+                )}
+                <span className="person-profile__notes-chevron" aria-hidden="true">⌃</span>
+              </span>
             </button>
           </div>
-          <section
-            id={`person-profile-notes-view-${personId}`}
-            className="person-profile__notes-view"
-            aria-labelledby={`person-profile-notes-heading-${personId}`}
-            hidden={!notesOpen}
-          >
-              <header className="person-profile__section-heading">
-                <h3 id={`person-profile-notes-heading-${personId}`}>Notes</h3>
-                <button
-                  type="button"
-                  className="btn mini ghost"
-                  onClick={() => {
-                    setNotesOpen(false);
-                    notesAccessRef.current?.focus({ preventScroll: true });
-                  }}
-                >
-                  Return to profile tabs
-                </button>
-              </header>
-              <PersonNotesPanel
-                personId={personId}
-                people={people}
-                notes={personNotes}
-                onCreate={draft => onCreatePersonNote
-                  ? onCreatePersonNote(personId, draft)
-                  : 'Person notes are unavailable.'}
-                onUpdate={(noteId, expectedUpdatedAt, actorId, draft) => onUpdatePersonNote
-                  ? onUpdatePersonNote(noteId, expectedUpdatedAt, actorId, draft)
-                  : 'Person notes are unavailable.'}
-                onDelete={(noteId, expectedUpdatedAt, actorId) => onDeletePersonNote
-                  ? onDeletePersonNote(noteId, expectedUpdatedAt, actorId)
-                  : 'Person notes are unavailable.'}
-              />
-          </section>
+          <PersonNotesPanel
+            personId={personId}
+            people={people}
+            peopleGroups={peopleGroups}
+            notes={personNotes}
+            canEdit={onUpdatePersonNote !== undefined}
+            drawerOpen={notesOpen}
+            drawerId={`person-profile-notes-drawer-${personId}`}
+            openerRef={notesDockOpener}
+            onDrawerClose={() => setNotesOpen(false)}
+            onDrawerOpen={() => setNotesOpen(true)}
+            onCreate={draft => onCreatePersonNote
+              ? onCreatePersonNote(personId, draft)
+              : 'Person notes are unavailable.'}
+            onUpdate={(noteId, expectedUpdatedAt, actorId, draft) => onUpdatePersonNote
+              ? onUpdatePersonNote(noteId, expectedUpdatedAt, actorId, draft)
+              : 'Person notes are unavailable.'}
+            onDelete={(noteId, expectedUpdatedAt, actorId) => onDeletePersonNote
+              ? onDeletePersonNote(noteId, expectedUpdatedAt, actorId)
+              : 'Person notes are unavailable.'}
+          />
       </section>
       {connectionEditor && (
         <ConnectionEditor
           key={connectionEditor.record?.id ?? `${personId}-${connectionEditor.sparkId ?? 'new'}`}
           {...(connectionEditor.record ? { record: connectionEditor.record } : {})}
           people={people}
+          peopleGroups={peopleGroups}
           initialParticipantIds={connectionEditor.record?.participantIds ?? (() => {
             const spark = personSparks.find(item => item.id === connectionEditor.sparkId);
             return spark ? [spark.ownerId, ...spark.sharedWith] : [personId];

@@ -126,7 +126,7 @@ describe('shared Rhythm season impact comparison', () => {
     expect(afterOnTrack.textContent).toContain('Completion history is unavailable.');
   });
 
-  it('uses the real tracking baseline when there is no qualifying completion and shows the score floor', async () => {
+  it('keeps never-tended On Track unavailable during grace and at zero after it expires', async () => {
     const user = userEvent.setup();
     const firstDay = score([], true, '2026-10-01');
     render(
@@ -154,7 +154,7 @@ describe('shared Rhythm season impact comparison', () => {
       />
     );
     await user.click(screen.getByText('Why the scores change'));
-    expect(screen.getAllByText('max(0, 100 − 10 × 20) = 0')).toHaveLength(2);
+    expect(screen.getAllByText(/0 until the first qualifying Tend/)).toHaveLength(2);
     expect(screen.getAllByText('20 missed days')).toHaveLength(2);
   });
 

@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { rhythmLastActivityLabel, rhythmLastTendedLabel } from '../src/domain/preview-data.ts';
+import {
+  formatRhythmActivityDate,
+  rhythmLastActivityLabel,
+  rhythmLastTendedLabel
+} from '../src/domain/preview-data.ts';
 import { selectNextScheduledOccurrence } from '../src/domain/rhythm-occurrences.ts';
 import type { RhythmSchedule, RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 
 describe('next scheduled occurrence selection', () => {
+  it('formats activity dates consistently for Rhythm and Prayer cards', () => {
+    expect(formatRhythmActivityDate('2026-10-25', '2026-10-25')).toBe('Today');
+    expect(formatRhythmActivityDate('2026-10-20', '2026-10-25')).toBe('Oct 20');
+    expect(formatRhythmActivityDate('2025-10-20', '2026-10-25')).toBe('Oct 20, 2025');
+  });
+
   it('labels only the latest actual completion, with date, year, and no-history distinctions', () => {
     expect(rhythmLastActivityLabel({
       completionHistory: [{ id: 'today', effectiveDate: '2026-10-25' }]

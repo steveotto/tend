@@ -39,6 +39,7 @@ export function RhythmHealthScoringDetails({
   createdOnTrackScore,
   onChooseSchedule,
   formatDate,
+  activity = 'rhythm',
   initiallyExpanded = true
 }: {
   id: string;
@@ -52,6 +53,7 @@ export function RhythmHealthScoringDetails({
   createdOnTrackScore: number | null;
   onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
   formatDate: FormatDate;
+  activity?: 'rhythm' | 'prayer';
   initiallyExpanded?: boolean;
 }) {
   const headingId = useId();
@@ -82,7 +84,7 @@ export function RhythmHealthScoringDetails({
       <HealthDetailsExpandableHeader
         id={headingId}
         contentId={contentId}
-        title="How this Rhythm was scored"
+        title={activity === 'prayer' ? 'How this prayer request was scored' : 'How this Rhythm was scored'}
         expanded={expanded}
         onToggle={() => setExpanded(value => !value)}
       />
@@ -111,7 +113,9 @@ export function RhythmHealthScoringDetails({
 
         <MetricSection
           title="Consistency"
-          subtitle="Consistency measures your follow-through over time"
+          subtitle={activity === 'prayer'
+            ? 'Consistency measures follow-through on this request over time'
+            : 'Consistency measures your follow-through over time'}
           score={consistencyScore}
           label="Consistency score"
         >
@@ -121,16 +125,20 @@ export function RhythmHealthScoringDetails({
               {...(schedule ? { schedule } : {})}
                 asOfDate={asOfDate}
                 formatDate={formatDate}
+                activity={activity}
               />
             : <UnscoredEvidence
                 metric={consistency}
+                activity={activity}
               {...(!sharedUnscoredExplanation && onChooseSchedule ? { onChooseSchedule } : {})}
               />}
         </MetricSection>
 
         <MetricSection
           title="On Track"
-          subtitle="On Track measures how caught up you are"
+          subtitle={activity === 'prayer'
+            ? 'On Track measures how caught up you are with this request'
+            : 'On Track measures how caught up you are'}
           score={onTrackScore}
           label="On Track score"
         >
@@ -141,10 +149,12 @@ export function RhythmHealthScoringDetails({
                 entries={scoreHistory}
                 asOfDate={asOfDate}
                 formatDate={formatDate}
+                  activity={activity}
               />
             )
             : <UnscoredEvidence
                 metric={onTrack}
+                  activity={activity}
                 {...(sharedUnscoredExplanation && onChooseSchedule ? { onChooseSchedule } : {})}
               />}
         </MetricSection>
@@ -187,12 +197,14 @@ function ConsistencyEvidence({
   metric,
   schedule,
   asOfDate,
-  formatDate
+  formatDate,
+  activity
 }: {
   metric: ScoredConsistencyMetric;
   schedule?: RhythmSchedule;
   asOfDate: string;
   formatDate: FormatDate;
+  activity: 'rhythm' | 'prayer';
 }) {
   const evidence = metric.evidence;
   const measuredDays = evidence.limitedHistoryDays
@@ -214,7 +226,7 @@ function ConsistencyEvidence({
             : 'Dates',
           value: `${formatDate(evidence.windowStartDate, false)}–${formatDate(evidence.windowEndDate, false)}`
         },
-        { label: 'Completed', value: String(evidence.completedCount) },
+        { label: activity === 'prayer' ? 'Prayed' : 'Completed', value: String(evidence.completedCount) },
         { label: 'Scheduled', value: String(evidence.eligibleDueCount) }
       ]} />
       <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--consistency">
@@ -224,7 +236,7 @@ function ConsistencyEvidence({
         <strong>{consistencyFrequencyName(evidence.frequency)}</strong> frequency based on {measuredDays}{' '}
         {measuredDays === 1 ? 'day' : 'days'} of tracking.
       </p>
-      {consistencyEligibilityNote(schedule)}
+      {consistencyEligibilityNote(schedule, activity)}
     </>
   );
 }
@@ -246,7 +258,10 @@ function consistencyFrequencyName(frequency: ScoredConsistencyMetric['evidence']
   }
 }
 
-function consistencyEligibilityNote(schedule: RhythmSchedule | undefined): ReactNode {
+function consistencyEligibilityNote(
+  schedule: RhythmSchedule | undefined,
+  activity: 'rhythm' | 'prayer'
+): ReactNode {
   if (!schedule) return null;
   if (isOnceWeeklyRhythmSchedule(schedule)) {
     const plannedDay = rhythmWeekdayName(schedule.weekdays[0]!);
@@ -260,7 +275,8 @@ function consistencyEligibilityNote(schedule: RhythmSchedule | undefined): React
   if (isPeriodBasedRhythmSchedule(schedule)) {
     return (
       <p className="rhythm-health-scoring-card__note">
-        Any completion in its eligible calendar period counts once; extra logs stay in your history.
+        Any {activity === 'prayer' ? 'prayer' : 'completion'} in its eligible calendar period
+        {' '}counts once; extra logs stay in your history.
       </p>
     );
   }
@@ -272,11 +288,13 @@ function OnTrackEvidence({
   entries,
   asOfDate,
   formatDate,
+  activity
 }: {
   metric: ScoredOnTrackMetric;
   entries: ReturnType<typeof onTrackHistoryDisplayEntries>;
   asOfDate: string;
   formatDate: FormatDate;
+  activity: 'rhythm' | 'prayer';
 }) {
   const historyId = useId();
   const [showFullHistory, setShowFullHistory] = useState(false);
@@ -288,25 +306,34 @@ function OnTrackEvidence({
   );
   const hasFullHistoryAlternate = entries.length !== recentEntries.length
     || entries.some((entry, index) => entry !== recentEntries[index]);
-  const theoreticalDeduction = evidence.missedOccurrenceCount * evidence.pointsPerMissedOccurrence;
-  const formula = theoreticalDeduction > 100
-    ? `max(0, 100 − (${evidence.missedOccurrenceCount} × ${evidence.pointsPerMissedOccurrence}))`
-    : `100 − (${evidence.missedOccurrenceCount} × ${evidence.pointsPerMissedOccurrence})`;
+  const formula = evidence.lastQualifyingCompletionDate === null
+    ? null
+    : evidence.missedOccurrenceCount * evidence.pointsPerMissedOccurrence > 100
+      ? `max(0, 100 − (${evidence.missedOccurrenceCount} × ${evidence.pointsPerMissedOccurrence}))`
+      : `100 − (${evidence.missedOccurrenceCount} × ${evidence.pointsPerMissedOccurrence})`;
+  const firstQualifyingAction = activity === 'prayer' ? 'prayer' : 'Tend';
   const visibleEntries = showFullHistory ? entries : recentEntries;
   return (
     <>
       <BreakdownRows rows={[
         {
-          label: 'Last tended',
+          label: activity === 'prayer' ? 'Last prayed' : 'Last tended',
           value: evidence.lastQualifyingCompletionDate
             ? formatDate(evidence.lastQualifyingCompletionDate, false)
             : 'None yet'
         },
         { label: 'Missed occurrences', value: String(evidence.missedOccurrenceCount) },
-        { label: 'Per miss', value: `${evidence.pointsPerMissedOccurrence} points` }
+        {
+          label: 'Per miss',
+          value: `${evidence.pointsPerMissedOccurrence} points${formula === null
+            ? ` after the first qualifying ${firstQualifyingAction}`
+            : ''}`
+        }
       ]} />
       <p className="rhythm-health-scoring-card__formula rhythm-health-scoring-card__formula--on-track">
-        <span>{formula} = <strong>{formatScore(metric.score)}</strong></span>
+        <span>{formula === null
+          ? <><strong>0</strong> until the first qualifying {firstQualifyingAction}</>
+          : <>{formula} = <strong>{formatScore(metric.score)}</strong></>}</span>
       </p>
       <section className="rhythm-health-scoring-card__history" aria-labelledby={`${historyId}-title`}>
         <h5 id={`${historyId}-title`}>Recent score history</h5>
@@ -320,10 +347,10 @@ function OnTrackEvidence({
             <li
               key={entry.key}
               className={`rhythm-health-scoring-card__history-entry rhythm-health-scoring-card__history-entry--${entry.kind === 'occurrence' ? entry.status : entry.kind}`}
-              aria-label={historyEntryDescription(entry, metric, formatDate)}
+              aria-label={historyEntryDescription(entry, metric, formatDate, activity)}
             >
               <span className="rhythm-health-scoring-card__history-dot" aria-hidden="true" />
-              <span>{historyEntryLabel(entry, formatDate)}</span>
+              <span>{historyEntryLabel(entry, formatDate, activity)}</span>
               <strong>{formatScore(entry.score)}</strong>
             </li>
           ))}
@@ -351,24 +378,32 @@ function OnTrackEvidence({
 
 function historyEntryLabel(
   entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number],
-  formatDate: FormatDate
+  formatDate: FormatDate,
+  activity: 'rhythm' | 'prayer'
 ): string {
-  if (entry.kind === 'created') return `${formatDate(entry.date, false)} · Created`;
+  if (entry.kind === 'created') {
+    return `${formatDate(entry.date, false)} · ${activity === 'prayer' ? 'Prayer request created' : 'Created'}`;
+  }
   if (entry.kind === 'schedule-change') return `${formatDate(entry.date, false)} · Schedule changed`;
   if (entry.kind === 'zero-score-span') {
     return `${entry.occurrenceCount} more misses · ${formatDate(entry.startDate, false)}–${formatDate(entry.endDate, false)}`;
   }
   if (entry.status === 'today') return `Today · ${formatDate(entry.date, false)}`;
-  return `${formatDate(entry.date, false)} · ${entry.status === 'completed' ? 'Tended' : 'Missed'}`;
+  return `${formatDate(entry.date, false)} · ${entry.status === 'completed'
+    ? activity === 'prayer' ? 'Prayed' : 'Tended'
+    : 'Missed'}`;
 }
 
 function historyEntryDescription(
   entry: ReturnType<typeof onTrackHistoryDisplayEntries>[number],
   metric: ScoredOnTrackMetric,
-  formatDate: FormatDate
+  formatDate: FormatDate,
+  activity: 'rhythm' | 'prayer'
 ): string {
+  const subject = activity === 'prayer' ? 'Prayer request' : 'Rhythm';
+  const action = activity === 'prayer' ? 'Prayer' : 'Completion';
   if (entry.kind === 'created') {
-    return `Rhythm created on ${formatDate(entry.date)}. On Track score at creation: ${formatScore(entry.score)}.`;
+    return `${subject} created on ${formatDate(entry.date)}. On Track score at creation: ${formatScore(entry.score)}.`;
   }
   if (entry.kind === 'schedule-change') {
     return `Schedule changed on ${formatDate(entry.date)}. On Track score at that point: ${formatScore(entry.score)}.`;
@@ -379,14 +414,24 @@ function historyEntryDescription(
   }
   if (entry.status === 'completed') {
     if (entry.periodStartDate && entry.eligibleEndDate && entry.completionDate) {
-      return `Completion on ${formatDate(entry.completionDate)} satisfied the occurrence due ${formatDate(entry.date)} within its eligible period, ${formatDate(entry.periodStartDate)}–${formatDate(entry.eligibleEndDate)}. Extra logs stay in your history.`;
+      return `${action} on ${formatDate(entry.completionDate)} satisfied the occurrence due ${formatDate(entry.date)} within its eligible period, ${formatDate(entry.periodStartDate)}–${formatDate(entry.eligibleEndDate)}. Extra logs stay in your history.`;
     }
-    return `Qualifying completion on ${formatDate(entry.date)} reset the missed-occurrence count and On Track score to 100.`;
+    return `Qualifying ${activity === 'prayer' ? 'prayer' : 'completion'} on ${formatDate(entry.date)} reset the missed-occurrence count and On Track score to 100.`;
   }
   if (entry.status === 'missed') {
     const period = entry.periodStartDate && entry.eligibleEndDate
       ? ` in the eligible period ${formatDate(entry.periodStartDate)}–${formatDate(entry.eligibleEndDate)}`
       : '';
+    const occurrenceIndex = metric.evidence.occurrences.findIndex(occurrence =>
+      occurrence.status === 'missed' && occurrence.date === entry.date
+    );
+    const hasEarlierQualifyingCompletion = occurrenceIndex >= 0
+      && metric.evidence.occurrences.slice(0, occurrenceIndex)
+        .some(occurrence => occurrence.status === 'completed');
+    if (!hasEarlierQualifyingCompletion) {
+      const firstQualifyingAction = activity === 'prayer' ? 'prayer' : 'Tend';
+      return `Missed scheduled occurrence on ${formatDate(entry.date)}${period} before the first qualifying ${firstQualifyingAction}; On Track stays at 0 until then.`;
+    }
     return `Missed scheduled occurrence on ${formatDate(entry.date)}${period}; ${metric.evidence.pointsPerMissedOccurrence}-point deduction applied. Resulting On Track score: ${formatScore(entry.score)}.`;
   }
   return `Current On Track state as of ${formatDate(entry.date)}. Current score: ${formatScore(entry.score)}.`;
@@ -394,14 +439,19 @@ function historyEntryDescription(
 
 function UnscoredEvidence({
   metric,
-  onChooseSchedule
+  onChooseSchedule,
+  activity
 }: {
   metric: UnscoredMetric;
   onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
+  activity: 'rhythm' | 'prayer';
 }) {
+  const explanation = activity === 'prayer'
+    ? prayerUnscoredExplanation(metric)
+    : metric.explanation;
   return (
     <div className="rhythm-health-scoring-card__unscored">
-      <p>{metric.explanation}</p>
+      <p>{explanation}</p>
       {onChooseSchedule && (
         <button type="button" onClick={onChooseSchedule}>
           Choose a schedule to calculate On Track
@@ -409,6 +459,32 @@ function UnscoredEvidence({
       )}
     </div>
   );
+}
+
+function prayerUnscoredExplanation(metric: UnscoredMetric): string {
+  switch (metric.reasonCode) {
+    case 'ready-for-first-tend':
+      return 'Ready for your first prayer.';
+    case 'unsupported-schedule':
+      return 'Set a supported prayer frequency to calculate Health.';
+    case 'history-unavailable':
+      return 'Prayer history is unavailable, so this request cannot be scored.';
+    case 'not-started':
+      return 'This prayer schedule has not started yet.';
+    case 'inactive':
+      return metric.explanation.includes('has ended')
+        ? 'This prayer schedule has ended, so its score is not accruing.'
+        : 'This prayer request is inactive, so its score is not accruing.';
+    case 'no-eligible-occurrences':
+      return 'No scheduled prayer opportunities to measure yet.';
+    case 'timezone-uncertain':
+      return 'Prayer Health is unavailable because the prayer history time zone is uncertain.';
+    case 'unsupported-history':
+      return metric.explanation
+        .replaceAll('This Rhythm', 'This prayer request')
+        .replaceAll('Rhythm’s', 'prayer request’s')
+        .replaceAll('scheduled moments', 'scheduled prayer opportunities');
+  }
 }
 
 function BreakdownRows({ rows }: { rows: readonly { label: string; value: string }[] }) {

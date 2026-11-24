@@ -4,8 +4,8 @@ import { App } from '../App.tsx';
 import { PreviewBuildLabel } from '../components/PreviewBuildLabel.tsx';
 import { createAuthenticatedPreviewIdentity } from '../domain/preview-identity.ts';
 import type { PreviewIdentityState } from '../domain/preview-identity.ts';
-import { createPreviewAccountBackupApi } from '../storage/preview-account-backup.ts';
-import type { PreviewAccountBackupSupabaseClient } from '../storage/preview-account-backup.ts';
+import { createCanonicalAccountApi } from '../storage/canonical-account.ts';
+import type { CanonicalAccountSupabaseClient } from '../storage/canonical-account.ts';
 
 const classicUrl = 'https://steveotto.github.io/tend/';
 const authStorageKey = 'tend2:preview:auth-session';
@@ -31,8 +31,8 @@ export type PreviewAuthClient = {
     updateUser(attributes: { password: string }): Promise<AuthResult>;
     signOut(options: { scope: 'local' }): Promise<AuthResult>;
   };
-  from?: PreviewAccountBackupSupabaseClient['from'];
-  rpc?: PreviewAccountBackupSupabaseClient['rpc'];
+  from?: CanonicalAccountSupabaseClient['from'];
+  rpc?: CanonicalAccountSupabaseClient['rpc'];
 };
 
 export type PreviewSupabaseClientFactory = (
@@ -82,7 +82,7 @@ export function PreviewIdentityHost({
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const accountBackupApi = useMemo(() => {
     if (!client?.from || !client.rpc) return undefined;
-    return createPreviewAccountBackupApi({
+    return createCanonicalAccountApi({
       from: client.from.bind(client),
       rpc: client.rpc.bind(client)
     });

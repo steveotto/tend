@@ -1,7 +1,8 @@
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import { syntheticPersonPickerGroups } from '../domain/preview-data.ts';
 import { BadgeSelectionPicker } from './BadgeSelectionPicker.tsx';
+import type { BadgeSelectionTheme } from './BadgeSelectionPicker.tsx';
 import { useAvailablePersonGroups } from './CategoryAvailabilityContext.tsx';
 import { PersonBadge, PersonBadgeVisual } from './PersonBadge.tsx';
 
@@ -38,8 +39,8 @@ export function PeopleAssociationRow({
         <span className="rhythm-editor__association-row-selection">
           {selectedPeople.length > 0 && (
             <span className="rhythm-editor__association-people">
-              {selectedPeople.map(person => (
-                <PersonBadge key={person.id} person={person} presentation="static" />
+              {selectedPeople.map((person, index) => (
+                <PersonBadge key={`${person.id}-${index}`} person={person} presentation="static" />
               ))}
             </span>
           )}
@@ -67,6 +68,12 @@ export function PeopleBadgeSelectionPicker({
   excludedIds = [],
   unavailableSelectedIds = [],
   fixedSelectedIds = [],
+  title = 'Choose people',
+  emptyMessage,
+  description,
+  status,
+  actionButtons,
+  theme,
   onDone,
   onCancel
 }: {
@@ -78,6 +85,12 @@ export function PeopleBadgeSelectionPicker({
   excludedIds?: readonly PersonId[];
   unavailableSelectedIds?: readonly PersonId[];
   fixedSelectedIds?: readonly PersonId[];
+  title?: string;
+  emptyMessage?: string;
+  description?: ReactNode;
+  status?: ReactNode;
+  actionButtons?: ReactNode;
+  theme?: BadgeSelectionTheme;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -89,11 +102,16 @@ export function PeopleBadgeSelectionPicker({
   }));
   return (
     <BadgeSelectionPicker
-      title="Choose people"
+      title={title}
       items={availablePeople}
       selectedIds={selectedIds}
       getLabel={person => person.displayName}
-      renderBadge={person => <PersonBadgeVisual person={person} />}
+      renderBadge={person => <PersonBadgeVisual person={person} {...(theme ? { theme } : {})} />}
+      {...(emptyMessage ? { emptyMessage } : {})}
+      {...(description ? { description } : {})}
+      {...(status ? { status } : {})}
+      {...(actionButtons ? { actionButtons } : {})}
+      {...(theme ? { theme } : {})}
       groups={availableGroups}
       unavailableSelectedItems={[...new Set(unavailableSelectedIds)].map(id => ({
         id,
