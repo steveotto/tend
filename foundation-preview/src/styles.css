@@ -8751,7 +8751,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .preview-login__form input:focus-visible,
 .preview-login__form button:focus-visible,
-.preview-login__classic a:focus-visible,
 .preview-sign-out:focus-visible {
   outline: 3px solid var(--forest, #24694b);
   outline-offset: 3px;
@@ -8848,17 +8847,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .preview-login__error {
   color: #a33426;
   line-height: 1.5;
-}
-
-.preview-login__classic {
-  margin: 24px 0 0;
-  font-size: calc(0.875rem * var(--app-text-scale, 1));
-}
-
-.preview-login__classic a {
-  color: var(--tend-forest);
-  font-weight: 600;
-  text-underline-offset: 3px;
 }
 
 .preview-footer .preview-sign-out {
