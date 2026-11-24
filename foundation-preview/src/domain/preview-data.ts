@@ -17,7 +17,7 @@ import { resolvePersonCategoryGroups } from './person-categories.ts';
 
 export type FoundationPreview = {
   id: string;
-  category: 'Faith' | 'Marriage' | 'Parenting' | 'Health & Fitness' | 'Finances' | 'Friendships';
+  category: 'Faith' | 'Marriage' | 'Dating' | 'Parenting' | 'Health & Fitness' | 'Finances' | 'Friendships';
   categoryId: CategoryId;
   name: string;
   description: string;
@@ -28,7 +28,7 @@ export type FoundationPreview = {
   illustrativeScore?: number | null;
 };
 
-export type CategoryId = 'faith' | 'marriage' | 'parenting' | 'health' | 'finances' | 'friendships';
+export type CategoryId = 'faith' | 'marriage' | 'dating' | 'parenting' | 'health' | 'finances' | 'friendships';
 
 export type FoundationTerminology = {
   singular: string;
@@ -63,6 +63,15 @@ export type MarriageFoundationId = (typeof marriageFoundationIds)[number];
 export function isMarriageFoundationId(value: unknown): value is MarriageFoundationId {
   return typeof value === 'string' && marriageFoundationIds.some(id => id === value);
 }
+
+export const datingFoundationIds = [
+  'dating-connection',
+  'dating-communication',
+  'dating-fun-adventure',
+  'dating-trust-honesty',
+  'dating-shared-faith',
+  'dating-direction'
+] as const;
 
 export type GoalPreview = MoneyGoal;
 
@@ -335,6 +344,234 @@ export const parentingRhythmSuggestions: readonly CategoryRhythmSuggestionTempla
   }
 ];
 
+export const datingRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
+  { id: 'connection', title: 'Connection', subtitle: 'Make room to feel known and close at a mutual pace.' },
+  { id: 'communication', title: 'Communication', subtitle: 'Practice honest conversation and attentive listening.' },
+  { id: 'fun-adventure', title: 'Fun & Adventure', subtitle: 'Enjoy shared experiences that fit both partners.' },
+  { id: 'trust-honesty', title: 'Trust & Honesty', subtitle: 'Build reliability, openness, and emotional safety.' },
+  { id: 'shared-faith', title: 'Shared Faith', subtitle: 'Explore faith together when it fits both partners.' },
+  { id: 'direction', title: 'Direction', subtitle: 'Share intentions and hopes without rushing decisions.' }
+];
+
+export const datingRhythmSuggestions: readonly CategoryRhythmSuggestionTemplate[] = [
+  {
+    sourceId: 'dating.plan-date',
+    groupId: 'connection',
+    title: 'Plan a date together',
+    description: 'Choose an activity and time that works for both partners.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Choose a day',
+    recommendedFrequency: 'weekly',
+    iconId: 'connection',
+    primaryFoundationId: 'dating-connection',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.meaningful-check-in',
+    groupId: 'connection',
+    title: 'Share a meaningful check-in',
+    description: 'Set aside a little time to share what has felt important lately.',
+    cadence: 'Daily',
+    scheduleHint: 'Daily · Flexible',
+    recommendedFrequency: 'daily',
+    iconId: 'connection',
+    primaryFoundationId: 'dating-connection',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.know-you-question',
+    groupId: 'connection',
+    title: 'Ask a question that helps us know each other better',
+    description: 'Pick a question both partners feel comfortable exploring.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Choose a day',
+    recommendedFrequency: 'weekly',
+    iconId: 'communication',
+    primaryFoundationId: 'dating-connection',
+    secondaryFoundationIds: ['dating-communication']
+  },
+  {
+    sourceId: 'dating.distraction-free-conversation',
+    groupId: 'communication',
+    title: 'Have a distraction-free conversation',
+    description: 'Set aside time to talk with notifications put away.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Choose a day',
+    recommendedFrequency: 'weekly',
+    iconId: 'communication',
+    primaryFoundationId: 'dating-communication',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.listen-without-interrupting',
+    groupId: 'communication',
+    title: 'Practice listening without interrupting',
+    description: 'Take turns listening and reflecting back what you heard.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Choose a day',
+    recommendedFrequency: 'weekly',
+    iconId: 'communication',
+    primaryFoundationId: 'dating-communication',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.communication-check-in',
+    groupId: 'communication',
+    title: 'Check in on how we communicate',
+    description: 'Talk about what is working and what you might adjust.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Choose a date or weekday',
+    recommendedFrequency: 'monthly',
+    iconId: 'communication',
+    primaryFoundationId: 'dating-communication',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.try-new-activity',
+    groupId: 'fun-adventure',
+    title: 'Try a new activity together',
+    description: 'Choose something new that both partners are curious about.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Choose a date or weekday',
+    recommendedFrequency: 'monthly',
+    iconId: 'fun-adventure',
+    primaryFoundationId: 'dating-fun-adventure',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.take-turns-planning',
+    groupId: 'fun-adventure',
+    title: 'Take turns planning a date',
+    description: 'Alternate choosing an outing that fits both partners’ schedules and comfort.',
+    cadence: 'Every 2 weeks',
+    scheduleHint: 'Every 2 weeks · Choose a day and start date',
+    recommendedFrequency: 'every-two-weeks',
+    iconId: 'fun-adventure',
+    primaryFoundationId: 'dating-fun-adventure',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.explore-somewhere-new',
+    groupId: 'fun-adventure',
+    title: 'Explore somewhere new',
+    description: 'Visit a place that is new to one or both partners.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Choose a date or weekday',
+    recommendedFrequency: 'monthly',
+    iconId: 'fun-adventure',
+    primaryFoundationId: 'dating-fun-adventure',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.commitments-check-in',
+    groupId: 'trust-honesty',
+    title: 'Check in on commitments we made',
+    description: 'Review shared plans and clarify anything that needs follow-up.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Choose a day',
+    recommendedFrequency: 'weekly',
+    iconId: 'partnership',
+    primaryFoundationId: 'dating-trust-honesty',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.expectations',
+    groupId: 'trust-honesty',
+    title: 'Discuss expectations openly',
+    description: 'Share expectations and make room for questions or differences.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Choose a date or weekday',
+    recommendedFrequency: 'monthly',
+    iconId: 'communication',
+    primaryFoundationId: 'dating-trust-honesty',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.boundaries',
+    groupId: 'trust-honesty',
+    title: 'Check in on personal boundaries',
+    description: 'Talk about personal boundaries and respect each person’s comfort.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Choose a date or weekday',
+    recommendedFrequency: 'monthly',
+    iconId: 'connection',
+    primaryFoundationId: 'dating-trust-honesty',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.pray-together',
+    groupId: 'shared-faith',
+    title: 'Pray together',
+    description: 'If it fits both partners, take a few minutes to pray together.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Choose a day',
+    recommendedFrequency: 'weekly',
+    iconId: 'spiritual-growth',
+    primaryFoundationId: 'dating-shared-faith',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.learning',
+    groupId: 'shared-faith',
+    title: 'Discuss something you are learning',
+    description: 'Share a reflection from a book, service, or personal study.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Choose a day',
+    recommendedFrequency: 'weekly',
+    iconId: 'spiritual-growth',
+    primaryFoundationId: 'dating-shared-faith',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.gathering',
+    groupId: 'shared-faith',
+    title: 'Attend a faith gathering together',
+    description: 'Choose a gathering that feels welcoming and aligns with your beliefs.',
+    cadence: 'Weekly',
+    scheduleHint: 'Weekly · Choose a day',
+    recommendedFrequency: 'weekly',
+    iconId: 'spiritual-growth',
+    primaryFoundationId: 'dating-shared-faith',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.relationship-intentions',
+    groupId: 'direction',
+    title: 'Discuss relationship intentions',
+    description: 'Share what each partner is looking for and invite questions.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Choose a date or weekday',
+    recommendedFrequency: 'monthly',
+    iconId: 'partnership',
+    primaryFoundationId: 'dating-direction',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.future-hopes',
+    groupId: 'direction',
+    title: 'Talk about future hopes',
+    description: 'Share hopes for the future without needing to settle them now.',
+    cadence: 'Monthly',
+    scheduleHint: 'Monthly · Choose a date or weekday',
+    recommendedFrequency: 'monthly',
+    iconId: 'partnership',
+    primaryFoundationId: 'dating-direction',
+    secondaryFoundationIds: []
+  },
+  {
+    sourceId: 'dating.expectations-align',
+    groupId: 'direction',
+    title: 'Check whether expectations still align',
+    description: 'Talk openly about whether current expectations still feel mutual.',
+    cadence: 'Every 3 months',
+    scheduleHint: 'Every 3 months · Choose a date or weekday',
+    recommendedFrequency: 'every-three-months',
+    iconId: 'partnership',
+    primaryFoundationId: 'dating-direction',
+    secondaryFoundationIds: []
+  }
+];
+
 export const faithRhythmSuggestionGroups: readonly CategoryRhythmSuggestionGroupDefinition[] = [
   { id: 'daily-regular', title: 'Daily & Regular', subtitle: 'Make room for daily practices and regular reflection.' },
   { id: 'weekly', title: 'Weekly', subtitle: 'Set aside time for worship, fasting and service.' },
@@ -459,7 +696,7 @@ export type PersonPreview = {
 };
 
 export type PersonId = string;
-export type PersonPickerGroupId = 'marriage' | 'parenting' | 'friends';
+export type PersonPickerGroupId = 'marriage' | 'dating' | 'parenting' | 'friends';
 export type HealthRunTarget = {
   distance: number;
   unit: 'km' | 'mi';
@@ -484,6 +721,7 @@ export function createSamplePeople(): PersonPreview[] {
 
 const samplePersonPickerGroups: readonly PersonPickerGroup[] = [
   { id: 'marriage', label: 'Marriage', memberIds: ['sample-person-avery', 'sample-person-morgan'] },
+  { id: 'dating', label: 'Dating partner', memberIds: [] },
   { id: 'parenting', label: 'Parenting', memberIds: ['sample-person-morgan', 'sample-person-jordan'] },
   { id: 'friends', label: 'Friends', memberIds: ['sample-person-avery', 'sample-person-jordan'] }
 ];
@@ -494,7 +732,7 @@ export const syntheticPersonPickerGroups: readonly PersonPickerGroup[] =
 export function createPersonPickerGroups(): PersonPickerGroup[] {
   return syntheticPersonPickerGroups.map(group => ({
     ...group,
-    memberIds: group.id === 'friends' ? [] : [...group.memberIds]
+    memberIds: group.id === 'friends' || group.id === 'dating' ? [] : [...group.memberIds]
   }));
 }
 
@@ -556,8 +794,34 @@ export function validatePersonPickerGroupsStructure(
   value: unknown,
   people: readonly PersonPreview[] = syntheticPeople
 ): value is PersonPickerGroup[] {
-  if (!Array.isArray(value) || value.length !== syntheticPersonPickerGroups.length) return false;
-  const knownIds = new Set<PersonPickerGroupId>(['marriage', 'parenting', 'friends']);
+  return validatePersonPickerGroupsStructureForIds(
+    value,
+    people,
+    syntheticPersonPickerGroups.map(group => group.id)
+  );
+}
+
+export function migrateLegacyPersonPickerGroupsV53(
+  value: unknown,
+  people: readonly PersonPreview[]
+): PersonPickerGroup[] | null {
+  const legacyIds: readonly PersonPickerGroupId[] = ['marriage', 'parenting', 'friends'];
+  if (!validatePersonPickerGroupsStructureForIds(value, people, legacyIds)) return null;
+  const groups = value.map(group => ({ ...group, memberIds: [...group.memberIds] }));
+  return [
+    groups[0]!,
+    { id: 'dating', label: 'Dating partner', memberIds: [] },
+    ...groups.slice(1)
+  ];
+}
+
+function validatePersonPickerGroupsStructureForIds(
+  value: unknown,
+  people: readonly PersonPreview[],
+  ids: readonly PersonPickerGroupId[]
+): value is PersonPickerGroup[] {
+  if (!Array.isArray(value) || value.length !== ids.length) return false;
+  const knownIds = new Set<PersonPickerGroupId>(ids);
   const knownPeople = new Set<PersonId>(people.map(person => person.id));
   const seenGroups = new Set<PersonPickerGroupId>();
   for (const candidate of value) {
@@ -639,6 +903,7 @@ export type RhythmPreview = {
   personal?: boolean;
   healthLogCapability?: 'weight' | 'cardio' | 'workout' | 'flexibility' | null;
   healthRunTarget?: HealthRunTarget | null;
+  alsoLogConnection?: boolean;
 };
 
 export type RhythmCompletion = {
@@ -654,6 +919,7 @@ export type RhythmCompletion = {
 export const areas = [
   { id: 'faith', label: 'Faith' },
   { id: 'marriage', label: 'Marriage' },
+  { id: 'dating', label: 'Dating' },
   { id: 'parenting', label: 'Parenting' },
   { id: 'health', label: 'Health & Fitness' },
   { id: 'finances', label: 'Finances' },
@@ -816,6 +1082,69 @@ const populatedMarriageFoundations: FoundationPreview[] = marriageFoundationDeta
   ...foundation,
   illustrativeScore: marriageFoundationScores[foundation.id] ?? null
 }));
+
+export const datingFoundations: readonly FoundationPreview[] = [
+  {
+    id: 'dating-connection',
+    category: 'Dating',
+    categoryId: 'dating',
+    name: 'Connection',
+    description: 'Feeling known, valued, and emotionally close as you get to know each other.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'connection'
+  },
+  {
+    id: 'dating-communication',
+    category: 'Dating',
+    categoryId: 'dating',
+    name: 'Communication',
+    description: 'Honest listening, understanding, and handling hard conversations well.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'communication'
+  },
+  {
+    id: 'dating-fun-adventure',
+    category: 'Dating',
+    categoryId: 'dating',
+    name: 'Fun & Adventure',
+    description: 'Enjoying life together, laughter, and shared experiences.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'fun-adventure'
+  },
+  {
+    id: 'dating-trust-honesty',
+    category: 'Dating',
+    categoryId: 'dating',
+    name: 'Trust & Honesty',
+    description: 'Being reliable, transparent, and emotionally safe.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'partnership'
+  },
+  {
+    id: 'dating-shared-faith',
+    category: 'Dating',
+    categoryId: 'dating',
+    name: 'Shared Faith',
+    description: 'Exploring faith together, encouraging each other, and heading the same direction spiritually.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'spiritual-growth'
+  },
+  {
+    id: 'dating-direction',
+    category: 'Dating',
+    categoryId: 'dating',
+    name: 'Direction',
+    description: 'Being intentional and on the same page about where this is going.',
+    capabilities: ongoingMarriageCapabilities,
+    lifecycle: 'active',
+    iconId: 'partnership'
+  }
+];
 
 export const parentingFoundations: readonly FoundationPreview[] = [
   {
@@ -1612,6 +1941,7 @@ export const financeRhythmSuggestions: readonly CategoryRhythmSuggestionTemplate
 
 export const foundationCatalogue: readonly FoundationPreview[] = [
   ...marriageFoundations,
+  ...datingFoundations,
   ...parentingFoundations,
   ...friendshipFoundations,
   ...faithPractices,

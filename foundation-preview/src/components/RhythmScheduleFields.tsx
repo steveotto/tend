@@ -100,10 +100,11 @@ function formFromSchedule(
   requireExplicitChoices = false,
   initialFrequency?: RhythmFrequencyRecommendation
 ): ScheduleFormState {
-  const recommendedFrequency = initialFrequency === 'every-two-weeks'
+  const recommendedFrequency = initialFrequency === 'every-two-weeks' || initialFrequency === 'every-three-months'
     ? 'custom'
     : initialFrequency;
   const everyTwoWeeks = schedule === undefined && initialFrequency === 'every-two-weeks';
+  const everyThreeMonths = schedule === undefined && initialFrequency === 'every-three-months';
   const base: ScheduleFormState = {
     weekdays: [],
     ...(schedule === undefined && recommendedFrequency ? { frequency: recommendedFrequency } : {}),
@@ -115,8 +116,8 @@ function formFromSchedule(
       month: 1 as const,
       monthInQuarter: 1 as const
     } : {}),
-    interval: everyTwoWeeks ? '2' : '1',
-    unit: everyTwoWeeks ? 'weeks' : 'days',
+    interval: everyTwoWeeks ? '2' : everyThreeMonths ? '3' : '1',
+    unit: everyTwoWeeks ? 'weeks' : everyThreeMonths ? 'months' : 'days',
     startDate: localToday(),
     hasEndDate: false,
     endDate: ''

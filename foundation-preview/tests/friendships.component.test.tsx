@@ -528,12 +528,17 @@ describe('Friendships view', () => {
 
     await user.click(screen.getByRole('button', { name: 'View connections (1)' }));
     const history = screen.getByRole('dialog', { name: 'Morgan Reed · connection history' });
-    const connectionRow = within(history).getByRole('button', { name: /^Call connection,/ });
+    const connectionRow = within(history).getByRole('button', { name: /^Call, Manual connection,/ });
     expect(within(connectionRow).getByText('Call')).toBeTruthy();
-    expect(within(connectionRow).getByText('Talked about the weekend.')).toBeTruthy();
+    expect(within(connectionRow).getByText('Manual')).toBeTruthy();
+    expect(within(connectionRow).queryByText('Talked about the weekend.')).toBeNull();
     expect(within(connectionRow).getByText('10:15 AM')).toBeTruthy();
     expect(within(connectionRow).getByText('Oct 21, 2026')).toBeTruthy();
-    expect(connectionRow.querySelector('.friendships-connection-row__chevron svg')).toBeTruthy();
+    expect(connectionRow.querySelector('.friendships-connection-row__check')?.textContent).toBe('✓');
+    expect(connectionRow.querySelector('.friendships-connection-row__check')?.classList.contains(
+      'friendships-connection-row__check--manual'
+    )).toBe(true);
+    expect(connectionRow.querySelector('.friendships-connection-row__timestamp')).toBeTruthy();
     expect(within(connectionRow).queryByText('Avery')).toBeNull();
     expect(within(connectionRow).queryByText('Morgan')).toBeNull();
     expect(within(connectionRow).queryByRole('button')).toBeNull();
@@ -558,8 +563,13 @@ describe('Friendships view', () => {
     await user.click(within(edit).getAllByRole('checkbox')[0]!);
     await user.click(within(edit).getByRole('button', { name: 'Save changes' }));
     expect(document.activeElement).toBe(connectionRow);
-    expect((within(history).getByRole('button', { name: /^Call connection,/ }).textContent ?? '').trim())
-      .toBe('CallOct 14, 2026');
+    const updatedRow = within(history).getByRole('button', {
+      name: /^Call, Manual connection, Oct 14, 2026/
+    });
+    expect(within(updatedRow).getByText('Call')).toBeTruthy();
+    expect(within(updatedRow).getByText('Manual')).toBeTruthy();
+    expect(within(updatedRow).getByText('Oct 14, 2026')).toBeTruthy();
+    expect(within(updatedRow).queryByText('Talked about the weekend.')).toBeNull();
     expect(within(history).queryByText('Talked about the weekend.')).toBeNull();
     expect(within(history).queryByText('10:15 AM')).toBeNull();
 
@@ -570,7 +580,9 @@ describe('Friendships view', () => {
     await user.click(screen.getByRole('tab', { name: 'Friends' }));
     await user.click(screen.getByRole('button', { name: 'View connections (1)' }));
     const historyAfterEdit = screen.getByRole('dialog', { name: 'Morgan Reed · connection history' });
-    await user.click(within(historyAfterEdit).getByRole('button', { name: /^Call connection,/ }));
+    await user.click(within(historyAfterEdit).getByRole('button', {
+      name: /^Call, Manual connection,/
+    }));
     const deleteEditor = screen.getByRole('dialog', { name: 'Connection details' });
     await user.click(within(deleteEditor).getByRole('button', { name: 'Delete connection' }));
     let confirmation = screen.getByRole('alertdialog');
@@ -579,7 +591,9 @@ describe('Friendships view', () => {
     await user.click(within(deleteEditor).getByRole('button', { name: 'Delete connection' }));
     confirmation = screen.getByRole('alertdialog');
     await user.click(within(confirmation).getByRole('button', { name: 'Delete connection' }));
-    expect(within(historyAfterEdit).queryByRole('button', { name: /^Call connection,/ })).toBeNull();
+    expect(within(historyAfterEdit).queryByRole('button', {
+      name: /^Call, Manual connection,/
+    })).toBeNull();
     expect(document.activeElement).toBe(within(historyAfterEdit).getByRole('button', { name: 'Close connection history' }));
     expect(within(historyAfterEdit).getByText('No connections yet.')).toBeTruthy();
     await user.click(within(historyAfterEdit).getByRole('button', { name: 'Close connection history' }));

@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import {
-  CONTROLLED_CALENDAR_TEST_URL,
   calendarFeedUrlError,
   createCalendarSourceId,
   validateCalendarSources
 } from '../domain/calendar-sources.ts';
 import type { CalendarSource } from '../domain/calendar-sources.ts';
+import { SettingsSwitch } from './SettingsSwitch.tsx';
 
 type CalendarSourceDraft = {
   id: string | null;
@@ -44,36 +44,18 @@ export function CalendarSourcesSettings({
   const [removalId, setRemovalId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const setupSteps = (
+    <ol className="calendar-sources-settings__steps" aria-label="Calendar setup steps">
+      <li><span aria-hidden="true">1</span><p>Open your calendar&apos;s sharing settings on iCloud.com.</p></li>
+      <li><span aria-hidden="true">2</span><p>Turn on Public Calendar and copy its link.</p></li>
+      <li><span aria-hidden="true">3</span><p>Select Add calendar and paste the link.</p></li>
+    </ol>
+  );
 
   function beginAdd() {
     setDraft({ id: null, name: '', url: '', enabled: true });
     setError(null);
     setNotice(null);
-  }
-
-  function addControlledTest() {
-    const id = createCalendarSourceId();
-    if (!id) {
-      setError('A secure calendar ID could not be created. No changes were saved.');
-      return;
-    }
-    const validation = validateCalendarSources([
-      ...sources,
-      {
-        id,
-        name: 'Controlled test calendar',
-        url: CONTROLLED_CALENDAR_TEST_URL,
-        enabled: true,
-        kind: 'controlled-test'
-      }
-    ]);
-    if (!validation.valid) {
-      setError(validation.errors[0] ?? 'Calendar settings are invalid. No changes were saved.');
-      return;
-    }
-    const saveError = onSave(validation.sources);
-    setError(saveError);
-    setNotice(saveError ? null : 'Controlled test calendar added.');
   }
 
   function saveDraft(event: FormEvent<HTMLFormElement>) {
@@ -141,27 +123,38 @@ export function CalendarSourcesSettings({
 
   return (
     <div className="calendar-sources-settings">
-      <label className="calendar-sources-settings__show-today">
-        <input
-          type="checkbox"
-          checked={showOnToday}
-          onChange={event => onShowOnTodayChange(event.currentTarget.checked)}
-        />
-        Show calendar on Today
-      </label>
-      <p className="calendar-sources-settings__help">
-        In iCloud Calendar on icloud.com, open a calendar’s sharing settings, turn on Public Calendar, and copy its link. Private Apple Account sign-in and other providers are not supported.
-      </p>
+      <SettingsSwitch
+        variant="row"
+        label="Show calendar on Today"
+        checked={showOnToday}
+        onChange={onShowOnTodayChange}
+      />
+      <section className="calendar-sources-settings__setup" aria-label="Calendar setup">
+        {sources.length === 0
+          ? setupSteps
+          : (
+            <details className="calendar-sources-settings__disclosure">
+              <summary>How to add a calendar</summary>
+              {setupSteps}
+            </details>
+          )}
+        <p className="calendar-sources-settings__capability">Supports public iCloud calendars.</p>
+      </section>
       <p className="calendar-sources-settings__privacy">
-        Public calendar links can grant access to the feed. Treat each link like a password. {accountScoped
-          ? 'Links are stored in this signed-in account’s saved data and included in its existing sync. Only enabled sources are sent to the same-origin reader while Calendar is shown on Today.'
-          : localReaderEnabled
-            ? 'This local preview sends enabled links only to a reader on this device. Links and event details are not logged or uploaded.'
-            : 'This preview saves links only in its versioned synthetic data and does not fetch them.'}
+        Keep your calendar link private—anyone with it may be able to view its events.
       </p>
+      <details className="calendar-sources-settings__disclosure calendar-sources-settings__processing">
+        <summary>About calendar processing</summary>
+        <p>{accountScoped
+          ? 'Saved links are part of this signed-in account’s data and its existing sync. When Calendar is shown on Today, enabled sources are sent to the configured same-origin reader for event retrieval.'
+          : localReaderEnabled
+            ? 'When Calendar is shown on Today, enabled links are sent to the configured same-origin reader for event retrieval. The reader accepts public iCloud calendars only.'
+            : 'This synthetic preview stores calendar sources in its versioned preview data and does not retrieve events from calendar links.'}
+        </p>
+      </details>
 
       {sources.length === 0
-        ? <p className="calendar-sources-settings__empty">No calendar sources configured.</p>
+        ? <p className="calendar-sources-settings__empty">No calendars added yet.</p>
         : (
           <ul className="calendar-sources-settings__list" aria-label="Calendar sources">
             {sources.map(source => (
@@ -295,14 +288,9 @@ export function CalendarSourcesSettings({
       {notice && <p className="calendar-sources-settings__message" role="status">{notice}</p>}
       {!draft && (
         <div className="calendar-sources-settings__add-actions">
-          <button type="button" className="btn mini ghost" onClick={beginAdd}>
+          <button type="button" className="btn mini" onClick={beginAdd}>
             Add calendar
           </button>
-          {localReaderEnabled && (
-            <button type="button" className="btn mini ghost" onClick={addControlledTest}>
-              Add controlled test feed
-            </button>
-          )}
         </div>
       )}
     </div>

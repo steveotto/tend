@@ -32,8 +32,14 @@ import weekAwayTogetherIcon from '../../../assets/tend-marriage-icons/rhythms/we
 
 const foundationIcons: Record<string, string> = {
   connection: connectionIcon,
+  'dating-connection': connectionIcon,
   communication: communicationIcon,
+  'dating-communication': communicationIcon,
   'fun-adventure': funAdventureIcon,
+  'dating-fun-adventure': funAdventureIcon,
+  'dating-trust-honesty': partnershipIcon,
+  'dating-shared-faith': spiritualGrowthIcon,
+  'dating-direction': partnershipIcon,
   'spiritual-growth': spiritualGrowthIcon,
   partnership: partnershipIcon,
   intimacy: intimacyIcon,

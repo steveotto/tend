@@ -1,11 +1,12 @@
 import { isValidDate } from './money-goals.ts';
 import { isValidPersonId } from './preview-data.ts';
+import { isValidTimeZone } from './rhythm-schedule.ts';
 import type { PersonPreview } from './preview-data.ts';
 import type { PersonId } from './preview-data.ts';
 
 export const connectionCadences = ['daily', 'weekly', 'two-weeks', 'monthly', 'twice-weekly'] as const;
 export type ConnectionCadence = (typeof connectionCadences)[number];
-export type ConnectionType = 'text' | 'call' | 'time-together';
+export type ConnectionType = 'text' | 'call' | 'time-together' | 'rhythm' | 'spark';
 
 export type PersonConnectionCadenceSetting = {
   personId: PersonId;
@@ -15,6 +16,25 @@ export type PersonConnectionCadenceSetting = {
 };
 export type FriendshipCadenceSetting = PersonConnectionCadenceSetting;
 
+export type RhythmCompletionConnectionSnapshot = {
+  date: string;
+  time?: string;
+  timeZone?: string;
+  participantIds: PersonId[];
+  notes?: string;
+  title: string;
+};
+
+export type SparkCompletionConnectionSnapshot = {
+  type: ConnectionType;
+  date: string;
+  time?: string;
+  timeZone?: string;
+  participantIds: PersonId[];
+  notes?: string;
+  title: string;
+};
+
 export type FriendshipConnection = {
   id: string;
   type: ConnectionType;
@@ -22,8 +42,17 @@ export type FriendshipConnection = {
   time?: string;
   participantIds: PersonId[];
   notes?: string;
+  timeZone?: string;
+  rhythmId?: string;
+  completionId?: string;
+  rhythmTitleSnapshot?: string;
+  rhythmConnectionSnapshot?: RhythmCompletionConnectionSnapshot;
+  ownedByRhythmCompletion?: boolean;
   sparkId?: string;
   sparkOwnerId?: PersonId;
+  sparkTitleSnapshot?: string;
+  sparkConnectionSnapshot?: SparkCompletionConnectionSnapshot;
+  ownedBySparkCompletion?: boolean;
   [key: string]: unknown;
 };
 
@@ -57,7 +86,7 @@ export type FriendConnectionStatus = {
 };
 
 const cadenceSet = new Set<string>(connectionCadences);
-const connectionTypes = new Set<ConnectionType>(['text', 'call', 'time-together']);
+const connectionTypes = new Set<ConnectionType>(['text', 'call', 'time-together', 'rhythm', 'spark']);
 
 export function createFriendshipData(): FriendshipData {
   return { cadenceSettings: [], connections: [] };
@@ -102,6 +131,8 @@ export function validateFriendshipData(
   }
 
   const connectionIds = new Set<string>();
+  const ownedCompletionIds = new Set<string>();
+  const ownedSparkIds = new Set<string>();
   for (const connection of value.connections) {
     if (!isRecord(connection)) return false;
     const id = connection.id;
@@ -111,13 +142,213 @@ export function validateFriendshipData(
       || !connectionTypes.has(connection.type as ConnectionType)
       || typeof connection.date !== 'string' || !isValidDate(connection.date)
       || (connection.time !== undefined && !isValidTime(connection.time))
+      || (connection.timeZone !== undefined && !isValidTimeZone(connection.timeZone))
+      || (connection.time === undefined && connection.timeZone !== undefined)
+      || (connection.rhythmId !== undefined
+        && (typeof connection.rhythmId !== 'string' || !connection.rhythmId.trim() || connection.rhythmId.length > 160))
+      || (connection.completionId !== undefined
+        && (typeof connection.completionId !== 'string' || !connection.completionId.trim() || connection.completionId.length > 160))
+      || (connection.rhythmTitleSnapshot !== undefined
+        && (typeof connection.rhythmTitleSnapshot !== 'string'
+          || !connection.rhythmTitleSnapshot.trim()
+          || connection.rhythmTitleSnapshot.length > 160))
+      || (connection.sparkId !== undefined
+        && (typeof connection.sparkId !== 'string'
+          || !connection.sparkId.trim()
+          || connection.sparkId.length > 160))
+      || (connection.sparkOwnerId !== undefined
+        && (!isPersonId(connection.sparkOwnerId) || !knownPeople.has(connection.sparkOwnerId)))
+      || ((connection.sparkId === undefined) !== (connection.sparkOwnerId === undefined))
+      || (connection.sparkTitleSnapshot !== undefined
+        && (typeof connection.sparkTitleSnapshot !== 'string'
+          || !connection.sparkTitleSnapshot.trim()
+          || connection.sparkTitleSnapshot.length > 180))
+      || (connection.ownedByRhythmCompletion !== undefined
+        && typeof connection.ownedByRhythmCompletion !== 'boolean')
+      || (connection.ownedByRhythmCompletion === true
+        && !hasUnclaimedRhythmCompletionOwnership(connection, ownedCompletionIds))
+      || (connection.ownedBySparkCompletion !== undefined
+        && typeof connection.ownedBySparkCompletion !== 'boolean')
+      || (connection.ownedBySparkCompletion === true
+        && !hasUnclaimedSparkCompletionOwnership(connection, ownedSparkIds))
+      || (connection.rhythmConnectionSnapshot !== undefined
+        && !isRhythmCompletionConnectionSnapshot(
+          connection.rhythmConnectionSnapshot,
+          knownPeople
+        ))
+      || (connection.sparkConnectionSnapshot !== undefined
+        && !isSparkCompletionConnectionSnapshot(
+          connection.sparkConnectionSnapshot,
+          knownPeople
+        ))
       || !isUniquePersonIds(connection.participantIds) || connection.participantIds.length === 0
       || connection.participantIds.some(personId => !knownPeople.has(personId))
       || (connection.notes !== undefined
         && (typeof connection.notes !== 'string' || connection.notes.length > 4000))) return false;
+    if (connection.ownedByRhythmCompletion === true
+      && connection.rhythmConnectionSnapshot !== undefined
+      && !rhythmConnectionSnapshotMatchesConnection(
+        connection.rhythmConnectionSnapshot,
+        connection
+      )) return false;
+    if (connection.ownedBySparkCompletion === true && typeof connection.sparkId === 'string') {
+      ownedSparkIds.add(connection.sparkId);
+    }
     connectionIds.add(connectionId);
+    if (connection.ownedByRhythmCompletion === true
+      && typeof connection.completionId === 'string') {
+      ownedCompletionIds.add(connection.completionId);
+    }
   }
   return true;
+}
+
+function hasUnclaimedSparkCompletionOwnership(
+  connection: Record<string, unknown>,
+  ownedSparkIds: ReadonlySet<string>
+): boolean {
+  return typeof connection.sparkId === 'string'
+    && typeof connection.sparkOwnerId === 'string'
+    && typeof connection.sparkTitleSnapshot === 'string'
+    && isRecord(connection.sparkConnectionSnapshot)
+    && !ownedSparkIds.has(connection.sparkId);
+}
+
+function isSparkCompletionConnectionSnapshot(
+  value: unknown,
+  knownPeople: ReadonlySet<PersonId>
+): value is SparkCompletionConnectionSnapshot {
+  if (!isRecord(value)
+    || !connectionTypes.has(value.type as ConnectionType)
+    || typeof value.date !== 'string'
+    || !isValidDate(value.date)
+    || (value.time !== undefined && !isValidTime(value.time))
+    || (value.timeZone !== undefined && !isValidTimeZone(value.timeZone))
+    || (value.time === undefined && value.timeZone !== undefined)
+    || !isUniquePersonIds(value.participantIds)
+    || value.participantIds.length === 0
+    || value.participantIds.some(personId => !knownPeople.has(personId))
+    || typeof value.title !== 'string'
+    || !value.title.trim()
+    || value.title.length > 180
+    || (value.notes !== undefined
+      && (typeof value.notes !== 'string' || value.notes.length > 4000))) return false;
+  return true;
+}
+
+function sparkConnectionSnapshotMatchesConnection(
+  snapshot: SparkCompletionConnectionSnapshot,
+  connection: Record<string, unknown>
+): boolean {
+  const participantIds = connection.participantIds;
+  return connection.type === snapshot.type
+    && Array.isArray(participantIds)
+    && snapshot.date === connection.date
+    && snapshot.time === connection.time
+    && snapshot.timeZone === connection.timeZone
+    && snapshot.notes === connection.notes
+    && snapshot.title === connection.sparkTitleSnapshot
+    && snapshot.participantIds.length === participantIds.length
+    && snapshot.participantIds.every((id, index) => id === participantIds[index]);
+}
+
+function isRhythmCompletionConnectionSnapshot(
+  value: unknown,
+  knownPeople: ReadonlySet<PersonId>
+): value is RhythmCompletionConnectionSnapshot {
+  if (!isRecord(value)
+    || typeof value.date !== 'string'
+    || !isValidDate(value.date)
+    || (value.time !== undefined && !isValidTime(value.time))
+    || (value.timeZone !== undefined && !isValidTimeZone(value.timeZone))
+    || (value.time === undefined && value.timeZone !== undefined)
+    || !isUniquePersonIds(value.participantIds)
+    || value.participantIds.length === 0
+    || value.participantIds.some(personId => !knownPeople.has(personId))
+    || typeof value.title !== 'string'
+    || !value.title.trim()
+    || value.title.length > 160
+    || (value.notes !== undefined
+      && (typeof value.notes !== 'string' || value.notes.length > 4000))) return false;
+  return value.time === undefined || value.timeZone !== undefined;
+}
+
+function hasUnclaimedRhythmCompletionOwnership(
+  connection: Record<string, unknown>,
+  ownedCompletionIds: ReadonlySet<string>
+): boolean {
+  return connection.type === 'rhythm'
+    && typeof connection.rhythmId === 'string'
+    && typeof connection.completionId === 'string'
+    && typeof connection.rhythmTitleSnapshot === 'string'
+    && !ownedCompletionIds.has(connection.completionId);
+}
+
+function rhythmConnectionSnapshotMatchesConnection(
+  snapshot: RhythmCompletionConnectionSnapshot,
+  connection: Record<string, unknown>
+): boolean {
+  const participantIds = connection.participantIds;
+  return Array.isArray(participantIds)
+    && snapshot.date === connection.date
+    && snapshot.time === connection.time
+    && snapshot.timeZone === connection.timeZone
+    && snapshot.notes === connection.notes
+    && snapshot.title === connection.rhythmTitleSnapshot
+    && snapshot.participantIds.length === participantIds.length
+    && snapshot.participantIds.every((id, index) => id === participantIds[index]);
+}
+
+export function rhythmCompletionConnectionSnapshot(
+  connection: Pick<
+    FriendshipConnection,
+    'date' | 'time' | 'timeZone' | 'participantIds' | 'notes' | 'rhythmTitleSnapshot'
+  >
+): RhythmCompletionConnectionSnapshot {
+  return {
+    date: connection.date,
+    ...(connection.time ? { time: connection.time } : {}),
+    ...(connection.timeZone ? { timeZone: connection.timeZone } : {}),
+    participantIds: [...connection.participantIds],
+    ...(connection.notes ? { notes: connection.notes } : {}),
+    title: connection.rhythmTitleSnapshot ?? ''
+  };
+}
+
+export function isRhythmCompletionConnectionUnchanged(
+  connection: FriendshipConnection
+): boolean {
+  return connection.ownedByRhythmCompletion === true
+    && connection.rhythmConnectionSnapshot !== undefined
+    && rhythmConnectionSnapshotMatchesConnection(connection.rhythmConnectionSnapshot, connection);
+}
+
+export function sparkCompletionConnectionSnapshot(
+  connection: Pick<
+    FriendshipConnection,
+    'type' | 'date' | 'time' | 'timeZone' | 'participantIds' | 'notes' | 'sparkTitleSnapshot'
+  >
+): SparkCompletionConnectionSnapshot {
+  return {
+    type: connection.type,
+    date: connection.date,
+    ...(connection.time ? { time: connection.time } : {}),
+    ...(connection.timeZone ? { timeZone: connection.timeZone } : {}),
+    participantIds: [...connection.participantIds],
+    ...(connection.notes ? { notes: connection.notes } : {}),
+    title: connection.sparkTitleSnapshot ?? ''
+  };
+}
+
+export function isSparkCompletionConnectionUnchanged(
+  connection: FriendshipConnection
+): boolean {
+  return connection.ownedBySparkCompletion === true
+    && connection.sparkConnectionSnapshot !== undefined
+    && sparkConnectionSnapshotMatchesConnection(
+      connection.sparkConnectionSnapshot,
+      connection
+    );
 }
 
 export function validateLegacyFriendshipDataV19(
@@ -178,8 +409,97 @@ export function addOrUpdateConnection(
     ...data,
     connections: data.connections.map(item => {
       if (item.id !== connection.id) return item;
-      const { time: _time, notes: _notes, ...existingFields } = item;
+      const existingFields = { ...item };
+      delete existingFields.time;
+      delete existingFields.timeZone;
+      delete existingFields.notes;
+      const detachedRhythmCompletion = item.ownedByRhythmCompletion === true
+        && connection.ownedByRhythmCompletion !== true
+        && connection.rhythmId === undefined
+        && connection.completionId === undefined
+        && connection.rhythmConnectionSnapshot === undefined;
+      if (detachedRhythmCompletion) {
+        delete existingFields.rhythmId;
+        delete existingFields.completionId;
+        delete existingFields.ownedByRhythmCompletion;
+        delete existingFields.rhythmConnectionSnapshot;
+      }
       return { ...existingFields, ...connection };
+    })
+  };
+}
+
+export function detachRhythmCompletionOwnership(
+  connection: FriendshipConnection
+): FriendshipConnection {
+  const {
+    rhythmId: _rhythmId,
+    completionId: _completionId,
+    rhythmConnectionSnapshot: _snapshot,
+    ownedByRhythmCompletion: _owned,
+    ...preserved
+  } = connection;
+  return preserved;
+}
+
+export function detachSparkCompletionOwnership(
+  connection: FriendshipConnection
+): FriendshipConnection {
+  const {
+    sparkId: _sparkId,
+    sparkOwnerId: _sparkOwnerId,
+    sparkConnectionSnapshot: _snapshot,
+    ownedBySparkCompletion: _owned,
+    ...preserved
+  } = connection;
+  return preserved;
+}
+
+export function reconcileDirectRhythmConnectionEdit(
+  existing: FriendshipConnection | undefined,
+  next: FriendshipConnection
+): FriendshipConnection {
+  if (existing?.ownedByRhythmCompletion !== true) return next;
+  const changed = existing.type !== next.type
+    || existing.date !== next.date
+    || existing.time !== next.time
+    || existing.timeZone !== next.timeZone
+    || existing.notes !== next.notes
+    || existing.participantIds.length !== next.participantIds.length
+    || existing.participantIds.some((id, index) => id !== next.participantIds[index]);
+  return changed ? detachRhythmCompletionOwnership(next) : next;
+}
+
+export function reconcileRhythmCompletionConnection(
+  connection: FriendshipConnection,
+  completion: {
+    effectiveDate: string;
+    localTime?: string;
+    timeZone?: string;
+    memory?: string;
+  }
+): FriendshipConnection {
+  const { time: _time, timeZone: _timeZone, notes: _notes, ...preserved } = connection;
+  return {
+    ...preserved,
+    date: completion.effectiveDate,
+    ...(completion.localTime
+      ? {
+          time: completion.localTime,
+          ...(completion.timeZone ? { timeZone: completion.timeZone } : {})
+        }
+      : {}),
+    ...(completion.memory?.trim() ? { notes: completion.memory } : {}),
+    rhythmConnectionSnapshot: rhythmCompletionConnectionSnapshot({
+      ...preserved,
+      date: completion.effectiveDate,
+      ...(completion.localTime
+        ? {
+            time: completion.localTime,
+            ...(completion.timeZone ? { timeZone: completion.timeZone } : {})
+          }
+        : {}),
+      ...(completion.memory?.trim() ? { notes: completion.memory } : {})
     })
   };
 }
@@ -201,15 +521,30 @@ export function connectionsForPerson(
     .sort(compareConnectionsNewestFirst);
 }
 
+function isActiveConnection(connection: FriendshipConnection): boolean {
+  return connection.deleted !== true
+    && connection.isDeleted !== true
+    && connection.deletedAt == null
+    && connection.deleted_at == null;
+}
+
+export function eligibleConnectionsForPerson(
+  data: FriendshipData,
+  personId: PersonId,
+  asOfDate: string
+): FriendshipConnection[] {
+  if (!isValidDate(asOfDate)) return [];
+  return connectionsForPerson(data, personId)
+    .filter(connection => isValidDate(connection.date)
+      && connection.date <= asOfDate
+      && isActiveConnection(connection));
+}
+
 export function latestValidConnection(
   connections: readonly FriendshipConnection[]
 ): FriendshipConnection | null {
   return connections
-    .filter(connection => isValidDate(connection.date)
-      && connection.deleted !== true
-      && connection.isDeleted !== true
-      && connection.deletedAt == null
-      && connection.deleted_at == null)
+    .filter(connection => isValidDate(connection.date) && isActiveConnection(connection))
     .slice()
     .sort(compareConnectionsNewestFirst)[0] ?? null;
 }
@@ -270,7 +605,8 @@ export function connectionStatusForPerson(
   today: string
 ): FriendConnectionStatus {
   const cadence = data.cadenceSettings.find(item => item.personId === personId);
-  const lastConnection = connectionsForPerson(data, personId)[0] ?? null;
+  const eligibleConnections = eligibleConnectionsForPerson(data, personId, today);
+  const lastConnection = eligibleConnections[0] ?? null;
   if (!cadence) {
     return { personId, cadence: null, lastConnection, nextDueDate: null, due: false, weeklyProgress: null };
   }
@@ -278,7 +614,7 @@ export function connectionStatusForPerson(
     const weekStart = localWeekStart(today);
     const weekEnd = addDateDays(weekStart, 6);
     const qualifyingDays = new Set(
-      connectionsForPerson(data, personId)
+      eligibleConnections
         .map(connection => connection.date)
         .filter(date => date >= weekStart && date <= weekEnd && date <= today)
     ).size;

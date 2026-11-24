@@ -66,6 +66,7 @@ export function PeopleBadgeSelectionPicker({
   groups = syntheticPersonPickerGroups,
   excludedIds = [],
   unavailableSelectedIds = [],
+  fixedSelectedIds = [],
   onDone,
   onCancel
 }: {
@@ -76,6 +77,7 @@ export function PeopleBadgeSelectionPicker({
   groups?: readonly PersonPickerGroup[];
   excludedIds?: readonly PersonId[];
   unavailableSelectedIds?: readonly PersonId[];
+  fixedSelectedIds?: readonly PersonId[];
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -100,6 +102,7 @@ export function PeopleBadgeSelectionPicker({
       unavailableItemType="Person"
       unavailableGroupLabel="Unavailable People references"
       getUnavailableItemLabel={item => `Remove unavailable person reference ${item.id}`}
+      fixedSelectedIds={fixedSelectedIds}
       onToggle={onToggle}
       onToggleGroup={onToggleGroup}
       onDone={onDone}

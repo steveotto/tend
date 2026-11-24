@@ -18,6 +18,7 @@ export type PersonHealthComponentScore = {
   id?: 'rhythms' | 'connections' | 'prayer';
   label: string;
   score: number | null;
+  unavailableReason?: string;
 };
 
 type PersonHealthSummaryProps = {
@@ -173,9 +174,12 @@ export function PersonHealthComponentScores({
           aria-label="Health by area"
           data-count={values.length}
         >
-          {values.map(({ id, label, score }) => {
+          {values.map(({ id, label, score, unavailableReason }) => {
             const value = score !== null && Number.isFinite(score) ? score : null;
             const available = value !== null;
+            const reasonId = id && unavailableReason
+              ? `${detailsId}-unavailable-${id}`
+              : undefined;
             const content = (
               <>
                 <CategoryHealthBadge
@@ -186,6 +190,11 @@ export function PersonHealthComponentScores({
                 <span className="person-health-component-score__label">
                   {label}
                 </span>
+                {reasonId && (
+                  <span id={reasonId} className="person-health-component-score__reason">
+                    {unavailableReason}
+                  </span>
+                )}
               </>
             );
             if (id && areaDetails) {
@@ -197,6 +206,7 @@ export function PersonHealthComponentScores({
                   ref={element => { scoreButtonRefs.current[selectableArea] = element; }}
                   className={`person-health-component-score ${scoreTone(value)}`}
                   aria-label={`${label} Health ${value === null ? 'unavailable' : formatScore(value)}`}
+                  {...(reasonId ? { 'aria-describedby': reasonId } : {})}
                   aria-expanded={expanded}
                   aria-haspopup="dialog"
                   key={id}
@@ -217,6 +227,7 @@ export function PersonHealthComponentScores({
                 className={`person-health-component-score ${scoreTone(value)}`}
                 role={available ? 'meter' : 'img'}
                 aria-label={available ? `${label} Health score` : `${label} Health score: unavailable`}
+                {...(reasonId ? { 'aria-describedby': reasonId } : {})}
                 aria-valuemin={available ? 0 : undefined}
                 aria-valuemax={available ? 100 : undefined}
                 aria-valuenow={value ?? undefined}
@@ -256,6 +267,7 @@ export type PersonOverallHealthArea = {
   id: 'rhythms' | 'connections' | 'prayer';
   label: string;
   score: number | null;
+  unavailableReason?: string;
 };
 
 export function PersonOverallHealthDetails({
@@ -333,6 +345,7 @@ export function PersonHealthAreaDetails({
   rollup,
   evidence,
   unavailableExplanation,
+  scoringExplanation,
   unavailableInputs
 }: {
   person: PersonPreview;
@@ -342,6 +355,7 @@ export function PersonHealthAreaDetails({
   rollup: HealthRollupConfig;
   evidence?: HealthAggregateEvidence;
   unavailableExplanation?: string;
+  scoringExplanation?: string;
   unavailableInputs?: ReactNode;
 }) {
   const title = `${areaLabel} Health`;
@@ -378,7 +392,9 @@ export function PersonHealthAreaDetails({
             formulaContent: (
               <section className="health-aggregate-evidence">
                 <p className="health-aggregate-evidence__empty">
-                  {unavailableExplanation ?? `${title} scoring is unavailable in this preview.`}
+                  {health.health === null
+                    ? unavailableExplanation ?? `${title} scoring is unavailable in this preview.`
+                    : scoringExplanation ?? `${title} uses its available score only.`}
                 </p>
                 {unavailableInputs}
               </section>

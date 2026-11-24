@@ -6,7 +6,7 @@ import {
   deleteConnection,
   friendConnectionStatus,
   formatConnectionRecency,
-  latestValidConnectionForPerson
+  reconcileDirectRhythmConnectionEdit
 } from '../domain/friendships.ts';
 import type {
   FriendshipConnection,
@@ -59,6 +59,10 @@ import { useAvailablePersonGroups, usePrayerEnabled } from './CategoryAvailabili
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { PersonSparkPanel } from './PersonSparkPanel.tsx';
 import { selectPersonOverallHealth, selectPersonRhythmHealth } from '../domain/person-health.ts';
+import {
+  PERSON_CONNECTION_HEALTH_SCORING_EXPLANATION,
+  selectPersonConnectionHealth
+} from '../domain/person-connection-health.ts';
 import { personPrayerRequestsForPerson } from '../domain/person-prayers.ts';
 import type { PersonSparkDraft, PersonSpark } from '../domain/person-sparks.ts';
 import { connectionCadenceOptions } from './PersonConnectionCadenceSelect.tsx';
@@ -75,6 +79,8 @@ export type PersonProfileNavigationRequest = {
   requestId: number;
   tab: ProfileTab;
   targetPrayerRequestId?: string;
+  sparkCompletionId?: string;
+  openNotes?: boolean;
 };
 
 const profileTabs: { id: ProfileTab; label: string }[] = [
@@ -223,8 +229,12 @@ export function PersonProfileView({
     if (!prayerEnabled && navigationRequest.tab === 'prayer') return;
     setTab(navigationRequest.tab);
     setTargetPrayerRequestId(navigationRequest.targetPrayerRequestId ?? null);
-    setNotesOpen(false);
-  }, [navigationRequest, personId, prayerEnabled]);
+    setNotesOpen(navigationRequest.openNotes === true);
+    if (navigationRequest.sparkCompletionId) {
+      const spark = personSparks.find(item => item.id === navigationRequest.sparkCompletionId);
+      if (spark) openSparkCompletion(spark);
+    }
+  }, [navigationRequest, personId, prayerEnabled, personSparks]);
   useEffect(() => {
     if (prayerEnabled || tab !== 'prayer') return;
     setTab('rhythms');
@@ -267,10 +277,22 @@ export function PersonProfileView({
     rhythmScores,
     archivedRhythmIds
   );
-  const overallHealth = selectPersonOverallHealth(personRhythmHealth, prayerEnabled);
+  const personConnectionHealth = selectPersonConnectionHealth(friendships, personId, today);
+  const overallHealth = selectPersonOverallHealth(
+    personRhythmHealth,
+    personConnectionHealth,
+    prayerEnabled
+  );
   const componentScores = [
     { id: 'rhythms', label: 'Rhythms', score: personRhythmHealth.health },
-    { id: 'connections', label: 'Connections', score: null },
+    {
+      id: 'connections',
+      label: 'Connections',
+      score: personConnectionHealth.score,
+      ...(personConnectionHealth.unavailableReason
+        ? { unavailableReason: personConnectionHealth.unavailableReason }
+        : {})
+    },
     ...(prayerEnabled ? [{ id: 'prayer' as const, label: 'Prayer', score: null }] : [])
   ] as const;
   const connectionCadenceLabel = personConnectionStatus.cadence
@@ -329,7 +351,11 @@ export function PersonProfileView({
     rhythms: { label: 'Rhythm' as const, health: personRhythmHealth, supportsMeasures: true },
     connections: {
       label: 'Connection' as const,
-      health: { consistency: null, onTrack: null, health: null },
+      health: {
+        consistency: null,
+        onTrack: null,
+        health: personConnectionHealth.score
+      },
       supportsMeasures: false
     },
     prayer: {
@@ -338,7 +364,7 @@ export function PersonProfileView({
       supportsMeasures: false
     }
   };
-  const latestConnection = latestValidConnectionForPerson(friendships, personId);
+  const latestConnection = personConnectionHealth.latestConnection;
   const latestConnectionLabel = latestConnection
     ? formatConnectionRecency(latestConnection.date, today)
     : null;
@@ -354,9 +380,9 @@ export function PersonProfileView({
     const contributes = overallHealth.eligibleComponentIds.includes(areaScoreId);
     const inputRows = area === 'connections'
       ? [
-          ['Logged connections', String(connectionHistory.length)],
-          ['Configured cadence', connectionCadenceLabel],
-          ['Most recent connection', latestConnection?.date ?? '—']
+          ['Eligible connections', String(personConnectionHealth.eligibleConnectionCount)],
+          ['Connection frequency', connectionCadenceLabel],
+          ['Latest eligible connection', latestConnection?.date ?? '—']
         ] as const
       : area === 'prayer'
         ? [
@@ -383,7 +409,13 @@ export function PersonProfileView({
         })}
         {...(area === 'rhythms' ? { evidence: personRhythmScoringEvidence } : {})}
         {...(!config.supportsMeasures ? {
-          unavailableExplanation: `${config.label} Health has no scoring rule in this preview; these inputs are not converted into a score.`,
+          ...(area === 'connections' && personConnectionHealth.score !== null
+            ? { scoringExplanation: PERSON_CONNECTION_HEALTH_SCORING_EXPLANATION }
+            : {
+                unavailableExplanation: area === 'connections'
+                  ? personConnectionHealth.unavailableReason ?? 'Connection Health is unavailable.'
+                  : `${config.label} Health is unavailable in this preview.`
+              }),
           ...(unavailableInputs ? { unavailableInputs } : {})
         } : {})}
       />
@@ -462,8 +494,8 @@ export function PersonProfileView({
     setConnectionEditor({ record });
   }
 
-  function openSparkCompletion(spark: PersonSpark, opener: HTMLButtonElement) {
-    connectionOpener.current = opener;
+  function openSparkCompletion(spark: PersonSpark, opener?: HTMLButtonElement) {
+    connectionOpener.current = opener ?? null;
     setConnectionEditor({ sparkId: spark.id });
   }
 
@@ -763,8 +795,10 @@ export function PersonProfileView({
             <PersonSparkPanel
               personId={personId}
               people={people}
+              peopleGroups={peopleGroups}
               sparks={personSparks}
               friendships={friendships}
+              today={today}
               onCreate={draft => onCreatePersonSpark
                 ? onCreatePersonSpark(personId, draft)
                 : 'Sparks are unavailable.'}
@@ -841,7 +875,7 @@ export function PersonProfileView({
                   className="btn mini ghost"
                   onClick={() => {
                     setNotesOpen(false);
-                    notesAccessRef.current?.focus();
+                    notesAccessRef.current?.focus({ preventScroll: true });
                   }}
                 >
                   Return to profile tabs
@@ -872,7 +906,6 @@ export function PersonProfileView({
             const spark = personSparks.find(item => item.id === connectionEditor.sparkId);
             return spark ? [spark.ownerId, ...spark.sharedWith] : [personId];
           })()}
-          {...(connectionEditor.sparkId ? { initialDate: '', requireTypeConfirmation: true } : {})}
           {...(connectionEditor.sparkId
             ? { sparkTitle: personSparks.find(item => item.id === connectionEditor.sparkId)?.title ?? 'Spark' }
             : {})}
@@ -884,7 +917,11 @@ export function PersonProfileView({
                 : 'Spark completion is unavailable.';
             }
             if (onSaveConnection) return onSaveConnection(connection);
-            onConnectionChange(addOrUpdateConnection(friendships, connection));
+            const existing = friendships.connections.find(item => item.id === connection.id);
+            onConnectionChange(addOrUpdateConnection(
+              friendships,
+              reconcileDirectRhythmConnectionEdit(existing, connection)
+            ));
             return null;
           }}
           onDelete={connectionId => onDeleteConnection

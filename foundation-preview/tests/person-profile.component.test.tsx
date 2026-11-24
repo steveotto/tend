@@ -25,6 +25,7 @@ import {
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { PersonId } from '../src/domain/preview-data.ts';
 import type { RhythmScoreResult } from '../src/domain/rhythm-scoring.ts';
+import { localDateString } from '../src/domain/money-goals.ts';
 
 afterEach(cleanup);
 
@@ -129,6 +130,7 @@ function ProfileHarness({
   onClose = vi.fn(),
   onEditPerson = vi.fn(),
   onCreatePersonSpark = vi.fn(),
+  onUpdatePersonSpark = vi.fn(),
   onArchivePersonSpark = vi.fn(),
   onUndoPersonSpark = vi.fn(),
   onCompletePersonSpark = vi.fn()
@@ -155,16 +157,10 @@ function ProfileHarness({
   onClose?: () => void;
   onEditPerson?: (personId: PersonId, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onCreatePersonSpark?: (ownerId: PersonId, draft: PersonSparkDraft) => string | null;
+  onUpdatePersonSpark?: (sparkId: string, draft: PersonSparkDraft) => string | null;
   onArchivePersonSpark?: (sparkId: string, archived: boolean) => string | null;
   onUndoPersonSpark?: (sparkId: string) => string | null;
-  onCompletePersonSpark?: (sparkId: string, connection: {
-    id: string;
-    type: 'text' | 'call' | 'time-together';
-    date: string;
-    time?: string;
-    participantIds: PersonId[];
-    notes?: string;
-  }) => string | null;
+  onCompletePersonSpark?: (sparkId: string, connection: FriendshipConnection) => string | null;
 }) {
   const [friendships, setFriendships] = useState<FriendshipData>(initialFriendships);
   const [personNotes, setPersonNotes] = useState<PersonNote[]>([...initialNotes]);
@@ -199,6 +195,7 @@ function ProfileHarness({
         prayerRequests={prayerRequests}
         personSparks={personSparks}
         onCreatePersonSpark={onCreatePersonSpark}
+        onUpdatePersonSpark={onUpdatePersonSpark}
         onArchivePersonSpark={onArchivePersonSpark}
         onUndoPersonSparkCompletion={onUndoPersonSpark}
         onCompletePersonSpark={onCompletePersonSpark}
@@ -388,7 +385,7 @@ describe('shared person profile', () => {
     expect(Array.from(overallHeader!.children).map(child => child.tagName)).toEqual(['DIV', 'SPAN', 'BUTTON']);
     expect(overallHeader?.querySelector('h3')?.textContent).toBe('Health');
     expect(within(overallHealth).getByRole('meter', { name: 'Overall Health score' })
-      .getAttribute('aria-valuetext')).toBe('Score unavailable');
+      .getAttribute('aria-valuetext')).toBe('100 out of 100');
     expect(overallHealth.classList.contains('health-score-breakdown')).toBe(true);
     expect(overallHealth.classList.contains('health-score-summary')).toBe(false);
     expect(screen.getAllByText('—').length).toBeGreaterThan(1);
@@ -649,7 +646,8 @@ describe('shared person profile', () => {
 
     await user.click(connectionsScoreButton);
     const connectionDialog = screen.getByRole('dialog', { name: 'Avery’s Connection Health details' });
-    expect(within(connectionDialog).getByText(/Connection Health has no scoring rule in this preview/)).toBeTruthy();
+    expect(within(connectionDialog).getByText(/Set a connection frequency/)).toBeTruthy();
+    expect(within(connectionDialog).getByText(/No connections yet/)).toBeTruthy();
     expect(within(connectionDialog).queryByText('75%')).toBeNull();
     await user.click(within(connectionDialog).getByRole('button', { name: 'Close Health details' }));
     await waitFor(() => expect(document.activeElement).toBe(connectionsScoreButton));
@@ -941,14 +939,18 @@ describe('shared person profile', () => {
       .toEqual([true, false, false]);
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
     expect(document.activeElement).toBe(addOpener);
-    expect(screen.getByText('No connections yet.')).toBeTruthy();
+    expect(screen.getAllByText('No connections yet.').length).toBeGreaterThan(0);
     expect(JSON.parse(screen.getByTestId('saved-connections').textContent ?? '{}').connections).toEqual([]);
   });
 
-  it('uses the single Do it action, pencil editing, and safeguarded Spark completion flow', async () => {
+  it('uses the single Do it action and shared Spark editing with People-picker ownership', async () => {
     const user = userEvent.setup();
-    const completeSpark = vi.fn((_sparkId: string, _connection: FriendshipConnection) => null);
+    const completeSpark = vi.fn<
+      (_sparkId: string, _connection: FriendshipConnection) => string | null
+    >(() => null);
+    completeSpark.mockReturnValueOnce('Preview storage changed. No Connection was saved.');
     const createSpark = vi.fn(() => null);
+    const updateSpark = vi.fn((_sparkId: string, _draft: PersonSparkDraft) => null);
     const archiveSpark = vi.fn((_sparkId: string, _archived: boolean) => null);
     const spark: PersonSpark = {
       id: 'spark-visit-garden',
@@ -974,6 +976,7 @@ describe('shared person profile', () => {
         rhythms={[]}
         personSparks={[spark, sparkWithoutDescription]}
         onCreatePersonSpark={createSpark}
+        onUpdatePersonSpark={updateSpark}
         onArchivePersonSpark={archiveSpark}
         onCompletePersonSpark={completeSpark}
       />
@@ -982,6 +985,12 @@ describe('shared person profile', () => {
 
     const section = screen.getByRole('region', { name: 'Sparks' });
     const sparkCard = within(section).getByRole('article', { name: 'Visit the garden' });
+    const disclosure = within(sparkCard).getByRole('button', { name: 'Expand Spark Visit the garden' });
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+    expect(sparkCard.querySelector('.person-spark-card__description')).toBeNull();
+    await user.click(disclosure);
+    expect(within(sparkCard).getByRole('button', { name: 'Collapse Spark Visit the garden' })
+      .getAttribute('aria-expanded')).toBe('true');
     expect(within(sparkCard).getByText('Take an easy walk and enjoy the flowers.')).toBeTruthy();
     expect(within(sparkCard).getAllByRole('button', { name: /Open synthetic profile for/ })).toHaveLength(2);
     expect(within(sparkCard).getByText('Someday')).toBeTruthy();
@@ -989,53 +998,279 @@ describe('shared person profile', () => {
       .querySelector('.person-spark-card__description')).toBeNull();
     expect(within(section).queryByRole('button', { name: /Actions for/ })).toBeNull();
 
-    const editButton = within(sparkCard).getByRole('button', { name: 'Edit Visit the garden' });
+    const editButton = within(sparkCard).getByRole('button', { name: 'Edit Spark' });
     await user.click(editButton);
-    const sparkEditor = screen.getByRole('dialog', { name: 'Spark details' });
-    expect((within(sparkEditor).getByLabelText('Description (optional)') as HTMLTextAreaElement).value)
+    const sparkEditor = screen.getByRole('dialog', { name: 'Edit Spark' });
+    const sparkDescription = within(sparkEditor).getByLabelText('Description (optional)') as HTMLTextAreaElement;
+    expect(sparkDescription.value)
       .toBe('Take an easy walk and enjoy the flowers.');
-    await user.click(within(sparkEditor).getByRole('button', { name: 'Archive Spark' }));
-    expect(archiveSpark).toHaveBeenCalledWith(spark.id, true);
+    expect(within(sparkEditor).queryByRole('button', { name: /Notes/ })).toBeNull();
+    expect(within(sparkEditor).queryByRole('button', { name: /Archive Spark/ })).toBeNull();
+    const editPeopleRow = within(sparkEditor).getByRole('button', {
+      name: 'Choose people, Avery Brooks and Morgan Reed'
+    });
+    await user.click(editPeopleRow);
+    const editPicker = screen.getByRole('dialog', { name: 'Choose people' });
+    expect(within(editPicker).getByRole('button', { name: 'Avery Brooks' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    expect(within(editPicker).getByRole('button', { name: 'Morgan Reed' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    await user.click(within(editPicker).getByRole('button', { name: 'Done' }));
+    await user.clear(sparkDescription);
+    await user.type(sparkDescription, 'Updated description');
+    await user.click(within(sparkEditor).getByRole('button', { name: 'Save changes' }));
+    expect(updateSpark).toHaveBeenCalledWith(spark.id, {
+      title: spark.title,
+      description: 'Updated description',
+      sharedWith: ['sample-person-morgan']
+    });
+    expect(archiveSpark).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(editButton);
 
     await user.click(within(sparkCard).getByRole('button', { name: 'Do it' }));
     const editor = screen.getByRole('dialog', { name: 'Log a connection for this Spark' });
     const dateField = within(editor).getByLabelText('Date') as HTMLInputElement;
-    expect(dateField.value).toBe('');
-    expect(completeSpark).not.toHaveBeenCalled();
-    await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
-    expect(within(editor).getByRole('alert').textContent).toContain('Choose a connection date');
+    expect(dateField.value).toBe(localDateString(new Date()));
+    expect(within(editor).queryByRole('combobox', { name: 'Connection type' })).toBeNull();
+    expect(within(editor).getByText('Spark', { selector: 'strong' })).toBeTruthy();
+    const now = new Date();
+    const hour24 = now.getHours();
+    expect(within(editor).getByRole('spinbutton', { name: 'Hour' }).getAttribute('aria-valuenow'))
+      .toBe(String(hour24 % 12 || 12));
+    expect(within(editor).getByRole('spinbutton', { name: 'Minute' }).getAttribute('aria-valuenow'))
+      .toBe(String(now.getMinutes()));
+    expect(within(editor).getByRole('spinbutton', { name: 'AM / PM' }).getAttribute('aria-valuetext'))
+      .toBe(hour24 < 12 ? 'AM' : 'PM');
     expect(completeSpark).not.toHaveBeenCalled();
     fireEvent.change(dateField, { target: { value: '2026-10-28' } });
+    await user.type(within(editor).getByLabelText('Notes (optional)'), 'Plan it for Saturday.');
     await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
-    expect(within(editor).getByRole('alert').textContent).toContain('Choose the actual connection type');
-    expect(completeSpark).not.toHaveBeenCalled();
-
-    await user.click(within(editor).getByRole('combobox', { name: 'Connection type: Choose type' }));
-    await user.click(within(screen.getByRole('listbox', { name: 'Connection type' }))
-      .getByRole('option', { name: 'Time Together' }));
-    await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
+    expect(within(editor).getByRole('alert').textContent)
+      .toBe('Preview storage changed. No Connection was saved.');
+    expect(dateField.value).toBe('2026-10-28');
+    expect((within(editor).getByLabelText('Notes (optional)') as HTMLTextAreaElement).value)
+      .toBe('Plan it for Saturday.');
     expect(completeSpark).toHaveBeenCalledOnce();
     expect(completeSpark.mock.calls[0]?.[0]).toBe(spark.id);
     expect(completeSpark.mock.calls[0]?.[1]).toMatchObject({
-      type: 'time-together',
+      type: 'spark',
       date: '2026-10-28',
+      sparkTitleSnapshot: spark.title,
+      notes: 'Plan it for Saturday.',
       participantIds: ['sample-person-avery', 'sample-person-morgan']
     });
+    await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
+    expect(completeSpark).toHaveBeenCalledTimes(2);
 
     await user.click(within(sparkCard).getByRole('button', { name: 'Do it' }));
     const cancelledEditor = screen.getByRole('dialog', { name: 'Log a connection for this Spark' });
     await user.click(within(cancelledEditor).getByRole('button', { name: 'Cancel' }));
-    expect(completeSpark).toHaveBeenCalledOnce();
+    expect(completeSpark).toHaveBeenCalledTimes(2);
 
     await user.click(within(section).getByRole('button', { name: '+ Add Spark' }));
     const addDialog = screen.getByRole('dialog', { name: 'Add Spark' });
+    const addPeopleRow = within(addDialog).getByRole('button', {
+      name: 'Choose people, Avery Brooks'
+    });
+    await user.click(addPeopleRow);
+    const addPicker = screen.getByRole('dialog', { name: 'Choose people' });
+    expect(within(addPicker).getByRole('button', { name: 'Avery Brooks' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    await user.click(within(addPicker).getByRole('button', { name: 'Morgan Reed' }));
+    await user.click(within(addPicker).getByRole('button', { name: 'Done' }));
     await user.type(within(addDialog).getByLabelText('Title'), 'Go to the market');
-    await user.click(within(addDialog).getByRole('button', { name: 'Save Spark' }));
+    await user.click(within(addDialog).getByRole('button', { name: 'Create Spark' }));
     expect(createSpark).toHaveBeenCalledWith('sample-person-avery', {
       title: 'Go to the market',
-      sharedWith: []
+      sharedWith: ['sample-person-morgan']
     });
+  });
+
+  it('shows saved Spark and Rhythm titles with secondary source labels in history and details', async () => {
+    const user = userEvent.setup();
+    const sparkConnection: FriendshipConnection = {
+      id: 'spark-picnic-connection',
+      type: 'spark',
+      date: '2026-10-28',
+      participantIds: ['sample-person-avery', 'sample-person-morgan'],
+      sparkId: 'spark-picnic',
+      sparkOwnerId: 'sample-person-avery',
+      sparkTitleSnapshot: 'Plan a picnic'
+    };
+    const rhythmConnection: FriendshipConnection = {
+      id: 'rhythm-daily-connection',
+      type: 'rhythm',
+      date: '2026-10-27',
+      participantIds: ['sample-person-avery', 'sample-person-morgan'],
+      rhythmId: 'rhythm-daily',
+      completionId: 'rhythm-daily-completion',
+      rhythmTitleSnapshot: 'Daily connection'
+    };
+    const olderRhythmConnection: FriendshipConnection = {
+      id: 'rhythm-legacy-connection',
+      type: 'rhythm',
+      date: '2026-10-25',
+      participantIds: ['sample-person-avery'],
+      rhythmId: 'rhythm-legacy'
+    };
+    const spark: PersonSpark = {
+      id: 'spark-picnic',
+      ownerId: 'sample-person-avery',
+      title: 'Plan a picnic',
+      sharedWith: ['sample-person-morgan'],
+      archived: false,
+      completed: true,
+      completionHistory: [{
+        id: sparkConnection.id,
+        source: 'connection',
+        date: sparkConnection.date,
+        connectionId: sparkConnection.id
+      }]
+    };
+    render(
+      <ProfileHarness
+        rhythms={[]}
+        personSparks={[spark]}
+        initialFriendships={{
+          ...createFriendshipData(),
+          connections: [sparkConnection, rhythmConnection, olderRhythmConnection]
+        }}
+      />
+    );
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+
+    const sparkRow = screen.getByRole('button', { name: /Plan a picnic, Spark connection/ });
+    expect(within(sparkRow).getByText('Plan a picnic')).toBeTruthy();
+    expect(within(sparkRow).getByText('Spark')).toBeTruthy();
+    expect(sparkRow.querySelector('.friendships-connection-row__check--spark')).toBeTruthy();
+    expect(sparkRow.querySelectorAll('time')).toHaveLength(1);
+    await user.click(sparkRow);
+    const sparkDetails = screen.getByRole('dialog', { name: 'Connection details' });
+    expect(within(sparkDetails).getByText('Plan a picnic')).toBeTruthy();
+    expect(within(sparkDetails).getByRole('combobox', { name: 'Connection type: Spark' })).toBeTruthy();
+    await user.click(within(sparkDetails).getByRole('button', { name: 'Cancel' }));
+
+    const rhythmRow = screen.getByRole('button', { name: /Daily connection, Rhythm connection/ });
+    expect(within(rhythmRow).getByText('Daily connection')).toBeTruthy();
+    expect(within(rhythmRow).getByText('Rhythm')).toBeTruthy();
+    expect(rhythmRow.querySelector('.friendships-connection-row__check--rhythm')).toBeTruthy();
+    expect(rhythmRow.querySelectorAll('time')).toHaveLength(1);
+    await user.click(rhythmRow);
+    const rhythmDetails = screen.getByRole('dialog', { name: 'Connection details' });
+    expect(within(rhythmDetails).getByText('Daily connection')).toBeTruthy();
+    expect(within(rhythmDetails).getByRole('combobox', { name: 'Connection type: Rhythm' })).toBeTruthy();
+    await user.click(within(rhythmDetails).getByRole('button', { name: 'Cancel' }));
+
+    const olderRhythmRow = screen.getByRole('button', { name: /^Rhythm connection,/ });
+    expect(within(olderRhythmRow).getAllByText('Rhythm')).toHaveLength(2);
+    expect(olderRhythmRow.querySelector('.friendships-connection-row__check--rhythm')).toBeTruthy();
+    await user.click(olderRhythmRow);
+    const olderDetails = screen.getByRole('dialog', { name: 'Connection details' });
+    expect(within(olderDetails).getByRole('combobox', { name: 'Connection type: Rhythm' })).toBeTruthy();
+    await user.click(within(olderDetails).getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('shows all participant-linked source records and explains why Connection Health is unscored', async () => {
+    const user = userEvent.setup();
+    const averyId = 'sample-person-avery';
+    const morganId = 'sample-person-morgan';
+    const rhythm = { ...linkedRhythm, title: 'Pray together', personIds: [averyId] };
+    const manualConnection: FriendshipConnection = {
+      id: 'health-manual-connection',
+      type: 'text',
+      date: '2026-10-29',
+      participantIds: [averyId]
+    };
+    const sparkConnection: FriendshipConnection = {
+      id: 'health-spark-connection',
+      type: 'spark',
+      date: '2026-10-28',
+      participantIds: [averyId, morganId],
+      sparkId: 'health-spark',
+      sparkOwnerId: averyId,
+      sparkTitleSnapshot: 'Watch Backrooms Movie'
+    };
+    const rhythmConnection: FriendshipConnection = {
+      id: 'health-rhythm-connection',
+      type: 'rhythm',
+      date: '2026-10-27',
+      participantIds: [averyId],
+      rhythmId: rhythm.id,
+      completionId: 'health-rhythm-completion',
+      rhythmTitleSnapshot: 'Pray together'
+    };
+    const otherPersonConnection: FriendshipConnection = {
+      id: 'morgan-only-connection',
+      type: 'call',
+      date: '2026-10-29',
+      participantIds: [morganId]
+    };
+    const spark: PersonSpark = {
+      id: 'health-spark',
+      ownerId: averyId,
+      title: 'Watch Backrooms Movie',
+      sharedWith: [morganId],
+      archived: false,
+      completed: true,
+      completionHistory: [{
+        id: sparkConnection.id,
+        source: 'connection',
+        date: sparkConnection.date,
+        connectionId: sparkConnection.id
+      }]
+    };
+
+    render(
+      <ProfileHarness
+        rhythms={[rhythm]}
+        rhythmScores={new Map([[rhythm.id, scoredProfileRhythmScore(50, 50)]])}
+        personSparks={[spark]}
+        initialFriendships={{
+          ...createFriendshipData(),
+          connections: [
+            manualConnection,
+            sparkConnection,
+            rhythmConnection,
+            otherPersonConnection
+          ]
+        }}
+      />
+    );
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+    expect(screen.getByRole('button', { name: /Text, Manual connection,/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Watch Backrooms Movie, Spark connection/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Pray together, Rhythm connection/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Morgan-only connection/ })).toBeNull();
+
+    const overall = screen.getByRole('region', { name: 'Overall Health summary' });
+    expect(within(overall).getByRole('meter', {
+      name: 'Overall Health progress score'
+    }).getAttribute('aria-valuenow')).toBe('50');
+    const componentScoresToggle = within(overall).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    });
+    await user.click(componentScoresToggle);
+    const areas = within(overall).getByRole('group', { name: 'Health by area' });
+    expect(within(areas).getByRole('img', {
+      name: 'Connections Health score: unavailable'
+    })).toBeTruthy();
+    expect(within(areas).getByText(
+      'Set a connection frequency in Person settings to calculate Connection Health.'
+    )).toBeTruthy();
+
+    await user.click(within(overall).getByRole('button', {
+      name: 'Show Overall Health scoring explanation'
+    }));
+    const overallDetails = screen.getByRole('dialog', { name: 'Avery’s Overall Health details' });
+    await user.click(within(overallDetails).getByRole('button', {
+      name: 'Connections Health unavailable'
+    }));
+    const connectionDetails = screen.getByRole('dialog', {
+      name: 'Avery’s Connection Health details'
+    });
+    expect(within(connectionDetails).getByText(/Set a connection frequency/)).toBeTruthy();
+    expect(within(connectionDetails).getByText('3')).toBeTruthy();
+    expect(within(connectionDetails).getByText('No cadence configured')).toBeTruthy();
   });
 
   it('keeps Spark completion undo behind the existing explicit confirmation', async () => {
@@ -1059,9 +1294,10 @@ describe('shared person profile', () => {
     render(<ProfileHarness rhythms={[]} personSparks={[spark]} onUndoPersonSpark={undoSpark} />);
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
     const card = screen.getByRole('article', { name: spark.title });
-    const editButton = within(card).getByRole('button', { name: `Edit ${spark.title}` });
+    await user.click(within(card).getByRole('button', { name: `Expand Spark ${spark.title}` }));
+    const editButton = within(card).getByRole('button', { name: 'Edit Spark' });
     await user.click(editButton);
-    const editor = screen.getByRole('dialog', { name: 'Spark details' });
+    const editor = screen.getByRole('dialog', { name: 'Edit Spark' });
     await user.click(within(editor).getByRole('button', { name: 'Undo completion' }));
     const confirmation = screen.getByRole('dialog', { name: 'Undo this Spark completion?' });
     expect(undoSpark).not.toHaveBeenCalled();
@@ -1126,7 +1362,7 @@ describe('shared person profile', () => {
     expect(stored.connections[0]?.participantIds).toEqual(['sample-person-avery', 'sample-person-morgan']);
     expect(screen.getByRole('button', { name: '+ Add' })).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: /Connection cadence/ })).toBeNull();
-    const connectionRow = screen.getByRole('button', { name: /^Text connection,/ });
+    const connectionRow = screen.getByRole('button', { name: /^Text, Manual connection,/ });
     await user.click(connectionRow);
     const edit = screen.getByRole('dialog', { name: 'Connection details' });
     await user.click(within(edit).getAllByRole('checkbox')[0]!);
@@ -1163,12 +1399,12 @@ describe('shared person profile', () => {
     );
     render(<ProfileHarness rhythms={[]} initialFriendships={data} />);
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
-    await user.click(screen.getByRole('button', { name: /^Call connection,/ }));
+    await user.click(screen.getByRole('button', { name: /^Call, Manual connection,/ }));
     const details = screen.getByRole('dialog', { name: 'Connection details' });
     await user.click(within(details).getByRole('button', { name: 'Delete connection' }));
     const confirmation = screen.getByRole('alertdialog');
     await user.click(within(confirmation).getByRole('button', { name: 'Delete connection' }));
-    expect(screen.getByText('No connections yet.')).toBeTruthy();
+    expect(screen.getAllByText('No connections yet.').length).toBeGreaterThan(0);
     const updated = JSON.parse(screen.getByTestId('saved-connections').textContent ?? '{}') as FriendshipData;
     expect(updated.connections).toEqual([]);
     expect(updated.cadenceSettings).toEqual(data.cadenceSettings);

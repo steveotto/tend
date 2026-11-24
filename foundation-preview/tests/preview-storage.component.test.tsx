@@ -64,6 +64,7 @@ import {
   loadV44RecoveryCopy,
   loadV45RecoveryCopy,
   loadV46RecoveryCopy,
+  loadV55RecoveryCopy,
   createPreviewStorageScope,
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
   loadV39RecoveryCopy,
@@ -109,7 +110,10 @@ import {
   PREVIEW_V45_RECOVERY_KEY,
   PREVIEW_V46_RECOVERY_KEY,
   PREVIEW_V47_RECOVERY_KEY,
+  PREVIEW_V55_RECOVERY_KEY,
+  PREVIEW_V56_RECOVERY_KEY,
   loadV47RecoveryCopy,
+  loadV56RecoveryCopy,
   writePreview
 } from '../src/storage/preview-storage.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
@@ -169,6 +173,8 @@ afterEach(() => {
   window.localStorage.removeItem(PREVIEW_V45_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V46_RECOVERY_KEY);
   window.localStorage.removeItem(PREVIEW_V47_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V55_RECOVERY_KEY);
+  window.localStorage.removeItem(PREVIEW_V56_RECOVERY_KEY);
   vi.unstubAllGlobals();
 });
 
@@ -472,6 +478,47 @@ function setDownloadMocks() {
 }
 
 describe('synthetic preview storage adapter and envelope', () => {
+  it('reloads a date-only Spark unchanged and preserves the exact v55 recovery copy', () => {
+    const data = createSamplePreviewData();
+    data.personSparks = [{
+      id: 'storage-dated-spark',
+      ownerId: 'sample-person-avery',
+      title: 'Take a walk',
+      dueDate: '2026-03-08',
+      sharedWith: ['sample-person-morgan'],
+      archived: false,
+      completed: false,
+      completionHistory: []
+    }];
+    const { storage, values } = storageFixture();
+    const initial = writePreview(storage, data, null, { currentDate: '2026-11-23' });
+    expect(initial.kind).toBe('saved');
+    const reloaded = loadPreview(storage, '2026-11-23');
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind !== 'loaded') return;
+    expect(reloaded.data.personSparks[0]?.dueDate).toBe('2026-03-08');
+
+    const legacyData = createSamplePreviewData();
+    legacyData.personSparks = [{
+      id: 'legacy-undated-spark',
+      ownerId: 'sample-person-avery',
+      title: 'An older undated idea',
+      sharedWith: [],
+      archived: false,
+      completed: false,
+      completionHistory: []
+    }];
+    const raw = JSON.stringify(withPreSparkSchema(createPreviewEnvelope(legacyData), 55));
+    values.set(PREVIEW_STORAGE_KEY, raw);
+    const upgraded = loadPreview(storage, '2026-11-23');
+    expect(upgraded.kind).toBe('loaded');
+    if (upgraded.kind !== 'loaded') return;
+    expect(writePreview(storage, upgraded.data, upgraded.raw, { currentDate: '2026-11-23' }).kind)
+      .toBe('saved');
+    expect(values.get(PREVIEW_V55_RECOVERY_KEY)).toBe(raw);
+    expect(loadV55RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+  });
+
   it('downloads the exact current raw document before applying a validated restore', async () => {
     const user = userEvent.setup();
     const currentRaw = ` \n${JSON.stringify(createPreviewEnvelope(createSamplePreviewData()))}\n`;
@@ -663,6 +710,21 @@ describe('synthetic preview storage adapter and envelope', () => {
       if (reloaded.kind === 'loaded') expect(reloaded.data.showTended).toBe(false);
     }
     cleanup();
+  });
+
+  it('preserves the exact schema-56 source before writing the new preview schema', () => {
+    const sourceEnvelope = createPreviewEnvelope(createSamplePreviewData());
+    const raw = JSON.stringify({ ...sourceEnvelope, schemaVersion: 56 });
+    const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
+
+    const loaded = loadPreview(storage, '2026-11-23');
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    expect(writePreview(storage, loaded.data, loaded.raw, { currentDate: '2026-11-23' }).kind)
+      .toBe('saved');
+    expect(values.get(PREVIEW_V56_RECOVERY_KEY)).toBe(raw);
+    expect(loadV56RecoveryCopy(storage)).toEqual({ kind: 'loaded', raw });
+    expect(JSON.parse(values.get(PREVIEW_STORAGE_KEY)!).schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
   });
 
   it('writes a new schema-40 Rhythm over a stored schema-39 preview and preserves the exact source', () => {
@@ -1512,7 +1574,7 @@ describe('synthetic preview storage adapter and envelope', () => {
     const raw = JSON.stringify(legacyEnvelope);
 
     const parsed = parsePreviewBackup(raw, '2026-10-21');
-    expect(parsed.valid).toBe(true);
+    expect(parsed, parsed.valid ? undefined : parsed.message).toMatchObject({ valid: true });
     if (!parsed.valid) return;
     expect(parsed.sourceSchemaVersion).toBe(19);
     expect(parsed.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
@@ -1523,7 +1585,8 @@ describe('synthetic preview storage adapter and envelope', () => {
 
     const { storage, values } = storageFixture({ [PREVIEW_STORAGE_KEY]: raw });
     const loaded = loadPreview(storage, '2026-10-21');
-    expect(loaded.kind).toBe('loaded');
+    expect(loaded, loaded.kind === 'loaded' ? undefined : JSON.stringify(loaded))
+      .toMatchObject({ kind: 'loaded' });
     if (loaded.kind !== 'loaded') return;
     expect(writePreview(storage, loaded.data, raw, { currentDate: '2026-10-21' }).kind).toBe('saved');
     expect(values.get(PREVIEW_V19_RECOVERY_KEY)).toBe(raw);
@@ -1544,11 +1607,10 @@ describe('synthetic preview storage adapter and envelope', () => {
       savedWorkoutId: 'legacy-template-without-plan',
       workoutName: 'Existing workout'
     }];
-    const legacyEnvelope = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    const legacyEnvelope = JSON.parse(JSON.stringify(withPreSparkSchema(createPreviewEnvelope(data), 20))) as {
       schemaVersion: number;
       data: Record<string, unknown>;
     };
-    legacyEnvelope.schemaVersion = 20;
     delete legacyEnvelope.data.personDetails;
     delete legacyEnvelope.data.personNotes;
     const legacyStrength = legacyEnvelope.data.strength as { settings: Record<string, unknown> };
@@ -1907,7 +1969,7 @@ describe('synthetic preview storage adapter and envelope', () => {
 
   it('preserves and exposes the exact v27 source before schema-v28 scoring migration', async () => {
     const data = createSamplePreviewData();
-    const legacy = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
+    const legacy = JSON.parse(JSON.stringify(withPreSparkSchema(createPreviewEnvelope(data), 27))) as {
       schemaVersion: number;
       data: {
         cardio: Record<string, unknown>;
@@ -1918,7 +1980,6 @@ describe('synthetic preview storage adapter and envelope', () => {
         personSparks?: unknown;
       };
     };
-    legacy.schemaVersion = 27;
     delete legacy.data.people;
     delete legacy.data.personDetails;
     delete legacy.data.personNotes;
@@ -2086,11 +2147,11 @@ describe('synthetic preview storage adapter and envelope', () => {
     const releasedShapeData = { ...data };
     Reflect.deleteProperty(releasedShapeData, 'flexibility');
     Reflect.deleteProperty(releasedShapeData, 'personSparks');
-    const releasedShape = parsePreviewBackup(JSON.stringify({
+    const releasedShape = parsePreviewBackup(JSON.stringify(withPreSparkSchema({
       format: 'tend.synthetic-preview',
       schemaVersion: 38,
       data: releasedShapeData
-    }), '2026-10-21');
+    }, 38)), '2026-10-21');
     expect(releasedShape.valid).toBe(true);
     if (releasedShape.valid) {
       expect(releasedShape.sourceSchemaVersion).toBe(38);
@@ -2105,11 +2166,11 @@ describe('synthetic preview storage adapter and envelope', () => {
     const priorFlexibilityShapeData = { ...data };
     Reflect.deleteProperty(priorFlexibilityShapeData, 'todayView');
     Reflect.deleteProperty(priorFlexibilityShapeData, 'personSparks');
-    const priorFlexibilityShape = parsePreviewBackup(JSON.stringify({
+    const priorFlexibilityShape = parsePreviewBackup(JSON.stringify(withPreSparkSchema({
       format: 'tend.synthetic-preview',
       schemaVersion: 38,
       data: priorFlexibilityShapeData
-    }), '2026-10-21');
+    }, 38)), '2026-10-21');
     expect(priorFlexibilityShape.valid).toBe(true);
     if (priorFlexibilityShape.valid) {
       expect(priorFlexibilityShape.sourceSchemaVersion).toBe(38);

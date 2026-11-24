@@ -19,6 +19,7 @@ export function RhythmCompletionDialog({
       initialFocusId="rhythm-completion-heading"
       surfaceClassName="money-goal-dialog__surface--flush"
       phoneFullScreen
+      scrollableBody
       onClose={onClose}
     >
       <RhythmCompletionForm

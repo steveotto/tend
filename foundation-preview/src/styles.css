@@ -20,6 +20,7 @@
   --surface: var(--tend-surface);
   --sans: var(--tend-font-ui);
   --tend-muted: var(--tend-secondary);
+  --tend-focus: #39704d;
   --area-icon: none;
   --marriage-icon: none;
   --score: 100%;
@@ -4076,6 +4077,39 @@ a:focus-visible {
       background: var(--tend-surface);
     }
 
+    .rhythm-editor__association-checkbox {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--tend-line);
+      background: var(--tend-surface);
+    }
+
+    .rhythm-editor__association-checkbox input {
+      flex: none;
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      accent-color: var(--tend-purple, #7049ad);
+      cursor: pointer;
+    }
+
+    .rhythm-editor__association-checkbox input:focus-visible {
+      outline: 3px solid var(--tend-purple, #7049ad);
+      outline-offset: 2px;
+    }
+
+    .rhythm-editor__association-checkbox span {
+      display: grid;
+      gap: 3px;
+    }
+
+    .rhythm-editor__association-checkbox small {
+      color: var(--ink-faint);
+      line-height: 1.35;
+    }
+
     .rhythm-editor__association-row {
       box-sizing: border-box;
       display: grid;
@@ -7695,95 +7729,51 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .friendships-connection-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
-  align-items: start;
-  gap: 0 12px;
-  padding: 13px;
-  color: var(--tend-ink);
-}
-
-.friendships-connection-row__heading {
-  display: flex;
-  grid-column: 1;
-  grid-row: 1;
+  grid-template-columns: 24px minmax(0, 1fr) max-content;
+  align-items: center;
   min-width: 0;
-  align-items: center;
-  gap: 9px;
+  gap: 10px;
 }
 
-.friendships-connection-row__icon {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  color: var(--tend-forest, var(--forest));
-}
-
-.friendships-connection-row__icon svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.6;
+.friendships-connection-row__content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  gap: 2px 6px;
 }
 
 .friendships-connection-row__title {
   min-width: 0;
-  color: var(--tend-ink);
-  font-size: calc(0.9375rem * var(--app-text-scale, 1));
-  font-weight: 700;
-  line-height: 1.3;
-  overflow-wrap: break-word;
-  word-break: normal;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
 }
 
-.friendships-connection-row__chevron {
+.friendships-connection-row__source-type {
+  flex: none;
+  color: var(--tend-secondary);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.friendships-connection-row__check--manual {
+  background: var(--tend-mist);
+  color: var(--tend-forest);
+}
+
+.friendships-connection-row__check--spark {
+  background: var(--spark-surface, #fefbe6);
+  color: var(--spark-icon-stroke, #8a6200);
+}
+
+.friendships-connection-row__timestamp {
   display: flex;
-  grid-column: 2;
-  grid-row: 1;
-  min-height: 24px;
+  min-width: max-content;
   align-items: center;
-  justify-content: center;
-  color: var(--tend-secondary);
-}
-
-.friendships-connection-row__chevron svg {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
-}
-
-.friendships-connection-row__notes {
-  grid-column: 1 / -1;
-  min-width: 0;
-  margin-top: 5px;
-  color: var(--tend-secondary);
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  line-height: 1.4;
-  overflow-wrap: break-word;
-  white-space: pre-wrap;
-}
-
-.friendships-connection-row__footer {
-  display: flex;
-  grid-column: 1 / -1;
-  flex-wrap: wrap;
-  gap: 3px 12px;
-  min-width: 0;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--tend-line);
-  color: var(--tend-ink-soft, var(--ink-soft));
-  font-size: calc(12.5px * var(--app-text-scale, 1));
-  font-variant-numeric: tabular-nums;
-  line-height: 1.35;
+  justify-self: end;
+  gap: 4px;
 }
 
 .friendships-connection-row:hover {
@@ -7837,6 +7827,37 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   color: var(--tend-ink-soft, var(--ink-soft));
   font-size: calc(0.75rem * var(--app-text-scale, 1));
   font-variant-numeric: tabular-nums;
+}
+
+.friendships-connection-form__ownership-note {
+  margin: 0;
+  color: var(--tend-ink-soft, var(--ink-soft));
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.5;
+}
+
+.friendships-connection-form__source-context {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 10px;
+  background: var(--tend-mist);
+  color: var(--tend-ink);
+}
+
+.friendships-connection-form__source-context > strong {
+  color: var(--tend-secondary);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+}
+
+.friendships-connection-form__source-context > span {
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .friendships-connection-delete {
@@ -7895,8 +7916,8 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .friendships-participants {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
   margin: 0;
@@ -7913,6 +7934,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .friendships-participants label {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 7px;
   min-width: 0;
@@ -8508,6 +8530,15 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   white-space: nowrap;
 }
 
+.person-health-component-score__reason {
+  max-width: 100%;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  font-weight: 400;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 520px) {
   .person-profile__identity-card {
     padding: 14px;
@@ -8739,6 +8770,42 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .preview-login__form button:disabled {
   cursor: wait;
   opacity: 0.6;
+}
+
+.preview-login__password-control {
+  position: relative;
+  display: block;
+}
+
+.preview-login__password-control input {
+  padding-right: 74px;
+}
+
+.preview-login__form .preview-login__password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--forest, #24694b);
+  transform: translateY(-50%);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  opacity: 1;
+}
+
+.preview-login__password-toggle:focus-visible {
+  outline: 3px solid var(--forest, #24694b);
+  outline-offset: 2px;
+}
+
+.preview-login__secondary-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
 }
 
 .preview-login__text-button,
@@ -9276,7 +9343,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   color: var(--spark-action-fg);
 }
 
-.person-spark-card__do-it:hover {
+.rhythm-card--simple.person-spark-card .person-spark-card__do-it:hover {
   border-color: var(--forest-deep);
   background: var(--forest-deep);
 }
@@ -9285,7 +9352,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   background: color-mix(in srgb, var(--spark-action-bg) 10%, white);
 }
 
-.person-spark-card__do-it:active {
+.rhythm-card--simple.person-spark-card .person-spark-card__do-it:active {
   border-color: var(--forest-deep);
   background: var(--forest-deep);
 }
@@ -9294,8 +9361,86 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   background: color-mix(in srgb, var(--spark-action-bg) 18%, white);
 }
 
+.today-sparks-section,
+.sparks-library {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.today-sparks-section {
+  margin-top: 20px;
+}
+
+.today-sparks-section__heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.today-sparks-section__heading > div {
+  min-width: 0;
+}
+
+.today-sparks-section__heading h2 {
+  margin: 0;
+  color: var(--tend-ink);
+  font-size: calc(1.125rem * var(--app-text-scale, 1));
+}
+
+.today-sparks-section__heading p {
+  margin: 4px 0 0;
+  color: var(--tend-secondary);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.today-sparks-section__view-all {
+  min-height: 44px;
+  flex: none;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--spark-action-bg);
+  font: inherit;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.today-sparks-section__view-all:hover {
+  background: var(--spark-chip-bg);
+}
+
+.today-sparks-section__empty {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 14px;
+  background: var(--tend-surface);
+  color: var(--tend-secondary);
+}
+
+.today-sparks-section__empty p {
+  margin: 0;
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+}
+
+.today-sparks-section__list {
+  gap: 8px;
+}
+
 .person-spark-panel__add:disabled,
-.person-spark-card__do-it:disabled {
+.rhythm-card--simple.person-spark-card .person-spark-card__do-it:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -9315,22 +9460,78 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .tend-app-preview .rhythm-card--simple.person-spark-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 8px 10px;
-  padding: 11px 14px;
-  border-color: var(--spark-border);
-  border-radius: 15px;
-  background: var(--spark-surface);
+  gap: 8px;
+  padding: 12px;
+  border-color: var(--tend-line);
+  border-radius: var(--tend-radius-card);
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+}
+
+.tend-app-preview .rhythm-card--simple.person-spark-card--collapsed {
+  display: block;
+  padding: 0;
+  border-color: var(--tend-line);
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+}
+
+.person-spark-card__disclosure {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.person-spark-card__compact-title {
+  min-width: 0;
+  flex: 1 1 auto;
   color: var(--spark-text-primary);
-  box-shadow: none;
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.person-spark-card__chevron {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--spark-border);
+  border-radius: 50%;
+  background: var(--spark-surface);
+  color: var(--spark-icon-stroke);
+}
+
+.person-spark-card__chevron svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .person-spark-card__title-row {
   display: flex;
   grid-column: 1 / -1;
   min-width: 0;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
 }
 
@@ -9338,10 +9539,10 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   min-width: 0;
   flex: 1 1 auto;
   margin: 0;
-  color: var(--spark-text-primary);
-  font-size: calc(1.1875rem * var(--app-text-scale, 1));
-  font-weight: 700;
-  line-height: 1.25;
+  color: var(--tend-ink);
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.3;
   overflow-wrap: break-word;
   word-break: normal;
 }
@@ -9352,12 +9553,11 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   height: 44px;
   flex: none;
   place-items: center;
-  margin: -11px -11px 0 0;
   padding: 0;
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: var(--spark-text-secondary);
+  color: var(--tend-secondary);
   cursor: pointer;
 }
 
@@ -9378,110 +9578,134 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   stroke-width: 1.6;
 }
 
+.person-spark-card__collapse {
+  display: inline-grid;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--spark-icon-stroke);
+  cursor: pointer;
+}
+
+.person-spark-card__collapse::before {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid var(--spark-border);
+  border-radius: 50%;
+  background: var(--spark-surface);
+  content: "";
+}
+
+.person-spark-card__collapse > span {
+  position: relative;
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+  transform: rotate(-90deg);
+}
+
 .person-spark-card__description {
   grid-column: 1 / -1;
   min-width: 0;
   margin: 0;
-  color: var(--spark-text-secondary);
+  color: var(--tend-secondary);
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
   line-height: 1.4;
   overflow-wrap: break-word;
   white-space: pre-wrap;
 }
 
-.person-spark-card__body {
+.person-spark-card__association-row {
   display: flex;
+  flex-wrap: wrap;
   grid-column: 1 / -1;
   min-width: 0;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+}
+
+.person-spark-card__association-row--without-people {
+  display: none;
 }
 
 .person-spark-card__people {
   display: flex;
   min-width: 0;
-  flex: 1 1 auto;
+  width: 100%;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
-.tend-app-preview .person-spark-card .rhythm-person-badge,
-.app-shell .person-spark-card .rhythm-person-badge {
-  max-width: 100%;
-  border: 0;
-  border-radius: 999px;
-  background: var(--spark-chip-bg);
-  color: #000;
+.person-spark-card__action-row {
+  display: flex;
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-end;
+  margin-top: 2px;
 }
 
 .person-spark-card .person-badge-visual {
   min-width: 0;
-  border-color: var(--spark-chip-border);
-  background: var(--spark-chip-bg);
-  color: #000;
+  color: var(--tend-forest);
 }
 
-.person-spark-card .person-badge-avatar {
-  border-color: var(--spark-chip-border);
-  background: var(--spark-avatar-bg);
-  color: var(--spark-avatar-fg);
-}
-
-.person-spark-card__do-it {
-  background: var(--spark-action-bg);
-  color: var(--spark-action-fg);
-  min-height: 44px;
-  padding: 8px 14px;
-  border-radius: 11px;
-  font: 650 var(--tend-type-button-label, .95rem)/1.2 var(--sans);
+.rhythm-card--simple.person-spark-card .person-spark-card__do-it {
+  border: 1px solid var(--tend-forest);
+  background: var(--tend-forest);
+  color: #fff;
 }
 
 .person-spark-card__footer {
   display: flex;
   grid-column: 1 / -1;
   align-items: center;
+  flex-wrap: wrap;
   min-width: 0;
-  margin-top: 1px;
-  padding-top: 8px;
-  border-top: 1px solid var(--spark-divider);
-  color: var(--spark-text-secondary);
+  gap: 8px;
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--tend-line);
   font-size: calc(0.75rem * var(--app-text-scale, 1));
   line-height: 1.4;
 }
 
-.person-spark-card__footer-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--spark-text-secondary);
+.person-spark-card__due-date {
+  min-width: 0;
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: calc(100% - 52px);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #946B00 12%, var(--tend-surface));
+  color: #946B00;
+  font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
-.person-spark-card__check {
-  display: inline-flex;
-  width: 20px;
-  height: 20px;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--spark-action-bg);
-  color: var(--spark-action-fg);
-  font-size: 13px;
-  font-weight: 800;
+.person-spark-card__footer > .person-spark-card__edit {
+  margin-left: auto;
+  color: var(--tend-secondary);
 }
 
-.person-spark-card__footer-label svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-  fill: var(--spark-icon-fill);
-  stroke: var(--spark-icon-stroke);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
+.person-spark-card__status {
+  min-width: 0;
+  margin-left: auto;
+  color: var(--tend-secondary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.person-spark-card__footer > .person-spark-card__do-it {
+  flex: 0 0 92px;
+  margin-left: auto;
 }
 
 .person-spark-panel__empty {
@@ -9531,71 +9755,76 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .person-spark-dialog .money-goal-dialog__scroll-region {
   display: block;
-  padding: 16px 2px 2px;
+  padding: 16px 2px 14px;
 }
 
 .person-spark-form,
 .person-spark-confirm {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
 }
 
-.person-spark-form > label {
+.person-spark-form__fields {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.person-spark-form .goal-field {
   display: grid;
   gap: 6px;
   min-width: 0;
-  color: var(--ink, #25332b);
+  margin: 0;
+  color: var(--tend-ink);
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
   font-weight: 600;
 }
 
-.person-spark-form input:not([type="checkbox"]),
-.person-spark-form textarea {
+.person-spark-form__field > label {
+  color: var(--tend-ink);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 600;
+}
+
+.person-spark-form__field input:not([type="checkbox"]),
+.person-spark-form__field textarea,
+.person-spark-form__field select {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+  min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid var(--line, #dfe5df);
+  border: 1px solid var(--tend-line);
   border-radius: 10px;
-  background: var(--tend-canvas, #fff);
-  color: var(--ink, #25332b);
+  background: var(--tend-surface);
+  color: var(--tend-ink);
   font: inherit;
 }
 
-.person-spark-form textarea {
+.person-spark-form__field textarea {
   resize: vertical;
   line-height: 1.5;
 }
 
-.person-spark-form__people {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
-  gap: 8px;
+.person-spark-form__hint {
+  margin: 0;
+  color: var(--tend-secondary);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.person-spark-form > .rhythm-editor__association-row {
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 10px;
-  border: 1px solid var(--tend-spark-border);
+  padding: 12px;
+  border: 1px solid var(--tend-line);
   border-radius: 12px;
-}
-
-.person-spark-form__people legend {
-  padding: 0 5px;
-  color: var(--ink-soft, #66736b);
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-}
-
-.person-spark-form__people label {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  padding: 4px;
-}
-
-.person-spark-form__people .person-badge-visual {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
 }
 
 .person-spark-form__completion {
@@ -9623,41 +9852,40 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   min-width: 0;
 }
 
-.person-spark-form__delete {
-  padding-top: 12px;
+.money-goal-dialog.person-spark-dialog .person-spark-form .money-goal-dialog__actions {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 12px;
+  position: static;
+  z-index: auto;
+  bottom: auto;
+  margin: 0;
+  padding: 12px 0 max(12px, env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--tend-spark-border);
+  background: var(--tend-surface);
 }
 
-.person-spark-form__management {
+.person-spark-form .money-goal-dialog__actions > .btn {
+  flex: 0 0 auto;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.person-spark-form__secondary-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
 .person-spark-form__delete-button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, #a43838 28%, var(--tend-spark-border));
-  border-radius: 10px;
-  background: transparent;
-  color: #8c3232;
-  font: inherit;
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  font-weight: 650;
-  cursor: pointer;
+  font-weight: 550;
 }
 
-.person-spark-form__delete-button > svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
+.person-spark-form__delete-button:focus-visible {
+  outline-color: var(--tend-danger, #a23c34);
 }
 
 .person-spark-confirm > p {
@@ -9679,9 +9907,68 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .person-spark-panel .person-spark-card__edit:focus-visible,
-.person-spark-panel .person-spark-card__do-it:focus-visible {
+.person-spark-panel .person-spark-card__do-it:focus-visible,
+.person-spark-card__disclosure:focus-visible,
+.person-spark-card__edit:focus-visible,
+.person-spark-card__collapse:focus-visible,
+.person-spark-card__do-it:focus-visible,
+.today-sparks-section__view-all:focus-visible {
   outline: 2px solid var(--spark-action-bg);
   outline-offset: 2px;
+}
+
+.sparks-library-dialog {
+  box-sizing: border-box;
+  width: min(820px, calc(100vw - 28px));
+  max-height: min(90dvh, 900px);
+  overflow: hidden;
+}
+
+.sparks-library-dialog > .money-goal-dialog__surface {
+  min-width: 0;
+  padding: clamp(18px, 3vw, 28px);
+  background: var(--tend-canvas);
+}
+
+.sparks-library-dialog .money-goal-dialog__scroll-region {
+  display: block;
+  padding: 16px 2px max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+.sparks-library__toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sparks-library__tabs {
+  min-width: 0;
+  flex: 1 1 300px;
+}
+
+.sparks-library__tabs button {
+  min-width: 0;
+  min-height: 44px;
+  flex: 1 1 0;
+  padding-inline: 8px;
+  overflow-wrap: anywhere;
+}
+
+.sparks-library__panel {
+  min-width: 0;
+}
+
+.sparks-library__empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 14px;
+  background: var(--tend-surface);
+  color: var(--tend-secondary);
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
 }
 
 .tend-app-preview .person-spark-card .rhythm-person-badge:focus-visible,
@@ -13669,6 +13956,21 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
     font-weight: 400;
   }
 
+.rhythm-completion-form__connection {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+}
+
+.rhythm-completion-form__connection-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .rhythm-completion-form__date,
 .rhythm-completion-form__field,
 .rhythm-completion-form textarea {
@@ -16297,6 +16599,15 @@ button.strength-guided__performance:focus-visible {
   padding-top: 14px;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
+}
+
+.money-goal-dialog--scrollable-body .friendships-connection-form {
+  min-height: 0;
+  flex: none;
+  overflow-x: visible;
+  overflow-y: visible;
+  overscroll-behavior-y: auto;
+  padding-bottom: 0;
 }
 
 .tool-zone__header {
@@ -19850,6 +20161,34 @@ button.strength-guided__performance:focus-visible {
   line-height: 1.5;
 }
 
+.rhythm-connection-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  margin: 12px auto 0;
+  padding: 10px 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.5;
+}
+
+.rhythm-connection-notice button {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--tend-forest);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .weight-tabs,
 .cardio-tabs {
   display: flex;
@@ -22414,6 +22753,55 @@ html[data-mobile-text-size="larger"] .cardio-activity-comparison__deltas {
   min-width: 0;
 }
 
+.rhythm-connection-indicator {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tend-mist);
+  color: var(--tend-forest);
+  cursor: help;
+}
+
+.rhythm-connection-indicator svg {
+  width: 18px;
+  height: 18px;
+}
+
+.rhythm-connection-indicator:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
+.rhythm-connection-indicator[data-tooltip]::after {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  bottom: calc(100% + 6px);
+  width: max-content;
+  max-width: min(220px, calc(100vw - 24px));
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--tend-ink);
+  color: #fff;
+  content: attr(data-tooltip);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.rhythm-connection-indicator:hover::after,
+.rhythm-connection-indicator:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
 .today-rhythm-details__category-foundation-names {
   display: flex;
   flex: 1 1 100%;
@@ -24018,6 +24406,8 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
 .today-plan-section .today-plan__empty-rhythms {
   box-sizing: border-box;
   display: grid;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   place-items: center;
   padding: 16px;
@@ -24030,8 +24420,11 @@ dialog.money-goal-dialog:not(.money-goal-dialog--rhythm-editor):not(.dialog--pho
 }
 
 .today-plan-section .today-plan__empty-rhythms p {
+  min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  line-height: 1.5;
 }
 
 .today-plan-section .show-tended-list__progress-row {
@@ -24351,6 +24744,7 @@ html[data-mobile-text-size="larger"] .rhythm-editor__association-category-list--
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
   font-weight: 600;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -24406,18 +24800,44 @@ html[data-mobile-text-size="larger"] .rhythm-editor__association-category-list--
   display: none;
 }
 
-.today-plan-section .today-plan__empty-rhythms {
-  display: flex;
-  min-height: 0;
+.today-plan-section .today-plan__agenda-group--expanded > .today-plan__empty-rhythms--now {
+  margin-block-start: calc(var(--tend-space-unit, 8px) * 1.5);
+}
+
+.today-plan-section .today-plan__empty-rhythms--now {
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
+  justify-items: stretch;
   gap: 8px 12px;
-  padding: 10px 12px;
   text-align: left;
 }
 
-.today-plan-section .today-plan__empty-rhythms p {
-  flex: 1 1 auto;
+.today-plan-section .today-plan__empty-rhythms--now .today-plan__empty-action {
+  justify-self: end;
+}
+
+@media (max-width: 400px) {
+  .today-plan-section .today-plan__empty-rhythms--now {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+  }
+
+  .today-plan-section .today-plan__empty-rhythms--now .today-plan__empty-action {
+    justify-self: center;
+  }
+}
+
+html[data-mobile-text-size-level="medium"] .today-plan-section .today-plan__empty-rhythms--now,
+html[data-mobile-text-size-level="large"] .today-plan-section .today-plan__empty-rhythms--now {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  text-align: center;
+}
+
+html[data-mobile-text-size-level="medium"] .today-plan-section .today-plan__empty-rhythms--now .today-plan__empty-action,
+html[data-mobile-text-size-level="large"] .today-plan-section .today-plan__empty-rhythms--now .today-plan__empty-action {
+  justify-self: center;
 }
 
 .money-goal-dialog--strength-rest-settings {
@@ -29569,6 +29989,12 @@ button.person-health-component-score:focus-visible {
     grid-row: 1;
   }
 
+  .person-health-component-score__reason {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
   .person-health-component-score__badge {
     grid-column: 2;
     grid-row: 1;
@@ -29577,20 +30003,24 @@ button.person-health-component-score:focus-visible {
 
 }
 
-/* Focus briefing */
+/* Full-screen Focus */
 .focus-dialog {
-  width: min(520px, calc(100vw - 32px));
-  max-width: 520px;
-  max-height: min(85vh, 820px);
-  margin: auto;
-  overflow: auto;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
-  border: 1px solid var(--tend-line);
-  border-radius: 24px;
+  border: 0;
+  border-radius: 0;
   padding: 0;
   background: var(--tend-canvas);
   color: var(--tend-ink);
-  box-shadow: 0 22px 70px rgba(16, 37, 29, 0.27);
 }
 
 .focus-dialog::backdrop {
@@ -29598,34 +30028,43 @@ button.person-health-component-score:focus-visible {
 }
 
 .focus-dialog__surface {
-  padding: 26px;
+  width: min(100%, 920px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding:
+    0
+    max(24px, env(safe-area-inset-right))
+    calc(32px + env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
 }
 
 .focus-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding: max(24px, env(safe-area-inset-top)) 0 12px;
+  background: var(--tend-canvas);
 }
 
-.focus-eyebrow {
-  color: var(--tend-forest);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.focus-head__copy {
+  min-width: 0;
 }
 
 .focus-head h2 {
-  margin: 4px 0;
+  margin: 0;
   font-family: var(--tend-font-ui);
-  font-size: 1.875rem;
+  font-size: calc(1.75rem * var(--app-text-scale, 1));
 }
 
-.focus-head p {
-  margin: 0 0 14px;
+.focus-intro {
+  margin: 0 0 24px;
   color: var(--tend-secondary);
-  font-size: 0.8125rem;
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+  line-height: 1.45;
 }
 
 .focus-close {
@@ -29642,152 +30081,178 @@ button.person-health-component-score:focus-visible {
   font-size: 1.125rem;
 }
 
-.focus-group {
-  margin-top: 15px;
+.focus-horizon,
+.focus-people {
+  margin-top: 28px;
 }
 
-.focus-group-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--tend-line);
-}
-
-.focus-group-head h3 {
+.focus-horizon > h3,
+.focus-section-heading h3 {
   margin: 0;
+  font-family: var(--tend-font-ui);
+  font-size: calc(1.25rem * var(--app-text-scale, 1));
+}
+
+.focus-block {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--tend-line);
+  border-radius: 18px;
+  background: var(--tend-surface);
+  box-shadow: 0 4px 16px rgba(16, 37, 29, 0.04);
+}
+
+.focus-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--tend-mist);
+}
+
+.focus-block__copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.focus-block__copy h4,
+.focus-block__copy p {
+  margin: 0;
+}
+
+.focus-block__copy h4 {
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.focus-block__copy p,
+.focus-block__date,
+.focus-block__count {
   color: var(--tend-secondary);
-  font-size: 0.75rem;
-  letter-spacing: 0.16em;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.focus-block__date {
+  color: var(--tend-forest);
+  font-weight: 600;
+}
+
+.focus-block__count {
+  flex: none;
+  text-align: right;
+}
+
+.focus-rhythm-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.focus-rhythm-list .show-tended-list__item {
+  min-width: 0;
+}
+
+.focus-empty {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--tend-canvas);
+  color: var(--tend-secondary);
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+  line-height: 1.5;
+}
+
+.focus-calendar {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-canvas);
+}
+
+.focus-calendar h5 {
+  margin: 0 0 8px;
+  color: var(--tend-secondary);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.focus-group-head span {
-  color: var(--tend-secondary);
-  font-size: 0.6875rem;
-}
-
-.focus-items {
+.focus-calendar ol {
   display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.focus-item {
-  display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) 92px 68px;
-  align-items: center;
-  gap: 7px 12px;
-  min-height: 62px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--tend-line);
+.focus-calendar li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.focus-time {
+.focus-calendar time {
+  flex: none;
   color: var(--tend-forest);
-  font-size: 0.75rem;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
   font-weight: 700;
 }
 
-.focus-time--overdue {
-  color: #b45309;
-}
-
-.focus-item-main {
+.focus-calendar__copy {
+  display: grid;
   min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--tend-ink);
-  text-align: left;
+  gap: 2px;
 }
 
-.focus-rhythm-title {
-  cursor: pointer;
+.focus-calendar__copy strong {
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+  overflow-wrap: anywhere;
 }
 
-.focus-item-main strong,
-.focus-item-main small {
-  display: block;
-}
-
-.focus-item-main strong {
-  font-size: 0.875rem;
-}
-
-.focus-item-main small {
-  margin-top: 3px;
+.focus-calendar__copy small {
   color: var(--tend-secondary);
-  font-size: 0.75rem;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
 }
 
-.focus-badges {
+.focus-section-heading {
   display: flex;
-  align-items: center;
-  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 12px;
 }
 
-.focus-kind {
-  padding: 5px 8px;
-  border-radius: 99px;
-  background: var(--tend-mist);
+.focus-section-heading > span {
   color: var(--tend-secondary);
-  font-size: 0.6875rem;
-  white-space: nowrap;
-}
-
-.focus-person-badge {
-  display: inline-flex;
-  align-items: center;
-  min-width: 92px;
-  max-width: 92px;
-  height: 24px;
-  gap: 5px;
-  overflow: hidden;
-  padding: 3px 8px 3px 3px;
-  border: 0;
-  border-radius: 99px;
-  background: var(--tend-mist);
-  color: var(--tend-ink);
-  font: inherit;
-  font-size: 0.75rem;
-  cursor: pointer;
-}
-
-.focus-person-badge .avatar {
-  width: 16px !important;
-  height: 16px !important;
-}
-
-.focus-person-badge > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.focus-rhythm-item .rhythm-card__tend {
-  grid-column: 4;
-  width: 68px;
-  min-width: 68px;
-  height: 34px;
-  min-height: 34px;
-  padding: 0 7px;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
 }
 
 .focus-person {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 11px;
-  padding: 12px 0;
-  border: 0;
-  border-bottom: 1px solid var(--tend-line);
-  background: transparent;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 14px;
+  background: var(--tend-surface);
   color: var(--tend-ink);
   text-align: left;
   cursor: pointer;
 }
 
-.focus-person:hover {
+.focus-person:hover,
+.focus-person:focus-visible {
+  border-color: var(--tend-forest);
   background: var(--tend-mist);
 }
 
@@ -29796,79 +30261,83 @@ button.person-health-component-score:focus-visible {
   flex: none;
 }
 
-.focus-person-main {
+.focus-person__copy {
+  display: grid;
   flex: 1;
   min-width: 0;
+  gap: 2px;
 }
 
-.focus-person-main strong,
-.focus-person-main small {
-  display: block;
+.focus-person__copy strong {
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  overflow-wrap: anywhere;
 }
 
-.focus-person-main strong {
-  font-size: 0.875rem;
-}
-
-.focus-person-main small {
+.focus-person__copy small {
   color: var(--tend-secondary);
-  font-size: 0.75rem;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
 }
 
-.focus-score {
-  color: var(--tend-forest);
-  font-size: 1.0625rem;
-  font-weight: 700;
+.focus-person__score {
+  flex: none;
 }
 
-.focus-empty {
-  padding: 15px 0;
+.focus-person__chevron {
+  flex: none;
   color: var(--tend-secondary);
-  font-size: 0.8125rem;
-}
-
-.focus-footer {
-  margin-top: 18px;
-  color: var(--tend-secondary);
-  font-size: 0.6875rem;
-  text-align: center;
+  font-size: calc(1.5rem * var(--app-text-scale, 1));
+  line-height: 1;
 }
 
 @media (max-width: 520px) {
-  .focus-dialog {
-    width: 100vw;
-    max-width: 100vw;
-    height: 100dvh;
-    max-height: 100dvh;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
+  .focus-dialog__surface {
+    padding:
+      0
+      max(16px, env(safe-area-inset-right))
+      calc(24px + env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
   }
 
-  .focus-dialog__surface {
-    min-height: 100%;
-    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  .focus-head {
+    padding-top: max(18px, env(safe-area-inset-top));
   }
 
   .focus-head h2 {
-    font-size: 1.625rem;
+    font-size: calc(1.625rem * var(--app-text-scale, 1));
   }
 
-  .focus-item {
-    grid-template-columns: 58px minmax(0, 1fr) 62px;
+  .focus-block {
+    padding: 12px;
   }
 
-  .focus-badges {
-    grid-column: 2;
+  .focus-block__header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 10px 12px;
   }
 
-  .focus-rhythm-item .rhythm-card__tend {
-    grid-column: 3;
+  .focus-block__count {
+    margin-left: auto;
+    text-align: left;
   }
 
-  .focus-person-badge {
-    min-width: 96px;
-    max-width: 96px;
+  .focus-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .focus-person {
+    gap: 8px;
+    padding: 12px 10px;
+  }
+
+  .focus-person__copy {
+    flex-basis: 0;
+  }
+
+  .focus-person__chevron {
+    font-size: calc(1.25rem * var(--app-text-scale, 1));
   }
 }
 
@@ -29903,10 +30372,144 @@ button.person-health-component-score:focus-visible {
     grid-row: 1;
   }
 
+  .person-health-component-score__reason {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
   .person-health-component-score__badge {
     grid-column: 2;
     grid-row: 1;
     justify-self: end;
   }
 
+}
+
+.tend-app-preview .calendar-sources-settings {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.tend-app-preview .calendar-sources-settings .settings-switch--row {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-mist);
+  cursor: pointer;
+}
+
+.tend-app-preview .calendar-sources-settings .settings-switch--row .settings-switch__label {
+  min-width: 0;
+  color: var(--tend-ink);
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .calendar-sources-settings .settings-switch--row input {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--tend-forest);
+}
+
+.tend-app-preview .calendar-sources-settings__setup {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.tend-app-preview .calendar-sources-settings__steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tend-app-preview .calendar-sources-settings__steps li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.tend-app-preview .calendar-sources-settings__steps li > span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tend-mist);
+  color: var(--tend-forest);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tend-app-preview .calendar-sources-settings__steps p,
+.tend-app-preview .calendar-sources-settings__processing p {
+  min-width: 0;
+  margin: 0;
+  color: var(--tend-ink);
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .calendar-sources-settings__capability,
+.tend-app-preview .calendar-sources-settings__privacy {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+}
+
+.tend-app-preview .calendar-sources-settings__privacy {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.tend-app-preview .calendar-sources-settings__empty {
+  color: var(--tend-ink);
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  line-height: 1.5;
+}
+
+.tend-app-preview .calendar-sources-settings__disclosure {
+  min-width: 0;
+}
+
+.tend-app-preview .calendar-sources-settings__disclosure > summary {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  color: var(--tend-forest);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tend-app-preview .calendar-sources-settings__disclosure > summary:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
+.tend-app-preview .calendar-sources-settings__processing > p {
+  padding: 0 0 8px;
+  color: var(--ink-soft);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+}
+
+.tend-app-preview .calendar-sources-settings__add-actions > button:first-child {
+  min-height: 44px;
 }

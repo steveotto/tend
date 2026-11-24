@@ -89,7 +89,9 @@ const resultsPerGroup = 6;
 const connectionTypeLabels: Record<FriendshipConnection['type'], string> = {
   text: 'Text',
   call: 'Call',
-  'time-together': 'Time Together'
+  'time-together': 'Time Together',
+  rhythm: 'Rhythm',
+  spark: 'Spark'
 };
 
 function normalized(value: string): string {

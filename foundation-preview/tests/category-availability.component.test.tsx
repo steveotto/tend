@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CategoryAvailabilityProvider } from '../src/components/CategoryAvailabilityContext.tsx';
 import { PeopleView } from '../src/components/PeopleView.tsx';
 import { CategorySettings } from '../src/components/CategorySettings.tsx';
+import { AreaIcon } from '../src/components/AreaIcon.tsx';
 import {
   createHealthFitnessHealthContribution,
   createHealthFitnessRollup
@@ -40,6 +41,8 @@ describe('category availability component behavior', () => {
     );
 
     expect(screen.getByText('Choose the areas you want to focus on. Turning one off keeps its data and linked Rhythms.')).toBeTruthy();
+    expect(screen.getByText('Choose Marriage or Dating.')).toBeTruthy();
+    expect((screen.getByRole('switch', { name: 'Dating' }) as HTMLInputElement).checked).toBe(false);
     expect(screen.queryByRole('switch', { name: 'Strength Foundation' })).toBeNull();
     await user.click(screen.getByRole('button', { name: /Health.*Show Foundations/ }));
     const strengthSwitch = screen.getByRole('switch', { name: 'Strength Foundation' });
@@ -49,6 +52,39 @@ describe('category availability component behavior', () => {
     await user.click(strengthSwitch);
     expect(onCategoryChange).toHaveBeenCalledWith('health', false);
     expect(onFoundationChange).toHaveBeenCalledWith('health-strength', false);
+    await user.click(screen.getByRole('switch', { name: 'Dating' }));
+    expect(onCategoryChange).toHaveBeenCalledWith('dating', true);
+  });
+
+  it('displays a legacy dual-enabled preference as Marriage-only', () => {
+    render(
+      <CategorySettings
+        preferences={{ ...defaultCategoryPreferences, dating: true }}
+        foundationPreferences={defaultFoundationPreferences}
+        onChange={vi.fn()}
+        onFoundationChange={vi.fn()}
+      />
+    );
+
+    expect((screen.getByRole('switch', { name: 'Marriage' }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('switch', { name: 'Dating' }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('uses the shared Marriage heart icon for Dating across category icon variants', () => {
+    const { container } = render(
+      <>
+        <AreaIcon id="marriage" />
+        <AreaIcon id="dating" />
+        <AreaIcon id="marriage" variant="today-summary" />
+        <AreaIcon id="dating" variant="today-summary" />
+      </>
+    );
+    const icons = [...container.querySelectorAll<HTMLElement>('.area-svg-icon')];
+
+    expect(icons[1]?.style.getPropertyValue('--area-icon'))
+      .toBe(icons[0]?.style.getPropertyValue('--area-icon'));
+    expect(icons[3]?.style.getPropertyValue('--area-icon'))
+      .toBe(icons[2]?.style.getPropertyValue('--area-icon'));
   });
 
   it('limits Health breakdown names and contribution nodes to enabled Foundations', () => {
@@ -124,8 +160,41 @@ describe('category availability component behavior', () => {
     expect(within(filters).queryByRole('button', { name: 'Marriage' })).toBeNull();
     expect(within(filters).queryByRole('button', { name: 'Parenting' })).toBeNull();
     expect(within(filters).queryByRole('button', { name: 'Friends' })).toBeNull();
+    expect(within(filters).queryByRole('button', { name: 'Dating' })).toBeNull();
     expect(screen.getAllByRole('article')).toHaveLength(people.length);
     expect(screen.queryByRole('group', { name: /relationship group/ })).toBeNull();
+  });
+
+  it('shows Dating as an optional People classification only after enabling the Category', () => {
+    const people = createSamplePeople();
+    const groups = createPersonPickerGroups();
+    const view = render(
+      <CategoryAvailabilityProvider preferences={defaultCategoryPreferences}>
+        <PeopleView
+          people={people}
+          groups={groups}
+          friendships={createFriendshipData()}
+          today="2026-11-14"
+          onOpenPerson={vi.fn()}
+        />
+      </CategoryAvailabilityProvider>
+    );
+    expect(screen.queryByRole('button', { name: 'Dating' })).toBeNull();
+    expect(groups.find(group => group.id === 'dating')?.memberIds).toEqual([]);
+
+    view.rerender(
+      <CategoryAvailabilityProvider preferences={{ ...defaultCategoryPreferences, marriage: false, dating: true }}>
+        <PeopleView
+          people={people}
+          groups={groups}
+          friendships={createFriendshipData()}
+          today="2026-11-14"
+          onOpenPerson={vi.fn()}
+        />
+      </CategoryAvailabilityProvider>
+    );
+    expect(screen.getByRole('button', { name: 'Dating' })).toBeTruthy();
+    expect(groups.find(group => group.id === 'dating')?.memberIds).toEqual([]);
   });
 
   it('keeps hidden category and Foundation links when saving another Rhythm field', async () => {

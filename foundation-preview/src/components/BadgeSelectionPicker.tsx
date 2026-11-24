@@ -50,6 +50,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   unavailableItemType = 'Foundation',
   unavailableGroupLabel,
   getUnavailableItemLabel,
+  fixedSelectedIds = [],
   focusItemId,
   description,
   renderSelectedItemContent,
@@ -72,6 +73,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   unavailableItemType?: string;
   unavailableGroupLabel?: string;
   getUnavailableItemLabel?: (item: { id: string; label: string }) => string;
+  fixedSelectedIds?: readonly string[];
   focusItemId?: string | null;
   description?: ReactNode;
   renderSelectedItemContent?: (item: Item) => ReactNode;
@@ -313,6 +315,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
                   : 'rhythm-association-picker__option-grid'}>
                   {groupItems.map(item => {
                     const selected = selectedIds.includes(item.id);
+                    const fixedSelected = selected && fixedSelectedIds.includes(item.id);
                     const label = getLabel(item);
                     if (navigation) {
                       const summary = navigation.getSummary(item);
@@ -387,6 +390,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
                                 : {})
                             }
                           : {})}
+                        disabled={fixedSelected}
                         data-selected={selected ? 'true' : 'false'}
                         onClick={() => onToggle(item.id)}
                       >

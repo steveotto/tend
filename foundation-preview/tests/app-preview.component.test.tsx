@@ -9,10 +9,18 @@ import { addCalendarDays } from '../src/domain/rhythm-scoring.ts';
 import { cardioWeekStart } from '../src/domain/cardio.ts';
 import { formatScore } from '../src/domain/score-display.ts';
 import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
+import { localDateInTimeZone, localTimeInTimeZone } from '../src/domain/rhythm-occurrences.ts';
 import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from '../src/domain/rhythm-seasons.ts';
 import type { RhythmWeekday } from '../src/domain/rhythm-schedule.ts';
 import { activeIdForMarriageSuggestion } from '../src/domain/category-rhythms.ts';
-import { addOrUpdateConnection, setFriendCadence } from '../src/domain/friendships.ts';
+import {
+  addOrUpdateConnection,
+  isRhythmCompletionConnectionUnchanged,
+  latestValidConnectionForPerson,
+  rhythmCompletionConnectionSnapshot,
+  sparkCompletionConnectionSnapshot,
+  setFriendCadence
+} from '../src/domain/friendships.ts';
 import { hasFoundationIcon } from '../src/components/MarriageIcon.tsx';
 import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 import { createStrengthGuidedSession, startStrengthSessionRestTimer } from '../src/domain/strength.ts';
@@ -30,6 +38,7 @@ import {
   healthFitnessRhythmSuggestionGroups,
   healthFitnessRhythmSuggestions,
   parentingRhythmSuggestions,
+  datingRhythmSuggestions,
   faithPractices,
   faithRhythmSuggestionGroups,
   faithRhythmSuggestions,
@@ -173,20 +182,32 @@ async function chooseCategoryFoundation(
 }
 
 function schema44Raw(data: ReturnType<typeof createSamplePreviewData>): string {
-  const envelope = withPreSparkSchema(JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as {
-    schemaVersion: number;
-    data: { goals: Array<Record<string, unknown>>; personSparks?: unknown };
+  const current = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>;
+  const envelope = withPreSparkSchema({
+    ...current,
+    data: preDatingSchemaData(current.data)
   }, 44);
   for (const goal of envelope.data.goals) delete goal.foundationId;
   return JSON.stringify(envelope);
 }
 
 function schema45Raw(data: ReturnType<typeof createSamplePreviewData>): string {
-  const envelope = withPreSparkSchema(
-    JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>,
-    45
-  );
+  const current = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>;
+  const envelope = withPreSparkSchema({
+    ...current,
+    data: preDatingSchemaData(current.data)
+  }, 45);
   return JSON.stringify(envelope);
+}
+
+function preDatingSchemaData(data: ReturnType<typeof createPreviewEnvelope>['data']) {
+  const { foundationPreferences: _foundationPreferences, ...legacyData } = data;
+  const { dating: _dating, ...categoryPreferences } = legacyData.categoryPreferences;
+  return {
+    ...legacyData,
+    categoryPreferences,
+    peopleGroups: legacyData.peopleGroups.filter(group => group.id !== 'dating')
+  };
 }
 
 async function openChestTricepsCreateEditor(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
@@ -332,6 +353,80 @@ function savedMarriageRhythm(
     primaryFoundationId: foundationIds[0] ?? null,
     secondaryFoundationIds: foundationIds.slice(1)
   };
+}
+
+function savedDatingRhythm(
+  id: string,
+  title: string,
+  personIds: SavedRhythm['personIds'] = ['sample-person-avery'],
+  alsoLogConnection = true
+): SavedRhythm {
+  return {
+    id,
+    title,
+    description: 'A practical synthetic Dating Rhythm.',
+    cadence: 'Daily',
+    timeLabel: 'Anytime',
+    timeOfDay: 'anytime',
+    personIds: [...personIds],
+    categoryIds: ['dating'],
+    schedule: { frequency: 'daily' },
+    primaryFoundationId: 'dating-connection',
+    secondaryFoundationIds: [],
+    alsoLogConnection
+  };
+}
+
+function datingCompletionFixture() {
+  const data = createSamplePreviewData();
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const completedAtDate = new Date(Date.now() - 60_000);
+  const today = localDateInTimeZone(completedAtDate, timeZone);
+  const localTime = localTimeInTimeZone(completedAtDate, timeZone);
+  const rhythmId = 'user-rhythm-88888888-0000-4000-8000-000000000001';
+  const completionId = '88888888-0000-4000-8000-000000000001';
+  const rhythm = savedDatingRhythm(rhythmId, 'Dating completion fixture');
+  const completedAt = localDateTimeInZone(today, localTime, timeZone).toISOString();
+  const completion: DatedRhythmCompletion = {
+    id: completionId,
+    rhythmId,
+    effectiveDate: today,
+    localTime,
+    timeZone,
+    completedAt,
+    recordedAt: new Date().toISOString(),
+    memory: 'Original reflection'
+  };
+  data.categoryPreferences = { ...data.categoryPreferences, marriage: false, dating: true };
+  data.savedRhythms = [rhythm];
+  data.datedRhythmCompletions = [completion];
+  data.completedRhythmIds = [rhythmId];
+  data.activeRhythmCompletions = [{ rhythmId, completionId }];
+  data.rhythmHistoryIds = [rhythmId];
+  data.friendships.connections = [{
+    id: '88888888-0000-4000-8000-000000000002',
+    type: 'rhythm',
+    date: completion.effectiveDate,
+    time: completion.localTime,
+    timeZone: completion.timeZone,
+    participantIds: ['sample-person-morgan'],
+    ...(completion.memory === undefined ? {} : { notes: completion.memory }),
+    rhythmId,
+    completionId,
+    rhythmTitleSnapshot: rhythm.title,
+    ownedByRhythmCompletion: true,
+    rhythmConnectionSnapshot: rhythmCompletionConnectionSnapshot({
+      date: completion.effectiveDate,
+      time: completion.localTime,
+      timeZone: completion.timeZone,
+      participantIds: ['sample-person-morgan'],
+      ...(completion.memory === undefined ? {} : { notes: completion.memory }),
+      rhythmTitleSnapshot: rhythm.title
+    })
+  }];
+  const validation = parsePreviewBackup(JSON.stringify(createPreviewEnvelope(data)), today);
+  if (!validation.valid) throw new Error(validation.message);
+  return { data, rhythmId, completionId, connectionId: data.friendships.connections[0]!.id };
 }
 
 function savedHealthRhythm(
@@ -696,7 +791,13 @@ describe('Tend Today preview', () => {
       JSON.stringify({ events: [], issueCount: 0 }),
       { status: 200, headers: { 'content-type': 'application/json' } }
     ));
-    await user.click(screen.getByRole('button', { name: 'Add controlled test feed' }));
+    await user.click(screen.getByRole('button', { name: 'Add calendar' }));
+    await user.type(screen.getByLabelText('Calendar name'), 'Synthetic public calendar');
+    await user.type(
+      screen.getByLabelText('Public iCloud calendar link'),
+      'https://p123-caldav.icloud.com/published/synthetic-token'
+    );
+    await user.click(screen.getByRole('button', { name: 'Save calendar' }));
     await waitFor(() => {
       const saved = parsePreviewBackup(
         window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '',
@@ -737,7 +838,7 @@ describe('Tend Today preview', () => {
 
     const faithSwitch = screen.getByRole('switch', { name: 'Faith' }) as HTMLInputElement;
     expect(faithSwitch.checked).toBe(true);
-    expect(screen.getAllByRole('switch')).toHaveLength(6);
+    expect(screen.getAllByRole('switch')).toHaveLength(7);
     await user.click(faithSwitch);
     await waitFor(() => {
       const saved = parsePreviewBackup(
@@ -1044,7 +1145,7 @@ describe('Tend Today preview', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open Settings' }));
     expect(await screen.findByRole('heading', { name: 'Categories' })).toBeTruthy();
-    expect(screen.getAllByRole('switch')).toHaveLength(6);
+    expect(screen.getAllByRole('switch')).toHaveLength(7);
   });
 
   it('lets an authenticated account manage Calendar settings through scoped storage and the production reader', async () => {
@@ -1059,7 +1160,8 @@ describe('Tend Today preview', () => {
 
     const firstView = testingRender(<App identity={accountIdentity} />);
     await openPreviewSettings(user, 'calendar');
-    expect(screen.getByText(/stored in this signed-in account’s saved data/)).toBeTruthy();
+    await user.click(screen.getByText('About calendar processing'));
+    expect(screen.getByText(/Saved links are part of this signed-in account’s data and its existing sync/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add controlled test feed' })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Add calendar' }));
@@ -4518,11 +4620,18 @@ describe('Tend Today preview', () => {
   it('saves one person-scoped connection through the profile and restores it after reload', async () => {
     const user = userEvent.setup();
     const data = createSamplePreviewData();
+    const today = localDateString(new Date());
     data.peopleGroups = setPersonGroupMembership(
       createPersonPickerGroups(),
       'friends',
       'sample-person-avery',
       true
+    );
+    data.friendships = setFriendCadence(
+      data.friendships,
+      'sample-person-avery',
+      'daily',
+      addCalendarDays(today, -60)
     );
     const initialCompleted = [...data.completedRhythmIds];
     window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
@@ -4544,6 +4653,13 @@ describe('Tend Today preview', () => {
       expect(saved.friendships.connections[0].participantIds).toEqual(['sample-person-avery']);
       expect(saved.completedRhythmIds).toEqual(initialCompleted);
     });
+    const initialHealth = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    await user.click(within(initialHealth).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    }));
+    expect(within(initialHealth).getByRole('meter', {
+      name: 'Connections Health score'
+    }).getAttribute('aria-valuenow')).toBe('100');
 
     cleanup();
     render(<App />);
@@ -4554,8 +4670,283 @@ describe('Tend Today preview', () => {
     await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
     expect(within(profile).getByRole('button', { name: '+ Add' })).toBeTruthy();
     expect(within(profile).getByText('Text')).toBeTruthy();
+    const reloadedHealth = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    await user.click(within(reloadedHealth).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    }));
+    expect(within(reloadedHealth).getByRole('meter', {
+      name: 'Connections Health score'
+    }).getAttribute('aria-valuenow')).toBe('100');
     const restored = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').data;
     expect(restored.friendships.connections).toHaveLength(1);
+  });
+
+  it('scores saved manual, Spark, and Rhythm connections after reload using the latest eligible participant event', async () => {
+    const user = userEvent.setup();
+    const today = localDateString(new Date());
+    const data = createSamplePreviewData();
+    const averyId = 'sample-person-avery';
+    const morganId = 'sample-person-morgan';
+    const rhythmId = 'user-rhythm-99999999-9999-4999-8999-999999999999';
+    const sparkId = 'persisted-movie-spark';
+    const manualConnection = {
+      id: 'persisted-manual-connection',
+      type: 'text' as const,
+      date: addCalendarDays(today, -2),
+      participantIds: [averyId]
+    };
+    const sparkConnection = {
+      id: 'persisted-spark-connection',
+      type: 'spark' as const,
+      date: addCalendarDays(today, -3),
+      participantIds: [averyId, morganId],
+      sparkId,
+      sparkOwnerId: averyId,
+      sparkTitleSnapshot: 'Watch Backrooms Movie',
+      ownedBySparkCompletion: true,
+      sparkConnectionSnapshot: sparkCompletionConnectionSnapshot({
+        type: 'spark',
+        date: addCalendarDays(today, -3),
+        participantIds: [averyId, morganId],
+        sparkTitleSnapshot: 'Watch Backrooms Movie'
+      })
+    };
+    const rhythmConnection = {
+      id: 'persisted-rhythm-connection',
+      type: 'rhythm' as const,
+      date: addCalendarDays(today, -4),
+      participantIds: [averyId],
+      rhythmId,
+      completionId: 'persisted-prayer-completion',
+      rhythmTitleSnapshot: 'Pray together'
+    };
+    const spark = {
+      id: sparkId,
+      ownerId: averyId,
+      title: 'Watch Backrooms Movie',
+      sharedWith: [morganId],
+      archived: false,
+      completed: true,
+      completionHistory: [{
+        id: 'persisted-spark-completion',
+        source: 'connection' as const,
+        date: sparkConnection.date,
+        connectionId: sparkConnection.id,
+        participantIds: sparkConnection.participantIds
+      }]
+    };
+    data.peopleGroups = setPersonGroupMembership(
+      createPersonPickerGroups(),
+      'friends',
+      averyId,
+      true
+    );
+    data.savedRhythms = [savedDatingRhythm(rhythmId, 'Pray together', [averyId])];
+    data.personSparks = [spark];
+    data.friendships = setFriendCadence({
+      ...data.friendships,
+      connections: [
+        manualConnection,
+        sparkConnection,
+        rhythmConnection,
+        {
+          id: 'future-connection',
+          type: 'call',
+          date: addCalendarDays(today, 1),
+          participantIds: [averyId]
+        },
+        {
+          id: 'deleted-connection',
+          type: 'call',
+          date: today,
+          participantIds: [averyId],
+          deletedAt: `${today}T12:00:00Z`
+        },
+        {
+          id: 'morgan-only-connection',
+          type: 'time-together',
+          date: today,
+          participantIds: [morganId]
+        }
+      ]
+    }, averyId, 'daily', addCalendarDays(today, -60));
+    const raw = JSON.stringify(createPreviewEnvelope(data));
+    const parsedSeed = parsePreviewBackup(raw, today);
+    expect(parsedSeed.valid, JSON.stringify(parsedSeed)).toBe(true);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, raw);
+
+    async function openAveryAndVerify(expectedScore: string) {
+      await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+        .getByRole('button', { name: 'People' }));
+      await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+      const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+      const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+      await user.click(within(overall).getByRole('button', {
+        name: 'Show Overall Health component scores breakdown'
+      }));
+      expect(within(overall).getByRole('meter', {
+        name: 'Connections Health score'
+      }).getAttribute('aria-valuenow')).toBe(expectedScore);
+      await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+      expect(within(profile).getByRole('button', { name: /Watch Backrooms Movie, Spark connection/ })).toBeTruthy();
+      expect(within(profile).getByRole('button', { name: /Pray together, Rhythm connection/ })).toBeTruthy();
+      expect(within(profile).queryByRole('button', { name: /Morgan-only-connection/ })).toBeNull();
+    }
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openAveryAndVerify('90');
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await openAveryAndVerify('90');
+
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const manualRow = within(profile).getByRole('button', {
+      name: /Text, Manual connection,/
+    });
+    await user.click(manualRow);
+    const manualEditor = screen.getByRole('dialog', { name: 'Connection details' });
+    fireEvent.change(within(manualEditor).getByLabelText('Date'), {
+      target: { value: addCalendarDays(today, -1) }
+    });
+    await user.click(within(manualEditor).getByRole('button', { name: 'Save changes' }));
+    const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    expect(within(overall).getByRole('meter', {
+      name: 'Connections Health score'
+    }).getAttribute('aria-valuenow')).toBe('100');
+
+    await user.click(within(profile).getByRole('button', {
+      name: /Text, Manual connection,/
+    }));
+    const manualDetails = screen.getByRole('dialog', { name: 'Connection details' });
+    await user.click(within(manualDetails).getByRole('button', { name: 'Delete connection' }));
+    const deleteConfirmation = screen.getByRole('alertdialog');
+    await user.click(within(deleteConfirmation).getByRole('button', { name: 'Delete connection' }));
+    expect(within(overall).getByRole('meter', {
+      name: 'Connections Health score'
+    }).getAttribute('aria-valuenow')).toBe('80');
+
+    const sparkCard = within(profile).getByRole('article', { name: 'Watch Backrooms Movie' });
+    await user.click(within(sparkCard).getByRole('button', {
+      name: 'Expand Spark Watch Backrooms Movie'
+    }));
+    await user.click(within(sparkCard).getByRole('button', { name: 'Edit Spark' }));
+    const sparkEditor = screen.getByRole('dialog', { name: 'Edit Spark' });
+    await user.click(within(sparkEditor).getByRole('button', { name: 'Undo completion' }));
+    const sparkUndoConfirmation = screen.getByRole('dialog', {
+      name: 'Undo this Spark completion?'
+    });
+    await user.click(within(sparkUndoConfirmation).getByRole('button', { name: 'Undo completion' }));
+    expect(within(overall).getByRole('meter', {
+      name: 'Connections Health score'
+    }).getAttribute('aria-valuenow')).toBe('70');
+    const finalState = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      today
+    );
+    expect(finalState.valid).toBe(true);
+    if (!finalState.valid) return;
+    const remainingConnections = finalState.envelope.data.friendships.connections;
+    expect(remainingConnections.map(item => item.id)).toEqual(expect.arrayContaining([
+      'persisted-rhythm-connection',
+      'future-connection',
+      'deleted-connection',
+      'morgan-only-connection'
+    ]));
+    expect(remainingConnections.some(item =>
+      item.id === manualConnection.id || item.id === sparkConnection.id
+    )).toBe(false);
+    expect(remainingConnections.find(item => item.id === 'persisted-rhythm-connection')).toMatchObject({
+      type: 'rhythm',
+      date: addCalendarDays(today, -4),
+      participantIds: [averyId],
+      rhythmTitleSnapshot: 'Pray together'
+    });
+  });
+
+  it('saves a Spark Connection once after storage retry and removes only that record on Undo', async () => {
+    const user = userEvent.setup();
+    const storage = installMemoryStorage();
+    const data = createSamplePreviewData();
+    const spark = {
+      id: 'spark-plan-picnic',
+      ownerId: 'sample-person-avery',
+      title: 'Plan a picnic',
+      sharedWith: ['sample-person-morgan'],
+      archived: false,
+      completed: false,
+      completionHistory: []
+    };
+    data.personSparks = [spark];
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+    const sparkCard = within(profile).getByRole('article', { name: spark.title });
+    await user.click(within(sparkCard).getByRole('button', { name: `Expand Spark ${spark.title}` }));
+    await user.click(within(sparkCard).getByRole('button', { name: 'Do it' }));
+    const completion = screen.getByRole('dialog', { name: 'Log a connection for this Spark' });
+    expect(within(completion).queryByRole('combobox')).toBeNull();
+    expect((within(completion).getAllByRole('checkbox') as HTMLInputElement[])
+      .map(checkbox => checkbox.checked)).toEqual([true, true, false]);
+    fireEvent.change(within(completion).getByLabelText('Date'), {
+      target: { value: '2026-10-28' }
+    });
+    await user.type(within(completion).getByLabelText('Notes (optional)'), 'Bring fruit and a blanket.');
+
+    const originalRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    const originalSetItem = storage.setItem.bind(storage);
+    let failActiveWrite = true;
+    storage.setItem = (key, value) => {
+      if (failActiveWrite && key === PREVIEW_STORAGE_KEY) {
+        throw new DOMException('Synthetic storage failure', 'QuotaExceededError');
+      }
+      originalSetItem(key, value);
+    };
+    await user.click(within(completion).getByRole('button', { name: 'Save connection' }));
+    expect(within(completion).getByRole('alert').textContent).toContain('Preview could not save');
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect((within(completion).getByLabelText('Notes (optional)') as HTMLTextAreaElement).value)
+      .toBe('Bring fruit and a blanket.');
+
+    failActiveWrite = false;
+    await user.click(within(completion).getByRole('button', { name: 'Save connection' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', {
+      name: 'Log a connection for this Spark'
+    })).toBeNull());
+    const saved = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.friendships.connections).toHaveLength(1);
+    expect(saved.envelope.data.friendships.connections[0]).toMatchObject({
+      type: 'spark',
+      date: '2026-10-28',
+      participantIds: ['sample-person-avery', 'sample-person-morgan'],
+      sparkId: spark.id,
+      sparkOwnerId: spark.ownerId,
+      sparkTitleSnapshot: spark.title,
+      notes: 'Bring fruit and a blanket.',
+      ownedBySparkCompletion: true
+    });
+
+    await user.click(within(sparkCard).getByRole('button', { name: 'Edit Spark' }));
+    const editor = screen.getByRole('dialog', { name: 'Edit Spark' });
+    await user.click(within(editor).getByRole('button', { name: 'Undo completion' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Undo this Spark completion?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Undo completion' }));
+
+    const undone = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(undone.valid).toBe(true);
+    if (!undone.valid) return;
+    expect(undone.envelope.data.personSparks[0]?.completed).toBe(false);
+    expect(undone.envelope.data.friendships.connections).toEqual([]);
   });
 
   it('opens the shared history modal directly from the chart action', async () => {
@@ -5469,11 +5860,15 @@ describe('Tend Today preview', () => {
       originalSetItem(key, value);
     });
 
-    await saveCardCompletion(user, 'Pray together');
+    await user.click(screen.getByRole('button', { name: 'Tend Pray together' }));
+    const dialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent)
-        .toContain('Preview data was not saved on this device.');
+      const storageAlert = screen.getAllByRole('alert')
+        .find(alert => alert.textContent?.includes('Preview data was not saved on this device.'));
+      expect(storageAlert).toBeTruthy();
     });
+    expect(screen.getByRole('dialog', { name: 'When did you tend it?' })).toBeTruthy();
     expect(screen.getByRole('article', { name: 'Pray together' })).toBeTruthy();
     expect(screen.queryByRole('button', {
       name: accessibleName => accessibleName.startsWith('Pray together, Tended ')
@@ -5532,6 +5927,52 @@ describe('Tend Today preview', () => {
       window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
       localDateString(new Date())
     ).valid).toBe(true);
+  });
+
+  it('returns from a Focus Rhythm profile to the still-open Focus view', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Focus' }));
+    const focus = screen.getByRole('dialog', { name: 'Focus' });
+    const profileButton = screen.getByRole('button', {
+      name: 'Open Avery Brooks profile, Person Health 0, No connection logged'
+    });
+    await user.click(profileButton);
+
+    const profile = await screen.findByRole('main', { name: 'Avery Brooks' });
+    await user.click(within(profile).getByRole('button', { name: 'Back to Focus' }));
+    await waitFor(() => expect(screen.queryByRole('main', { name: 'Avery Brooks' })).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'Focus' })).toBe(focus);
+    await waitFor(() => expect(document.activeElement).toBe(profileButton));
+  });
+
+  it('uses eligible Connection Health in Focus eligibility and person ranking', async () => {
+    const user = userEvent.setup();
+    const today = localDateString(new Date());
+    const data = createSamplePreviewData();
+    data.friendships = setFriendCadence({
+      ...data.friendships,
+      connections: [{
+        id: 'focus-person-health-connection',
+        type: 'text',
+        date: addCalendarDays(today, -6),
+        participantIds: ['sample-person-avery']
+      }]
+    }, 'sample-person-avery', 'daily', addCalendarDays(today, -60));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+    render(<App />);
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Focus' }));
+    const focus = screen.getByRole('dialog', { name: 'Focus' });
+    const person = within(focus).getByRole('button', {
+      name: /Open Avery Brooks profile, Person Health 25, last connected 6 days ago/i
+    });
+    expect(person).toBeTruthy();
   });
 
   it('keeps global search independent from Today plan content', async () => {
@@ -9640,5 +10081,659 @@ describe('Tend Today preview', () => {
         expect(afterDelete.envelope.data.savedRhythms.some(item => item.id === rhythmId)).toBe(true);
       }
     });
+  });
+
+  it('saves a Rhythm completion and confirmed Connection atomically, retries safely, reloads, and undoes both', async () => {
+    const user = userEvent.setup();
+    const storage = installMemoryStorage();
+    const data = createSamplePreviewData();
+    const rhythmId = 'user-rhythm-88888888-0000-4000-8000-000000000002';
+    const title = 'Partner check-in';
+    data.categoryPreferences = { ...data.categoryPreferences, marriage: false, dating: true };
+    data.savedRhythms = [savedDatingRhythm(rhythmId, title)];
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Dating' }));
+    await user.click(screen.getByRole('tab', { name: 'Today' }));
+    await user.click(screen.getByRole('button', { name: `Tend ${title}` }));
+    const completionDialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
+    expect((within(completionDialog).getByLabelText('Also log a connection') as HTMLInputElement).checked)
+      .toBe(true);
+    expect((within(completionDialog).getByLabelText('Avery Brooks') as HTMLInputElement).checked)
+      .toBe(true);
+    expect((within(completionDialog).getByLabelText('Morgan Reed') as HTMLInputElement).checked)
+      .toBe(false);
+    await user.click(within(completionDialog).getByLabelText('Avery Brooks'));
+    await user.click(within(completionDialog).getByLabelText('Morgan Reed'));
+
+    const unchangedRaw = storage.getItem(PREVIEW_STORAGE_KEY);
+    const originalSetItem = storage.setItem.bind(storage);
+    let failActiveWrite = true;
+    storage.setItem = (key, value) => {
+      if (failActiveWrite && key === PREVIEW_STORAGE_KEY) {
+        throw new DOMException('Synthetic storage failure', 'QuotaExceededError');
+      }
+      originalSetItem(key, value);
+    };
+    await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
+    expect((await within(completionDialog).findByRole('alert')).textContent)
+      .toContain('Preview could not save this completion');
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(unchangedRaw);
+    const afterFailedWrite = parsePreviewBackup(unchangedRaw!, localDateString(new Date()));
+    expect(afterFailedWrite.valid && afterFailedWrite.envelope.data.datedRhythmCompletions).toEqual([]);
+    expect(afterFailedWrite.valid && afterFailedWrite.envelope.data.friendships.connections).toEqual([]);
+
+    failActiveWrite = false;
+    await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'When did you tend it?' })).toBeNull());
+    const saved = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.datedRhythmCompletions).toHaveLength(1);
+    expect(saved.envelope.data.activeRhythmCompletions).toHaveLength(1);
+    expect(saved.envelope.data.completedRhythmIds).toEqual([rhythmId]);
+    expect(saved.envelope.data.friendships.connections).toHaveLength(1);
+    const completion = saved.envelope.data.datedRhythmCompletions[0]!;
+    const connection = saved.envelope.data.friendships.connections[0]!;
+    expect(connection).toMatchObject({
+      type: 'rhythm',
+      date: completion.effectiveDate,
+      time: completion.localTime,
+      participantIds: ['sample-person-morgan'],
+      rhythmId,
+      completionId: completion.id,
+      rhythmTitleSnapshot: title,
+      ownedByRhythmCompletion: true
+    });
+    expect(connection.notes).toBe(completion.memory);
+    expect(isRhythmCompletionConnectionUnchanged(connection)).toBe(true);
+    expect(latestValidConnectionForPerson(
+      saved.envelope.data.friendships,
+      'sample-person-morgan'
+    )?.id).toBe(connection.id);
+    expect(saved.envelope.data.peopleGroups.find(group => group.id === 'dating')?.memberIds).toEqual([]);
+    expect(saved.envelope.data.savedRhythms[0]?.personIds).toEqual(['sample-person-avery']);
+    expect(saved.envelope.data.savedRhythms[0]?.scoring).toBeUndefined();
+
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const reloadedCard = getTodayRhythmArticle(title);
+    expect(within(reloadedCard).getByRole('button', { name: `Undo completion for ${title}` })).toBeTruthy();
+    const reloaded = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(reloaded.valid && reloaded.envelope.data.friendships.connections).toHaveLength(1);
+
+    await user.click(within(reloadedCard).getByRole('button', { name: `Undo completion for ${title}` }));
+    const undone = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(undone.valid).toBe(true);
+    if (!undone.valid) return;
+    expect(undone.envelope.data.datedRhythmCompletions).toEqual([]);
+    expect(undone.envelope.data.activeRhythmCompletions).toEqual([]);
+    expect(undone.envelope.data.completedRhythmIds).toEqual([]);
+    expect(undone.envelope.data.friendships.connections).toEqual([]);
+  });
+
+  it('saves a Rhythm completion without creating a Connection when logging is skipped', async () => {
+    const user = userEvent.setup();
+    const storage = installMemoryStorage();
+    const data = createSamplePreviewData();
+    const rhythmId = 'user-rhythm-88888888-0000-4000-8000-000000000003';
+    const title = 'Daily connection';
+    data.categoryPreferences = { ...data.categoryPreferences, marriage: false, dating: true };
+    data.savedRhythms = [savedDatingRhythm(rhythmId, title)];
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Dating' }));
+    await user.click(screen.getByRole('tab', { name: 'Today' }));
+    await user.click(screen.getByRole('button', { name: `Tend ${title}` }));
+    const completionDialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
+    expect(within(completionDialog).queryByRole('combobox')).toBeNull();
+    const logConnection = within(completionDialog).getByLabelText('Also log a connection') as HTMLInputElement;
+    expect(logConnection.checked).toBe(true);
+    await user.click(logConnection);
+    await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'When did you tend it?' })).toBeNull());
+
+    const saved = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.datedRhythmCompletions).toHaveLength(1);
+    expect(saved.envelope.data.completedRhythmIds).toEqual([rhythmId]);
+    expect(saved.envelope.data.friendships.connections).toEqual([]);
+  });
+
+  it('reconciles an owned Connection when history edits completion time and preserves it after Connection editing and Undo', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 23, 12, 0));
+    const user = userEvent.setup();
+    const storage = installMemoryStorage();
+    const fixture = datingCompletionFixture();
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Areas' });
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Dating' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    const article = screen.getByRole('article', { name: 'Dating completion fixture' });
+    await user.click(within(article).getByRole('button', {
+      name: historyButtonName('View scores and history for Dating completion fixture')
+    }));
+    const details = screen.getByRole('dialog', { name: 'Dating completion fixture' });
+    const history = within(details).getByRole('region', {
+      name: 'History for Dating completion fixture'
+    });
+    await user.click(within(history).getByRole('button', { name: 'Logged moments (1)' }));
+    await user.click(screen.getByRole('button', {
+      name: /^Edit logged moment for Dating completion fixture/
+    }));
+    const nextDate = localDateString(new Date());
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: nextDate } });
+    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Minute' }), { key: 'ArrowDown' });
+    await user.click(screen.getByRole('button', {
+      name: /^Save$/
+    }));
+    await waitFor(() => {
+      const current = parsePreviewBackup(
+        storage.getItem(PREVIEW_STORAGE_KEY)!,
+        localDateString(new Date())
+      );
+      expect(current.valid).toBe(true);
+      if (!current.valid) return;
+      const completion = current.envelope.data.datedRhythmCompletions
+        .find(item => item.id === fixture.completionId);
+      const connection = current.envelope.data.friendships.connections
+        .find(item => item.id === fixture.connectionId);
+      expect(completion?.effectiveDate).toBe(nextDate);
+      expect(completion?.localTime).toBe('11:59');
+      expect(connection).toMatchObject({
+        date: nextDate,
+        time: '11:59',
+        timeZone: completion?.timeZone,
+        participantIds: ['sample-person-morgan'],
+        notes: 'Original reflection',
+        rhythmTitleSnapshot: 'Dating completion fixture',
+        ownedByRhythmCompletion: true
+      });
+      expect(isRhythmCompletionConnectionUnchanged(connection!)).toBe(true);
+    });
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Morgan Reed' }));
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+    const connectionRow = screen.getByRole('button', {
+      name: /^Dating completion fixture, Rhythm connection,/
+    });
+    await user.click(connectionRow);
+    const connectionEditor = screen.getByRole('dialog', { name: 'Connection details' });
+    expect(within(connectionEditor).getByText(/detaches this Connection from the completion/)).toBeTruthy();
+    const notes = within(connectionEditor).getByLabelText('Notes (optional)');
+    await user.clear(notes);
+    await user.type(notes, 'Kept as an independent Connection.');
+    await user.click(within(connectionEditor).getByRole('button', { name: 'Save changes' }));
+
+    const directlyEdited = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    if (!directlyEdited.valid) throw new Error(directlyEdited.message);
+    expect(directlyEdited.envelope.data.friendships.connections[0]).toMatchObject({
+      notes: 'Kept as an independent Connection.',
+      rhythmTitleSnapshot: 'Dating completion fixture'
+    });
+    expect(directlyEdited.envelope.data.friendships.connections[0]).not.toHaveProperty('completionId');
+    expect(directlyEdited.envelope.data.friendships.connections[0]).not.toHaveProperty('rhythmId');
+    expect(directlyEdited.envelope.data.friendships.connections[0]).not.toHaveProperty('ownedByRhythmCompletion');
+    expect(directlyEdited.envelope.data.friendships.connections[0]).not.toHaveProperty('rhythmConnectionSnapshot');
+
+    await user.click(within(screen.getByRole('main', { name: 'Morgan Reed' }))
+      .getByRole('button', { name: 'Back to People' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expandAllTodayGroups(document);
+    await user.click(screen.getByRole('button', {
+      name: /Dating completion fixture, Tended/
+    }));
+    await user.click(screen.getByRole('button', {
+      name: 'Undo completion for Dating completion fixture'
+    }));
+    const afterUndo = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(afterUndo.valid).toBe(true);
+    if (!afterUndo.valid) return;
+    expect(afterUndo.envelope.data.datedRhythmCompletions).toEqual([]);
+    expect(afterUndo.envelope.data.friendships.connections).toHaveLength(1);
+    expect(afterUndo.envelope.data.friendships.connections[0]?.notes)
+      .toBe('Kept as an independent Connection.');
+  });
+
+  it('does not recreate a directly deleted Connection when its Rhythm completion is undone', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 23, 12, 0));
+    const user = userEvent.setup();
+    const storage = installMemoryStorage();
+    const fixture = datingCompletionFixture();
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Areas' });
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Morgan Reed' }));
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+    await user.click(screen.getByRole('button', {
+      name: /^Dating completion fixture, Rhythm connection,/
+    }));
+    const connectionEditor = screen.getByRole('dialog', { name: 'Connection details' });
+    await user.click(within(connectionEditor).getByRole('button', { name: 'Delete connection' }));
+    const confirmation = screen.getByRole('alertdialog');
+    await user.click(within(confirmation).getByRole('button', { name: 'Delete connection' }));
+
+    const afterDirectDelete = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(afterDirectDelete.valid).toBe(true);
+    if (!afterDirectDelete.valid) return;
+    expect(afterDirectDelete.envelope.data.datedRhythmCompletions).toHaveLength(1);
+    expect(afterDirectDelete.envelope.data.friendships.connections).toEqual([]);
+
+    await user.click(within(screen.getByRole('main', { name: 'Morgan Reed' }))
+      .getByRole('button', { name: 'Back to People' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    expandAllTodayGroups(document);
+    await user.click(screen.getByRole('button', {
+      name: /Dating completion fixture, Tended/
+    }));
+    await user.click(screen.getByRole('button', {
+      name: 'Undo completion for Dating completion fixture'
+    }));
+    const afterUndo = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(afterUndo.valid).toBe(true);
+    if (!afterUndo.valid) return;
+    expect(afterUndo.envelope.data.datedRhythmCompletions).toEqual([]);
+    expect(afterUndo.envelope.data.completedRhythmIds).toEqual([]);
+    expect(afterUndo.envelope.data.friendships.connections).toEqual([]);
+  });
+
+  it('deleting a Rhythm completion removes only its unchanged owned Connection', async () => {
+    const user = userEvent.setup();
+    const storage = installMemoryStorage();
+    const fixture = datingCompletionFixture();
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(fixture.data)));
+    render(<App />);
+    await screen.findByRole('navigation', { name: 'Areas' });
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Dating' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    const article = screen.getByRole('article', { name: 'Dating completion fixture' });
+    await user.click(within(article).getByRole('button', {
+      name: historyButtonName('View scores and history for Dating completion fixture')
+    }));
+    const details = screen.getByRole('dialog', { name: 'Dating completion fixture' });
+    const history = within(details).getByRole('region', {
+      name: 'History for Dating completion fixture'
+    });
+    await user.click(within(history).getByRole('button', { name: 'Logged moments (1)' }));
+    const deleteLabel = /^Delete logged moment for Dating completion fixture/;
+    await user.click(screen.getByRole('button', { name: deleteLabel }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Delete moment'
+    }));
+
+    const saved = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.datedRhythmCompletions).toEqual([]);
+    expect(saved.envelope.data.activeRhythmCompletions).toEqual([]);
+    expect(saved.envelope.data.completedRhythmIds).toEqual([]);
+    expect(saved.envelope.data.friendships.connections).toEqual([]);
+  });
+
+  it('keeps Dating optional and opens all 18 suggestions in the shared editable Rhythm flow', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    data.categoryPreferences = { ...data.categoryPreferences, marriage: false, dating: true };
+    const raw = JSON.stringify(createPreviewEnvelope(data));
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, raw);
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const savedBeforeSuggestions = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Dating' }));
+    expect(screen.getByRole('heading', { name: 'Dating' })).toBeTruthy();
+    expect(screen.getAllByText('No active Rhythms.').length).toBeGreaterThan(0);
+    expect(screen.getByText('0 of 0 Rhythms tended')).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    expect(screen.getByRole('heading', { name: 'Start with a rhythm.' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Suggestions' }));
+
+    let picker = await screen.findByRole('dialog', { name: 'Dating Rhythm suggestions' });
+    expect(within(picker).getAllByRole('listitem')).toHaveLength(18);
+    expect([...picker.querySelectorAll('.rhythm-suggestion-picker__group h3')]
+      .map(heading => heading.textContent)).toEqual([
+      'Connection',
+      'Communication',
+      'Fun & Adventure',
+      'Trust & Honesty',
+      'Shared Faith',
+      'Direction'
+    ]);
+
+    for (const suggestion of datingRhythmSuggestions) {
+      const row = suggestionRow(picker, suggestion.title);
+      expect(within(row).getByText(suggestion.description)).toBeTruthy();
+      await user.click(within(row).getByRole('button', { name: 'Add' }));
+      const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+      expect((within(editor).getByLabelText('Title') as HTMLInputElement).value)
+        .toBe(suggestion.title);
+      expect((within(editor).getByLabelText('Description (optional)') as HTMLTextAreaElement).value)
+        .toBe(suggestion.description);
+      expect(within(editor).getByRole('combobox', {
+        name: `Time of day: Anytime`
+      })).toBeTruthy();
+      expect(within(editor).getByRole('button', { name: 'Choose people' })).toBeTruthy();
+      expect(within(editor).queryByRole('checkbox', { name: /Also log a connection/ })).toBeNull();
+
+      const frequency = suggestion.recommendedFrequency === 'every-two-weeks'
+        || suggestion.recommendedFrequency === 'every-three-months'
+        ? 'Custom'
+        : suggestion.recommendedFrequency === 'select-days'
+          ? 'Select Days'
+          : suggestion.recommendedFrequency === 'quarterly'
+            ? 'Quarterly'
+            : suggestion.recommendedFrequency === 'yearly'
+              ? 'Yearly'
+              : suggestion.recommendedFrequency[0]!.toUpperCase()
+                + suggestion.recommendedFrequency.slice(1);
+      expect(within(editor).getByRole('combobox', { name: `Frequency: ${frequency}` })).toBeTruthy();
+      if (suggestion.recommendedFrequency === 'weekly') {
+        expect((within(editor).getByRole('radio', { name: 'Monday' }) as HTMLInputElement).checked)
+          .toBe(false);
+      }
+      if (suggestion.recommendedFrequency === 'monthly'
+        || suggestion.recommendedFrequency === 'every-three-months') {
+        expect(within(editor).getByRole('combobox', {
+          name: 'Repeat on: Choose a pattern'
+        })).toBeTruthy();
+      }
+      if (suggestion.recommendedFrequency === 'every-two-weeks'
+        || suggestion.recommendedFrequency === 'every-three-months') {
+        const interval = suggestion.recommendedFrequency === 'every-two-weeks' ? '2' : '3';
+        const unit = suggestion.recommendedFrequency === 'every-two-weeks' ? 'weeks' : 'months';
+        expect((within(editor).getByRole('spinbutton', { name: /Repeat every/i }) as HTMLInputElement).value)
+          .toBe(interval);
+        expect(within(editor).getByRole('combobox', {
+          name: `Repeat interval unit: ${unit}`
+        })).toBeTruthy();
+        expect((within(editor).getByLabelText('Starting on') as HTMLInputElement).value)
+          .toBe(localDateString(new Date()));
+      }
+
+      await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+      picker = await screen.findByRole('dialog', { name: 'Dating Rhythm suggestions' });
+    }
+
+    expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(savedBeforeSuggestions);
+    const savedBeforeSelection = parsePreviewBackup(savedBeforeSuggestions!, localDateString(new Date()));
+    expect(savedBeforeSelection.valid && savedBeforeSelection.envelope.data.savedRhythms).toHaveLength(0);
+
+    await user.click(within(suggestionRow(picker, 'Plan a date together'))
+      .getByRole('button', { name: 'Add' }));
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    const title = within(editor).getByLabelText('Title');
+    await user.clear(title);
+    await user.type(title, 'Plan a flexible date');
+    const description = within(editor).getByLabelText('Description (optional)');
+    await user.clear(description);
+    await user.type(description, 'Choose something that works for both partners.');
+    await user.click(within(editor).getByRole('combobox', { name: 'Time of day: Anytime' }));
+    await user.click(within(editor).getByRole('option', { name: 'Morning' }));
+    await user.click(within(editor).getByRole('radio', { name: 'Tuesday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    const peoplePicker = associationPicker('Choose people');
+    await user.click(within(peoplePicker).getByRole('button', { name: 'Avery Brooks' }));
+    await user.click(within(peoplePicker).getByRole('button', { name: 'Done' }));
+    const connectionPreference = within(editor).getByRole('checkbox', {
+      name: /Also log a connection/
+    }) as HTMLInputElement;
+    expect(connectionPreference.checked).toBe(true);
+    await user.click(connectionPreference);
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Rhythm' })).toBeNull());
+
+    const saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.savedRhythms).toHaveLength(1);
+    expect(saved.envelope.data.savedRhythms[0]).toMatchObject({
+      title: 'Plan a flexible date',
+      description: 'Choose something that works for both partners.',
+      categoryIds: ['dating'],
+      primaryFoundationId: 'dating-connection',
+      secondaryFoundationIds: [],
+      personIds: ['sample-person-avery'],
+      alsoLogConnection: false,
+      suggestionSourceId: 'dating.plan-date',
+      schedule: { frequency: 'weekly', weekdays: [2] },
+      timeOfDay: 'morning'
+    });
+    expect(saved.envelope.data.friendships.connections).toEqual([]);
+    expect(saved.envelope.data.completedRhythmIds).toEqual([]);
+
+    const returnedPicker = screen.getByRole('dialog', { name: 'Dating Rhythm suggestions' });
+    const savedSuggestion = suggestionRow(returnedPicker, 'Plan a date together');
+    expect(within(savedSuggestion).getByText('Added')).toBeTruthy();
+    await user.click(within(savedSuggestion).getByRole('button', { name: 'Add' }));
+    const duplicateChoice = screen.getByRole('dialog', { name: 'Dating Rhythm suggestions' });
+    expect(within(duplicateChoice).getByRole('heading', {
+      name: 'You’ve added Plan a date together'
+    })).toBeTruthy();
+    expect(within(duplicateChoice).getByRole('button', { name: 'Edit Plan a flexible date' })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'Add Rhythm' })).toBeNull();
+  });
+
+  it('opens the existing Calendar settings directly from the unconfigured Today action', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await user.click(screen.getByRole('button', { name: 'Set up calendar' }));
+
+    expect(await screen.findByText('No calendars added yet.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add calendar' })).toBeTruthy();
+    expect(screen.queryByText('More → Settings → Calendar.')).toBeNull();
+  });
+
+  it('starts Dating disabled and enabling it creates no Rhythms, people, completions, or Connections', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const initialEnvelope = createPreviewEnvelope(data);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(initialEnvelope));
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    const initialAreasNav = screen.getByRole('navigation', { name: 'Areas' });
+    expect(within(initialAreasNav).queryByRole('button', { name: 'Dating' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Categories' }));
+    const datingSwitch = screen.getByRole('switch', { name: 'Dating' }) as HTMLInputElement;
+    expect(datingSwitch.checked).toBe(false);
+    await user.click(datingSwitch);
+    expect(datingSwitch.checked).toBe(true);
+    expect((screen.getByRole('switch', { name: 'Marriage' }) as HTMLInputElement).checked).toBe(false);
+    await user.click(screen.getByRole('button', { name: '‹ Settings' }));
+    await user.click(screen.getByRole('button', { name: '‹ More' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+
+    const areasNav = screen.getByRole('navigation', { name: 'Areas' });
+    expect(within(areasNav).getByRole('button', { name: 'Dating' })).toBeTruthy();
+    expect(within(areasNav).queryByRole('button', { name: 'Marriage' })).toBeNull();
+    const todayCategories = within(
+      screen.getByRole('region', { name: 'Overall health summary' })
+    ).getByRole('navigation', { name: 'Today categories' });
+    expect(within(todayCategories).getByRole('button', { name: /Dating/ })).toBeTruthy();
+    expect(within(todayCategories).queryByRole('button', { name: /Marriage/ })).toBeNull();
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Dating' }));
+    expect(screen.getAllByText('No active Rhythms.').length).toBeGreaterThan(0);
+
+    const saved = parsePreviewBackup(
+      window.localStorage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.categoryPreferences).toMatchObject({
+      marriage: false,
+      dating: true
+    });
+    expect(saved.envelope.data.peopleGroups.find(group => group.id === 'dating')?.memberIds).toEqual([]);
+    expect(saved.envelope.data.savedRhythms).toEqual(initialEnvelope.data.savedRhythms);
+    expect(saved.envelope.data.people).toEqual(initialEnvelope.data.people);
+    expect(saved.envelope.data.peopleGroups.filter(group => group.id !== 'dating'))
+      .toEqual(initialEnvelope.data.peopleGroups.filter(group => group.id !== 'dating'));
+    expect(saved.envelope.data.foundationPreferences).toEqual(initialEnvelope.data.foundationPreferences);
+    expect(saved.envelope.data.datedRhythmCompletions).toEqual(initialEnvelope.data.datedRhythmCompletions);
+    expect(saved.envelope.data.activeRhythmCompletions).toEqual(initialEnvelope.data.activeRhythmCompletions);
+    expect(saved.envelope.data.completedRhythmIds).toEqual(initialEnvelope.data.completedRhythmIds);
+    expect(saved.envelope.data.rhythmHistoryIds).toEqual(initialEnvelope.data.rhythmHistoryIds);
+    expect(saved.envelope.data.friendships).toEqual(initialEnvelope.data.friendships);
+  });
+
+  it('switches Marriage and Dating exclusively, preserves data and Foundation choices, and reloads both-disabled state', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    data.foundationPreferences = {
+      ...data.foundationPreferences,
+      connection: false,
+      'dating-direction': false
+    };
+    const initialEnvelope = createPreviewEnvelope(data);
+    const initialRaw = JSON.stringify(initialEnvelope);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, initialRaw);
+    const view = render(<App />);
+    await screen.findByRole('navigation', { name: 'Areas' });
+
+    const readSaved = () => {
+      const raw = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+      if (!raw) throw new Error('The availability change did not create a preview envelope.');
+      const parsed = parsePreviewBackup(raw, localDateString(new Date()));
+      if (!parsed.valid) throw new Error(parsed.message);
+      return parsed.envelope.data;
+    };
+    const expectDataPreserved = () => {
+      const saved = readSaved();
+      const {
+        categoryPreferences: _categoryPreferences,
+        todayView: _todayView,
+        ...savedData
+      } = saved;
+      const {
+        categoryPreferences: _initialCategoryPreferences,
+        todayView: _initialTodayView,
+        ...initialData
+      } = initialEnvelope.data;
+      expect(savedData).toEqual(initialData);
+    };
+    const openCategories = async () => {
+      await user.click(screen.getByRole('button', { name: 'More, settings' }));
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+      await user.click(screen.getByRole('button', { name: 'Categories' }));
+    };
+    const returnToToday = async () => {
+      await user.click(screen.getByRole('button', { name: '‹ Settings' }));
+      await user.click(screen.getByRole('button', { name: '‹ More' }));
+      await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+        .getByRole('button', { name: 'Today' }));
+    };
+
+    await openCategories();
+    await user.click(screen.getByRole('switch', { name: 'Dating' }));
+    await waitFor(() => expect(readSaved().categoryPreferences)
+      .toMatchObject({ marriage: false, dating: true }));
+    expect((screen.getByRole('switch', { name: 'Marriage' }) as HTMLInputElement).checked).toBe(false);
+    expectDataPreserved();
+    await returnToToday();
+
+    let areasNav = screen.getByRole('navigation', { name: 'Areas' });
+    expect(within(areasNav).getByRole('button', { name: 'Dating' })).toBeTruthy();
+    expect(within(areasNav).queryByRole('button', { name: 'Marriage' })).toBeNull();
+    let todayCategories = within(
+      screen.getByRole('region', { name: 'Overall health summary' })
+    ).getByRole('navigation', { name: 'Today categories' });
+    expect(within(todayCategories).getByRole('button', { name: /Dating/ })).toBeTruthy();
+    expect(within(todayCategories).queryByRole('button', { name: /Marriage/ })).toBeNull();
+
+    await openCategories();
+    await user.click(screen.getByRole('switch', { name: 'Marriage' }));
+    await waitFor(() => expect(readSaved().categoryPreferences)
+      .toMatchObject({ marriage: true, dating: false }));
+    expect((screen.getByRole('switch', { name: 'Dating' }) as HTMLInputElement).checked).toBe(false);
+    expectDataPreserved();
+    await returnToToday();
+
+    areasNav = screen.getByRole('navigation', { name: 'Areas' });
+    expect(within(areasNav).getByRole('button', { name: 'Marriage' })).toBeTruthy();
+    expect(within(areasNav).queryByRole('button', { name: 'Dating' })).toBeNull();
+    todayCategories = within(
+      screen.getByRole('region', { name: 'Overall health summary' })
+    ).getByRole('navigation', { name: 'Today categories' });
+    expect(within(todayCategories).getByRole('button', { name: /Marriage/ })).toBeTruthy();
+    expect(within(todayCategories).queryByRole('button', { name: /Dating/ })).toBeNull();
+
+    await openCategories();
+    await user.click(screen.getByRole('switch', { name: 'Marriage' }));
+    await waitFor(() => expect(readSaved().categoryPreferences)
+      .toMatchObject({ marriage: false, dating: false }));
+    expectDataPreserved();
+    await returnToToday();
+    areasNav = screen.getByRole('navigation', { name: 'Areas' });
+    expect(within(areasNav).queryByRole('button', { name: 'Marriage' })).toBeNull();
+    expect(within(areasNav).queryByRole('button', { name: 'Dating' })).toBeNull();
+    todayCategories = within(
+      screen.getByRole('region', { name: 'Overall health summary' })
+    ).getByRole('navigation', { name: 'Today categories' });
+    expect(todayCategories.querySelectorAll('.menu-area')).toHaveLength(5);
+    expect(within(todayCategories).queryByRole('button', { name: /Marriage/ })).toBeNull();
+    expect(within(todayCategories).queryByRole('button', { name: /Dating/ })).toBeNull();
+
+    view.unmount();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    expect(readSaved().categoryPreferences).toMatchObject({ marriage: false, dating: false });
+    areasNav = screen.getByRole('navigation', { name: 'Areas' });
+    expect(within(areasNav).queryByRole('button', { name: 'Marriage' })).toBeNull();
+    expect(within(areasNav).queryByRole('button', { name: 'Dating' })).toBeNull();
+    expectDataPreserved();
   });
 });

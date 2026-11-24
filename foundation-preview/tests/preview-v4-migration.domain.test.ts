@@ -33,6 +33,7 @@ import {
   validateStrengthGuidedSessionDraft
 } from '../src/domain/strength.ts';
 import type { StrengthData, StrengthSavedWorkout } from '../src/domain/strength.ts';
+import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
 
 const currentDate = '2026-10-22';
 const savedRhythmId = 'user-rhythm-11111111-1111-4111-8111-111111111111';
@@ -148,7 +149,7 @@ describe('v4 migration and recovery domain', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
     const { personSparks: _personSparks, ...dataBeforeSparks } = current.data;
-    const raw = JSON.stringify({ ...current, schemaVersion: 48, data: dataBeforeSparks });
+    const raw = JSON.stringify(withPreSparkSchema(current, 48, dataBeforeSparks));
     const migrated = parsePreviewBackup(raw, currentDate);
 
     expect(migrated.valid).toBe(true);
@@ -169,7 +170,7 @@ describe('v4 migration and recovery domain', () => {
     data.cardio.runs = [{ id: 'legacy-cardio-run', date: currentDate, distance: 2 }];
     const current = createPreviewEnvelope(data);
     const { personSparks: _personSparks, ...dataBeforeSparks } = current.data;
-    const raw = JSON.stringify({ ...current, schemaVersion: 49, data: dataBeforeSparks });
+    const raw = JSON.stringify(withPreSparkSchema(current, 49, dataBeforeSparks));
 
     const migrated = parsePreviewBackup(raw, currentDate);
 
@@ -185,7 +186,7 @@ describe('v4 migration and recovery domain', () => {
     const data = createSamplePreviewData();
     const current = createPreviewEnvelope(data);
     const { personSparks: _personSparks, ...v50Data } = current.data;
-    const raw = JSON.stringify({ ...current, schemaVersion: 50, data: v50Data });
+    const raw = JSON.stringify(withPreSparkSchema(current, 50, v50Data));
 
     const migrated = parsePreviewBackup(raw, currentDate);
 
@@ -407,11 +408,11 @@ describe('v4 migration and recovery domain', () => {
       personSparks: _personSparks,
       ...v25Data
     } = envelope.data;
-    const raw = JSON.stringify({
+    const raw = JSON.stringify(withPreSparkSchema({
       ...envelope,
       schemaVersion: 25,
       data: { ...v25Data, strength: legacyStrength }
-    });
+    }, 25));
     const parsed = parsePreviewBackup(raw, currentDate);
     expect(parsed.valid).toBe(true);
     if (!parsed.valid) return;
@@ -481,11 +482,11 @@ describe('v4 migration and recovery domain', () => {
       personSparks: _personSparks,
       ...v24Data
     } = envelope.data;
-    const raw = JSON.stringify({
+    const raw = JSON.stringify(withPreSparkSchema({
       ...envelope,
       schemaVersion: 24,
       data: { ...v24Data, strength: legacyStrength }
-    });
+    }, 24));
     const migrated = parsePreviewBackup(raw, currentDate);
     expect(migrated.valid).toBe(true);
     if (!migrated.valid) return;
@@ -641,6 +642,7 @@ describe('v4 migration and recovery domain', () => {
   it('preserves current custom blocks, Seasons, goal links, logs, and settings through the preview reader', () => {
     const data = dataWithHistory();
     const rhythm = data.savedRhythms[0]!;
+    rhythm.alsoLogConnection = false;
     const customTimeBlockId = 'custom-time-block:11111111-1111-4111-8111-111111111111';
     data.timeBlocks.blocks.splice(1, 0, {
       id: customTimeBlockId,
@@ -774,11 +776,11 @@ describe('v4 migration and recovery domain', () => {
     data.rhythmHistoryIds = ['sample-pray-together'];
     const current = createPreviewEnvelope(data);
     const { personSparks: _personSparks, ...dataBeforeSparks } = current.data;
-    const raw = JSON.stringify({
+    const raw = JSON.stringify(withPreSparkSchema({
       ...current,
       schemaVersion: 44,
       data: dataBeforeSparks
-    });
+    }, 44));
 
     const source = parsePreviewBackup(raw, currentDate);
     const result = migratePreviewToProposedV4(raw, currentDate);
@@ -876,11 +878,11 @@ describe('v4 migration and recovery domain', () => {
     ] as const;
 
     for (const source of sources) {
-      const originalRaw = ` \n${JSON.stringify({
+      const originalRaw = ` \n${JSON.stringify(withPreSparkSchema({
         format: currentEnvelope.format,
         schemaVersion: source.version,
         data: source.data
-      })}\n`;
+      }, source.version))}\n`;
       const parsed = parsePreviewBackup(originalRaw, currentDate);
       expect(parsed.valid).toBe(true);
       expect(proposedV4RecoveryKeyForRaw(originalRaw)).toBe(source.key);
@@ -999,13 +1001,11 @@ describe('v4 migration and recovery domain', () => {
   it('migrates schema v23 Strength settings before saving a fresh suggestion and preserves its exact source', () => {
     const data = createSamplePreviewData();
     const currentEnvelope = createPreviewEnvelope(data);
-    const legacyEnvelope = JSON.parse(JSON.stringify(currentEnvelope)) as Record<string, unknown>;
-    legacyEnvelope.schemaVersion = 23;
-    delete (legacyEnvelope.data as Record<string, unknown>).people;
-    delete (legacyEnvelope.data as Record<string, unknown>).personDetails;
-    delete (legacyEnvelope.data as Record<string, unknown>).personNotes;
-    delete (legacyEnvelope.data as Record<string, unknown>).personSparks;
-    const legacyStrength = (legacyEnvelope.data as Record<string, unknown>).strength as Record<string, unknown>;
+    const legacyEnvelope = withPreSparkSchema({ ...currentEnvelope, schemaVersion: 23 }, 23);
+    delete (legacyEnvelope.data as Partial<typeof legacyEnvelope.data>).people;
+    delete (legacyEnvelope.data as Partial<typeof legacyEnvelope.data>).personDetails;
+    delete (legacyEnvelope.data as Partial<typeof legacyEnvelope.data>).personNotes;
+    const legacyStrength = legacyEnvelope.data.strength as unknown as Record<string, unknown>;
     const legacySettings = legacyStrength.settings as Record<string, unknown>;
     delete legacySettings.weightUnit;
     delete legacySettings.betweenSetRestSeconds;
@@ -1107,11 +1107,11 @@ describe('v4 migration and recovery domain', () => {
       personSparks: _personSparks,
       ...v21Data
     } = v21Envelope.data;
-    const v21Raw = ` \n${JSON.stringify({
+    const v21Raw = ` \n${JSON.stringify(withPreSparkSchema({
       ...v21Envelope,
       schemaVersion: 21,
       data: { ...v21Data, strength: strengthAtV24(strengthV21) }
-    })}\n`;
+    }, 21))}\n`;
     const migrated = migratePreviewToProposedV4(v21Raw, currentDate);
     expect(migrated).toMatchObject({ valid: true, sourceSchemaVersion: 21 });
     if (!migrated.valid) return;
@@ -1168,11 +1168,11 @@ describe('v4 migration and recovery domain', () => {
       personSparks: _personSparks,
       ...v22Data
     } = current.data;
-    const v22Raw = ` \n${JSON.stringify({
+    const v22Raw = ` \n${JSON.stringify(withPreSparkSchema({
       ...current,
       schemaVersion: 22,
       data: { ...v22Data, strength: strengthAtV24(data.strength) }
-    })}\n`;
+    }, 22))}\n`;
     const migrated = migratePreviewToProposedV4(v22Raw, currentDate);
     expect(migrated, migrated.valid ? undefined : migrated.message).toMatchObject({ valid: true, sourceSchemaVersion: 22 });
     if (!migrated.valid) return;

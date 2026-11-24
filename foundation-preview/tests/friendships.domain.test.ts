@@ -7,7 +7,12 @@ import {
   deleteConnection,
   formatConnectionRecency,
   friendConnectionStatus,
+  detachRhythmCompletionOwnership,
+  isRhythmCompletionConnectionUnchanged,
   latestValidConnectionForPerson,
+  reconcileDirectRhythmConnectionEdit,
+  reconcileRhythmCompletionConnection,
+  rhythmCompletionConnectionSnapshot,
   selectFriendStatuses,
   migrateLegacyFriendshipDataV19,
   setFriendCadence,
@@ -39,6 +44,64 @@ function event(
 }
 
 describe('Friendships cadence and connection history', () => {
+  it('validates Spark connection types and optional source-title snapshots', () => {
+    const sparkConnection = event('spark-connection', '2026-11-20', [avery, morgan], {
+      type: 'spark',
+      sparkId: 'spark-one',
+      sparkOwnerId: avery,
+      sparkTitleSnapshot: 'Plan a picnic'
+    });
+    expect(validateFriendshipData({
+      cadenceSettings: [],
+      connections: [sparkConnection]
+    }, [avery, morgan])).toBe(true);
+
+    const legacySparkConnection = event('legacy-spark-connection', '2026-11-19', [avery], {
+      sparkId: 'legacy-spark',
+      sparkOwnerId: avery
+    });
+    expect(validateFriendshipData({
+      cadenceSettings: [],
+      connections: [legacySparkConnection]
+    }, [avery, morgan])).toBe(true);
+    expect(validateFriendshipData({
+      cadenceSettings: [],
+      connections: [{ ...sparkConnection, sparkTitleSnapshot: ' '.repeat(181) }]
+    }, [avery, morgan])).toBe(false);
+  });
+
+  it('selects manual, Spark, and Rhythm connections only for their saved participants', () => {
+    const manual = event('manual-connection', '2026-11-18', [avery]);
+    const spark = event('spark-source-connection', '2026-11-19', [avery, morgan], {
+      type: 'spark',
+      sparkId: 'spark-source',
+      sparkOwnerId: avery,
+      sparkTitleSnapshot: 'Watch Backrooms Movie'
+    });
+    const rhythm = event('rhythm-source-connection', '2026-11-20', [avery], {
+      type: 'rhythm',
+      rhythmId: 'rhythm-source',
+      completionId: 'rhythm-completion',
+      rhythmTitleSnapshot: 'Pray together'
+    });
+    const morganOnly = event('morgan-only-connection', '2026-11-21', [morgan]);
+    const data = {
+      ...createFriendshipData(),
+      connections: [manual, spark, rhythm, morganOnly]
+    };
+
+    expect(validateFriendshipData(data, [avery, morgan])).toBe(true);
+    expect(connectionsForPerson(data, avery).map(connection => connection.id)).toEqual([
+      rhythm.id,
+      spark.id,
+      manual.id
+    ]);
+    expect(connectionsForPerson(data, morgan).map(connection => connection.id)).toEqual([
+      morganOnly.id,
+      spark.id
+    ]);
+  });
+
   it('selects the latest valid active connection date and updates for edits and deletions', () => {
     let data = createFriendshipData();
     data = addOrUpdateConnection(data, event('older', '2026-10-10', [avery], {
@@ -66,6 +129,66 @@ describe('Friendships cadence and connection history', () => {
     expect(latestValidConnectionForPerson(data, avery)).toBeNull();
     expect(formatConnectionRecency('2026-10-20', '2026-10-21')).toBe('Yesterday');
     expect(formatConnectionRecency('not-a-date', '2026-10-21')).toBeNull();
+  });
+
+  it('keeps generated Rhythm Connection snapshots immutable through completion edits and detaches direct edits', () => {
+    const rhythmConnection: FriendshipConnection = {
+      id: 'rhythm-connection-1',
+      type: 'rhythm',
+      date: '2026-11-20',
+      time: '09:30',
+      timeZone: 'UTC',
+      participantIds: [avery, morgan],
+      notes: 'Initial reflection',
+      rhythmId: 'user-rhythm-1',
+      completionId: 'completion-1',
+      rhythmTitleSnapshot: 'Original Rhythm title',
+      ownedByRhythmCompletion: true,
+      rhythmConnectionSnapshot: rhythmCompletionConnectionSnapshot({
+        date: '2026-11-20',
+        time: '09:30',
+        timeZone: 'UTC',
+        participantIds: [avery, morgan],
+        notes: 'Initial reflection',
+        rhythmTitleSnapshot: 'Original Rhythm title'
+      })
+    };
+
+    expect(isRhythmCompletionConnectionUnchanged(rhythmConnection)).toBe(true);
+    expect(validateFriendshipData({
+      cadenceSettings: [],
+      connections: [rhythmConnection]
+    }, [avery, morgan])).toBe(true);
+
+    const updated = reconcileRhythmCompletionConnection(rhythmConnection, {
+      effectiveDate: '2026-11-22',
+      localTime: '10:15',
+      timeZone: 'America/New_York',
+      memory: 'Updated reflection'
+    });
+    expect(updated).toMatchObject({
+      date: '2026-11-22',
+      time: '10:15',
+      timeZone: 'America/New_York',
+      notes: 'Updated reflection',
+      participantIds: [avery, morgan],
+      rhythmTitleSnapshot: 'Original Rhythm title'
+    });
+    expect(isRhythmCompletionConnectionUnchanged(updated)).toBe(true);
+
+    const edited = reconcileDirectRhythmConnectionEdit(rhythmConnection, {
+      ...rhythmConnection,
+      participantIds: [avery],
+      notes: 'Independent note'
+    });
+    expect(edited).not.toHaveProperty('completionId');
+    expect(edited).not.toHaveProperty('rhythmId');
+    expect(edited).not.toHaveProperty('ownedByRhythmCompletion');
+    expect(edited).not.toHaveProperty('rhythmConnectionSnapshot');
+    expect(edited.rhythmTitleSnapshot).toBe('Original Rhythm title');
+    expect(isRhythmCompletionConnectionUnchanged(edited)).toBe(false);
+    expect(detachRhythmCompletionOwnership(rhythmConnection).rhythmTitleSnapshot)
+      .toBe('Original Rhythm title');
   });
 
   it('starts a new cadence from its explicit set date and applies an inclusive due-date boundary', () => {

@@ -1,9 +1,9 @@
 import { cleanup, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CalendarAgendaSection } from '../src/components/CalendarAgendaSection.tsx';
 import { CalendarSourcesSettings } from '../src/components/CalendarSourcesSettings.tsx';
+import { CONTROLLED_CALENDAR_TEST_URL } from '../src/domain/calendar-sources.ts';
 import type { CalendarSource } from '../src/domain/calendar-sources.ts';
 import { createLocalCalendarReaderServer } from '../local-calendar-reader.mjs';
 
@@ -13,7 +13,13 @@ afterEach(() => {
 });
 
 function CalendarReaderHarness({ readerOrigin }: { readerOrigin: string }) {
-  const [sources, setSources] = useState<CalendarSource[]>([]);
+  const [sources, setSources] = useState<CalendarSource[]>([{
+    id: 'calendar-source-controlled-fixture',
+    name: 'Controlled test calendar',
+    url: CONTROLLED_CALENDAR_TEST_URL,
+    enabled: true,
+    kind: 'controlled-test'
+  }]);
   return (
     <>
       <CalendarSourcesSettings
@@ -35,8 +41,7 @@ function CalendarReaderHarness({ readerOrigin }: { readerOrigin: string }) {
 }
 
 describe('Calendar settings to local-reader flow', () => {
-  it('saves the controlled Settings source, reads its ICS over HTTP, and displays parsed events', async () => {
-    const user = userEvent.setup();
+  it('uses a test-only controlled source fixture to read ICS over HTTP and display parsed events', async () => {
     const reader = createLocalCalendarReaderServer();
     await new Promise<void>(resolve => reader.listen(0, '127.0.0.1', resolve));
     const address = reader.address();
@@ -55,7 +60,6 @@ describe('Calendar settings to local-reader flow', () => {
 
     try {
       render(<CalendarReaderHarness readerOrigin={readerOrigin} />);
-      await user.click(screen.getByRole('button', { name: 'Add controlled test feed' }));
 
       expect(await screen.findByText('Controlled all-day event')).toBeTruthy();
       expect(screen.getByText('Controlled timed event')).toBeTruthy();

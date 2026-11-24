@@ -95,6 +95,7 @@ export type SavedRhythm = {
   suggestionSourceId?: string;
   healthLogCapability?: RhythmHealthLogCapability | null;
   healthRunTarget?: HealthRunTarget | null;
+  alsoLogConnection?: boolean;
 };
 
 export type RhythmDraft = {
@@ -118,6 +119,8 @@ export type RhythmDraft = {
   healthWorkoutId?: string;
   healthWorkoutRotationWorkoutIds?: string[];
   healthWorkoutRotationAdvanceMode?: StrengthRotationAdvanceMode;
+  alsoLogConnection?: boolean;
+  alsoLogConnectionExplicit?: boolean;
 };
 
 export type RhythmDraftErrors = Partial<Record<keyof RhythmDraft | 'schedule' | 'foundationIds' | 'form', string>>;
@@ -177,6 +180,7 @@ const savedRhythmV17Keys = [...savedRhythmV14Keys, 'healthLogCapability'];
 const savedRhythmV18Keys = savedRhythmV17Keys;
 const savedRhythmV19Keys = [...savedRhythmV18Keys, 'healthRunTarget'];
 const savedRhythmV20Keys = [...savedRhythmV19Keys, 'createdLocalTime', 'createdDueTime'];
+const savedRhythmV53Keys = [...savedRhythmV20Keys, 'alsoLogConnection'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -295,6 +299,13 @@ export function validateSavedRhythmsV19(value: unknown): value is SavedRhythm[] 
 
 export function validateSavedRhythmsV20(value: unknown): value is SavedRhythm[] {
   return validateSavedRhythmsWithHealthTarget(value, savedRhythmV20Keys);
+}
+
+export function validateSavedRhythmsV53(value: unknown): value is SavedRhythm[] {
+  if (!validateSavedRhythmsWithHealthTarget(value, savedRhythmV53Keys)) return false;
+  return value.every(record =>
+    record.alsoLogConnection === undefined || typeof record.alsoLogConnection === 'boolean'
+  );
 }
 
 function validateSavedRhythmsWithHealthTarget(
@@ -455,7 +466,10 @@ export function rhythmDraftFrom(
       ? {}
       : { secondaryFoundationIds: rhythm.secondaryFoundationIds.map(canonicalFoundationId) }),
     ...(rhythm.healthLogCapability === undefined ? {} : { healthLogCapability: rhythm.healthLogCapability }),
-    ...(rhythm.healthRunTarget === undefined ? {} : { healthRunTarget: rhythm.healthRunTarget })
+    ...(rhythm.healthRunTarget === undefined ? {} : { healthRunTarget: rhythm.healthRunTarget }),
+    ...(rhythm.alsoLogConnection === undefined
+      ? { alsoLogConnection: false }
+      : { alsoLogConnection: rhythm.alsoLogConnection, alsoLogConnectionExplicit: true })
   };
 }
 
@@ -850,7 +864,14 @@ export function saveRhythmDraft(
       : draft.healthLogCapability === null ? {} : { healthLogCapability: draft.healthLogCapability }),
     ...(draft.healthRunTarget === undefined
       ? existing?.healthRunTarget === undefined ? {} : { healthRunTarget: existing.healthRunTarget }
-      : draft.healthRunTarget === null ? {} : { healthRunTarget: draft.healthRunTarget })
+      : draft.healthRunTarget === null ? {} : { healthRunTarget: draft.healthRunTarget }),
+    ...(draft.alsoLogConnectionExplicit
+      ? { alsoLogConnection: draft.alsoLogConnection === true }
+      : draft.alsoLogConnection === true
+        ? { alsoLogConnection: true }
+        : existing?.alsoLogConnection === undefined
+          ? {}
+          : { alsoLogConnection: existing.alsoLogConnection })
   };
   return {
     savedRhythms: [
@@ -913,7 +934,10 @@ export function applySavedRhythmOverrides(
       : { secondaryFoundationIds: saved.secondaryFoundationIds }),
     ...(saved.suggestionSourceId === undefined ? {} : { suggestionSourceId: saved.suggestionSourceId }),
     ...(saved.healthLogCapability === undefined ? {} : { healthLogCapability: saved.healthLogCapability }),
-    ...(saved.healthRunTarget === undefined ? {} : { healthRunTarget: saved.healthRunTarget })
+    ...(saved.healthRunTarget === undefined ? {} : { healthRunTarget: saved.healthRunTarget }),
+    ...(saved.alsoLogConnection === undefined
+      ? {}
+      : { alsoLogConnection: saved.alsoLogConnection })
   };
 }
 

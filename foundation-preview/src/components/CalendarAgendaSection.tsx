@@ -320,11 +320,13 @@ export function CalendarAgendaSection({
   sources,
   timeZone,
   readerEnabled,
+  onOpenSetup,
   onEventsChange
 }: {
   sources: readonly CalendarSource[];
   timeZone: string;
   readerEnabled: boolean;
+  onOpenSetup?: () => void;
   onEventsChange?: (events: readonly CalendarEvent[]) => void;
 }) {
   const [retryCount, setRetryCount] = useState(0);
@@ -430,12 +432,12 @@ export function CalendarAgendaSection({
   const statusContent = !hasConfiguredSources
     ? {
       title: 'Connect a calendar',
-      description: 'More → Settings → Calendar.'
+      description: ''
     }
     : !hasEnabledSources
       ? {
         title: 'Enable a calendar',
-        description: 'More → Settings → Calendar.'
+        description: 'Choose a saved calendar to show events.'
       }
       : !readerEnabled
         ? {
@@ -508,6 +510,15 @@ export function CalendarAgendaSection({
                 : <strong>{statusContent.title}</strong>}
               {statusContent.description && (
                 <span className="calendar-event__date-time">{statusContent.description}</span>
+              )}
+              {!hasConfiguredSources && onOpenSetup && (
+                <button
+                  type="button"
+                  className="btn mini ghost calendar-setup-button"
+                  onClick={onOpenSetup}
+                >
+                  Set up calendar
+                </button>
               )}
               {state.kind === 'error' && state.failures[0] && (
                 <span className="calendar-feed-diagnostic">

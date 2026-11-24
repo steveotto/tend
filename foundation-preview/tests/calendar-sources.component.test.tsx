@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CalendarSourcesSettings } from '../src/components/CalendarSourcesSettings.tsx';
+import { CONTROLLED_CALENDAR_TEST_URL } from '../src/domain/calendar-sources.ts';
 import type { CalendarSource } from '../src/domain/calendar-sources.ts';
 
 afterEach(cleanup);
@@ -33,6 +34,23 @@ function CalendarSettingsHarness({
 }
 
 describe('synthetic calendar settings', () => {
+  it('shows accessible iCloud setup steps and a primary Add calendar action when empty', () => {
+    render(<CalendarSettingsHarness localReaderEnabled />);
+
+    const steps = screen.getByRole('list', { name: 'Calendar setup steps' });
+    expect([...steps.querySelectorAll('li')].map(step => step.textContent?.replace(/^[123]/, '').trim())).toEqual([
+      "Open your calendar's sharing settings on iCloud.com.",
+      'Turn on Public Calendar and copy its link.',
+      'Select Add calendar and paste the link.'
+    ]);
+    expect(screen.getByText('Supports public iCloud calendars.')).toBeTruthy();
+    expect(screen.getByText('No calendars added yet.')).toBeTruthy();
+    expect(screen.getByText('Keep your calendar link private—anyone with it may be able to view its events.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add calendar' }).className).not.toContain('ghost');
+    expect(screen.queryByRole('button', { name: 'Add controlled test feed' })).toBeNull();
+    expect(screen.getByText(/configured same-origin reader/)).toBeTruthy();
+  });
+
   it('exposes the Today visibility preference and preserves calendar source settings', async () => {
     const user = userEvent.setup();
     const source: CalendarSource = {
@@ -49,6 +67,11 @@ describe('synthetic calendar settings', () => {
     expect(showOnToday.checked).toBe(false);
     expect(screen.getByRole('checkbox', { name: 'Use Synthetic calendar' })).toBeTruthy();
     expect(screen.getByText('Enabled · public iCloud feed')).toBeTruthy();
+    const setupDisclosure = screen.getByText('How to add a calendar').closest('details');
+    expect(setupDisclosure?.open).toBe(false);
+    await user.click(screen.getByText('How to add a calendar'));
+    expect(setupDisclosure?.open).toBe(true);
+    expect(screen.getByRole('list', { name: 'Calendar setup steps' })).toBeTruthy();
   });
 
   it('adds a public iCloud source without displaying its saved link', async () => {
@@ -110,20 +133,28 @@ describe('synthetic calendar settings', () => {
     expect(screen.getByText('Enabled · public iCloud feed')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Remove' }));
-    const item = screen.getByRole('listitem');
+    const item = within(screen.getByRole('list', { name: 'Calendar sources' })).getByRole('listitem');
     await user.click(within(item).getByRole('button', { name: 'Confirm removal of Personal calendar' }));
-    expect(await screen.findByText('No calendar sources configured.')).toBeTruthy();
+    expect(await screen.findByText('No calendars added yet.')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe('Calendar removed.');
   });
 
-  it('adds only the fixed local test feed through its dedicated Settings action', async () => {
+  it('keeps controlled reader fixtures available to tests without exposing a Settings action', async () => {
     const user = userEvent.setup();
-    render(<CalendarSettingsHarness localReaderEnabled />);
+    render(<CalendarSettingsHarness
+      localReaderEnabled
+      initial={[{
+        id: 'calendar-source-controlled-fixture',
+        name: 'Controlled test calendar',
+        url: CONTROLLED_CALENDAR_TEST_URL,
+        enabled: true,
+        kind: 'controlled-test'
+      }]}
+    />);
 
-    await user.click(screen.getByRole('button', { name: 'Add controlled test feed' }));
-    expect(await screen.findByText('Controlled test calendar')).toBeTruthy();
+    expect(screen.getByText('Controlled test calendar')).toBeTruthy();
     expect(screen.getByText('Enabled · controlled test feed')).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe('Controlled test calendar added.');
+    expect(screen.queryByRole('button', { name: 'Add controlled test feed' })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Edit Controlled test calendar' }));
     expect(screen.queryByLabelText('Public iCloud calendar link')).toBeNull();
