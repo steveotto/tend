@@ -225,6 +225,21 @@ function Browser({
     setRaw(result.raw);
   }
 
+  function editPrayer() {
+    const first = data.prayerRequests[0];
+    if (!first) throw new Error('Synthetic account fixture needs a Prayer.');
+    const next = {
+      ...data,
+      prayerRequests: data.prayerRequests.map(request => request.id === first.id
+        ? { ...request, title: 'Edited on second device', updatedAt: '2026-11-06T14:00:00.000Z' }
+        : request)
+    };
+    const result = writePreview(storage, next, raw, { currentDate });
+    if (result.kind !== 'saved') throw new Error('Synthetic Prayer edit did not save.');
+    setData(next);
+    setRaw(result.raw);
+  }
+
   function restore(
     next: PreviewData,
     expectedRaw: string | null,
@@ -272,8 +287,10 @@ function Browser({
   return (
     <>
       <output data-testid="person-name">{data.people[0]?.displayName ?? 'No Person'}</output>
+      <output data-testid="prayer-title">{data.prayerRequests[0]?.title ?? 'No Prayer'}</output>
       <button type="button" onClick={() => editPerson('Device edit')}>Edit this device</button>
       <button type="button" onClick={() => editPerson('Second device edit')}>Edit second device</button>
+      <button type="button" onClick={editPrayer}>Edit Prayer on this device</button>
       <div ref={setSyncTarget} />
       <div hidden={!recoveryOpen} ref={setRecoveryTarget} />
       <PreviewAccountSync
@@ -1574,6 +1591,213 @@ describe('Preview account sync', () => {
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toContain('"data"');
     expect(storage.values.get(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toContain('"people":[]');
     expect(screen.getAllByText('Saved to your account').length).toBeGreaterThan(0);
+    view.unmount();
+  });
+
+  it('loads populated legacy Prayer data into a clean device, edits it, and reloads the original device', async () => {
+    const seedData = createEmptyPreviewData();
+    seedData.people = [
+      { id: 'avery', displayName: 'Avery' },
+      { id: 'morgan', displayName: 'Morgan' }
+    ];
+    seedData.prayerRequests = [{
+      id: 'legacy-prayer',
+      personId: 'avery',
+      sharedWith: ['morgan'],
+      title: 'Synthetic legacy request',
+      status: 'active',
+      schedule: { frequency: 'weekly', weekdays: [1, 3], weeklyMode: 'select-days' },
+      timeOfDay: 'evening',
+      createdAt: '2026-11-01T12:00:00.000Z',
+      updatedAt: '2026-11-05T12:00:00.000Z',
+      prayerLogs: [{
+        id: 'legacy-prayer-log',
+        prayedAt: '2026-11-04T12:00:00.000Z',
+        notes: 'Synthetic history only'
+      }]
+    }];
+    let canonicalState = mergePrayerRequestsIntoClassicState({
+      people: [
+        { id: 'avery', name: 'Avery' },
+        { id: 'morgan', name: 'Morgan' }
+      ],
+      prayers: [],
+      tasks: [{ id: 'keep-task', title: 'Unrelated' }]
+    }, createPreviewEnvelope(seedData));
+    const classicPrayer = (canonicalState.prayers as Array<Record<string, unknown>>)[0]!;
+    classicPrayer.sharedWith = ['avery', 'morgan'];
+    classicPrayer.unknownPrayerField = { preserve: true };
+    canonicalState.unrelatedAccountField = { preserve: true };
+    const originalCanonicalState = structuredClone(canonicalState);
+    let revision = 6;
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({
+        maybeSingle: vi.fn(async () => ({
+          data: {
+            state: structuredClone(canonicalState),
+            schema_version: 1,
+            revision,
+            updated_at: '2026-11-05T12:00:00.000Z'
+          },
+          error: null
+        }))
+      }))
+    }));
+    const rpc = vi.fn(async (_functionName: string, parameters: {
+      p_state: Record<string, unknown>;
+      p_expected_revision: number;
+      p_schema_version: number;
+    }) => {
+      if (parameters.p_expected_revision !== revision) {
+        return { data: null, error: { code: '40001', message: 'Stale revision' } };
+      }
+      canonicalState = structuredClone(parameters.p_state);
+      revision += 1;
+      return {
+        data: [{ revision, updated_at: '2026-11-06T14:00:00.000Z' }],
+        error: null
+      };
+    });
+    const api = createCanonicalAccountApi({
+      from,
+      rpc
+    } satisfies CanonicalAccountSupabaseClient);
+    const initialCloud = await api.read();
+    expect(initialCloud).not.toBeNull();
+    const validated = validatePreviewAccountBackup(initialCloud!, currentDate);
+    expect(validated.envelope.data.prayerRequests[0]?.sharedWith).toEqual(['morgan']);
+
+    const originalDevice = makeStorage(validated.envelope.data);
+    originalDevice.values.set(`${PREVIEW_STORAGE_KEY}:account-sync-state`, JSON.stringify({
+      accountId,
+      revision: initialCloud!.revision,
+      syncedEnvelope: validated.envelope,
+      syncedAt: initialCloud!.updatedAt
+    }));
+    const original = render(
+      <Browser api={api} storage={originalDevice.storage} initialData={createEmptyPreviewData()} />
+    );
+    await screen.findByText('Saved to your account');
+    expect(screen.getByTestId('prayer-title').textContent).toBe('Synthetic legacy request');
+    original.unmount();
+
+    const secondDevice = makeStorage(createEmptyPreviewData());
+    const fresh = render(
+      <Browser
+        api={api}
+        storage={secondDevice.storage}
+        initialData={createEmptyPreviewData()}
+        localIsPristine
+      />
+    );
+    await screen.findByText('Saved to your account');
+    expect(screen.getByTestId('prayer-title').textContent).toBe('Synthetic legacy request');
+    const beforeEdit = parsePreviewBackup(
+      secondDevice.values.get(PREVIEW_STORAGE_KEY)!,
+      currentDate
+    );
+    expect(beforeEdit.valid).toBe(true);
+    if (!beforeEdit.valid) throw new Error('Fresh-device legacy Prayer fixture did not validate.');
+    expect(beforeEdit.envelope.data.prayerRequests[0]).toMatchObject({
+      sharedWith: ['morgan'],
+      schedule: { frequency: 'weekly', weekdays: [1, 3], weeklyMode: 'select-days' },
+      prayerLogs: [{
+        id: 'legacy-prayer-log',
+        prayedAt: '2026-11-04T12:00:00.000Z',
+        notes: 'Synthetic history only'
+      }]
+    });
+    expect(rpc).not.toHaveBeenCalled();
+    expect(canonicalState).toEqual(originalCanonicalState);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Prayer on this device' }));
+    await waitFor(() => expect(revision).toBe(7), { timeout: 5000 });
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(canonicalState.prayers).toMatchObject([{
+      id: 'legacy-prayer',
+      personId: 'avery',
+      sharedWith: ['avery', 'morgan'],
+      unknownPrayerField: { preserve: true },
+      prayerLogs: [Date.parse('2026-11-04T12:00:00.000Z')]
+    }]);
+    expect(canonicalState.tasks).toEqual([{ id: 'keep-task', title: 'Unrelated' }]);
+    expect(canonicalState.unrelatedAccountField).toEqual({ preserve: true });
+    fresh.unmount();
+
+    const originalReload = render(
+      <Browser api={api} storage={originalDevice.storage} initialData={createEmptyPreviewData()} />
+    );
+    await waitFor(() => expect(screen.getByTestId('prayer-title').textContent)
+      .toBe('Edited on second device'));
+    const reloaded = parsePreviewBackup(
+      originalDevice.values.get(PREVIEW_STORAGE_KEY)!,
+      currentDate
+    );
+    expect(reloaded.valid).toBe(true);
+    if (!reloaded.valid) throw new Error('Original-device reload did not validate.');
+    expect(reloaded.envelope.data.people.map(person => person.id)).toEqual(['avery', 'morgan']);
+    expect(reloaded.envelope.data.prayerRequests[0]).toMatchObject({
+      title: 'Edited on second device',
+      sharedWith: ['morgan'],
+      schedule: { frequency: 'weekly', weekdays: [1, 3], weeklyMode: 'select-days' },
+      prayerLogs: [{
+        id: 'legacy-prayer-log',
+        prayedAt: '2026-11-04T12:00:00.000Z',
+        notes: 'Synthetic history only'
+      }]
+    });
+    expect(revision).toBe(7);
+    originalReload.unmount();
+  });
+
+  it('does not initialize a clean device or write when canonical Prayer references are unresolved', async () => {
+    const canonicalState = {
+      people: [{ id: 'avery', name: 'Avery' }],
+      prayers: [{
+        id: 'orphan-prayer',
+        personId: 'avery',
+        sharedWith: ['missing-person'],
+        text: 'Synthetic unresolved request',
+        added: '2026-11-01',
+        freq: 'daily',
+        prayerLogs: [Date.parse('2026-11-04T12:00:00.000Z')]
+      }],
+      tasks: [{ id: 'keep-task', title: 'Unrelated' }]
+    };
+    const originalCanonicalState = structuredClone(canonicalState);
+    const rpc = vi.fn(async () => ({ data: null, error: null }));
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({
+        maybeSingle: vi.fn(async () => ({
+          data: {
+            state: canonicalState,
+            schema_version: 1,
+            revision: 3,
+            updated_at: '2026-11-05T12:00:00.000Z'
+          },
+          error: null
+        }))
+      }))
+    }));
+    const api = createCanonicalAccountApi({
+      from,
+      rpc
+    } satisfies CanonicalAccountSupabaseClient);
+    const cleanDevice = makeStorage();
+    const view = render(
+      <Browser
+        api={api}
+        storage={cleanDevice.storage}
+        initialData={createEmptyPreviewData()}
+        localIsPristine
+      />
+    );
+
+    await screen.findByText(/preview\.prayer-requests\.invalid at data\.prayerRequests/i);
+    expect(cleanDevice.values.has(PREVIEW_STORAGE_KEY)).toBe(false);
+    expect(cleanDevice.values.has(PREVIEW_CLOUD_RESTORE_RECOVERY_KEY)).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
+    expect(canonicalState).toEqual(originalCanonicalState);
     view.unmount();
   });
 

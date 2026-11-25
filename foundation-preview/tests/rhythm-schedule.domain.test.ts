@@ -45,6 +45,26 @@ describe('pure structured Rhythm schedule domain', () => {
     }).valid).toBe(false);
   });
 
+  it('accepts selected-day schedules with one or more valid weekdays', () => {
+    for (const weekdays of [[1], [1, 3], [1, 3, 5], [0, 1, 2, 3, 4, 5, 6]]) {
+      expect(validateRhythmSchedule({
+        frequency: 'weekly',
+        weekdays,
+        weeklyMode: 'select-days'
+      }).valid).toBe(true);
+    }
+    expect(validateRhythmSchedule({
+      frequency: 'weekly',
+      weekdays: [1, 3],
+      weeklyMode: 'invalid'
+    }).valid).toBe(false);
+    expect(validateRhythmSchedule({
+      frequency: 'weekly',
+      weekdays: [1, 3],
+      weeklyMode: 'select-days'
+    }, false).valid).toBe(false);
+  });
+
   it('validates intervals, patterns, months, and local calendar dates without computing occurrences', () => {
     for (const interval of [0, 366, 1.5, '2']) {
       expect(validateRhythmSchedule({

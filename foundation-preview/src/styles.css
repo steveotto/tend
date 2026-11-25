@@ -22895,7 +22895,7 @@ button.strength-guided__performance:focus-visible {
   align-items: baseline;
   justify-content: center;
   flex-wrap: nowrap;
-  gap: 3px;
+  gap: 0;
   max-width: 100%;
   white-space: nowrap;
   font-size: calc(18px * var(--app-text-scale, 1));
@@ -23341,6 +23341,13 @@ button.strength-guided__performance:focus-visible {
 @media (max-width: 360px) {
   .cardio-activity-summary__metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cardio-all-activities-summary .cardio-activity-summary__value {
+    max-width: 100%;
+    flex-wrap: wrap;
+    gap: 0 0.32em;
+    white-space: normal;
   }
 
   .cardio-weekly-summary .cardio-activity-summary__metrics {

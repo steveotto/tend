@@ -226,7 +226,7 @@ export function isValidTimeZone(value: unknown): value is string {
   }
 }
 
-function isRhythmSchedule(value: unknown, allowSingleDaySelectDays = true): value is RhythmSchedule {
+function isRhythmSchedule(value: unknown, allowWeeklyMode = true): value is RhythmSchedule {
   if (!isRecord(value) || typeof value.frequency !== 'string') {
     return false;
   }
@@ -235,10 +235,10 @@ function isRhythmSchedule(value: unknown, allowSingleDaySelectDays = true): valu
   if (value.frequency === 'daily') {
     valid = hasOnlyKeys(value, commonKeys) && isValidOptionalEndDate(value);
   } else if (value.frequency === 'weekly') {
-    valid = hasOnlyKeys(value, [...commonKeys, 'weekdays', ...(allowSingleDaySelectDays ? ['weeklyMode'] : [])])
+    valid = hasOnlyKeys(value, [...commonKeys, 'weekdays', ...(allowWeeklyMode ? ['weeklyMode'] : [])])
       && isWeekdayList(value.weekdays)
       && (value.weeklyMode === undefined
-        || value.weeklyMode === 'select-days' && value.weekdays.length === 1)
+        || value.weeklyMode === 'select-days')
       && isValidOptionalEndDate(value);
   } else if (value.frequency === 'monthly') {
     valid = hasOnlyKeys(value, [...commonKeys, 'pattern'])
@@ -278,8 +278,8 @@ function isRhythmSchedule(value: unknown, allowSingleDaySelectDays = true): valu
   return valid;
 }
 
-export function validateRhythmSchedule(value: unknown, allowSingleDaySelectDays = true): RhythmScheduleValidation {
-  if (isRhythmSchedule(value, allowSingleDaySelectDays)) return { valid: true, schedule: value };
+export function validateRhythmSchedule(value: unknown, allowWeeklyMode = true): RhythmScheduleValidation {
+  if (isRhythmSchedule(value, allowWeeklyMode)) return { valid: true, schedule: value };
   return {
     valid: false,
     errors: [isRecord(value) ? 'The schedule contains missing, invalid, or unsupported fields.' : 'Choose a supported schedule.']
@@ -288,7 +288,7 @@ export function validateRhythmSchedule(value: unknown, allowSingleDaySelectDays 
 
 export function validateRhythmScoringMetadata(
   value: unknown,
-  allowSingleDaySelectDays = true
+  allowWeeklyMode = true
 ): value is RhythmScoringMetadata {
   if (!isRecord(value) || !hasOnlyKeys(value, ['trackingStartDate', 'timeZone', 'scheduleHistory'])
     || typeof value.trackingStartDate !== 'string' || !isValidDate(value.trackingStartDate)
@@ -308,7 +308,7 @@ export function validateRhythmScoringMetadata(
       || typeof segment.paletteToken !== 'string'
       || !rhythmSeasonPaletteTokens.includes(segment.paletteToken as RhythmSeasonPaletteToken)) return false;
     const knownSegment = segment.kind === 'scheduled'
-      && validateRhythmSchedule(segment.schedule, allowSingleDaySelectDays).valid
+      && validateRhythmSchedule(segment.schedule, allowWeeklyMode).valid
       && (segment.timeOfDay === undefined || isRhythmTimeValue(segment.timeOfDay))
       && segment.descriptiveCadence === undefined
       && (segment.contextCadence === undefined
