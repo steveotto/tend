@@ -24,6 +24,10 @@ import {
   PREVIEW_V32_RECOVERY_KEY,
   writePreview
 } from '../src/storage/preview-storage.ts';
+import type {
+  PreviewAccountBackupApi,
+  PreviewAccountBackupRecord
+} from '../src/storage/preview-account-backup.ts';
 import type { PreviewStorage } from '../src/storage/preview-storage.ts';
 import { installMemoryStorage } from './memory-storage.ts';
 import { withPreSparkSchema } from './legacy-preview-fixtures.ts';
@@ -67,6 +71,56 @@ function storedAccountName(label: string): string {
 }
 
 describe('account-isolated Preview storage', () => {
+  it('keeps a clean authenticated device read-only until the user runs the account check', async () => {
+    const previousUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.history.replaceState({}, '', `${window.location.pathname}?sync-check=read-only`);
+    const envelope = createPreviewEnvelope(accountData('Cloud only person'));
+    const record: PreviewAccountBackupRecord = {
+      document: envelope,
+      schemaVersion: envelope.schemaVersion,
+      revision: 23,
+      updatedAt: '2026-11-25T12:00:00.000Z',
+      canonicalStructure: {
+        people: envelope.data.people.length,
+        prayers: envelope.data.prayerRequests.length,
+        prayerLogs: envelope.data.prayerRequests.reduce(
+          (total, prayer) => total + prayer.prayerLogs.length,
+          0
+        ),
+        prayersWithNullPersonId: 0
+      }
+    };
+    const api: PreviewAccountBackupApi = {
+      read: vi.fn(async () => structuredClone(record)),
+      save: vi.fn(async () => 24),
+      preserveRecovery: vi.fn(async () => 24)
+    };
+    const setItem = vi.spyOn(window.localStorage, 'setItem');
+    const removeItem = vi.spyOn(window.localStorage, 'removeItem');
+
+    try {
+      render(<App identity={accountA} accountBackupApi={api} />);
+      await screen.findByRole('heading', { name: 'Read-only account data check' });
+      expect(window.localStorage.length).toBe(0);
+      expect(api.read).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Run read-only account check' }));
+      await screen.findByRole('status');
+
+      expect(screen.getByRole('status').textContent).toContain('revision read on this device: 23');
+      expect(api.read).toHaveBeenCalledOnce();
+      expect(api.save).not.toHaveBeenCalled();
+      expect(api.preserveRecovery).not.toHaveBeenCalled();
+      expect(setItem).not.toHaveBeenCalled();
+      expect(removeItem).not.toHaveBeenCalled();
+      expect(window.localStorage.length).toBe(0);
+    } finally {
+      setItem.mockRestore();
+      removeItem.mockRestore();
+      window.history.replaceState({}, '', previousUrl);
+    }
+  });
+
   it('does not create storage scopes for pending, signed-out, or invalid identities', () => {
     const calls: string[] = [];
     const storage: PreviewStorage = {
