@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { RhythmCompletionDialog } from '../src/components/RhythmCompletionDialog.tsx';
@@ -58,7 +58,7 @@ describe('Rhythm completion controls', () => {
     fireEvent.keyDown(dial, { key: 'End' });
     expect(onChange).toHaveBeenLastCalledWith(59);
     fireEvent.scroll(dial, { target: { scrollTop: 4 * 40 } });
-    expect(onChange).toHaveBeenLastCalledWith(4);
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(4));
   });
 
   it.each(['AM', 'PM'] as const)('centers the initial %s value and keeps click and keyboard selection synchronized', async initial => {
@@ -173,7 +173,7 @@ describe('Rhythm completion controls', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'AM' }));
     fireEvent.scroll(minute, { target: { scrollTop: 2 * 40 } });
-    expect(minute.getAttribute('aria-valuetext')).toBe('02');
+    await waitFor(() => expect(minute.getAttribute('aria-valuetext')).toBe('02'));
     expect(screen.getByRole('button', { name: 'Set minutes to 00' }).getAttribute('aria-pressed')).toBe('false');
 
     minute.focus();

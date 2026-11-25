@@ -7,6 +7,7 @@ import {
   selectSparksVisibleToPeople,
   selectSparkVisiblePeople
 } from '../src/domain/home-sparks.ts';
+import { selectOpenPersonSparks } from '../src/domain/person-sparks.ts';
 import type { PersonSpark } from '../src/domain/person-sparks.ts';
 
 function spark(id: string, overrides: Partial<PersonSpark> = {}): PersonSpark {
@@ -93,6 +94,7 @@ describe('Home Spark selection', () => {
     const active = selectPersonSparksByStatus(sparks, 'active');
     const completed = selectPersonSparksByStatus(sparks, 'completed');
     const archived = selectPersonSparksByStatus(sparks, 'archived');
+    expect(selectOpenPersonSparks(sparks).map(item => item.id)).toEqual(['active-future']);
     expect(active.map(item => item.id)).toEqual(['active-future']);
     expect(completed.map(item => item.id)).toEqual(['completed']);
     expect(archived.map(item => item.id)).toEqual(['archived', 'archived-completed']);

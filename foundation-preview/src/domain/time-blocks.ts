@@ -107,8 +107,8 @@ export function validateTimeBlockSettings(value: unknown): TimeBlockValidation {
 
 export function assignedTimeBlockIds(
   rhythms: readonly {
-    timeOfDay?: RhythmTimeValue;
-    scoring?: { scheduleHistory?: readonly { kind: string; timeOfDay?: RhythmTimeValue }[] };
+    timeOfDay?: RhythmTimeValue | undefined;
+    scoring?: { scheduleHistory?: readonly { kind: string; timeOfDay?: RhythmTimeValue | undefined }[] };
   }[]
 ): ReadonlySet<TimeBlockId> {
   const assigned = new Set<TimeBlockId>();

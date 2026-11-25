@@ -252,8 +252,8 @@ describe('Season-scoped Health scoring', () => {
           completedCount: 0
         }
       },
-      onTrack: { kind: 'scored', score: 70, evidence: { missedOccurrenceCount: 3 } },
-      healthScore: 17.5
+      onTrack: { kind: 'scored', score: 0, evidence: { missedOccurrenceCount: 3 } },
+      healthScore: 0
     });
   });
 
@@ -314,8 +314,8 @@ describe('Season-scoped Health scoring', () => {
           completedCount: 0
         }
       },
-      onTrack: { kind: 'scored', score: 50, evidence: { missedOccurrenceCount: 5 } },
-      healthScore: 12.5
+      onTrack: { kind: 'scored', score: 0, evidence: { missedOccurrenceCount: 5 } },
+      healthScore: 0
     });
     expect(selectedDaysScore).toMatchObject({
       kind: 'rhythm-score',

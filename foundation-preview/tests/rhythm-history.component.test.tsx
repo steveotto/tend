@@ -44,7 +44,10 @@ import {
 } from '../src/domain/rhythm-score-presentation.ts';
 import { historyButtonName } from './history-button-name.ts';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const connection = marriageRhythms.find(rhythm => rhythm.id === 'sample-marriage-connection')!;
 const todayConnection = todayRhythms.find(rhythm => rhythm.id === 'sample-connect')!;
@@ -1370,11 +1373,25 @@ describe('shared Rhythm history', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(120_000);
       });
+      expectScores('43.75', '25', '100');
+      expectChartToday('2026-10-24');
+
+      act(() => {
+        vi.setSystemTime(new Date('2026-10-24T22:01:00.000Z'));
+        fireEvent(document, new Event('visibilitychange'));
+      });
       expectScores('41.25', '25', '90');
       expectChartToday('2026-10-24');
 
       act(() => {
         vi.setSystemTime(new Date('2026-10-25T04:01:00.000Z'));
+        fireEvent(document, new Event('visibilitychange'));
+      });
+      expectScores('37.5', '20', '90');
+      expectChartToday('2026-10-25');
+
+      act(() => {
+        vi.setSystemTime(new Date('2026-10-25T22:01:00.000Z'));
         fireEvent(document, new Event('visibilitychange'));
       });
       expectScores('35', '20', '80');
@@ -1984,12 +2001,15 @@ describe('shared Rhythm history', () => {
     expect(completedEntry.getAttribute('aria-label')).toMatch(
       /Qualifying completion on .* reset the missed-occurrence count and On Track score to 100/
     );
-    const missedEntry = allOnTrackItems.find(item =>
+    const missedEntries = allOnTrackItems.filter(item =>
       item.getAttribute('aria-label')?.startsWith('Missed scheduled occurrence')
-    )!;
-    expect(missedEntry.getAttribute('aria-label')).toMatch(
-      /Missed scheduled occurrence on .* 10-point deduction applied\. Resulting On Track score: \d+\./
     );
+    expect(missedEntries.some(item =>
+      item.getAttribute('aria-label')?.includes('before the first qualifying Tend; On Track stays at 0')
+    )).toBe(true);
+    expect(missedEntries.some(item =>
+      /10-point deduction applied\. Resulting On Track score: \d+\./.test(item.getAttribute('aria-label') ?? '')
+    )).toBe(true);
     const todayEntry = allOnTrackItems.at(-1)!;
     expect(todayEntry.getAttribute('aria-label')).toMatch(/Current On Track state as of .* Current score: 70\./);
     expect(todayEntry.getAttribute('aria-label')).not.toMatch(/today|pending|not counted as missed/i);
@@ -2174,7 +2194,10 @@ describe('shared Rhythm history', () => {
     const user = userEvent.setup();
     const asOfDate = localDateInTimeZone(new Date(), 'UTC');
     const trackingStartDate = addCalendarDays(asOfDate, -20);
-    const rhythm = rhythmForSchedule({ frequency: 'daily' }, trackingStartDate);
+    const rhythm = {
+      ...rhythmForSchedule({ frequency: 'daily' }, trackingStartDate),
+      completionHistory: [{ id: 'initial-completion', effectiveDate: trackingStartDate }]
+    };
     const { rerender } = render(
       <RhythmHistoryView rhythm={rhythm} completionHistoryAvailable />
     );
@@ -2508,6 +2531,8 @@ describe('shared Rhythm history', () => {
   });
 
   it('derives the automatic start from the oldest dated completion and shows short-history context', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 24, 23, 0, 0));
     const user = userEvent.setup();
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const currentDate = localDateInTimeZone(new Date(), timeZone);
@@ -2535,7 +2560,9 @@ describe('shared Rhythm history', () => {
     expect(screen.queryByRole('button', { name: 'Set tracking start' })).toBeNull();
   });
 
-  it('explains an 80 On Track score from two missed dates despite zero logged moments', async () => {
+  it('explains a zero On Track score from missed dates before the first completion', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 24, 23, 0, 0));
     const user = userEvent.setup();
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const currentDate = localDateInTimeZone(new Date(), timeZone);
@@ -2557,12 +2584,18 @@ describe('shared Rhythm history', () => {
     }));
 
     expect(screen.getByRole('button', { name: 'Logged moments (0)' })).toBeTruthy();
-    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('80');
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('0');
     await openRhythmScoringDetails(user);
     const breakdown = screen.getByRole('dialog', { name: 'Rhythm Health details' });
     const missedOccurrences = within(breakdown).getByText('Missed occurrences');
     expect(missedOccurrences.parentElement?.querySelector('dd')?.textContent).toBe('2');
-    expect(within(breakdown).getAllByRole('listitem', { name: /Missed scheduled occurrence/ })).toHaveLength(2);
+    expect(breakdown.textContent).toContain('0 until the first qualifying Tend');
+    expect(within(breakdown).getAllByRole('listitem', {
+      name: /before the first qualifying Tend; On Track stays at 0/
+    })).toHaveLength(1);
+    expect(within(breakdown).getByRole('listitem', {
+      name: /On Track remained at 0 through 1 additional missed occurrence/
+    })).toBeTruthy();
   });
 
   it('shows the selected Rhythm identity, updates its schedule, and restores focus when dismissed', async () => {
@@ -2618,6 +2651,8 @@ describe('shared Rhythm history', () => {
   });
 
   it('announces the short confirmed tracking period beside the matching breakdown', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 10, 24, 23, 0, 0));
     const user = userEvent.setup();
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const currentDate = localDateInTimeZone(new Date(), timeZone);
@@ -2887,6 +2922,44 @@ describe('shared Rhythm history', () => {
     expect(within(history).getByRole('heading', { name: 'Daily' })).toBeTruthy();
     expect(document.querySelector('.rhythm-history-view__completion-total strong')?.textContent ?? '0')
       .toBe('0');
+  });
+
+  it('shows the first missed Rhythm opportunity as zero with an honest never-tended explanation', async () => {
+    const user = userEvent.setup();
+    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const trackingStartDate = addCalendarDays(asOfDate, -1);
+    const schedule = { frequency: 'daily' as const };
+    const rhythmId = 'never-tended-daily-connection';
+    const rhythm: RhythmPreview = {
+      ...todayConnection,
+      id: rhythmId,
+      title: 'Daily connection',
+      schedule,
+      createdLocalDate: trackingStartDate,
+      createdTimeZone: 'UTC',
+      scoring: {
+        trackingStartDate,
+        timeZone: 'UTC',
+        scheduleHistory: [createRhythmSeason(rhythmId, trackingStartDate, schedule)]
+      },
+      completionHistory: []
+    };
+
+    render(<RhythmHistoryView rhythm={rhythm} />);
+    expect(screen.getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow')).toBe('0');
+    await user.click(screen.getByRole('button', { name: 'Show Health Consistency and On Track breakdown' }));
+    expect(screen.getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow')).toBe('0');
+    expect(screen.getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow')).toBe('0');
+
+    await user.click(screen.getByRole('button', { name: 'Show Consistency and On Track score details' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rhythm Health details' });
+    await user.click(within(dialog).getByRole('button', { name: 'How this Rhythm was scored' }));
+    const onTrack = within(dialog).getByRole('region', { name: 'On Track scoring evidence' });
+    expect(within(onTrack).getByText('None yet')).toBeTruthy();
+    expect(onTrack.textContent).toContain('0 until the first qualifying Tend');
+    expect(within(onTrack).getAllByRole('listitem').some(item =>
+      item.getAttribute('aria-label')?.includes('before the first qualifying Tend; On Track stays at 0')
+    )).toBe(true);
   });
 
   it('keeps the rhythm title first and omits absent details while allowing long-title wrapping', () => {

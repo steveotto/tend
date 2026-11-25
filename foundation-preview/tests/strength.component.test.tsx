@@ -957,6 +957,7 @@ describe('Strength preview presentation', () => {
     expect(within(historyRegion).queryByRole('button', { name: 'View all' })).toBeNull();
     await user.click(addButton);
     let browser = screen.getByRole('dialog', { name: 'Add workout' });
+    expect(browser.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(within(browser).getByRole('heading', { name: 'Create your own' })).toBeTruthy();
     expect(within(browser).getByText('Choose exercises, sets, and reps.')).toBeTruthy();
     expect(within(browser).getByRole('region', { name: 'Starter routines' })).toBeTruthy();

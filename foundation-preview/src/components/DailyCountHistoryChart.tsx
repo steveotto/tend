@@ -7,7 +7,8 @@ export function DailyCountHistoryChart({
   activityName,
   activitySingular,
   activityPlural,
-  valuesLabel
+  valuesLabel,
+  theme
 }: {
   dailyCounts: readonly { date: string; count: number }[];
   todayDate?: string;
@@ -15,6 +16,7 @@ export function DailyCountHistoryChart({
   activitySingular: string;
   activityPlural: string;
   valuesLabel: string;
+  theme?: 'prayer';
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const latestDate = dailyCounts.at(-1)?.date;
@@ -49,7 +51,11 @@ export function DailyCountHistoryChart({
 
   if (dailyCounts.length === 0) {
     return (
-      <div className="rhythm-history-view__chart-placeholder" aria-hidden="true">
+      <div
+        className="rhythm-history-view__chart-placeholder"
+        data-theme={theme}
+        aria-hidden="true"
+      >
         <div className="rhythm-history-view__chart-placeholder-plot" />
       </div>
     );
@@ -58,7 +64,7 @@ export function DailyCountHistoryChart({
   const maxCount = Math.max(1, ...dailyCounts.map(item => item.count));
 
   return (
-    <div className="rhythm-history-view__chart-section">
+    <div className="rhythm-history-view__chart-section" data-theme={theme}>
       <div
         ref={scrollRef}
         className="rhythm-history-view__chart-scroll"
@@ -82,6 +88,7 @@ export function DailyCountHistoryChart({
             return (
               <li
                 key={item.date}
+                data-today={isToday}
                 aria-label={item.count === 0
                   ? `${dateLabel}: ${isToday
                     ? `no ${activitySingular} recorded yet, today`

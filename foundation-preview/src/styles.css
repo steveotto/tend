@@ -95,7 +95,7 @@ button {
   z-index: 1;
   max-width: 1100px;
   margin: 0 auto;
-  padding: calc(24px + env(safe-area-inset-top)) 22px calc(120px + env(safe-area-inset-bottom));
+  padding: calc(24px + env(safe-area-inset-top)) 22px calc(120px + var(--tend-mobile-safe-area-bottom, env(safe-area-inset-bottom, 0px)));
 }
 
 .apphead {
@@ -490,6 +490,11 @@ nav.tabs {
 }
 
 @media (max-width: 720px) {
+  :root {
+    --tend-mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --tend-mobile-nav-height: calc(72px + var(--tend-mobile-safe-area-bottom));
+  }
+
   .utility-primary {
     gap: 6px;
   }
@@ -564,8 +569,9 @@ nav.tabs {
     left: 0;
     z-index: 80;
     width: 100%;
+    height: var(--tend-mobile-nav-height);
     margin: 0;
-    padding: 7px 14px calc(7px + env(safe-area-inset-bottom, 0px));
+    padding: 7px 14px calc(7px + var(--tend-mobile-safe-area-bottom));
     border: 0;
     border-top: 1px solid var(--tend-line);
     background: var(--tend-surface);
@@ -3125,23 +3131,6 @@ a:focus-visible {
     color: var(--ink-soft);
   }
 
-  .preview-footer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 14px;
-    margin-top: 24px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
-    color: var(--ink-faint);
-    font-size: calc(0.6875rem * var(--app-text-scale, 1));
-  }
-
-  .preview-footer a {
-    color: var(--forest);
-    font-weight: 600;
-  }
-
   .preview-data-controls {
     display: grid;
     gap: 10px;
@@ -3921,16 +3910,17 @@ a:focus-visible {
     }
 
     .rhythm-schedule-fields__end-date-row {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      gap: 4px;
       min-width: 0;
     }
 
     .rhythm-schedule-fields__end-date {
       gap: 0;
       margin: 0;
+      justify-self: start;
     }
 
     .rhythm-schedule-fields__end-date input {
@@ -3949,6 +3939,7 @@ a:focus-visible {
       gap: 8px;
       width: fit-content;
       min-height: 44px;
+      max-width: 100%;
       color: var(--ink-soft);
       font-size: calc(0.8125rem * var(--app-text-scale, 1));
       font-weight: 500;
@@ -3958,9 +3949,15 @@ a:focus-visible {
     .rhythm-editor__checkbox-row input,
     .rhythm-schedule-fields__end-toggle input {
       width: 18px;
+      flex: 0 0 18px;
       height: 18px;
       margin: 0;
-      accent-color: var(--forest);
+      accent-color: var(--rhythm-schedule-accent, var(--forest));
+    }
+
+    .rhythm-schedule-fields__end-toggle input:focus-visible {
+      outline: 2px solid var(--rhythm-schedule-focus, var(--forest));
+      outline-offset: 2px;
     }
 
     .rhythm-editor__fitness-capabilities {
@@ -5462,13 +5459,17 @@ dialog.health-score-details-dialog[open] {
 }
 
 .health-score-breakdown__measure-toggle[aria-expanded='true'] {
-  border-color: var(--tend-forest);
-  background: var(--tend-forest);
+  border-color: var(--tend-line);
+  background: var(--tend-surface);
 }
 
 .health-score-breakdown__measure-toggle[aria-expanded='true'] svg {
-  stroke: #ffffff;
   transform: rotate(180deg);
+}
+
+.health-score-breakdown__measure-toggle:hover,
+.health-score-breakdown__measure-toggle:active {
+  background: color-mix(in srgb, var(--tend-line) 20%, var(--tend-surface));
 }
 
 .health-score-breakdown__measure-toggle:focus-visible {
@@ -5587,9 +5588,10 @@ dialog.health-score-details-dialog[open] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  padding: 6px 10px;
+  border: 1px solid var(--tend-line, var(--line));
+  border-radius: 8px;
+  background: var(--tend-surface, white);
   color: var(--tend-ink, var(--ink));
   font-family: var(--tend-font-ui, var(--sans));
   font-size: calc(1.125rem * var(--app-text-scale, 1));
@@ -5597,6 +5599,11 @@ dialog.health-score-details-dialog[open] {
   line-height: 1.3;
   text-align: left;
   cursor: pointer;
+}
+
+.health-details-expandable-header:hover,
+.health-details-expandable-header:active {
+  background: color-mix(in srgb, var(--tend-line) 20%, var(--tend-surface, white));
 }
 
 .health-details-expandable-header > span:first-child {
@@ -7749,6 +7756,10 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   overflow-wrap: anywhere;
 }
 
+.tended-rhythm-done-row__title.friendships-connection-row__title {
+  color: var(--tend-ink, var(--ink));
+}
+
 .friendships-connection-row__source-type {
   flex: none;
   color: var(--tend-secondary);
@@ -7774,6 +7785,17 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   align-items: center;
   justify-self: end;
   gap: 4px;
+}
+
+.friendships-connection-row__calendar-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
 }
 
 .friendships-connection-row:hover {
@@ -7916,8 +7938,8 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .friendships-participants {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
   margin: 0;
@@ -7927,15 +7949,18 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .friendships-participants legend {
+  grid-column: 1 / -1;
   padding: 0 5px;
   color: var(--ink-soft, #66736b);
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
 }
 
 .friendships-participants label {
+  box-sizing: border-box;
   display: flex;
-  flex: 0 1 auto;
   align-items: center;
+  justify-self: start;
+  width: 100%;
   gap: 7px;
   min-width: 0;
   min-height: 44px;
@@ -7949,6 +7974,12 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   min-width: 18px;
   min-height: 18px;
   accent-color: var(--forest-deep, #294c3a);
+}
+
+@media (max-width: 360px) {
+  .friendships-participants {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .friendships-form-error {
@@ -8507,11 +8538,11 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   display: grid;
   justify-items: center;
   align-content: start;
-  gap: var(--tend-space-unit, 8px);
+  gap: 6px;
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  padding: 10px 6px 0;
+  padding: 8px 2px 0;
   border: 0;
   color: var(--tend-secondary, var(--ink-soft));
   background: transparent;
@@ -8604,31 +8635,67 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   transform: rotate(180deg);
 }
 
-.person-profile__queue-heading {
+.person-profile-tab-header {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+  gap: 8px 12px;
   min-width: 0;
 }
 
-.person-profile__queue-count {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--tend-mist, var(--mist));
-  color: var(--tend-forest, var(--forest));
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  font-weight: 600;
-  line-height: 1.25;
+.person-profile-tab-header__copy {
+  flex: 1 1 150px;
+  min-width: 0;
 }
 
-.person-profile__queue-heading h3 {
-  min-width: 0;
+.person-profile-tab-header__copy h3 {
   margin: 0;
+  color: var(--tend-ink, var(--ink));
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+.person-profile-tab-header__copy p {
+  margin: 3px 0 0;
+  color: var(--tend-secondary, var(--ink-soft));
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.person-profile-tab-header__action {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 44px;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  font: 600 calc(0.875rem * var(--app-text-scale, 1))/1.2 var(--tend-font-ui, var(--sans));
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.person-profile-tab-header__action:hover {
+  filter: brightness(0.94);
+}
+
+.person-profile-tab-header__action:focus-visible {
+  outline: 3px solid var(--tend-forest, var(--forest));
+  outline-offset: 2px;
+}
+
+.person-profile-tab-header--prayer .person-profile-tab-header__action {
+  border-color: var(--tend-prayer-action);
+  background: var(--tend-prayer-action);
+}
+
+.person-profile-tab-header--prayer .person-profile-tab-header__action:focus-visible {
+  outline-color: var(--tend-prayer-text);
 }
 
 .person-profile__rhythm-actions {
@@ -8657,23 +8724,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 
 .preview-access-state p {
   color: var(--ink-soft, #66736b);
-}
-
-.preview-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 14px;
-  margin-top: 24px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  color: var(--ink-faint);
-  font-size: calc(0.6875rem * var(--app-text-scale, 1));
-}
-
-.preview-footer a {
-  color: var(--forest);
-  font-weight: 600;
 }
 
 .preview-login {
@@ -8849,38 +8899,288 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   line-height: 1.5;
 }
 
-.preview-footer .preview-sign-out {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--forest);
-  font: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
+
 
 .person-component-health-summary .health-score-measures__grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.person-profile__notes-access {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.person-profile__notes-view {
-  display: grid;
-  gap: 14px;
+.person-profile__notes-dock {
+  width: 100%;
   min-width: 0;
+  margin-top: 2px;
 }
 
-.person-profile__notes-view[hidden] {
-  display: none;
-}
-
-.person-profile__notes-view .person-profile__section-heading {
+.person-profile__notes-dock-button {
+  box-sizing: border-box;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 7px 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 14px 14px 8px 8px;
+  background: var(--tend-canvas);
+  color: var(--tend-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.person-profile__notes-dock-button:focus-visible,
+.person-notes-drawer button:focus-visible,
+.person-notes-drawer__scroll-region:focus-visible {
+  outline: 3px solid var(--tend-focus);
+  outline-offset: 3px;
+}
+
+.person-profile__notes-dock-label,
+.person-profile__notes-dock-actions {
+  display: inline-flex;
+  align-items: center;
+}
+
+.person-profile__notes-dock-label {
+  gap: 8px;
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 600;
+}
+
+.person-profile__notes-dock-label svg,
+.person-notes-drawer__header h2 svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.person-profile__notes-dock-actions {
+  gap: 10px;
+}
+
+.person-profile__notes-count {
+  display: inline-grid;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 6px;
+  place-items: center;
+  border: 1px solid var(--tend-line);
+  border-radius: 999px;
+  background: var(--tend-surface);
+  color: var(--tend-secondary);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1;
+}
+
+.person-profile__notes-chevron {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.person-notes-drawer {
+  position: fixed;
+  inset: auto 0 var(--tend-mobile-nav-height, calc(69px + env(safe-area-inset-bottom, 0px)));
+  box-sizing: border-box;
+  width: min(100%, 760px);
+  max-width: none;
+  max-height: calc(100dvh - 92px - env(safe-area-inset-bottom, 0px));
+  margin: 0 auto;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 18px 18px 0 0;
+  background: transparent;
+  color: var(--tend-ink);
+}
+
+.person-notes-drawer[open] {
+  animation: person-notes-drawer-enter 200ms ease-out both;
+}
+
+.person-notes-drawer::backdrop {
+  background: rgb(247 249 247 / 45%);
+}
+
+.person-notes-drawer__surface {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  height: min(68dvh, 560px);
+  max-height: inherit;
+  overflow: hidden;
+  border: 1px solid var(--tend-line);
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: var(--tend-canvas);
+  box-shadow: 0 -10px 24px rgb(32 39 35 / 11%);
+}
+
+.person-notes-drawer__drag-region {
+  padding: 10px 16px 0;
+  touch-action: none;
+}
+
+.person-notes-drawer__handle {
+  display: grid;
+  width: 48px;
+  height: 32px;
+  margin: 0 auto 8px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tend-secondary);
+  cursor: pointer;
+}
+
+.person-notes-drawer__handle-visual {
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tend-secondary) 42%, transparent);
+}
+
+.person-notes-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding-bottom: 10px;
+  background: var(--tend-canvas);
+}
+
+.person-notes-drawer__header h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  color: var(--tend-ink);
+  font-size: calc(1rem * var(--app-text-scale, 1));
+  font-weight: 600;
+}
+
+.person-notes-drawer__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.person-notes-drawer__add {
+  box-sizing: border-box;
+  min-height: 40px;
+  border: 1px solid var(--tend-line);
+  border-radius: 10px;
+  background: var(--tend-surface);
+  color: var(--tend-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.person-notes-drawer__add {
+  padding: 7px 12px;
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 650;
+}
+
+.person-notes-drawer__close {
+  display: grid;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tend-secondary);
+}
+
+.person-notes-drawer__close svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.person-notes-drawer__scroll-region {
+  min-height: 0;
+  padding: 4px 16px;
+  overflow-y: auto;
+  background: var(--tend-canvas);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.person-notes-drawer__scroll-region .friendships-empty {
+  margin: 12px 0;
+}
+
+.person-notes-drawer__total {
+  margin: 0;
+  padding: 8px 16px 12px;
+  color: var(--tend-secondary);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  text-align: right;
+}
+
+@keyframes person-notes-drawer-enter {
+  from { transform: translateY(24px); opacity: 0.85; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@media (min-width: 721px) {
+  .person-notes-drawer {
+    inset-block-end: 0;
+    max-height: min(76dvh, 660px);
+  }
+
+  .person-notes-drawer__surface {
+    height: min(72dvh, 620px);
+  }
+
+  .person-notes-drawer__total {
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 720px) {
+  .person-profile__notes-dock {
+    position: fixed;
+    z-index: 79;
+    right: 0;
+    bottom: var(--tend-mobile-nav-height);
+    left: 0;
+    width: 100%;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .person-profile__notes-dock-button {
+    width: 100%;
+    border-bottom: 0;
+    border-radius: 16px 16px 0 0;
+    margin: 0;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .person-notes-drawer[open] {
+    animation: none;
+  }
 }
 
 .prayer-theme,
@@ -8894,21 +9194,10 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .person-prayer-panel,
-.person-prayer-panel__group,
-.person-prayer-card__content {
+.person-prayer-panel__group {
   display: grid;
   gap: 12px;
   min-width: 0;
-}
-
-.person-prayer-panel .person-profile__section-heading > div {
-  min-width: 0;
-}
-
-.person-prayer-panel .person-profile__section-heading > div p {
-  margin: 4px 0 0;
-  color: var(--ink-soft, #66736b);
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
 }
 
 .person-prayer-panel__group {
@@ -8934,17 +9223,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   min-width: 0;
 }
 
-.person-prayer-card__content {
-  align-content: start;
-  gap: 8px;
-}
-
 .person-prayer-card {
-  grid-template-columns: minmax(0, 1fr) max-content;
-  align-items: start;
-  column-gap: 12px;
-  row-gap: 10px;
-  padding: 14px;
   border-color: color-mix(in srgb, var(--tend-prayer-border) 82%, var(--tend-line));
   background: var(--tend-prayer-surface);
   box-shadow: none;
@@ -8988,6 +9267,33 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   font-size: calc(0.75rem * var(--app-text-scale, 1));
 }
 
+.person-prayer-card__schedule {
+  margin: 0;
+  color: var(--tend-prayer-text);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.person-prayer-card__set-frequency {
+  justify-self: start;
+  min-height: 44px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--tend-prayer-action);
+  font: 650 calc(0.8125rem * var(--app-text-scale, 1))/1.4 var(--tend-font-ui, var(--sans));
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.person-prayer-card__set-frequency:focus-visible {
+  outline: 3px solid var(--tend-prayer-text);
+  outline-offset: 2px;
+}
+
 .person-prayer-card .person-badge-visual,
 .person-prayer-history .person-badge-visual {
   border-color: var(--tend-prayer-border);
@@ -9002,71 +9308,73 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   color: var(--tend-prayer-text);
 }
 
-.person-prayer-card__history-row {
-  display: flex;
-  min-width: 0;
-}
-
 .person-prayer-card__history {
   display: inline-flex;
+  width: 44px;
+  min-width: 44px;
   min-height: 44px;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 10px;
-  border: 1px solid var(--tend-prayer-border);
+  align-items: baseline;
+  justify-content: flex-end;
+  padding: 0;
+  border: 0;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--tend-canvas) 78%, var(--tend-prayer-surface));
-  color: var(--tend-prayer-text);
-  font: inherit;
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  background: transparent;
+  color: var(--tend-prayer-action);
+  font-size: var(--rhythm-card-title-size);
   line-height: 1.3;
   cursor: pointer;
 }
 
-.person-prayer-card__history > svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
+.person-prayer-card__history:hover {
+  background: transparent;
+  color: var(--tend-prayer-action);
 }
 
-.person-prayer-card__history > strong {
-  min-width: 1.5em;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
+.person-prayer-card__history:focus-visible,
+.person-prayer-card__actions-trigger:focus-visible {
+  outline: 3px solid var(--tend-prayer-text);
+  outline-offset: 2px;
+}
+
+.person-prayer-card__heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.person-prayer-card__heading-main {
+  display: grid;
+  gap: var(--rhythm-card-title-description-gap);
+  min-width: 0;
+}
+
+.person-prayer-card__heading .person-prayer-card__title,
+.person-prayer-card__heading .person-prayer-card__details {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.person-prayer-card__content {
+  grid-column: 1 / -1;
 }
 
 .person-prayer-card__actions {
-  grid-column: 2;
-  grid-row: 1;
-  width: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.person-prayer-card__actions-trigger {
-  display: inline-flex;
-  min-height: 40px;
+.person-prayer-card__count-row {
+  display: flex;
+  min-height: 44px;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid var(--tend-prayer-border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--tend-canvas) 78%, var(--tend-prayer-surface));
-  color: var(--tend-prayer-text);
-  font: inherit;
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  font-weight: 700;
-  line-height: 1.3;
-  cursor: pointer;
-}
-
-.person-prayer-card__actions-trigger:hover,
-.person-prayer-card__history:hover {
-  background: var(--tend-prayer-hover);
+  min-width: 0;
 }
 
 .person-prayer-card__actions-trigger > span {
@@ -9077,24 +9385,48 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .person-prayer-card__footer {
   display: flex;
   grid-column: 1 / -1;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px 12px;
   min-width: 0;
-  margin: 2px 0 0;
-  padding-top: 10px;
+  margin: 0;
   border-top: 1px solid color-mix(in srgb, var(--tend-prayer-border) 74%, var(--tend-line));
   color: var(--tend-prayer-text);
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  line-height: 1.4;
+}
+
+.person-prayer-card__prayer-count {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid var(--tend-prayer-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tend-prayer-surface) 62%, var(--tend-canvas));
+  color: var(--tend-prayer-text);
+  font-size: var(--rhythm-card-metadata-size);
+  font-weight: 600;
+  line-height: 1.25;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .person-prayer-card__last-prayed {
+  display: inline-flex;
   min-width: 0;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+.person-prayer-card__last-prayed > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
 }
 
 .person-prayer-menu {
@@ -9129,12 +9461,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   background: var(--tend-prayer-surface);
 }
 
-.person-prayer-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .person-prayer-panel__error {
   margin: 0;
   color: #a43838;
@@ -9144,6 +9470,8 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .person-prayer-dialog {
+  --rhythm-schedule-accent: var(--tend-prayer-action);
+  --rhythm-schedule-focus: var(--tend-prayer-text);
   box-sizing: border-box;
   width: min(560px, calc(100vw - 28px));
   max-height: min(90vh, 760px);
@@ -9161,6 +9489,69 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   min-width: 0;
 }
 
+.person-prayer-form .rhythm-schedule-fields {
+  gap: 12px;
+}
+
+.person-prayer-form .rhythm-schedule-fields__top-row {
+  align-items: end;
+}
+
+.person-prayer-form .rhythm-schedule-fields__frequency > label,
+.person-prayer-form .rhythm-schedule-fields__time > label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--tend-prayer-text);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 650;
+}
+
+.person-prayer-dialog .rhythm-select__trigger {
+  border-color: var(--tend-prayer-border);
+}
+
+.person-prayer-dialog .rhythm-select__trigger:focus-visible,
+.person-prayer-dialog .rhythm-select__option:focus-visible {
+  outline: 2px solid var(--tend-prayer-text);
+  outline-offset: 2px;
+}
+
+.person-prayer-dialog .rhythm-select__trigger > svg {
+  stroke: var(--tend-prayer-text);
+}
+
+.person-prayer-dialog .rhythm-select__option[aria-selected="true"] {
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-dialog .rhythm-select__option > svg {
+  stroke: var(--tend-prayer-text);
+}
+
+.person-prayer-dialog .rhythm-schedule-fields__end-toggle {
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-dialog .rhythm-schedule-fields__end-toggle input:focus-visible {
+  outline-color: var(--tend-prayer-text);
+}
+
+.person-prayer-dialog .rhythm-schedule-fields__end-date input {
+  border-color: var(--tend-prayer-border);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-dialog .rhythm-schedule-fields__end-date input:focus {
+  border-color: var(--tend-prayer-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tend-prayer-surface) 72%, transparent);
+}
+
+.person-prayer-dialog .rhythm-schedule-fields__end-date input:focus-visible {
+  outline: 2px solid var(--tend-prayer-text);
+  outline-offset: 2px;
+}
+
 .person-prayer-form > label {
   display: grid;
   gap: 6px;
@@ -9170,8 +9561,8 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   font-weight: 600;
 }
 
-.person-prayer-form input,
-.person-prayer-form textarea {
+.person-prayer-form > label input,
+.person-prayer-form > label textarea {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -9672,7 +10063,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   max-width: calc(100% - 52px);
   padding: 5px 9px;
   border-radius: 999px;
-  background: color-mix(in srgb, #946B00 12%, var(--tend-surface));
+  background: var(--spark-surface);
   color: #946B00;
   font-weight: 650;
   overflow-wrap: anywhere;
@@ -9694,6 +10085,59 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .person-spark-card__footer > .person-spark-card__do-it {
   flex: 0 0 92px;
   margin-left: auto;
+}
+
+.person-prayer-form .person-prayer-form__sharing > .btn,
+.person-prayer-form .person-prayer-form__actions > button[type="button"] {
+  min-height: 44px;
+  border: 1px solid var(--tend-prayer-border);
+  background: transparent;
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-form .person-prayer-form__sharing > .btn:hover:not(:disabled),
+.person-prayer-form .person-prayer-form__actions > button[type="button"]:hover:not(:disabled) {
+  background: var(--tend-prayer-surface);
+  border-color: var(--tend-prayer-text);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-form .person-prayer-form__sharing > .btn:active:not(:disabled),
+.person-prayer-form .person-prayer-form__actions > button[type="button"]:active:not(:disabled) {
+  background: var(--tend-prayer-active);
+}
+
+.person-prayer-form .person-prayer-form__actions > button[type="submit"] {
+  min-height: 44px;
+  border: 1px solid var(--tend-prayer-action);
+  background: var(--tend-prayer-action);
+  color: #fff;
+}
+
+.person-prayer-form .person-prayer-form__actions > button[type="submit"]:hover:not(:disabled) {
+  border-color: var(--tend-prayer-text);
+  background: var(--tend-prayer-text);
+  color: #fff;
+}
+
+.person-prayer-form .person-prayer-form__actions > button[type="submit"]:active:not(:disabled) {
+  border-color: var(--tend-prayer-text);
+  background: var(--tend-prayer-text);
+}
+
+.person-prayer-form .person-prayer-form__sharing > .btn:disabled,
+.person-prayer-form .person-prayer-form__actions > button:disabled {
+  border-color: var(--tend-prayer-border);
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.person-prayer-form .person-prayer-form__sharing > .btn:focus-visible,
+.person-prayer-form .person-prayer-form__actions > button:focus-visible {
+  outline: 3px solid var(--tend-prayer-text);
+  outline-offset: 2px;
 }
 
 .person-spark-panel__empty {
@@ -10053,6 +10497,269 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   overflow-wrap: anywhere;
 }
 
+.person-prayer-history__summary .person-prayer-card__footer {
+  margin-top: 2px;
+}
+
+.person-prayer-history__health {
+  min-width: 0;
+}
+
+.person-prayer-history__health-summary {
+  margin: 0;
+}
+
+.person-prayer-history__health .rhythm-history-view__score-info {
+  border-color: var(--tend-prayer-border);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-history__health .rhythm-history-view__score-info:hover,
+.person-prayer-history__health .rhythm-history-view__score-info:focus-visible {
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-health__request-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 0;
+  color: var(--tend-prayer-text);
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+
+.person-prayer-health__request-score > span:last-child:not(.ma-score) {
+  overflow-wrap: anywhere;
+}
+
+.person-prayer-health__details {
+  display: grid;
+  gap: 10px;
+  color: var(--tend-ink, var(--ink));
+  line-height: 1.5;
+}
+
+.person-prayer-health__details > p,
+.person-prayer-health__details > ul {
+  margin: 0;
+}
+
+.person-prayer-health__details > ul {
+  padding-left: 22px;
+}
+
+.person-prayer-history__edit {
+  display: grid;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tend-prayer-action);
+  cursor: pointer;
+}
+
+.person-prayer-history__edit svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.person-prayer-history__edit:hover {
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-history__edit:focus-visible,
+.person-prayer-history__logged > summary:focus-visible {
+  outline: 3px solid var(--tend-prayer-text);
+  outline-offset: 2px;
+}
+
+.person-prayer-history__logged {
+  border-color: var(--tend-prayer-border);
+  background: color-mix(in srgb, var(--tend-prayer-surface) 52%, var(--tend-canvas));
+}
+
+.person-prayer-history__logged > summary {
+  border-radius: inherit;
+}
+
+.person-prayer-history__logged .rhythm-history-view__logged-heading {
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-history__logged .rhythm-history-view__logged-count {
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-history__logged .disclosure-chevron {
+  stroke: var(--tend-prayer-text);
+}
+
+.person-prayer-history__logged .rhythm-history-view__logged-entry {
+  border-color: var(--tend-prayer-border);
+}
+
+.person-prayer-history__logged .rhythm-history-view__entry-action {
+  color: var(--tend-prayer-action);
+}
+
+.person-prayer-history__logged .rhythm-history-view__entry-action:hover:not(:disabled),
+.person-prayer-history__logged .rhythm-history-view__entry-action:focus-visible:not(:disabled) {
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-history__logged .person-prayer-history__entry-action:last-child {
+  color: #a43838;
+}
+
+.person-prayer-history__logged .person-prayer-history__entry-action:last-child:hover:not(:disabled),
+.person-prayer-history__logged .person-prayer-history__entry-action:last-child:focus-visible:not(:disabled) {
+  background: #faeeee;
+  color: #8f2f2f;
+}
+
+.person-prayer-history__logged .rhythm-history-view__entry-action:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.person-prayer-history__legacy-note,
+.person-prayer-log-form__guidance {
+  margin: 6px 0 0;
+  color: var(--tend-prayer-text);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.person-prayer-history__undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tend-prayer-border);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-history__undo p {
+  flex-basis: 100%;
+  margin: 0;
+  color: #a43838;
+}
+
+.person-prayer-log-form {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--tend-prayer-border);
+  border-radius: 12px;
+  background: var(--tend-canvas);
+}
+
+.person-prayer-log-form > h4 {
+  margin: 0;
+  color: var(--tend-prayer-text);
+  font-size: calc(1rem * var(--app-text-scale, 1));
+}
+
+.person-prayer-log-form .rhythm-completion-form__date-label,
+.person-prayer-log-form .rhythm-completion-form__memory-label,
+.person-prayer-log-form .rhythm-completion-form__time legend {
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-log-form .rhythm-completion-form__date,
+.person-prayer-log-form textarea {
+  width: 100%;
+  min-width: 0;
+  border-color: var(--tend-prayer-border);
+}
+
+.person-prayer-log-form .rhythm-completion-form__date:focus-visible,
+.person-prayer-log-form textarea:focus-visible,
+.person-prayer-log-form .time-dial__viewport:focus-visible {
+  outline-color: var(--tend-prayer-text);
+}
+
+.person-prayer-log-form .time-dial__viewport {
+  background: color-mix(in srgb, var(--tend-prayer-surface) 40%, white);
+}
+
+.person-prayer-log-form .time-dial__value.is-selected,
+.person-prayer-log-form .time-dial__shortcut[aria-pressed="true"] {
+  border-color: var(--tend-prayer-border);
+  background: var(--tend-prayer-active);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-log-form .time-dial__shortcut {
+  border-color: var(--tend-prayer-border);
+  background: var(--tend-canvas);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-log-form .time-dial__shortcut:hover {
+  background: var(--tend-prayer-surface);
+}
+
+.person-prayer-log-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.person-prayer-log-form__actions button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.person-prayer-log-form__actions > button[type="submit"] {
+  border-color: var(--tend-prayer-action);
+  background: var(--tend-prayer-action);
+  color: #fff;
+}
+
+.person-prayer-log-form__actions > button[type="submit"]:hover:not(:disabled) {
+  border-color: var(--tend-prayer-text);
+  background: var(--tend-prayer-text);
+  color: #fff;
+}
+
+.person-prayer-log-form__actions > button[type="button"] {
+  border: 1px solid var(--tend-prayer-border);
+  background: transparent;
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-log-form__actions > button:focus-visible {
+  outline: 3px solid var(--tend-prayer-text);
+  outline-offset: 2px;
+}
+
+.person-prayer-log-form__actions > button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
 .person-details-dialog {
   box-sizing: border-box;
   width: min(640px, calc(100vw - 28px));
@@ -10368,8 +11075,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   gap: 6px;
 }
 
-.person-note-editor .goal-field > label,
-.person-note-editor__sharing-copy > strong {
+.person-note-editor .goal-field > label {
   color: var(--ink, #25332b);
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
   font-weight: 600;
@@ -10390,8 +11096,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .person-note-editor textarea:focus-visible,
-.person-note-editor button:focus-visible,
-.person-notes-row:focus-visible {
+.person-note-editor button:focus-visible {
   outline: 2px solid var(--forest-deep, #294c3a);
   outline-offset: 2px;
 }
@@ -10404,55 +11109,92 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   line-height: 1.45;
 }
 
-.person-note-editor__sharing {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--line, #e5e9e5);
-  border-radius: 12px;
-}
-
-.person-note-editor__sharing-copy {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-  color: var(--ink-soft, #66736b);
-  font-size: calc(0.75rem * var(--app-text-scale, 1));
-  overflow-wrap: anywhere;
-}
-
-.person-note-editor__badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
 .person-notes-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
 .person-notes-row {
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 4px;
   width: 100%;
   min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--line, #e5e9e5);
-  border-radius: 12px;
-  background: var(--tend-canvas, #fff);
+  padding: 11px 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 15px;
+  background: var(--tend-surface);
   color: var(--ink, #25332b);
+  box-shadow: none;
+}
+
+.person-notes-row__open {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.person-notes-row:hover {
-  background: var(--tend-mist, #f3f6f3);
+.person-notes-row__open:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 1px;
+}
+
+.person-notes-row__edit {
+  display: grid;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tend-secondary);
+  cursor: pointer;
+}
+
+.person-notes-row__edit-visual {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.person-notes-row__edit:hover .person-notes-row__edit-visual {
+  background: color-mix(in srgb, var(--tend-mist) 74%, transparent);
+}
+
+.person-notes-row__edit:focus-visible {
+  outline: none;
+}
+
+.person-notes-row__edit:focus-visible .person-notes-row__edit-visual {
+  background: color-mix(in srgb, var(--tend-forest) 14%, var(--tend-canvas));
+}
+
+.person-notes-row__edit-visual svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
 }
 
 .person-notes-row__preview {
@@ -10466,16 +11208,44 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .person-notes-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   color: var(--ink-soft, #66736b);
   font-size: calc(0.6875rem * var(--app-text-scale, 1));
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
+.person-notes-row__people,
+.person-note-detail__people {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.person-notes-row__people .rhythm-person-badge,
+.person-note-detail__people .rhythm-person-badge {
+  max-width: 100%;
+}
+
+.person-notes-row__date {
+  display: inline-flex;
+  width: fit-content;
+  color: var(--tend-secondary);
+}
+
 .person-note-detail {
   display: grid;
   gap: 4px;
   padding-top: 14px;
+}
+
+.person-note-detail__people {
+  margin-top: 6px;
 }
 
 .person-note-detail__content {
@@ -11847,7 +12617,7 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .today-rhythm-details-dialog--inline .today-rhythm-details__surface {
-  padding-top: 16px;
+  padding-top: var(--rhythm-card-surface-top-padding);
   border-radius: inherit;
 }
 
@@ -11995,20 +12765,76 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   max-width: 100%;
 }
 
-.today-rhythm-details-dialog--inline .today-rhythm-details__footer {
+.today-rhythm-details-dialog--inline .today-rhythm-details__footer,
+.rhythm-card--simple.person-prayer-card > .person-prayer-card__footer {
   margin-top: 0;
   display: flex;
   min-height: 0;
   align-items: center;
-  padding: calc(6px * var(--app-text-scale, 1)) var(--rhythm-details-horizontal-padding) calc(8px * var(--app-text-scale, 1));
+  padding: var(--rhythm-card-footer-padding-start) var(--rhythm-details-horizontal-padding) var(--rhythm-card-footer-padding-end);
+}
+
+.today-rhythm-details-dialog--inline .today-rhythm-details__footer {
   border-top: 1px solid var(--line);
 }
 
-.today-rhythm-details-dialog--inline .rhythm-metadata-footer {
+.today-rhythm-details-dialog--inline .rhythm-metadata-footer,
+.person-prayer-card__footer .rhythm-metadata-footer {
   min-height: var(--rhythm-card-footer-row-height);
   width: 100%;
   gap: calc(4px * var(--app-text-scale, 1)) calc(12px * var(--app-text-scale, 1));
   font-size: var(--rhythm-card-metadata-size);
+}
+
+.rhythm-card--simple.person-prayer-card {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0;
+  row-gap: 0;
+  padding: 0;
+}
+
+.rhythm-card--simple.person-prayer-card > .person-prayer-card__content {
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--rhythm-card-title-description-gap);
+  min-width: 0;
+  padding: var(--rhythm-card-surface-top-padding) var(--rhythm-details-horizontal-padding) var(--rhythm-card-action-footer-gap);
+}
+
+.rhythm-card--simple.person-prayer-card > .person-prayer-card__footer {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.rhythm-card--simple.person-prayer-card .person-prayer-card__actions {
+  align-items: center;
+  min-height: 44px;
+  margin-top: 0;
+}
+
+.rhythm-card--simple.person-prayer-card .person-prayer-card__actions-trigger {
+  width: max-content;
+  max-width: 100%;
+  gap: 8px;
+  border-color: var(--tend-prayer-action);
+  background: var(--tend-prayer-action);
+  color: #fff;
+  font-size: var(--rhythm-card-action-size);
+  font-weight: 600;
+}
+
+.rhythm-card--simple.person-prayer-card .person-prayer-card__footer .rhythm-metadata-footer {
+  color: var(--tend-prayer-text);
+}
+
+.rhythm-card--simple.person-prayer-card .person-prayer-card__history:focus-visible,
+.rhythm-card--simple.person-prayer-card .person-prayer-card__actions-trigger:focus-visible {
+  outline: 3px solid var(--tend-prayer-text);
+  outline-offset: 2px;
 }
 
 .today-rhythm-details-dialog--inline .rhythm-metadata-status-cluster,
@@ -14028,18 +14854,6 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
     display: none;
   }
 
-.time-dial__selection {
-  position: sticky;
-  z-index: 1;
-  top: 40px;
-  display: block;
-  height: 40px;
-  margin: 0 3px -40px;
-  border-radius: 10px;
-  background: #d9f4e8;
-  pointer-events: none;
-  }
-
   .time-dial__spacer {
     height: 40px;
   }
@@ -14063,6 +14877,9 @@ html[data-mobile-text-size="larger"] .tend-app-preview .calendar-event__relative
   }
 
 .time-dial__value.is-selected {
+    margin-inline: 3px;
+    border-radius: 10px;
+    background: #d9f4e8;
     color: #173d2c;
     font-size: calc(1.25rem * var(--app-text-scale, 1));
     font-weight: 700;
@@ -18902,11 +19719,6 @@ button.strength-guided__performance:focus-visible {
 
 .strength-workout-suggestion__choice h4 {
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
-}
-
-.money-goal-dialog--strength-suggestions.dialog--phone-fullscreen {
-  width: 100vw;
-  max-height: none;
 }
 
 .money-goal-dialog--strength-suggestions.dialog--phone-fullscreen > .money-goal-dialog__surface {
@@ -25672,24 +26484,31 @@ button.person-health-component-score:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.today-rhythm-details-dialog--inline {
+.today-rhythm-details-dialog--inline,
+.rhythm-card--simple.person-prayer-card {
   --rhythm-details-horizontal-padding: var(--today-rhythm-card-content-padding, 16px);
   --rhythm-card-title-size: var(--tend-type-today-heading);
+  --rhythm-card-action-size: calc(0.875rem * var(--app-text-scale, 1));
+  --rhythm-card-footer-row-height: calc(2rem * var(--app-text-scale, 1));
+  --rhythm-card-metadata-size: calc(0.8125rem * var(--app-text-scale, 1));
+  --rhythm-card-score-icon-size: var(--rhythm-card-title-size);
+  --rhythm-card-title-description-gap: calc(8px * var(--app-text-scale, 1));
+  --rhythm-card-action-footer-gap: calc(10px * var(--app-text-scale, 1));
+  --rhythm-card-surface-top-padding: 16px;
+  --rhythm-card-footer-padding-start: calc(6px * var(--app-text-scale, 1));
+  --rhythm-card-footer-padding-end: calc(8px * var(--app-text-scale, 1));
+}
+
+.today-rhythm-details-dialog--inline {
   --rhythm-card-description-size: calc(0.9375rem * var(--app-text-scale, 1));
   --rhythm-card-people-size: calc(0.75rem * var(--app-text-scale, 1));
-  --rhythm-card-metadata-size: calc(0.8125rem * var(--app-text-scale, 1));
-  --rhythm-card-action-size: calc(0.875rem * var(--app-text-scale, 1));
   --rhythm-card-score-value-size: var(--rhythm-card-title-size);
   --rhythm-card-badge-height: calc(2rem * var(--app-text-scale, 1));
   --rhythm-card-avatar-size: calc(1.5rem * var(--app-text-scale, 1));
-  --rhythm-card-footer-row-height: calc(2rem * var(--app-text-scale, 1));
   --rhythm-card-score-width: calc(76px * var(--app-text-scale, 1));
   --rhythm-card-score-height: var(--rhythm-card-badge-height);
-  --rhythm-card-score-icon-size: var(--rhythm-card-title-size);
-  --rhythm-card-title-description-gap: calc(8px * var(--app-text-scale, 1));
   --rhythm-card-description-content-gap: calc(2px * var(--app-text-scale, 1));
   --rhythm-card-badge-action-gap: calc(12px * var(--app-text-scale, 1));
-  --rhythm-card-action-footer-gap: calc(10px * var(--app-text-scale, 1));
   width: 100%;
   max-width: none;
   max-height: none;
@@ -25829,18 +26648,21 @@ button.person-health-component-score:focus-visible {
   --rhythm-card-score-color: var(--score-red);
 }
 
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button .rhythm-metadata-icon--history {
+.rhythm-card__history-content .rhythm-metadata-icon--history {
   position: relative;
   display: inline-block;
   align-self: center;
   width: var(--rhythm-card-score-icon-size);
   height: var(--rhythm-card-score-icon-size);
+  fill: currentColor;
+  stroke: none;
 }
 
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-content {
+.rhythm-card__history-content {
   display: inline-flex;
   flex-direction: row-reverse;
   align-items: baseline;
+  min-height: 1.3em;
   gap: calc(6px * var(--app-text-scale, 1));
 }
 
@@ -25889,7 +26711,7 @@ button.person-health-component-score:focus-visible {
   min-width: var(--rhythm-card-score-width);
 }
 
-.today-rhythm-details-dialog--inline .today-rhythm-details__history-button .rhythm-metadata-icon--history {
+.rhythm-card__history-content .rhythm-metadata-icon--history {
   width: var(--rhythm-card-score-icon-size);
   height: var(--rhythm-card-score-icon-size);
 }
@@ -28234,6 +29056,10 @@ button.person-health-component-score:focus-visible {
   background: var(--score-track, #f0f4f1);
 }
 
+.rhythm-history-view__chart-placeholder[data-theme="prayer"] .rhythm-history-view__chart-placeholder-plot {
+  background: var(--tend-prayer-surface, #f0eaf5);
+}
+
 .rhythm-history-view__chart-scroll {
   display: flex;
   max-width: 100%;
@@ -28320,6 +29146,31 @@ button.person-health-component-score:focus-visible {
 
 .rhythm-history-view__chart li time {
   white-space: nowrap;
+}
+
+.rhythm-history-view__chart-section[data-theme="prayer"] .rhythm-history-view__completion-track {
+  box-sizing: border-box;
+  border: 1px solid var(--tend-prayer-border, #d2c5df);
+  background: var(--tend-prayer-surface, #f0eaf5);
+}
+
+.rhythm-history-view__chart-section[data-theme="prayer"] .rhythm-history-view__completion-bar {
+  background: var(--tend-prayer-action, #80629a);
+}
+
+.rhythm-history-view__chart-section[data-theme="prayer"] .rhythm-history-view__completion-zero {
+  background: var(--tend-prayer-disabled-border, #ded5e7);
+  color: var(--tend-prayer-disabled-text, #8f7da1);
+}
+
+.rhythm-history-view__chart-section[data-theme="prayer"] .rhythm-history-view__chart li[data-today="true"] .rhythm-history-view__completion-track {
+  border: 2px solid var(--tend-prayer-text, #705a8d);
+  background: color-mix(in srgb, var(--tend-prayer-surface, #f0eaf5) 74%, #fff);
+}
+
+.rhythm-history-view__chart-section[data-theme="prayer"] .rhythm-history-view__chart li[data-today="true"] time {
+  color: var(--tend-prayer-text, #705a8d);
+  font-weight: 700;
 }
 
 .rhythm-history-view__chart-hint {
@@ -29946,7 +30797,7 @@ button.person-health-component-score:focus-visible {
   box-shadow: inset 0 0 0 1px var(--tend-forest) !important;
 }
 
-@container person-health-three (max-width: 22em) {
+@container person-health-three (max-width: 17.5em) {
   .person-health-component-scores[data-count="3"] {
     grid-template-columns: minmax(0, 1fr);
     border-top: 0;
@@ -30500,4 +31351,504 @@ button.person-health-component-score:focus-visible {
 
 .tend-app-preview .calendar-sources-settings__add-actions > button:first-child {
   min-height: 44px;
+}
+
+.tend-app-preview .money-goal-dialog.prayer-selection-dialog {
+  box-sizing: border-box;
+  width: min(640px, calc(100vw - 24px));
+  max-width: min(640px, calc(100vw - 24px));
+  max-height: min(90dvh, 780px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--tend-line);
+  border-radius: 18px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+}
+
+.tend-app-preview .prayer-selection-dialog > .money-goal-dialog__surface {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  overflow: hidden;
+}
+
+.tend-app-preview .prayer-selection-header {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tend-app-preview .prayer-selection-header h3 {
+  min-width: 0;
+  margin: 0;
+  color: var(--tend-ink);
+  font-size: calc(1.2rem * var(--app-text-scale, 1));
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .prayer-selection-close {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0;
+  border: 1px solid var(--tend-line);
+  border-radius: 50%;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+  font-size: calc(1.5rem * var(--app-text-scale, 1));
+  cursor: pointer;
+}
+
+.tend-app-preview .prayer-selection-close:focus-visible,
+.tend-app-preview .prayer-timeframe-picker__trigger:focus-visible,
+.tend-app-preview .prayer-timeframe-picker__option:focus-visible {
+  outline: 2px solid var(--tend-forest);
+  outline-offset: 2px;
+}
+
+.tend-app-preview .prayer-selection-body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tend-app-preview .prayer-selection-people-view,
+.tend-app-preview .prayer-selection-time-view {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.tend-app-preview .prayer-selection-section {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.tend-app-preview .prayer-selection-section > h4,
+.tend-app-preview .prayer-selection-time-view > h4 {
+  margin: 0;
+  color: var(--tend-secondary);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.35;
+}
+
+.tend-app-preview .prayer-timeframe-picker__trigger {
+  display: flex;
+  min-width: 0;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tend-app-preview .prayer-timeframe-picker__summary {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.tend-app-preview .prayer-timeframe-picker__summary > strong {
+  color: var(--tend-ink);
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+}
+
+.tend-app-preview .prayer-timeframe-picker__summary > span {
+  color: var(--tend-secondary);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .prayer-timeframe-picker__chevron {
+  flex: 0 0 auto;
+  color: var(--tend-secondary);
+  font-size: calc(1.5rem * var(--app-text-scale, 1));
+}
+
+.tend-app-preview .prayer-timeframe-picker__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.tend-app-preview .prayer-timeframe-picker__option {
+  display: grid;
+  min-width: 0;
+  min-height: 64px;
+  grid-template:
+    "label count" auto
+    "description description" auto / minmax(0, 1fr) auto;
+  align-content: center;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--tend-line);
+  border-radius: 12px;
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tend-app-preview .prayer-timeframe-picker__option:hover,
+.tend-app-preview .prayer-timeframe-picker__option.is-current {
+  background: var(--tend-canvas);
+}
+
+.tend-app-preview .prayer-timeframe-picker__option.is-selected {
+  border-color: var(--tend-forest);
+  background: var(--tend-mist);
+  color: var(--tend-forest);
+}
+
+.tend-app-preview .prayer-timeframe-picker__label {
+  grid-area: label;
+  min-width: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .prayer-timeframe-picker__description {
+  grid-area: description;
+  min-width: 0;
+  color: var(--tend-secondary);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .prayer-timeframe-picker__count {
+  grid-area: count;
+  color: var(--tend-secondary);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  white-space: nowrap;
+}
+
+.tend-app-preview .prayer-selection-back {
+  justify-self: start;
+}
+
+.tend-app-preview .prayer-selection-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tend-app-preview .prayer-selection-bulk > .btn {
+  min-height: 38px;
+}
+
+.tend-app-preview .prayer-selection-count {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 8px 0;
+  padding: 6px 12px;
+  border: 1px solid var(--tend-prayer-border);
+  border-radius: 999px;
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .prayer-selection-footer-actions > .btn {
+  min-height: 44px;
+}
+
+.tend-app-preview .prayer-selection-empty,
+.tend-app-preview .prayer-entry-empty {
+  margin: 0;
+  color: var(--tend-secondary);
+  font-size: calc(0.875rem * var(--app-text-scale, 1));
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.tend-app-preview .prayer-selection-footer {
+  display: grid;
+  min-width: 0;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tend-line);
+}
+
+.tend-app-preview .prayer-selection-footer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tend-app-preview .prayer-selection-dialog.dialog--phone-fullscreen {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.tend-app-preview .prayer-selection-dialog.dialog--phone-fullscreen > .money-goal-dialog__surface {
+  height: 100%;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 18px)
+    max(16px, env(safe-area-inset-right, 0px))
+    calc(env(safe-area-inset-bottom, 0px) + 12px)
+    max(16px, env(safe-area-inset-left, 0px));
+}
+
+@media (max-width: 520px) {
+  .tend-app-preview .prayer-timeframe-picker__options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tend-app-preview .money-goal-dialog.prayer-selection-dialog.prayer-theme {
+  --tend-prayer-disabled-bg: #faf8fc;
+  --tend-prayer-disabled-border: #ded5e7;
+  --tend-prayer-disabled-text: #8f7da1;
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-close {
+  border-color: var(--tend-prayer-border);
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-close:hover {
+  background: var(--tend-prayer-surface);
+}
+
+.tend-app-preview .prayer-selection-dialog :is(
+  .prayer-selection-close,
+  .prayer-timeframe-picker__trigger,
+  .prayer-timeframe-picker__option
+):focus-visible {
+  outline-color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer button:focus-visible {
+  outline-color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-timeframe-picker__trigger {
+  border-color: var(--tend-prayer-border);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-timeframe-picker__summary > strong,
+.tend-app-preview .prayer-selection-dialog .prayer-timeframe-picker__chevron {
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-timeframe-picker__option.is-selected {
+  border-color: var(--tend-prayer-border);
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-timeframe-picker__option.is-selected:hover {
+  background: var(--tend-prayer-hover);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-bulk > .btn.ghost,
+.tend-app-preview .prayer-selection-dialog .prayer-selection-back,
+.tend-app-preview .rhythm-association-picker--prayer .btn.ghost,
+.tend-app-preview .prayer-selection-dialog .prayer-selection-footer-actions > .btn.ghost {
+  border: 1px solid var(--tend-prayer-border);
+  background: var(--tend-surface);
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-bulk > .btn.ghost:hover:not(:disabled),
+.tend-app-preview .prayer-selection-dialog .prayer-selection-back:hover:not(:disabled),
+.tend-app-preview .rhythm-association-picker--prayer .btn.ghost:hover:not(:disabled),
+.tend-app-preview .prayer-selection-dialog .prayer-selection-footer-actions > .btn.ghost:hover:not(:disabled) {
+  background: var(--tend-prayer-surface);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer .rhythm-association-picker__group-badge {
+  border: 1px solid var(--tend-line);
+  background: var(--tend-surface);
+  color: var(--tend-secondary);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__group[data-selected="true"] .rhythm-association-picker__group-badge {
+  border-color: var(--tend-prayer-border);
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__group:hover:not(:disabled) .rhythm-association-picker__group-badge {
+  background: var(--tend-prayer-surface);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__group[data-selected="true"]:hover:not(:disabled) .rhythm-association-picker__group-badge {
+  background: var(--tend-prayer-hover);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__group:disabled .rhythm-association-picker__group-badge {
+  border-color: var(--tend-prayer-disabled-border);
+  background: var(--tend-prayer-disabled-bg);
+  color: var(--tend-prayer-disabled-text);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__option {
+  border-color: var(--tend-line);
+  background: var(--tend-surface);
+  color: var(--tend-ink);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__option:hover:not(:disabled) {
+  background: var(--tend-canvas);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__option[aria-pressed="true"] {
+  border-color: var(--tend-prayer-border);
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__option[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--tend-prayer-hover);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__option[aria-pressed="true"] .rhythm-association-picker__selection-indicator {
+  border-color: var(--tend-prayer-border);
+  background: var(--tend-prayer-active);
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.person-badge-visual--prayer {
+  border-color: var(--tend-prayer-border);
+  background: transparent;
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer .person-badge-avatar {
+  border-color: var(--tend-prayer-border);
+  filter: none;
+  background: var(--tend-prayer-surface);
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__actions > .btn:not(.ghost),
+.tend-app-preview .prayer-selection-dialog .prayer-selection-footer-actions > .btn:not(.ghost) {
+  border-color: var(--tend-prayer-action);
+  background: var(--tend-prayer-action);
+  color: #fff;
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__actions > .btn:not(.ghost):hover:not(:disabled),
+.tend-app-preview .prayer-selection-dialog .prayer-selection-footer-actions > .btn:not(.ghost):hover:not(:disabled) {
+  border-color: var(--tend-prayer-text);
+  background: var(--tend-prayer-text);
+  color: #fff;
+}
+
+.tend-app-preview .rhythm-association-picker--prayer
+.rhythm-association-picker__actions > .btn:not(.ghost):disabled,
+.tend-app-preview .prayer-selection-dialog .prayer-selection-footer-actions > .btn:not(.ghost):disabled {
+  border-color: var(--tend-prayer-disabled-border);
+  background: var(--tend-prayer-disabled-bg);
+  color: var(--tend-prayer-disabled-text);
+  cursor: not-allowed;
+}
+
+.tend-app-preview .rhythm-association-picker--prayer .rhythm-association-picker__actions > .btn {
+  min-height: 44px;
+}
+
+.tend-app-preview .prayer-selection-dialog .rhythm-association-picker__status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-people-view
+.rhythm-association-picker__status {
+  min-width: 0;
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-people-view
+.rhythm-association-picker__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-people-view
+.rhythm-association-picker__actions > .prayer-selection-cancel,
+.tend-app-preview .prayer-selection-dialog .prayer-selection-people-view
+.rhythm-association-picker__actions > .prayer-selection-pray {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-people-view
+.rhythm-association-picker__actions > .prayer-selection-cancel {
+  border: 1px solid var(--tend-prayer-border);
+  background: var(--tend-surface);
+  color: var(--tend-prayer-text);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-people-view
+.rhythm-association-picker__actions > .prayer-selection-cancel:hover:not(:disabled) {
+  background: var(--tend-prayer-surface);
+}
+
+.tend-app-preview .prayer-selection-dialog .prayer-selection-people-view
+.rhythm-association-picker__actions > .prayer-selection-pray:disabled {
+  border-color: var(--tend-prayer-disabled-border);
+  background: var(--tend-prayer-disabled-bg);
+  color: var(--tend-prayer-disabled-text);
+  cursor: not-allowed;
 }

@@ -652,6 +652,7 @@ describe('Flexibility foundation presentation', () => {
     await user.click(screen.getByRole('tab', { name: 'Routines' }));
     await user.click(screen.getByRole('button', { name: 'Add routine' }));
     const picker = screen.getByRole('dialog', { name: 'Add routine' });
+    expect(picker.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(within(picker).getByRole('heading', { name: 'Create your own' })).toBeTruthy();
     expect(within(picker).getByRole('heading', { name: 'Daily Stretch' })).toBeTruthy();
     expect(within(picker).getByText(/6 stretches · About 10 min/)).toBeTruthy();

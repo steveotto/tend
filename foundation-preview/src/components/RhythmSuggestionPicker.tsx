@@ -125,6 +125,7 @@ export function RhythmSuggestionPicker({
       closeButtonId={closeId}
       initialFocusId={returnFocusIdRef.current ?? closeId}
       dialogClassName="money-goal-dialog--suggestion-picker"
+      phoneFullScreen
       surfaceClassName="money-goal-dialog__surface--suggestion-picker"
       bodyClassName="rhythm-suggestion-picker__body"
       onClose={onClose}

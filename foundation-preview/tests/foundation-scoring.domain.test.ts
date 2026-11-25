@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { marriageRhythms, todayRhythms } from '../src/domain/preview-data.ts';
+import {
+  marriageRhythms,
+  rhythmLastActivityLabel,
+  todayRhythms
+} from '../src/domain/preview-data.ts';
 import type { RhythmPreview } from '../src/domain/preview-data.ts';
 import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 import { addCalendarDays, selectRhythmScore } from '../src/domain/rhythm-scoring.ts';
@@ -8,6 +12,7 @@ import {
   selectFoundationRhythmScores,
   selectFoundationScore
 } from '../src/domain/foundation-scoring.ts';
+import { selectPersonRhythmHealth } from '../src/domain/person-health.ts';
 import type {
   RhythmScoreResult,
   RhythmScoreSelection,
@@ -78,6 +83,45 @@ function rhythm(
 }
 
 describe('selecting equal-weight Foundation scores', () => {
+  it('passes a never-tended zero score through the person Health aggregate after first grace', () => {
+    const rhythmId = 'never-tended-person-rhythm';
+    const untended: RhythmPreview = {
+      ...rhythm(rhythmId, 'connection'),
+      personIds: ['sample-person-avery'],
+      schedule: { frequency: 'daily' },
+      createdLocalDate: '2026-10-22',
+      createdTimeZone: 'UTC',
+      completionHistory: []
+    };
+    const scores = selectFoundationRhythmScores(
+      [untended],
+      [],
+      new Set(),
+      new Date('2026-10-23T12:00:00.000Z'),
+      'UTC'
+    );
+    const rhythmScore = scores.get(rhythmId);
+    const personHealth = selectPersonRhythmHealth(
+      'sample-person-avery',
+      [untended],
+      scores,
+      new Set()
+    );
+
+    expect(rhythmScore).toMatchObject({
+      kind: 'rhythm-score',
+      consistency: { kind: 'scored', score: 0 },
+      onTrack: { kind: 'scored', score: 0, evidence: { lastQualifyingCompletionDate: null } },
+      healthScore: 0
+    });
+    expect(personHealth).toMatchObject({
+      eligibleRhythmIds: [rhythmId],
+      consistency: 0,
+      onTrack: 0,
+      health: 0
+    });
+  });
+
   it('keeps a new Evening Rhythm unscored until its local time block starts', () => {
     const eveningRhythm: RhythmPreview = {
       ...rhythm('new-evening-rhythm', 'flexibility'),
@@ -112,6 +156,192 @@ describe('selecting equal-weight Foundation scores', () => {
       kind: 'rhythm-score',
       consistency: { kind: 'scored', score: 0 },
       onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
+      healthScore: null
+    });
+  });
+
+  it('reproduces different never-tended Daily and three-day schedules at a fixed Afternoon clock', () => {
+    const timeZone = 'America/New_York';
+    const dailySchedule: RhythmSchedule = { frequency: 'daily' };
+    const weeklySchedule: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [2, 4, 6]
+    };
+    const daily: RhythmPreview = {
+      ...rhythm('daily-connection-grace', 'connection'),
+      title: 'Daily connection',
+      cadence: 'Daily',
+      timeLabel: 'Afternoon',
+      timeOfDay: 'afternoon',
+      personIds: ['sample-person-avery'],
+      schedule: dailySchedule,
+      scoring: {
+        trackingStartDate: '2026-11-23',
+        timeZone,
+        scheduleHistory: [
+          createRhythmSeason('daily-connection-grace', '2026-11-23', dailySchedule, 'afternoon')
+        ]
+      },
+      createdLocalDate: '2026-11-23',
+      createdLocalTime: '09:00',
+      createdDueTime: '13:30',
+      createdTimeZone: timeZone,
+      completionHistory: []
+    };
+    const weekly: RhythmPreview = {
+      ...rhythm('three-times-weekly-walk-grace', 'connection', [], '3 times a week'),
+      title: 'Take a walk',
+      cadence: '3 times a week',
+      timeLabel: 'Afternoon',
+      timeOfDay: 'afternoon',
+      personIds: ['sample-person-avery'],
+      schedule: weeklySchedule,
+      scoring: {
+        trackingStartDate: '2026-11-24',
+        timeZone,
+        scheduleHistory: [
+          createRhythmSeason('three-times-weekly-walk-grace', '2026-11-24', weeklySchedule, 'afternoon')
+        ]
+      },
+      createdLocalDate: '2026-11-24',
+      createdLocalTime: '09:00',
+      createdDueTime: '13:30',
+      createdTimeZone: timeZone,
+      completionHistory: []
+    };
+    const scores = selectFoundationRhythmScores(
+      [daily, weekly],
+      [],
+      new Set(),
+      new Date('2026-11-24T19:16:22.803Z'),
+      timeZone
+    );
+    const personHealth = selectPersonRhythmHealth(
+      'sample-person-avery',
+      [daily, weekly],
+      scores,
+      new Set()
+    );
+
+    expect(scores.get(daily.id)).toMatchObject({
+      kind: 'rhythm-score',
+      trackingStartDate: '2026-11-23',
+      consistency: { kind: 'scored', score: 0 },
+      onTrack: { kind: 'scored', score: 0, evidence: { lastQualifyingCompletionDate: null } },
+      healthScore: 0
+    });
+    expect(scores.get(weekly.id)).toMatchObject({
+      kind: 'rhythm-score',
+      trackingStartDate: '2026-11-24',
+      consistency: { kind: 'scored', score: 0 },
+      onTrack: { kind: 'unscored' },
+      healthScore: null
+    });
+    expect(personHealth).toMatchObject({
+      eligibleRhythmIds: [daily.id],
+      excludedRhythmIds: [weekly.id],
+      consistency: 0,
+      onTrack: 0,
+      health: 0
+    });
+  });
+
+  it('uses a legacy top-level time label when saved schedule history has no time metadata', () => {
+    const timeZone = 'America/New_York';
+    const schedule: RhythmSchedule = { frequency: 'daily' };
+    const legacyRhythm: RhythmPreview = {
+      ...rhythm('legacy-afternoon-rhythm', 'connection'),
+      cadence: 'Daily',
+      timeLabel: 'Afternoon',
+      schedule,
+      scoring: {
+        trackingStartDate: '2026-11-23',
+        timeZone,
+        scheduleHistory: [createRhythmSeason('legacy-afternoon-rhythm', '2026-11-23', schedule)]
+      },
+      completionHistory: []
+    };
+    const beforeGraceExpiry = selectFoundationRhythmScores(
+      [legacyRhythm],
+      [],
+      new Set(),
+      new Date('2026-11-24T18:29:00.000Z'),
+      timeZone
+    ).get(legacyRhythm.id);
+    const atGraceExpiry = selectFoundationRhythmScores(
+      [legacyRhythm],
+      [],
+      new Set(),
+      new Date('2026-11-24T18:30:00.000Z'),
+      timeZone
+    ).get(legacyRhythm.id);
+
+    expect(legacyRhythm.scoring?.scheduleHistory[0]).not.toHaveProperty('timeOfDay');
+    expect(beforeGraceExpiry).toMatchObject({
+      trackingStartDate: '2026-11-23',
+      consistency: { kind: 'scored', score: 0 },
+      onTrack: { kind: 'unscored' },
+      healthScore: null
+    });
+    expect(atGraceExpiry).toMatchObject({
+      trackingStartDate: '2026-11-23',
+      consistency: { kind: 'scored', score: 0 },
+      onTrack: { kind: 'scored', score: 0 },
+      healthScore: 0
+    });
+  });
+
+  it('records the actual default Daily connection and Take a walk fixture state at the fixed review clock', () => {
+    const daily = todayRhythms.find(item => item.id === 'sample-connect')!;
+    const weekly = todayRhythms.find(item => item.id === 'sample-walk')!;
+    const scores = selectFoundationRhythmScores(
+      [daily, weekly],
+      [],
+      new Set(),
+      new Date('2026-11-24T19:16:22.803Z'),
+      'America/New_York'
+    );
+    const dailyScore = scores.get(daily.id);
+    const weeklyScore = scores.get(weekly.id);
+
+    expect(daily).toMatchObject({
+      title: 'Daily connection',
+      cadence: 'Daily',
+      timeLabel: 'Evening'
+    });
+    expect(daily.schedule).toBeUndefined();
+    expect(daily.scoring).toBeUndefined();
+    expect(daily.completionHistory?.map(record => record.effectiveDate)).toEqual([
+      '2026-10-20',
+      '2026-10-18',
+      '2026-10-17'
+    ]);
+    expect(dailyScore).toMatchObject({
+      kind: 'rhythm-score',
+      trackingStartDate: '2026-10-17',
+      consistency: { kind: 'scored', score: 0 },
+      onTrack: {
+        kind: 'scored',
+        score: 0,
+        evidence: { lastQualifyingCompletionDate: '2026-10-20' }
+      },
+      healthScore: 0
+    });
+    expect(rhythmLastActivityLabel(daily, '2026-11-24')).toBe('Oct 20');
+
+    expect(weekly).toMatchObject({
+      title: 'Take a walk',
+      cadence: '3 times a week',
+      timeLabel: 'Afternoon'
+    });
+    expect(weekly.schedule).toBeUndefined();
+    expect(weekly.scoring).toBeUndefined();
+    expect(weekly.createdLocalDate).toBeUndefined();
+    expect(weekly.completionHistory).toBeUndefined();
+    expect(rhythmLastActivityLabel(weekly, '2026-11-24')).toBe('Never');
+    expect(weeklyScore).toMatchObject({
+      kind: 'unscored',
+      reason: { reasonCode: 'unsupported-schedule' },
       healthScore: null
     });
   });

@@ -11,6 +11,7 @@ export type PersonPrayerHistory = {
   undatedCount: number;
   futureDatedCount: number;
   lastPrayedAt: string | null;
+  lastPrayedDate: string | null;
   recentWindowStart: string;
   recentCount: number;
   dailyCounts: readonly PersonPrayerDailyCount[];
@@ -30,29 +31,40 @@ export function selectPersonPrayerHistory(
   let undatedCount = 0;
   let futureDatedCount = 0;
   let lastPrayedAt: string | null = null;
+  let lastPrayedDate: string | null = null;
   let latestInstant = Number.NEGATIVE_INFINITY;
 
   for (const log of request.prayerLogs) {
-    if (log.prayedAt === undefined) {
+    if (log.prayedAt === undefined && log.prayedOn === undefined) {
       undatedCount += 1;
       continue;
     }
 
-    const instant = Date.parse(log.prayedAt);
-    if (!Number.isFinite(instant)) {
-      throw new RangeError(`Prayer log ${log.id} has an invalid timestamp.`);
+    let date: string;
+    let instant: number | undefined;
+    if (log.prayedOn !== undefined) {
+      if (!isCalendarDate(log.prayedOn)) {
+        throw new RangeError(`Prayer log ${log.id} has an invalid date.`);
+      }
+      date = log.prayedOn;
+    } else {
+      instant = Date.parse(log.prayedAt!);
+      if (!Number.isFinite(instant)) {
+        throw new RangeError(`Prayer log ${log.id} has an invalid timestamp.`);
+      }
+      date = dateInTimeZone(instant, timeZone);
     }
-    const date = dateInTimeZone(instant, timeZone);
     datedCount += 1;
     if (date > asOfDate) {
       futureDatedCount += 1;
       continue;
     }
-    counts.set(date, (counts.get(date) ?? 0) + 1);
-    if (instant > latestInstant) {
+    if (instant !== undefined && instant > latestInstant) {
       latestInstant = instant;
-      lastPrayedAt = log.prayedAt;
+      lastPrayedAt = log.prayedAt!;
     }
+    counts.set(date, (counts.get(date) ?? 0) + 1);
+    if (lastPrayedDate === null || date > lastPrayedDate) lastPrayedDate = date;
   }
 
   const firstDatedDate = [...counts.keys()].sort()[0] ?? asOfDate;
@@ -69,6 +81,7 @@ export function selectPersonPrayerHistory(
     undatedCount,
     futureDatedCount,
     lastPrayedAt,
+    lastPrayedDate,
     recentWindowStart,
     recentCount: dailyCounts.reduce(
       (count, item) => item.date >= recentWindowStart ? count + item.count : count,
@@ -76,6 +89,48 @@ export function selectPersonPrayerHistory(
     ),
     dailyCounts
   };
+}
+
+export function formatPrayerLogDate(log: {
+  prayedAt?: string;
+  prayedOn?: string;
+}, timeZone: string): string {
+  if (log.prayedOn !== undefined) {
+    if (!isCalendarDate(log.prayedOn)) return 'Date unavailable';
+    const [year, month, day] = log.prayedOn.split('-').map(Number);
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(new Date(Date.UTC(year!, month! - 1, day!, 12)));
+  }
+  if (!log.prayedAt) return 'Date not recorded';
+  const instant = Date.parse(log.prayedAt);
+  if (!Number.isFinite(instant)) return 'Date unavailable';
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(new Date(instant));
+}
+
+export function formatPrayerLogTime(log: { prayedAt?: string }, timeZone: string): string | null {
+  if (!log.prayedAt) return null;
+  const instant = Date.parse(log.prayedAt);
+  if (!Number.isFinite(instant)) return null;
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(new Date(instant));
+}
+
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
 }
 
 function dateNumber(value: string): number {

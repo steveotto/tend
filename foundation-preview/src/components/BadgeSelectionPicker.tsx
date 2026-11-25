@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 
 type IdentifiedItem = { id: string };
 
+export type BadgeSelectionTheme = 'prayer';
+
 export type BadgeSelectionDetailOption = {
   id: string;
   label: string;
@@ -53,7 +55,10 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   fixedSelectedIds = [],
   focusItemId,
   description,
+  status,
+  actionButtons,
   renderSelectedItemContent,
+  theme,
   navigation,
   onToggle,
   onToggleGroup,
@@ -76,7 +81,10 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
   fixedSelectedIds?: readonly string[];
   focusItemId?: string | null;
   description?: ReactNode;
+  status?: ReactNode;
+  actionButtons?: ReactNode;
   renderSelectedItemContent?: (item: Item) => ReactNode;
+  theme?: BadgeSelectionTheme;
   navigation?: BadgeSelectionNavigation<Item>;
   onToggle: (id: Item['id']) => void;
   onToggleGroup?: (ids: readonly Item['id'][]) => void;
@@ -134,7 +142,11 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
 
     return (
       <section
-        className="rhythm-association-picker rhythm-association-picker__category-detail"
+        className={[
+          'rhythm-association-picker',
+          'rhythm-association-picker__category-detail',
+          theme ? `rhythm-association-picker--${theme}` : ''
+        ].filter(Boolean).join(' ')}
         aria-labelledby="rhythm-association-picker-title"
         onKeyDown={event => {
           if (event.key === 'Escape') {
@@ -210,7 +222,10 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
 
   return (
     <section
-      className="rhythm-association-picker"
+      className={[
+        'rhythm-association-picker',
+        theme ? `rhythm-association-picker--${theme}` : ''
+      ].filter(Boolean).join(' ')}
       aria-labelledby="rhythm-association-picker-title"
       onKeyDown={event => {
         if (event.key === 'Escape') {
@@ -221,7 +236,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
       }}
     >
       <h3 id="rhythm-association-picker-title" ref={headingRef} tabIndex={-1}>{title}</h3>
-      {description && <p className="rhythm-association-picker__description">{description}</p>}
+      {description && <div className="rhythm-association-picker__description">{description}</div>}
       {groups && onToggleGroup && (
         <div className="rhythm-association-picker__groups" role="group" aria-label="Select people by group">
           {groups.map(group => {
@@ -257,7 +272,7 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
                 id={`rhythm-association-group-${group.id}`}
               >
                 {disabled
-                  ? `No people belong to ${group.label} in the synthetic preview.`
+                  ? `No available items belong to ${group.label}.`
                   : selected
                     ? `All ${group.label} members are selected. Activate to deselect all ${group.label} members.`
                     : `Not all ${group.label} members are selected. Activate to select all ${group.label} members.`}
@@ -395,6 +410,11 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
                         onClick={() => onToggle(item.id)}
                       >
                         <span className="rhythm-association-picker__badge">{renderBadge(item)}</span>
+                        {theme === 'prayer' && selected && (
+                          <span className="rhythm-association-picker__selection-indicator" aria-hidden="true">
+                            ✓
+                          </span>
+                        )}
                       </button>
                     );
                     return renderSelectedItemContent
@@ -441,14 +461,19 @@ export function BadgeSelectionPicker<Item extends IdentifiedItem>({
           )}
         </div>
       )}
+      {status && <div className="rhythm-association-picker__status">{status}</div>}
       <div className="money-goal-dialog__actions rhythm-association-picker__actions">
         {navigation && (
           <span className="rhythm-association-picker__selection-count" aria-live="polite">
             {selectedCategoryCountLabel}
           </span>
         )}
-        <button type="button" className="btn mini" onClick={onDone}>{doneLabel}</button>
-        <button type="button" className="btn mini ghost" onClick={onCancel}>Cancel</button>
+        {actionButtons ?? (
+          <>
+            <button type="button" className="btn mini" onClick={onDone}>{doneLabel}</button>
+            <button type="button" className="btn mini ghost" onClick={onCancel}>Cancel</button>
+          </>
+        )}
       </div>
     </section>
   );

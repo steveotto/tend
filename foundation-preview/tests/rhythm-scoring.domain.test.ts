@@ -3,6 +3,7 @@ import type { RhythmCompletionRecord } from '../src/domain/rhythm-completion.ts'
 import {
   addCalendarDays,
   localDateInTimeZone,
+  localTimeInTimeZone,
   selectDailyRhythmScore
 } from '../src/domain/rhythm-scoring.ts';
 import type { SelectDailyRhythmScoreInput } from '../src/domain/rhythm-scoring.ts';
@@ -84,8 +85,8 @@ describe('daily occurrence scoring', () => {
     });
     expect(empty.onTrack).toMatchObject({
       kind: 'scored',
-      score: 80,
-      evidence: { missedOccurrenceCount: 2, deduction: 20 }
+      score: 0,
+      evidence: { missedOccurrenceCount: 2, deduction: 0, lastQualifyingCompletionDate: null }
     });
 
     const partialRecords = [
@@ -135,9 +136,9 @@ describe('daily occurrence scoring', () => {
       score: 0,
       evidence: {
         missedOccurrenceCount: 22,
-        deduction: 100,
-        occurrences: expect.arrayContaining([{ date: '2026-10-10', status: 'missed', score: 0 }]),
-        repeatedZeroScoreSpans: [{ startDate: '2026-10-11', endDate: '2026-10-22', occurrenceCount: 12 }]
+        deduction: 0,
+        occurrences: expect.arrayContaining([{ date: '2026-10-01', status: 'missed', score: 0 }]),
+        repeatedZeroScoreSpans: [{ startDate: '2026-10-02', endDate: '2026-10-22', occurrenceCount: 21 }]
       }
     });
   });
@@ -161,9 +162,9 @@ describe('daily occurrence scoring', () => {
     });
     if (longHistory.onTrack.kind !== 'scored') throw new Error('Expected scored On Track evidence.');
     expect(longHistory.onTrack.evidence.missedOccurrenceCount).toBeGreaterThan(40_000);
-    expect(longHistory.onTrack.evidence.occurrences.length).toBe(11);
+    expect(longHistory.onTrack.evidence.occurrences.length).toBe(2);
     expect(longHistory.onTrack.evidence.repeatedZeroScoreSpans[0]?.occurrenceCount)
-      .toBe(longHistory.onTrack.evidence.missedOccurrenceCount - 10);
+      .toBe(longHistory.onTrack.evidence.missedOccurrenceCount - 1);
 
     const boundaryStart = '2026-10-01';
     const scheduleHistory: SegmentFixture[] = [
@@ -186,7 +187,7 @@ describe('daily occurrence scoring', () => {
       evidence: {
         scheduleChanges: [{ date: '2026-10-15', score: 0 }],
         repeatedZeroScoreSpans: [
-          { startDate: '2026-10-11', endDate: '2026-10-14', occurrenceCount: 4 },
+        { startDate: '2026-10-02', endDate: '2026-10-14', occurrenceCount: 13 },
           { startDate: '2026-10-15', endDate: '2026-10-23', occurrenceCount: 9 }
         ]
       }
@@ -555,6 +556,42 @@ describe('daily occurrence scoring', () => {
     expect(result.healthScore).toBeNull();
   });
 
+  it('uses the local time-block grace boundary when schedule history requires the local scorer', () => {
+    const previousSchedule: RhythmSchedule = { frequency: 'daily' };
+    const currentSchedule: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [2, 4, 6]
+    };
+    const scheduleHistory = [
+      createRhythmSeason(rhythmId, '2026-11-23', previousSchedule, 'afternoon'),
+      createRhythmSeason(rhythmId, '2026-11-24', currentSchedule, 'afternoon')
+    ];
+    const base = {
+      schedule: currentSchedule,
+      scoring: {
+        trackingStartDate: '2026-11-23',
+        timeZone: 'UTC',
+        scheduleHistory
+      },
+      createdLocalDate: '2026-11-23',
+      createdLocalTime: '09:00',
+      createdDueTime: '13:30',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-11-24',
+      dueTime: '13:30'
+    };
+    const beforeDeadline = scored(input({ ...base, asOfTime: '13:29' }));
+    const atDeadline = scored(input({ ...base, asOfTime: '13:30' }));
+    const afterDeadline = scored(input({ ...base, asOfTime: '13:31' }));
+
+    expect(beforeDeadline.onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'ready-for-first-tend'
+    });
+    expect(atDeadline.onTrack).toMatchObject({ kind: 'scored', score: 0 });
+    expect(afterDeadline.onTrack).toMatchObject({ kind: 'scored', score: 0 });
+  });
+
   it('requires a qualifying completion or an ended eligible occurrence across every supported frequency', () => {
     const today = '2026-10-23';
     const cases: { name: string; schedule: RhythmSchedule }[] = [
@@ -647,8 +684,8 @@ describe('daily occurrence scoring', () => {
       }));
       expect(result.onTrack, testCase.name).toMatchObject({
         kind: 'scored',
-        score: 90,
-        evidence: { missedOccurrenceCount: 1, deduction: 10 }
+        score: 0,
+        evidence: { missedOccurrenceCount: 1, deduction: 0, lastQualifyingCompletionDate: null }
       });
     }
 
@@ -681,8 +718,8 @@ describe('daily occurrence scoring', () => {
     }));
     expect(missedQuarterlyOccurrence).toMatchObject({
       consistency: { kind: 'scored', score: 0, evidence: { eligibleDueCount: 1, notCompletedCount: 1 } },
-      onTrack: { kind: 'scored', score: 90, evidence: { missedOccurrenceCount: 1 } },
-      healthScore: 22.5
+      onTrack: { kind: 'scored', score: 0, evidence: { missedOccurrenceCount: 1, deduction: 0 } },
+      healthScore: 0
     });
   });
 
@@ -720,6 +757,67 @@ describe('daily occurrence scoring', () => {
       },
       healthScore: null
     });
+
+    const startDate = addCalendarDays(asOfDate, -1);
+    const afterGrace = scored(input({
+      scoring: scoring(startDate),
+      createdLocalDate: startDate,
+      createdTimeZone: 'UTC',
+      records: [record('future-only', addCalendarDays(asOfDate, 1))]
+    }));
+    expect(afterGrace).toMatchObject({
+      consistency: { kind: 'scored', score: 0 },
+      onTrack: {
+        kind: 'scored',
+        score: 0,
+        evidence: { missedOccurrenceCount: 1, lastQualifyingCompletionDate: null }
+      },
+      healthScore: 0
+    });
+
+    const restoredFromSingleCompletion = scored(input({
+      scoring: scoring(startDate),
+      createdLocalDate: startDate,
+      createdTimeZone: 'UTC',
+      records: [record('only-completion', startDate)]
+    }));
+    const removedCompletion = scored(input({
+      scoring: scoring(startDate),
+      createdLocalDate: startDate,
+      createdTimeZone: 'UTC',
+      records: []
+    }));
+    const restoredCompletion = scored(input({
+      scoring: scoring(startDate),
+      createdLocalDate: startDate,
+      createdTimeZone: 'UTC',
+      records: [record('only-completion', startDate)]
+    }));
+    expect(restoredFromSingleCompletion.onTrack).toMatchObject({ kind: 'scored', score: 100 });
+    expect(removedCompletion.onTrack).toMatchObject({ kind: 'scored', score: 0 });
+    expect(restoredCompletion.onTrack).toMatchObject({ kind: 'scored', score: 100 });
+
+    const selectedDaysSchedule: RhythmSchedule = {
+      frequency: 'weekly',
+      weekdays: [1],
+      weeklyMode: 'select-days'
+    };
+    const ineligibleAndFutureLogs = scored(input({
+      schedule: selectedDaysSchedule,
+      scoring: scoring('2026-10-19', [{ startDate: '2026-10-19', schedule: selectedDaysSchedule }]),
+      createdLocalDate: '2026-10-19',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-20',
+      records: [
+        record('off-schedule-tuesday', '2026-10-20'),
+        record('future-monday', '2026-10-26')
+      ]
+    }));
+    expect(ineligibleAndFutureLogs.onTrack).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: { missedOccurrenceCount: 1, lastQualifyingCompletionDate: null }
+    });
   });
 
   it('derives the daily window from creation and the oldest dated completion', () => {
@@ -748,8 +846,8 @@ describe('daily occurrence scoring', () => {
         score: 0,
         evidence: { eligibleDueCount: 1, completedCount: 0, notCompletedCount: 1 }
       },
-      onTrack: { kind: 'scored', score: 90, evidence: { missedOccurrenceCount: 1 } },
-      healthScore: 22.5
+        onTrack: { kind: 'scored', score: 0, evidence: { missedOccurrenceCount: 1, deduction: 0 } },
+        healthScore: 0
     });
 
     const selectedWeekdayAfterCreationGrace = scored(input({
@@ -766,8 +864,8 @@ describe('daily occurrence scoring', () => {
         score: 0,
         evidence: { eligibleDueCount: 1, completedCount: 0, notCompletedCount: 1 }
       },
-      onTrack: { kind: 'scored', score: 90, evidence: { missedOccurrenceCount: 1 } },
-      healthScore: 22.5
+      onTrack: { kind: 'scored', score: 0, evidence: { missedOccurrenceCount: 1, deduction: 0 } },
+      healthScore: 0
     });
 
     const createdAndTendedToday = scored(input({
@@ -815,6 +913,44 @@ describe('daily occurrence scoring', () => {
         todayIncluded: true,
         limitedHistoryDays: null
       }
+    });
+  });
+
+  it('uses the request-local date and time across a daylight-saving boundary', () => {
+    const timeZone = 'America/Los_Angeles';
+    const schedule: RhythmSchedule = { frequency: 'daily' };
+    const evaluate = (timestamp: string) => {
+      const instant = new Date(timestamp);
+      return selectDailyRhythmScore(input({
+        scoring: undefined,
+        schedule,
+        createdLocalDate: '2026-03-08',
+        createdLocalTime: '08:00',
+        createdDueTime: '10:00',
+        createdTimeZone: timeZone,
+        asOfDate: localDateInTimeZone(instant, timeZone),
+        asOfTime: localTimeInTimeZone(instant, timeZone),
+        dueTime: '10:00',
+        timeZone,
+        records: []
+      }));
+    };
+
+    const beforeDue = new Date('2026-03-08T16:59:00.000Z');
+    expect(localDateInTimeZone(beforeDue, timeZone)).toBe('2026-03-08');
+    expect(localTimeInTimeZone(beforeDue, timeZone)).toBe('09:59');
+    expect(evaluate(beforeDue.toISOString()).onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'ready-for-first-tend'
+    });
+    expect(evaluate('2026-03-08T17:00:00.000Z').onTrack).toMatchObject({
+      kind: 'unscored',
+      reasonCode: 'ready-for-first-tend'
+    });
+    expect(evaluate('2026-03-09T17:00:00.000Z').onTrack).toMatchObject({
+      kind: 'scored',
+      score: 0,
+      evidence: { missedOccurrenceCount: 1, lastQualifyingCompletionDate: null }
     });
   });
 
@@ -1217,7 +1353,7 @@ describe('daily occurrence scoring', () => {
     });
     expect(selectDaysTuesday.onTrack).toMatchObject({
       kind: 'scored',
-      score: 90,
+      score: 0,
       evidence: { missedOccurrenceCount: 1 }
     });
 
@@ -1385,8 +1521,8 @@ describe('daily occurrence scoring', () => {
     });
     expect(beforeCompletion.onTrack).toMatchObject({
       kind: 'scored',
-      score: 90,
-      evidence: { missedOccurrenceCount: 1 }
+      score: 0,
+      evidence: { missedOccurrenceCount: 1, deduction: 0, lastQualifyingCompletionDate: null }
     });
 
     const atSunday = scored(input({
@@ -1427,7 +1563,7 @@ describe('daily occurrence scoring', () => {
     });
     expect(mondayAfter.onTrack).toMatchObject({
       kind: 'scored',
-      score: 90,
+      score: 0,
       evidence: { missedOccurrenceCount: 1 }
     });
 
@@ -1644,7 +1780,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-10-08',
         asOfDate: '2026-10-12',
         expectedMissed: 1,
-        expectedScore: 90,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1653,7 +1789,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-10-01',
         asOfDate: '2026-11-01',
         expectedMissed: 1,
-        expectedScore: 90,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1662,7 +1798,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-09-30',
         asOfDate: '2026-10-01',
         expectedMissed: 1,
-        expectedScore: 90,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1671,7 +1807,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-10-01',
         asOfDate: '2027-01-01',
         expectedMissed: 1,
-        expectedScore: 90,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1680,7 +1816,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-02-09',
         asOfDate: '2026-04-01',
         expectedMissed: 1,
-        expectedScore: 90,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1689,7 +1825,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-02-28',
         asOfDate: '2027-01-01',
         expectedMissed: 1,
-        expectedScore: 90,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1698,7 +1834,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-10-29',
         asOfDate: '2027-01-01',
         expectedMissed: 1,
-        expectedScore: 90,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1707,7 +1843,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-10-01',
         asOfDate: '2026-10-08',
         expectedMissed: 4,
-        expectedScore: 60,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1716,7 +1852,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-10-19',
         asOfDate: '2026-11-03',
         expectedMissed: 3,
-        expectedScore: 70,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1731,7 +1867,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-08-15',
         asOfDate: '2026-12-26',
         expectedMissed: 3,
-        expectedScore: 70,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1746,7 +1882,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-01-31',
         asOfDate: '2026-04-01',
         expectedMissed: 2,
-        expectedScore: 80,
+        expectedScore: 0,
         expectedLastCompletion: null
       },
       {
@@ -1779,7 +1915,7 @@ describe('daily occurrence scoring', () => {
         start: '2026-01-01',
         asOfDate: '2030-11-01',
         expectedMissed: 3,
-        expectedScore: 70,
+        expectedScore: 0,
         expectedLastCompletion: null
       }
     ];
@@ -1799,7 +1935,9 @@ describe('daily occurrence scoring', () => {
         evidence: {
           lastQualifyingCompletionDate: testCase.expectedLastCompletion,
           missedOccurrenceCount: testCase.expectedMissed,
-          deduction: testCase.expectedMissed * 10
+          deduction: testCase.expectedLastCompletion === null || testCase.expectedLastCompletion === undefined
+            ? 0
+            : testCase.expectedMissed * 10
         }
       });
       if (result.onTrack.kind !== 'scored') throw new Error(`${testCase.name} should be scored.`);

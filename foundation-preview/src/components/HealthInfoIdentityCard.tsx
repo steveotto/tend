@@ -11,6 +11,8 @@ export function HealthInfoIdentityCard({ identity }: { identity: HealthInfoIdent
       ? 'Foundation'
       : identity.icon.kind === 'person'
         ? 'Person'
+        : identity.icon.kind === 'prayer'
+          ? 'Prayer request'
         : 'Category';
 
   return (
@@ -28,6 +30,9 @@ export function HealthInfoIdentityCard({ identity }: { identity: HealthInfoIdent
         )}
         {identity.icon.kind === 'rhythm' && (
           <RhythmRepeatIcon className="rhythm-health-identity__repeat-icon" />
+        )}
+        {identity.icon.kind === 'prayer' && (
+          <MarriageIcon group="foundations" id="faith-prayer" />
         )}
         {identity.icon.kind === 'person' && identity.person && (
           <PersonAvatar person={identity.person} />

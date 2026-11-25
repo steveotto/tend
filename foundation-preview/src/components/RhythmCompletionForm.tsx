@@ -15,6 +15,7 @@ import type { PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import type { PersonId } from '../domain/preview-data.ts';
 import { PeopleParticipantPicker } from './PeopleParticipantPicker.tsx';
 import { CompletionDateTimeFields } from './CompletionDateTimeFields.tsx';
+import { CompletionNotesField } from './CompletionNotesField.tsx';
 
 function localDraftAt(date: Date): CompletionDraft {
   const hour = date.getHours();
@@ -236,17 +237,12 @@ export function RhythmCompletionForm({
         </fieldset>
       )}
 
-      <label className="rhythm-completion-form__memory-label" htmlFor="rhythm-completion-notes">Notes <span>Optional</span></label>
-      <textarea
+      <CompletionNotesField
         id="rhythm-completion-notes"
         value={draft.memory}
-        maxLength={1000}
-        rows={3}
-        aria-invalid={Boolean(errors.memory)}
-        aria-describedby={errors.memory ? 'rhythm-completion-notes-error' : undefined}
-        onChange={event => change('memory', event.currentTarget.value)}
+        {...(errors.memory ? { error: errors.memory } : {})}
+        onChange={value => change('memory', value)}
       />
-      {errors.memory && <p id="rhythm-completion-notes-error" className="rhythm-completion-form__error">{errors.memory}</p>}
       {formError && <p className="rhythm-completion-form__error" role="alert">{formError}</p>}
 
       <div className="money-goal-dialog__actions rhythm-completion-form__actions">

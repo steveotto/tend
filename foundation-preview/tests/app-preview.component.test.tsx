@@ -11,7 +11,7 @@ import { formatScore } from '../src/domain/score-display.ts';
 import { localDateTimeInZone } from '../src/domain/rhythm-completion.ts';
 import { localDateInTimeZone, localTimeInTimeZone } from '../src/domain/rhythm-occurrences.ts';
 import { createRhythmSeason, rhythmSeasonPaletteForOrdinal } from '../src/domain/rhythm-seasons.ts';
-import type { RhythmWeekday } from '../src/domain/rhythm-schedule.ts';
+import type { RhythmSchedule, RhythmWeekday } from '../src/domain/rhythm-schedule.ts';
 import { activeIdForMarriageSuggestion } from '../src/domain/category-rhythms.ts';
 import {
   addOrUpdateConnection,
@@ -58,6 +58,7 @@ import {
   type CategoryId
 } from '../src/domain/preview-data.ts';
 import {
+  createEmptyPreviewData,
   createPreviewEnvelope,
   createSamplePreviewData,
   parsePreviewBackup,
@@ -74,7 +75,8 @@ import {
   PREVIEW_V5_RECOVERY_KEY,
   PREVIEW_V42_RECOVERY_KEY,
   PREVIEW_V44_RECOVERY_KEY,
-  PREVIEW_V45_RECOVERY_KEY
+  PREVIEW_V45_RECOVERY_KEY,
+  PREVIEW_V58_RECOVERY_KEY
 } from '../src/storage/preview-storage.ts';
 import type {
   PreviewAccountBackupApi,
@@ -114,6 +116,11 @@ function legacyPreviewWithTimeLabel(timeLabel: string): string {
       archivedRhythmIds: []
     }
   });
+}
+
+function schema58PreviewRaw(data: ReturnType<typeof createSamplePreviewData>): string {
+  const envelope = createPreviewEnvelope(data);
+  return ` \n${JSON.stringify({ ...envelope, schemaVersion: 58 })}\n`;
 }
 
 function expandAllTodayGroups(container: ParentNode) {
@@ -687,6 +694,23 @@ describe('Tend Today preview', () => {
     expect((screen.getByLabelText('Calendar name') as HTMLInputElement).value).toBe('Draft calendar');
   });
 
+  it('keeps the component catalogue in Settings and out of the shared footer', async () => {
+    const user = userEvent.setup();
+    testingRender(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+
+    expect(screen.queryByRole('link', { name: 'Component catalogue' })).toBeNull();
+    expect(document.querySelector('.preview-footer')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+
+    const catalogueLink = screen.getByRole('link', { name: 'Component catalogue' });
+    expect(catalogueLink.getAttribute('href')).toBe('/preview.html');
+    expect(catalogueLink.closest('.settings-page')).toBeTruthy();
+    expect(catalogueLink.closest('footer')).toBeNull();
+    expect(screen.getAllByRole('link', { name: 'Component catalogue' })).toHaveLength(1);
+  });
+
   it('opens Calendar settings through More and stores sources only in the synthetic preview envelope', async () => {
     const user = userEvent.setup();
     testingRender(<App />);
@@ -946,6 +970,86 @@ describe('Tend Today preview', () => {
       expect(imported.valid && imported.envelope.data.prayerEnabled).toBe(true);
       expect(imported.valid && imported.envelope.data.prayerRequests).toEqual([request]);
     });
+  });
+
+  it('uses only identity-scoped saved Prayer people and requests, and persists Today prayer logs', async () => {
+    const user = userEvent.setup();
+
+    function savedAccount(label: string, accountId: string, personId: string) {
+      const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+      const storage = browserPreviewStorage(identity);
+      const data = createEmptyPreviewData();
+      const timestamp = '2026-11-20T10:00:00.000Z';
+      data.people = [{ id: personId, displayName: `${label} Person` }];
+      data.prayerRequests = [{
+        id: `${label.toLowerCase()}-prayer-request`,
+        personId,
+        title: `${label} saved prayer request`,
+        status: 'active',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        prayerLogs: []
+      }];
+      storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+      return { identity, storage, requestId: data.prayerRequests[0]!.id };
+    }
+
+    const first = savedAccount(
+      'Account Alpha',
+      'c0000000-0000-4000-8000-000000000049',
+      '10000000-0000-4000-8000-000000000001'
+    );
+    const second = savedAccount(
+      'Account Beta',
+      'c0000000-0000-4000-8000-000000000050',
+      '10000000-0000-4000-8000-000000000002'
+    );
+
+    const firstRender = testingRender(<App identity={first.identity} />);
+    await screen.findByRole('button', { name: 'More, settings' });
+    const prayerModule = screen.getByRole('region', { name: 'Pray' });
+    expect(prayerModule.querySelector('.prayer-entry-count')?.textContent).toBe('1');
+    await user.click(within(prayerModule).getByRole('button', { name: 'Customize' }));
+    let selection = screen.getByRole('dialog', { name: 'Prayer selection' });
+    expect(within(selection).getByRole('button', { name: 'Account Alpha Person' })
+      .getAttribute('aria-pressed')).toBe('true');
+    expect(within(selection).queryByRole('button', { name: 'Account Beta Person' })).toBeNull();
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: 'Pray for 1 request' }));
+    let session = screen.getByRole('dialog', { name: 'One request at a time' });
+    expect(within(session).getByRole('heading', { name: 'Account Alpha saved prayer request' })).toBeTruthy();
+    await user.click(within(session).getByRole('button', { name: 'Prayed' }));
+    await waitFor(() => {
+      const saved = parsePreviewBackup(
+        first.storage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+        localDateString(new Date())
+      );
+      expect(saved.valid
+        && saved.envelope.data.prayerRequests.find(request => request.id === first.requestId)?.prayerLogs)
+        .toHaveLength(1);
+    });
+    await user.click(within(session).getByRole('button', { name: 'Finish' }));
+
+    firstRender.unmount();
+    const firstReload = testingRender(<App identity={first.identity} />);
+    await screen.findByRole('button', { name: 'More, settings' });
+    await user.click(screen.getByRole('button', { name: 'Pray for 1 request' }));
+    session = screen.getByRole('dialog', { name: 'One request at a time' });
+    expect(within(session).getByText(/prayed 1 time/)).toBeTruthy();
+    await user.click(within(session).getByRole('button', { name: 'End session' }));
+    await user.click(within(session).getByRole('button', { name: 'Finish' }));
+
+    firstReload.unmount();
+    testingRender(<App identity={second.identity} />);
+    await screen.findByRole('button', { name: 'More, settings' });
+    expect(screen.getByRole('button', { name: 'Pray for 1 request' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Customize' }));
+    selection = screen.getByRole('dialog', { name: 'Prayer selection' });
+    expect(within(selection).getByRole('button', { name: 'Account Beta Person' })
+      .getAttribute('aria-pressed')).toBe('true');
+    expect(within(selection).queryByRole('button', { name: 'Account Alpha Person' })).toBeNull();
+    expect(within(selection).queryByText('Account Alpha saved prayer request')).toBeNull();
   });
 
   it('restores a valid account copy over invalid saved bytes without a stale autosave', async () => {
@@ -1334,7 +1438,7 @@ describe('Tend Today preview', () => {
     await user.click(friendsShortcut);
     await user.click(screen.getByRole('button', { name: 'Open profile for Morgan Reed' }));
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
-    await user.click(screen.getByRole('button', { name: '+ Add' }));
+    await user.click(screen.getByRole('button', { name: 'Add connection' }));
     const connectionEditor = screen.getByRole('dialog', { name: 'Log connection' });
     expect(connectionEditor.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(within(connectionEditor).getByRole('combobox', { name: 'Connection type: Text' })).toBeTruthy();
@@ -2047,6 +2151,7 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: 'Suggestions' }));
 
     const picker = screen.getByRole('dialog', { name: 'Faith practice suggestions' });
+    expect(picker.classList.contains('dialog--phone-fullscreen')).toBe(true);
     for (const group of faithRhythmSuggestionGroups) {
       const section = within(picker).getByRole('heading', { name: group.title, level: 3 }).closest('section')!;
       expect([...section.querySelectorAll('.rhythm-suggestion-picker__details h4')].map(heading => heading.textContent))
@@ -2792,21 +2897,17 @@ describe('Tend Today preview', () => {
       .toHaveLength(5);
   });
 
-  it('renders the synthetic Prayer action on Today without adding it to persisted preview data', async () => {
-    const user = userEvent.setup();
+  it('does not seed Today Prayer with demo requests when saved Prayer data is empty', async () => {
     render(<App />);
     await screen.findByText('Preview data saved in this browser.');
 
     expect(screen.getByRole('heading', { name: 'Prayer' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Customize' }));
-    const selection = screen.getByRole('dialog', { name: 'Prayer selection' });
-    await user.click(within(selection).getByRole('button', { name: /Change timeframe/ }));
-    const timeframes = within(selection).getByRole('group', { name: 'Prayer timeframes' });
-    await user.click(within(timeframes).getByRole('button', { name: /All Day/ }));
-    await user.click(within(selection).getByRole('button', { name: 'Start prayer' }));
-    const session = screen.getByRole('dialog', { name: 'One request at a time' });
-    expect(within(session).getByRole('heading', { name: 'Patience during a busy week' })).toBeTruthy();
-    await user.click(within(session).getByRole('button', { name: 'Prayed' }));
+    const module = screen.getByRole('region', { name: 'Pray' });
+    expect(module.querySelector('.prayer-entry-count')?.textContent).toBe('0');
+    expect(within(module).getByText('No active prayer requests are saved for these people.')).toBeTruthy();
+    expect(screen.queryByText('Patience during a busy week')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Pray for 0 requests' }) as HTMLButtonElement).disabled)
+      .toBe(true);
     const stored = JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY)!);
     expect(stored.data.prayerRequests).toEqual([]);
   });
@@ -3988,6 +4089,139 @@ describe('Tend Today preview', () => {
       .toBeTruthy();
   });
 
+  it('keeps Daily and three-times-weekly cards, gauges, and explanations aligned at a fixed Afternoon clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-24T19:16:22.803Z'));
+    const user = userEvent.setup();
+    const timeZone = 'America/New_York';
+    const dailySeed = todayRhythms.find(rhythm => rhythm.id === 'sample-connect')!;
+    const walkSeed = todayRhythms.find(rhythm => rhythm.id === 'sample-walk')!;
+    const dailySchedule = { frequency: 'daily' } as const;
+    const weeklySchedule: RhythmSchedule = { frequency: 'weekly', weekdays: [2, 4, 6] };
+    const data = createSamplePreviewData();
+    data.todayView = 'all-today';
+    data.savedRhythms.push({
+      id: dailySeed.id,
+      title: 'Daily connection',
+      description: 'Catch up on day',
+      cadence: 'Daily',
+      timeLabel: 'Afternoon',
+      personIds: ['sample-person-avery'],
+      categoryIds: ['faith'],
+      alsoLogConnection: true,
+      schedule: dailySchedule,
+      scoring: {
+        trackingStartDate: '2026-11-23',
+        timeZone,
+        scheduleHistory: [
+          createRhythmSeason(dailySeed.id, '2026-11-23', dailySchedule)
+        ]
+      },
+      createdLocalDate: '2026-11-23',
+      createdLocalTime: '09:00',
+      createdDueTime: '13:30',
+      createdTimeZone: timeZone
+    });
+    data.removedSeedCompletionIds.push(...(dailySeed.completionHistory ?? []).map(record => record.id));
+    data.savedRhythms.push({
+      id: walkSeed.id,
+      title: 'Take a walk',
+      cadence: '3 times a week',
+      timeLabel: 'Afternoon',
+      timeOfDay: 'afternoon',
+      personIds: [],
+      categoryIds: [],
+      schedule: weeklySchedule,
+      scoring: {
+        trackingStartDate: '2026-11-24',
+        timeZone,
+        scheduleHistory: [
+          createRhythmSeason(walkSeed.id, '2026-11-24', weeklySchedule, 'afternoon')
+        ]
+      },
+      createdLocalDate: '2026-11-24',
+      createdLocalTime: '09:00',
+      createdDueTime: '13:30',
+      createdTimeZone: timeZone
+    });
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    await showAllToday(user);
+
+    const dailyCard = screen.getByRole('article', { name: 'Daily connection' });
+    expect(within(dailyCard).getByText('Catch up on day')).toBeTruthy();
+    expect(within(dailyCard).getByText('Avery')).toBeTruthy();
+    expect(within(dailyCard).getByRole('img', { name: 'Also logs a connection.' })).toBeTruthy();
+    expect(within(dailyCard).getByRole('group', { name: 'Faith category' })).toBeTruthy();
+    expect(within(dailyCard).getByText('Not yet')).toBeTruthy();
+    const dailyOpener = within(dailyCard).getByRole('button', {
+      name: historyButtonName('View scores and history for Daily connection')
+    });
+    expect(dailyOpener.getAttribute('aria-label')).toContain('Health 0');
+    expect(dailyOpener.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('0');
+    await user.click(dailyOpener);
+
+    const dailyHistory = screen.getByRole('region', { name: 'History for Daily connection' });
+    const dailySummary = within(dailyHistory).getByRole('region', { name: 'Health score summary' });
+    expect(within(dailySummary).getByRole('meter', { name: 'Health score' }).getAttribute('aria-valuenow'))
+      .toBe('0');
+    await expandHealthMeasureDisclosure(user, dailySummary);
+    expect(within(dailySummary).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow'))
+      .toBe('0');
+    expect(within(dailySummary).getByRole('meter', { name: 'On Track score' }).getAttribute('aria-valuenow'))
+      .toBe('0');
+    await user.click(within(dailySummary).getByRole('button', {
+      name: 'Show Consistency and On Track score details'
+    }));
+    const dailyExplanation = screen.getByRole('dialog', { name: 'Rhythm Health details' });
+    const dailyExplanationSummary = within(dailyExplanation).getByRole('region', {
+      name: 'Rhythm Health score details score summary'
+    });
+    expect(within(dailyExplanationSummary).getByRole('meter', { name: 'On Track score' })
+      .getAttribute('aria-valuenow')).toBe('0');
+    await user.click(within(dailyExplanation).getByRole('button', { name: 'How this Rhythm was scored' }));
+    expect(within(dailyExplanation).getByRole('meter', { name: 'On Track score' })
+      .getAttribute('aria-valuenow')).toBe('0');
+    await user.click(within(dailyExplanation).getByRole('button', { name: 'Back to Rhythm details' }));
+    await user.click(within(dailyHistory).getByRole('button', { name: 'Close details' }));
+
+    const walkCard = screen.getByRole('article', { name: 'Take a walk' });
+    expect(within(walkCard).getByText('Not yet')).toBeTruthy();
+    const walkOpener = within(walkCard).getByRole('button', {
+      name: historyButtonName('View scores and history for Take a walk')
+    });
+    expect(walkOpener.getAttribute('aria-label')).toContain('Health unavailable');
+    expect(walkOpener.querySelector('.today-rhythm-details__history-score')?.textContent).toBe('—');
+    await user.click(walkOpener);
+
+    const walkHistory = screen.getByRole('region', { name: 'History for Take a walk' });
+    const walkSummary = within(walkHistory).getByRole('region', { name: 'Health score summary' });
+    expect(within(walkSummary).getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
+    await expandHealthMeasureDisclosure(user, walkSummary);
+    expect(within(walkSummary).getByRole('meter', { name: 'Consistency score' }).getAttribute('aria-valuenow'))
+      .toBe('0');
+    expect(within(walkSummary).getByRole('img', {
+      name: 'On Track: Unscored because Starts with your first Tend.'
+    })).toBeTruthy();
+    expect(within(walkSummary).queryByRole('meter', { name: 'On Track score' })).toBeNull();
+    await user.click(within(walkSummary).getByRole('button', {
+      name: 'Show Consistency and On Track score details'
+    }));
+    const walkExplanation = screen.getByRole('dialog', { name: 'Rhythm Health details' });
+    const walkExplanationSummary = within(walkExplanation).getByRole('region', {
+      name: 'Rhythm Health score details score summary'
+    });
+    expect(within(walkExplanationSummary).getByRole('img', {
+      name: 'On Track: Unscored because Starts with your first Tend.'
+    })).toBeTruthy();
+    expect(within(walkExplanationSummary).queryByRole('meter', { name: 'On Track score' })).toBeNull();
+    await user.click(within(walkExplanation).getByRole('button', { name: 'How this Rhythm was scored' }));
+    expect(within(walkExplanation).getByText('Starts with your first Tend.')).toBeTruthy();
+    expect(within(walkExplanation).queryByRole('meter', { name: 'On Track score' })).toBeNull();
+  });
+
   it('keeps Take a walk descriptive cadence literal until a structured schedule is explicitly saved', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -4406,13 +4640,13 @@ describe('Tend Today preview', () => {
     const peopleOpener = screen.getByRole('button', { name: 'Open profile for Avery Brooks' });
     await user.click(peopleOpener);
     let profile = screen.getByRole('main', { name: 'Avery Brooks' });
-    await user.click(within(profile).getByRole('button', { name: 'Add Rhythm' }));
+    await user.click(within(profile).getByRole('button', { name: 'Add rhythm' }));
     const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
     expect(within(editor).getByRole('button', { name: /Choose people, Avery Brooks/ })).toBeTruthy();
     expect(within(editor).getByRole('button', { name: 'Choose categories' })).toBeTruthy();
     expect(within(editor).queryByRole('button', { name: 'Choose a category first' })).toBeNull();
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
-    expect(document.activeElement).toBe(within(profile).getByRole('button', { name: 'Add Rhythm' }));
+    expect(document.activeElement).toBe(within(profile).getByRole('button', { name: 'Add rhythm' }));
     expect(JSON.parse(window.localStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}').data.savedRhythms).toEqual([]);
     await user.click(within(profile).getByRole('button', { name: 'Back to People' }));
     await waitFor(() => expect(document.activeElement).toBe(peopleOpener));
@@ -4642,7 +4876,7 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
     let profile = screen.getByRole('main', { name: 'Avery Brooks' });
     await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
-    await user.click(within(profile).getByRole('button', { name: '+ Add' }));
+    await user.click(within(profile).getByRole('button', { name: 'Add connection' }));
     const editor = screen.getByRole('dialog', { name: 'Log connection' });
     expect(within(editor).getByRole('combobox', { name: 'Connection type: Text' })).toBeTruthy();
     await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
@@ -4668,7 +4902,7 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
     profile = screen.getByRole('main', { name: 'Avery Brooks' });
     await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
-    expect(within(profile).getByRole('button', { name: '+ Add' })).toBeTruthy();
+    expect(within(profile).getByRole('button', { name: 'Add connection' })).toBeTruthy();
     expect(within(profile).getByText('Text')).toBeTruthy();
     const reloadedHealth = within(profile).getByRole('region', { name: 'Overall Health summary' });
     await user.click(within(reloadedHealth).getByRole('button', {
@@ -4828,7 +5062,16 @@ describe('Tend Today preview', () => {
       name: 'Connections Health score'
     }).getAttribute('aria-valuenow')).toBe('80');
 
-    const sparkCard = within(profile).getByRole('article', { name: 'Watch Backrooms Movie' });
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    const homeSparks = screen.getByRole('region', { name: 'Sparks' });
+    expect(within(homeSparks).queryByRole('article', { name: 'Watch Backrooms Movie' })).toBeNull();
+    await user.click(within(homeSparks).getByRole('button', { name: 'View all' }));
+    const library = screen.getByRole('dialog', { name: 'Sparks' });
+    expect(within(library).getByRole('tab', { name: 'Active (0)' })).toBeTruthy();
+    expect(within(library).getByRole('tab', { name: 'Completed (1)' })).toBeTruthy();
+    await user.click(within(library).getByRole('tab', { name: 'Completed (1)' }));
+    const sparkCard = within(library).getByRole('article', { name: 'Watch Backrooms Movie' });
     await user.click(within(sparkCard).getByRole('button', {
       name: 'Expand Spark Watch Backrooms Movie'
     }));
@@ -4839,7 +5082,16 @@ describe('Tend Today preview', () => {
       name: 'Undo this Spark completion?'
     });
     await user.click(within(sparkUndoConfirmation).getByRole('button', { name: 'Undo completion' }));
-    expect(within(overall).getByRole('meter', {
+    await user.click(within(library).getByRole('button', { name: 'Close Sparks' }));
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const restoredProfile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const restoredHealth = within(restoredProfile).getByRole('region', { name: 'Overall Health summary' });
+    await user.click(within(restoredHealth).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    }));
+    expect(within(restoredHealth).getByRole('meter', {
       name: 'Connections Health score'
     }).getAttribute('aria-valuenow')).toBe('70');
     const finalState = parsePreviewBackup(
@@ -4870,11 +5122,13 @@ describe('Tend Today preview', () => {
     const user = userEvent.setup();
     const storage = installMemoryStorage();
     const data = createSamplePreviewData();
+    const averyId = 'sample-person-avery';
+    const morganId = 'sample-person-morgan';
     const spark = {
       id: 'spark-plan-picnic',
-      ownerId: 'sample-person-avery',
+      ownerId: averyId,
       title: 'Plan a picnic',
-      sharedWith: ['sample-person-morgan'],
+      sharedWith: [morganId],
       archived: false,
       completed: false,
       completionHistory: []
@@ -4894,8 +5148,10 @@ describe('Tend Today preview', () => {
     await user.click(within(sparkCard).getByRole('button', { name: 'Do it' }));
     const completion = screen.getByRole('dialog', { name: 'Log a connection for this Spark' });
     expect(within(completion).queryByRole('combobox')).toBeNull();
-    expect((within(completion).getAllByRole('checkbox') as HTMLInputElement[])
-      .map(checkbox => checkbox.checked)).toEqual([true, true, false]);
+    const peopleRow = within(completion).getByRole('button', {
+      name: 'Choose people, Avery Brooks and Morgan Reed'
+    });
+    expect(peopleRow).toBeTruthy();
     fireEvent.change(within(completion).getByLabelText('Date'), {
       target: { value: '2026-10-28' }
     });
@@ -4903,6 +5159,14 @@ describe('Tend Today preview', () => {
 
     const originalRaw = storage.getItem(PREVIEW_STORAGE_KEY);
     const originalSetItem = storage.setItem.bind(storage);
+    const formValues = {
+      date: (within(completion).getByLabelText('Date') as HTMLInputElement).value,
+      notes: (within(completion).getByLabelText('Notes (optional)') as HTMLTextAreaElement).value,
+      participants: [averyId, morganId],
+      hour: within(completion).getByRole('spinbutton', { name: 'Hour' }).getAttribute('aria-valuenow'),
+      minute: within(completion).getByRole('spinbutton', { name: 'Minute' }).getAttribute('aria-valuenow'),
+      period: within(completion).getByRole('spinbutton', { name: 'AM / PM' }).getAttribute('aria-valuetext')
+    };
     let failActiveWrite = true;
     storage.setItem = (key, value) => {
       if (failActiveWrite && key === PREVIEW_STORAGE_KEY) {
@@ -4913,8 +5177,20 @@ describe('Tend Today preview', () => {
     await user.click(within(completion).getByRole('button', { name: 'Save connection' }));
     expect(within(completion).getByRole('alert').textContent).toContain('Preview could not save');
     expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
-    expect((within(completion).getByLabelText('Notes (optional)') as HTMLTextAreaElement).value)
-      .toBe('Bring fruit and a blanket.');
+    expect({
+      date: (within(completion).getByLabelText('Date') as HTMLInputElement).value,
+      notes: (within(completion).getByLabelText('Notes (optional)') as HTMLTextAreaElement).value,
+      participants: [averyId, morganId],
+      hour: within(completion).getByRole('spinbutton', { name: 'Hour' }).getAttribute('aria-valuenow'),
+      minute: within(completion).getByRole('spinbutton', { name: 'Minute' }).getAttribute('aria-valuenow'),
+      period: within(completion).getByRole('spinbutton', { name: 'AM / PM' }).getAttribute('aria-valuetext')
+    }).toEqual(formValues);
+    expect(within(profile).getByRole('article', { name: spark.title })).toBeTruthy();
+    const failedSave = parsePreviewBackup(originalRaw!, localDateString(new Date()));
+    expect(failedSave.valid).toBe(true);
+    if (!failedSave.valid) return;
+    expect(failedSave.envelope.data.personSparks[0]?.completed).toBe(false);
+    expect(failedSave.envelope.data.friendships.connections).toEqual([]);
 
     failActiveWrite = false;
     await user.click(within(completion).getByRole('button', { name: 'Save connection' }));
@@ -4924,19 +5200,36 @@ describe('Tend Today preview', () => {
     const saved = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
     expect(saved.valid).toBe(true);
     if (!saved.valid) return;
+    expect(saved.envelope.data.personSparks[0]?.completed).toBe(true);
     expect(saved.envelope.data.friendships.connections).toHaveLength(1);
     expect(saved.envelope.data.friendships.connections[0]).toMatchObject({
       type: 'spark',
       date: '2026-10-28',
-      participantIds: ['sample-person-avery', 'sample-person-morgan'],
+      participantIds: [averyId, morganId],
       sparkId: spark.id,
       sparkOwnerId: spark.ownerId,
       sparkTitleSnapshot: spark.title,
       notes: 'Bring fruit and a blanket.',
       ownedBySparkCompletion: true
     });
+    expect(within(profile).queryByRole('article', { name: spark.title })).toBeNull();
+    expect(within(profile).getByRole('button', {
+      name: /Plan a picnic, Spark connection/
+    })).toBeTruthy();
 
-    await user.click(within(sparkCard).getByRole('button', { name: 'Edit Spark' }));
+    cleanup();
+    render(<App />);
+    await screen.findByText('Preview data saved in this browser.');
+    const homeSparks = screen.getByRole('region', { name: 'Sparks' });
+    expect(within(homeSparks).queryByRole('article', { name: spark.title })).toBeNull();
+    await user.click(within(homeSparks).getByRole('button', { name: 'View all' }));
+    const library = screen.getByRole('dialog', { name: 'Sparks' });
+    expect(within(library).getByRole('tab', { name: 'Active (0)' })).toBeTruthy();
+    expect(within(library).getByRole('tab', { name: 'Completed (1)' })).toBeTruthy();
+    await user.click(within(library).getByRole('tab', { name: 'Completed (1)' }));
+    const completedCard = within(library).getByRole('article', { name: spark.title });
+    await user.click(within(completedCard).getByRole('button', { name: `Expand Spark ${spark.title}` }));
+    await user.click(within(completedCard).getByRole('button', { name: 'Edit Spark' }));
     const editor = screen.getByRole('dialog', { name: 'Edit Spark' });
     await user.click(within(editor).getByRole('button', { name: 'Undo completion' }));
     const confirmation = screen.getByRole('dialog', { name: 'Undo this Spark completion?' });
@@ -4946,7 +5239,24 @@ describe('Tend Today preview', () => {
     expect(undone.valid).toBe(true);
     if (!undone.valid) return;
     expect(undone.envelope.data.personSparks[0]?.completed).toBe(false);
+    expect(undone.envelope.data.personSparks[0]?.completionHistory[0]?.undone).toBe(true);
     expect(undone.envelope.data.friendships.connections).toEqual([]);
+    expect(within(library).getByRole('tab', { name: 'Active (1)' })).toBeTruthy();
+    expect(within(library).getByRole('tab', { name: 'Completed (0)' })).toBeTruthy();
+    expect(within(library).getByRole('article', { name: spark.title })).toBeTruthy();
+    await user.click(within(library).getByRole('button', { name: 'Close Sparks' }));
+    expect(within(screen.getByRole('region', { name: 'Sparks' }))
+      .getByRole('article', { name: spark.title })).toBeTruthy();
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const restoredProfile = screen.getByRole('main', { name: 'Avery Brooks' });
+    await user.click(within(restoredProfile).getByRole('tab', { name: 'Connections' }));
+    expect(within(restoredProfile).getByRole('article', { name: spark.title })).toBeTruthy();
+    expect(within(restoredProfile).queryByRole('button', {
+      name: /Plan a picnic, Spark connection/
+    })).toBeNull();
   });
 
   it('opens the shared history modal directly from the chart action', async () => {
@@ -6148,6 +6458,128 @@ describe('Tend Today preview', () => {
     expect(document.activeElement).toBe(flexible);
     expect(flexible.getAttribute('aria-selected')).toBe('true');
     expect(panel.getAttribute('aria-labelledby')).toBe(flexible.id);
+  });
+
+  it('saves a Rhythm from schema 58 only after exact recovery succeeds, preserving the draft and preventing duplicates', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    const originalRaw = schema58PreviewRaw(data);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    const storage = window.localStorage;
+    const writeStorage = storage.setItem.bind(storage);
+    const recoveryFailure = vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
+      if (key === PREVIEW_V58_RECOVERY_KEY) throw new Error('schema-58 recovery write blocked');
+      writeStorage(key, value);
+    });
+
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Marriage' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
+    const editor = screen.getByRole('dialog', { name: 'Add Rhythm' });
+    const title = within(editor).getByLabelText('Title') as HTMLInputElement;
+    await user.type(title, 'Schema 58 rhythm');
+    await user.click(within(editor).getByRole('button', { name: /^Choose people/ }));
+    const peoplePicker = associationPicker('Choose people');
+    await user.click(within(peoplePicker).getByRole('button', { name: 'Avery Brooks' }));
+    await user.click(within(peoplePicker).getByRole('button', { name: 'Done' }));
+    await user.click(within(editor).getByRole('button', { name: /^Choose categories/ }));
+    await chooseCategoryFoundation(user, 'Marriage', 'Connection');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+
+    const failure = await screen.findByText(/Preview could not save this Rhythm\./);
+    expect(failure.getAttribute('role')).toBe('alert');
+    expect(failure.textContent).toContain('Preview could not save this Rhythm.');
+    expect(title.value).toBe('Schema 58 rhythm');
+    expect(within(editor).getByRole('button', { name: /Choose people, Avery Brooks/ })).toBeTruthy();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(storage.getItem(PREVIEW_V58_RECOVERY_KEY)).toBeNull();
+    const unchanged = parsePreviewBackup(originalRaw, localDateString(new Date()));
+    expect(unchanged.valid).toBe(true);
+    if (unchanged.valid) expect(unchanged.envelope.data.savedRhythms).toEqual([]);
+
+    recoveryFailure.mockRestore();
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add Rhythm' })).toBeNull());
+    expect(storage.getItem(PREVIEW_V58_RECOVERY_KEY)).toBe(originalRaw);
+
+    cleanup();
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Marriage' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    expect(screen.getAllByRole('article', { name: 'Schema 58 rhythm' })).toHaveLength(1);
+    const saved = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      expect(saved.envelope.schemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+      expect(saved.envelope.data.savedRhythms.filter(rhythm => rhythm.title === 'Schema 58 rhythm'))
+        .toHaveLength(1);
+    }
+  });
+
+  it('saves a Prayer frequency edit from schema 58 only after recovery succeeds and retains the draft', async () => {
+    const user = userEvent.setup();
+    const data = createSamplePreviewData();
+    data.prayerRequests = [{
+      id: 'schema-58-prayer',
+      personId: 'sample-person-avery',
+      title: 'Schema 58 prayer',
+      status: 'active',
+      createdAt: '2026-11-01T10:00:00.000Z',
+      updatedAt: '2026-11-01T10:00:00.000Z',
+      prayerLogs: [{ id: 'schema-58-log', prayedAt: '2026-11-22T12:34:56.789Z' }]
+    }];
+    const originalRaw = schema58PreviewRaw(data);
+    window.localStorage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    const storage = window.localStorage;
+    const writeStorage = storage.setItem.bind(storage);
+    const recoveryFailure = vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
+      if (key === PREVIEW_V58_RECOVERY_KEY) throw new Error('schema-58 recovery write blocked');
+      writeStorage(key, value);
+    });
+
+    render(<App />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Focus' }));
+    const search = screen.getByRole('combobox', { name: 'Search Tend' });
+    await user.type(search, 'Schema 58 prayer');
+    const searchResults = screen.getByRole('listbox', { name: 'Search results' });
+    await user.click(within(searchResults)
+      .getByRole('option', { name: /Schema 58 prayer.*Avery Brooks.*Prayer/ }));
+    const prayerCard = screen.getByRole('article', { name: 'Schema 58 prayer' });
+    await user.click(within(prayerCard).getByRole('button', { name: 'Set prayer frequency' }));
+    const editor = screen.getByRole('dialog', { name: 'Prayer request details' });
+    await user.click(within(editor).getByRole('combobox', { name: 'Frequency: Choose frequency' }));
+    await user.click(within(editor).getByRole('option', { name: 'Weekly' }));
+    await user.click(within(editor).getByRole('radio', { name: 'Sunday' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
+
+    expect(within(editor).getByRole('alert').textContent)
+      .toContain('immutable-recovery-copy-failed');
+    expect(within(editor).getByRole('combobox', { name: 'Frequency: Weekly' })).toBeTruthy();
+    expect((within(editor).getByRole('radio', { name: 'Sunday' }) as HTMLInputElement).checked).toBe(true);
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(storage.getItem(PREVIEW_V58_RECOVERY_KEY)).toBeNull();
+
+    recoveryFailure.mockRestore();
+    await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Prayer request details' })).toBeNull());
+    expect(storage.getItem(PREVIEW_V58_RECOVERY_KEY)).toBe(originalRaw);
+
+    cleanup();
+    render(<App />);
+    const reloaded = loadPreview(browserPreviewStorage(), localDateString(new Date()));
+    expect(reloaded.kind).toBe('loaded');
+    if (reloaded.kind === 'loaded') {
+      expect(reloaded.data.prayerRequests).toHaveLength(1);
+      expect(reloaded.data.prayerRequests[0]).toMatchObject({
+        id: 'schema-58-prayer',
+        schedule: { frequency: 'weekly', weekdays: [0] },
+        prayerLogs: [{ id: 'schema-58-log', prayedAt: '2026-11-22T12:34:56.789Z' }]
+      });
+    }
   });
 
   it('creates and edits a synthetic Rhythm, preserving its identity and completion across reload', async () => {

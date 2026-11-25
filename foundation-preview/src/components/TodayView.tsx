@@ -44,6 +44,7 @@ import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { formatScore } from '../domain/score-display.ts';
 import { aggregateCategoryHealthScores } from '../domain/category-scoring.ts';
 import { TodayPrayerModule } from './TodayPrayerModule.tsx';
+import type { PrayerDataStatus } from './TodayPrayerModule.tsx';
 import type { CalendarSource } from '../domain/calendar-sources.ts';
 import { CalendarAgendaSection } from './CalendarAgendaSection.tsx';
 import {
@@ -137,8 +138,10 @@ type TodayViewProps = {
   initializing?: boolean;
   rhythms: readonly RhythmPreview[];
   rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
+  prayerDataStatus?: PrayerDataStatus;
+  prayerDataError?: string;
   prayerRequests: readonly PrayerRequestPreview[];
-  onPrayForRequest: (requestId: string) => string | null;
+  onPrayForRequest: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
   categoryHealthScores: ReadonlyMap<string, number | null>;
   onNavigate: (destination: Destination) => void;
   onOpenSettings?: () => void;
@@ -186,6 +189,8 @@ export function TodayView({
   initializing = false,
   rhythms,
   rhythmScores,
+  prayerDataStatus = 'ready',
+  prayerDataError,
   prayerRequests,
   onPrayForRequest,
   categoryHealthScores,
@@ -753,7 +758,11 @@ export function TodayView({
       )}
 
       <TodayPrayerModule
+        people={people}
+        peopleGroups={peopleGroups}
         requests={prayerRequests}
+        dataStatus={prayerDataStatus}
+        {...(prayerDataError ? { dataError: prayerDataError } : {})}
         enabled={prayerEnabled}
         onPray={onPrayForRequest}
       />

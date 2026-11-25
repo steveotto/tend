@@ -220,7 +220,7 @@ export function RhythmDetailsDialog({
         : `View scores and history for ${rhythm.title}`}
       onClick={inline ? event => onHistory?.(event) : () => setShowHistory(true)}
     >
-      <span className="today-rhythm-details__history-content">
+      <span className="rhythm-card__history-content">
         <RhythmMetadataIcon kind="history" />
         {inline && <span className="today-rhythm-details__history-score">{formatScore(healthScore)}</span>}
       </span>

@@ -3,6 +3,11 @@ import type { KeyboardEvent } from 'react';
 
 const rowHeight = 40;
 
+function getRowHeight(viewport: HTMLElement): number {
+  const value = viewport.querySelector<HTMLElement>('.time-dial__value');
+  return value?.getBoundingClientRect().height || rowHeight;
+}
+
 export function TimeDial<Value extends string | number>({
   label,
   values,
@@ -26,6 +31,7 @@ export function TimeDial<Value extends string | number>({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
+  const scrollSettleTimerRef = useRef<number | null>(null);
   const selectedIndex = Math.max(0, values.indexOf(value));
   const selectedIndexRef = useRef(selectedIndex);
   selectedIndexRef.current = selectedIndex;
@@ -36,11 +42,14 @@ export function TimeDial<Value extends string | number>({
   useLayoutEffect(() => {
     const viewport = scrollRef.current;
     if (!viewport) return;
-    viewport.scrollTop = selectedIndex * rowHeight;
+    const resolvedRowHeight = getRowHeight(viewport);
+    viewport.scrollTop = selectedIndex * resolvedRowHeight;
     if (initializedRef.current) return;
 
     const initialize = () => {
-      if (scrollRef.current) scrollRef.current.scrollTop = selectedIndexRef.current * rowHeight;
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = selectedIndexRef.current * getRowHeight(scrollRef.current);
+      }
       initializedRef.current = true;
     };
     const usesAnimationFrame = typeof window.requestAnimationFrame === 'function';
@@ -51,6 +60,10 @@ export function TimeDial<Value extends string | number>({
     return () => {
       if (usesAnimationFrame) window.cancelAnimationFrame(frame);
       else window.clearTimeout(frame);
+      if (scrollSettleTimerRef.current !== null) {
+        window.clearTimeout(scrollSettleTimerRef.current);
+        scrollSettleTimerRef.current = null;
+      }
     };
   }, [selectedIndex, compactToggle]);
 
@@ -58,7 +71,9 @@ export function TimeDial<Value extends string | number>({
     const boundedIndex = Math.max(0, Math.min(values.length - 1, index));
     const next = values[boundedIndex];
     if (next !== undefined) onChange(next);
-    if (scrollRef.current) scrollRef.current.scrollTop = boundedIndex * rowHeight;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = boundedIndex * getRowHeight(scrollRef.current);
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -118,14 +133,21 @@ export function TimeDial<Value extends string | number>({
           onKeyDown={handleKeyDown}
           onScroll={event => {
             if (!initializedRef.current) return;
-            const nextIndex = Math.max(0, Math.min(values.length - 1,
-              Math.round(event.currentTarget.scrollTop / rowHeight)));
-            if (values[nextIndex] !== undefined && nextIndex !== selectedIndex) {
-              onChange(values[nextIndex]!);
+            if (scrollSettleTimerRef.current !== null) {
+              window.clearTimeout(scrollSettleTimerRef.current);
             }
+            const viewport = event.currentTarget;
+            scrollSettleTimerRef.current = window.setTimeout(() => {
+              scrollSettleTimerRef.current = null;
+              const resolvedRowHeight = getRowHeight(viewport);
+              const nextIndex = Math.max(0, Math.min(values.length - 1,
+                Math.round(viewport.scrollTop / resolvedRowHeight)));
+              if (values[nextIndex] !== undefined && nextIndex !== selectedIndex) {
+                onChange(values[nextIndex]!);
+              }
+            }, 80);
           }}
         >
-          <div className="time-dial__selection" aria-hidden="true" />
           <div className="time-dial__spacer" aria-hidden="true" />
           {values.map((option, index) => (
             <span

@@ -1,4 +1,7 @@
 import type { PersonId } from './preview-data.ts';
+import type { RhythmTimeValue } from './rhythm-schedule.ts';
+import { DEFAULT_TIME_BLOCK_SETTINGS, isTimeBlockId } from './time-blocks.ts';
+import type { TimeBlockSettings } from './time-blocks.ts';
 
 export type PrayerTimeOfDay = 'morning' | 'afternoon' | 'evening' | 'anytime';
 export type PrayerTimeframeId =
@@ -16,7 +19,8 @@ export type PrayerRequestPreview = {
   title: string;
   details?: string;
   status: 'active' | 'answered' | 'archived';
-  timeOfDay: PrayerTimeOfDay;
+  timeOfDay: PrayerTimeOfDay | null;
+  updatedAt?: string;
   prayedCount: number;
   lastPrayedAt?: string;
 };
@@ -42,13 +46,30 @@ const timeframeDefinitions: readonly Omit<PrayerTimeframeOption, 'count' | 'isCu
   { id: 'evening', label: 'Evening', timeDescription: '5:00pm - 11:59pm' }
 ];
 
-export function prayerTimeOfDayLabel(timeOfDay: PrayerTimeOfDay): string {
+export function prayerTimeOfDayLabel(timeOfDay: PrayerTimeOfDay | null): string {
+  if (timeOfDay === null) return 'Time block unavailable';
   switch (timeOfDay) {
     case 'morning': return 'Morning';
     case 'afternoon': return 'Afternoon';
     case 'evening': return 'Evening';
     case 'anytime': return 'Anytime';
   }
+}
+
+export function prayerTimeframeForScheduleTime(
+  timeOfDay: RhythmTimeValue | undefined,
+  settings: TimeBlockSettings
+): PrayerTimeOfDay | null {
+  if (timeOfDay === undefined || timeOfDay === 'anytime' || timeOfDay === 'all-day') return 'anytime';
+  const block = isTimeBlockId(timeOfDay)
+    ? settings.blocks.find(item => item.id === timeOfDay)
+      ?? DEFAULT_TIME_BLOCK_SETTINGS.blocks.find(item => item.id === timeOfDay)
+    : undefined;
+  if (!block) return null;
+  const hour = Number(block.start.slice(0, 2));
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
 }
 
 export function currentPrayerTimeframe(instant: Date, timeZone: string): Exclude<PrayerTimeframeId, 'allday' | 'allrequests'> {

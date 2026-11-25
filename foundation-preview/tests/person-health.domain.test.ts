@@ -266,16 +266,19 @@ describe('person Health selectors', () => {
       '2026-10-27'
     );
     const enabled = selectPersonOverallHealth(scored, noConnectionHealth);
-    const prayerDisabled = selectPersonOverallHealth(scored, noConnectionHealth, false);
+    const prayerDisabled = selectPersonOverallHealth(scored, noConnectionHealth, { score: null }, false);
+    const withPrayer = selectPersonOverallHealth(scored, noConnectionHealth, { score: 50 });
     expect(enabled.health).toBe(scored.health);
     expect(enabled.componentIds).toEqual(['rhythms', 'connection', 'prayer']);
     expect(prayerDisabled.componentIds).toEqual(['rhythms', 'connection']);
     expect(prayerDisabled.unscoredComponentIds).toEqual(['connection']);
     expect(prayerDisabled.health).toBe(enabled.health);
+    expect(withPrayer.health).toBe(42.5);
+    expect(withPrayer.eligibleComponentIds).toEqual(['rhythms', 'prayer']);
     expect(selectPersonOverallHealth(scored, noConnectionHealth).health).toBe(35);
     expect(selectPersonOverallHealth(zero, noConnectionHealth).health).toBe(0);
     expect(selectPersonOverallHealth(unavailable, noConnectionHealth).health).toBeNull();
-    expect(selectPersonOverallHealth(unavailable, noConnectionHealth, false)).toMatchObject({
+    expect(selectPersonOverallHealth(unavailable, noConnectionHealth, { score: null }, false)).toMatchObject({
       componentIds: ['rhythms', 'connection'],
       health: null
     });
@@ -477,7 +480,7 @@ describe('person Health selectors', () => {
       ),
       score: 90
     };
-    const result = selectPersonOverallHealth(rhythms, connections, false);
+    const result = selectPersonOverallHealth(rhythms, connections, { score: null }, false);
 
     expect(result.eligibleComponentIds).toEqual(['rhythms', 'connection']);
     expect(result).toMatchObject({

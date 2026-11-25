@@ -205,10 +205,10 @@ describe('shared scoring engine Rhythm scores', () => {
     const established = scoreRhythm({
       ...input,
       createdDate: '2026-11-11',
-      asOfTime: '17:59'
+      asOfTime: '18:00'
     });
     expect(established.consistency).toEqual({ kind: 'scored', score: 0 });
-    expect(established.onTrack).toEqual({ kind: 'scored', score: 90 });
+    expect(established.onTrack).toEqual({ kind: 'scored', score: 0 });
   });
 
   it('starts a known late-created Rhythm at its next selected weekday occurrence', () => {
@@ -332,6 +332,106 @@ describe('shared scoring engine Rhythm scores', () => {
 
     expect(reset.onTrack).toEqual({ kind: 'scored', score: 80 });
     expect(floor.onTrack).toEqual({ kind: 'scored', score: 0 });
+  });
+
+  it('keeps On Track unavailable through the first due-day grace period, then starts at zero', () => {
+    const base = {
+      rhythmId: 'never-tended',
+      schedule: { frequency: 'daily' as const },
+      createdDate: '2026-11-12',
+      createdLocalTime: '08:00',
+      createdDueTime: '10:00',
+      completionDates: [] as string[]
+    };
+    const beforeDue = scoreRhythm({
+      ...base,
+      asOfDate: '2026-11-12',
+      asOfTime: '09:59',
+      dueTime: '10:00'
+    });
+    const duringGrace = scoreRhythm({
+      ...base,
+      asOfDate: '2026-11-12',
+      asOfTime: '10:00',
+      dueTime: '10:00'
+    });
+    const afterGrace = scoreRhythm({
+      ...base,
+      asOfDate: '2026-11-13'
+    });
+    const firstCompletion = scoreRhythm({
+      ...base,
+      completionDates: ['2026-11-13'],
+      asOfDate: '2026-11-13'
+    });
+
+    expect(beforeDue.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(duringGrace.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(afterGrace.onTrack).toEqual({ kind: 'scored', score: 0 });
+    expect(firstCompletion.onTrack).toEqual({ kind: 'scored', score: 100 });
+  });
+
+  it('keeps daily and selected-weekday misses pending until the next local time-block boundary', () => {
+    const daily = {
+      rhythmId: 'daily-afternoon-grace',
+      schedule: { frequency: 'daily' } as const,
+      createdDate: '2026-11-23',
+      createdLocalTime: '09:00',
+      createdDueTime: '13:30',
+      completionDates: [] as string[],
+      dueTime: '13:30'
+    };
+    const beforeDailyDeadline = scoreRhythm({
+      ...daily,
+      asOfDate: '2026-11-24',
+      asOfTime: '13:29'
+    });
+    const atDailyDeadline = scoreRhythm({
+      ...daily,
+      asOfDate: '2026-11-24',
+      asOfTime: '13:30'
+    });
+    const afterDailyDeadline = scoreRhythm({
+      ...daily,
+      asOfDate: '2026-11-24',
+      asOfTime: '13:31'
+    });
+
+    expect(beforeDailyDeadline.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(atDailyDeadline.onTrack).toEqual({ kind: 'scored', score: 0 });
+    expect(afterDailyDeadline.onTrack).toEqual({ kind: 'scored', score: 0 });
+
+    const selectedWeekdays = {
+      rhythmId: 'three-times-weekly-afternoon-grace',
+      schedule: {
+        frequency: 'weekly',
+        weekdays: [2, 4, 6]
+      } satisfies RhythmSchedule,
+      createdDate: '2026-11-24',
+      createdLocalTime: '09:00',
+      createdDueTime: '13:30',
+      completionDates: [] as string[],
+      dueTime: '13:30'
+    };
+    const beforeWeeklyDeadline = scoreRhythm({
+      ...selectedWeekdays,
+      asOfDate: '2026-11-25',
+      asOfTime: '13:29'
+    });
+    const atWeeklyDeadline = scoreRhythm({
+      ...selectedWeekdays,
+      asOfDate: '2026-11-25',
+      asOfTime: '13:30'
+    });
+    const afterWeeklyDeadline = scoreRhythm({
+      ...selectedWeekdays,
+      asOfDate: '2026-11-25',
+      asOfTime: '13:31'
+    });
+
+    expect(beforeWeeklyDeadline.onTrack).toEqual({ kind: 'unscored', reason: 'not-due-yet' });
+    expect(atWeeklyDeadline.onTrack).toEqual({ kind: 'scored', score: 0 });
+    expect(afterWeeklyDeadline.onTrack).toEqual({ kind: 'scored', score: 0 });
   });
 
   it('counts consecutive misses from the score-clock start even outside the Consistency window', () => {

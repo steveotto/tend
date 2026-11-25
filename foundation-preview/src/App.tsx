@@ -95,7 +95,6 @@ import {
   datingRhythmSuggestions,
   personById,
   peopleForRhythm,
-  syntheticPrayerRequests,
   todayRhythms,
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
@@ -105,8 +104,8 @@ import {
   type PersonPreview,
   type RhythmPreview
 } from './domain/preview-data.ts';
-import { recordPreviewPrayer } from './domain/prayer-session.ts';
 import type { PrayerRequestPreview } from './domain/prayer-session.ts';
+import { prayerTimeframeForScheduleTime } from './domain/prayer-session.ts';
 import {
   saveCheckIn,
   type CheckInDraft,
@@ -155,13 +154,22 @@ import {
 import type { PersonNoteDraft } from './domain/person-notes.ts';
 import {
   createPersonPrayerRequest,
+  deletePersonPrayerLog,
   deletePersonPrayerRequest,
+  prayerRequestHistorySummary,
   recordPersonPrayer,
+  savePersonPrayerLog,
   transitionPersonPrayerRequest,
+  undoDeletePersonPrayerLog,
   unlinkPersonPrayerRequest,
   updatePersonPrayerRequest
 } from './domain/person-prayers.ts';
-import type { PersonPrayerRequestDraft, PrayerRequestTransition } from './domain/person-prayers.ts';
+import type {
+  PersonPrayerLog,
+  PersonPrayerLogUndo,
+  PersonPrayerRequestDraft,
+  PrayerRequestTransition
+} from './domain/person-prayers.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from './domain/rhythm-completion.ts';
 import {
   deleteDatedCompletion,
@@ -181,6 +189,7 @@ import {
   selectPersonRhythmHealth
 } from './domain/person-health.ts';
 import { selectPersonConnectionHealth } from './domain/person-connection-health.ts';
+import { selectPersonPrayerHealth } from './domain/person-prayer-health.ts';
 import { validateStrengthData } from './domain/strength.ts';
 import type { StrengthMode } from './domain/strength.ts';
 import {
@@ -282,6 +291,7 @@ import {
   loadV50RecoveryCopy,
   loadV54RecoveryCopy,
   loadV55RecoveryCopy,
+  loadV58RecoveryCopy,
   loadCloudRestoreRecoveryCopy,
   loadStrengthRepairRecoveryCopy,
   loadPreviewImportRecovery,
@@ -599,6 +609,22 @@ function PreviewWorkspace({
   );
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
+  const prayerRequests = useMemo<PrayerRequestPreview[]>(() =>
+    previewData.prayerRequests.map(request => {
+      const history = prayerRequestHistorySummary(request);
+      return {
+        id: request.id,
+        personId: request.personId,
+        ...(request.sharedWith ? { sharedWith: request.sharedWith } : {}),
+        title: request.title,
+        ...(request.details !== undefined ? { details: request.details } : {}),
+        status: request.status,
+        timeOfDay: prayerTimeframeForScheduleTime(request.timeOfDay, previewData.timeBlocks),
+        updatedAt: request.updatedAt,
+        prayedCount: history.count,
+        ...(history.lastPrayedAt ? { lastPrayedAt: history.lastPrayedAt } : {})
+      };
+    }), [previewData.prayerRequests, previewData.timeBlocks]);
   const [freshInitialData, setFreshInitialData] = useState<PreviewData | null>(null);
   const [focusCalendarEvents, setFocusCalendarEvents] = useState<readonly CalendarEvent[]>([]);
   const localIsPristine = useMemo(
@@ -611,11 +637,8 @@ function PreviewWorkspace({
   const [persistedSatisfiedRhythmIds, setPersistedSatisfiedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const [persistedCompletedRhythmIds, setPersistedCompletedRhythmIds] = useState<ReadonlySet<string>>(new Set());
   const configuredRhythmTimeOptions = rhythmTimeOptionsForBlocks(previewData.timeBlocks);
-  const [prayerRequests, setPrayerRequests] = useState<PrayerRequestPreview[]>(() =>
-    syntheticPrayerRequests.map(request => request.sharedWith
-      ? { ...request, sharedWith: [...request.sharedWith] }
-      : { ...request }));
   const [hydrated, setHydrated] = useState(false);
+  const [previewDataLoadError, setPreviewDataLoadError] = useState<string | null>(null);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [persistenceStatus, setPersistenceStatus] = useState<PreviewPersistenceStatus>({ kind: 'loading' });
   const [rhythmConnectionNotice, setRhythmConnectionNotice] = useState('');
@@ -714,6 +737,7 @@ function PreviewWorkspace({
   const [v50RecoveryCopy, setV50RecoveryCopy] = useState<string | null>(null);
   const [v54RecoveryCopy, setV54RecoveryCopy] = useState<string | null>(null);
   const [v55RecoveryCopy, setV55RecoveryCopy] = useState<string | null>(null);
+  const [v58RecoveryCopy, setV58RecoveryCopy] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
@@ -828,6 +852,8 @@ function PreviewWorkspace({
     setV54RecoveryCopy(v54Recovery.kind === 'loaded' ? v54Recovery.raw : null);
     const v55Recovery = loadV55RecoveryCopy(previewStorage);
     setV55RecoveryCopy(v55Recovery.kind === 'loaded' ? v55Recovery.raw : null);
+    const v58Recovery = loadV58RecoveryCopy(previewStorage);
+    setV58RecoveryCopy(v58Recovery.kind === 'loaded' ? v58Recovery.raw : null);
     if (written.kind === 'saved') {
       setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(data));
       setPersistedCompletedRhythmIds(completedRhythmIdsForData(data));
@@ -1071,7 +1097,7 @@ function PreviewWorkspace({
   const archivedProfileRhythmCandidates = [...new Map(
     [...archivedRhythms, ...archivedUserRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
-  const personHealthAsOfDate = localDateString(scoringInstant);
+  const personHealthAsOfDate = localDateInTimeZone(scoringInstant, localTimeZone || 'UTC');
   const personOverallHealthScores = new Map(peopleWithPhotos.map(person => {
     const active = profileRhythmCandidates.filter(rhythm =>
       rhythm.personIds?.includes(person.id) && !previewData.archivedRhythmIds.includes(rhythm.id)
@@ -1090,7 +1116,20 @@ function PreviewWorkspace({
       person.id,
       personHealthAsOfDate
     );
-    return [person.id, selectPersonOverallHealth(rhythmHealth, connectionHealth).health] as const;
+    const prayerHealth = selectPersonPrayerHealth(
+      previewData.prayerRequests,
+      person.id,
+      personHealthAsOfDate,
+      localTimeZone,
+      scoringInstant,
+      previewData.timeBlocks
+    );
+    return [person.id, selectPersonOverallHealth(
+      rhythmHealth,
+      connectionHealth,
+      prayerHealth,
+      previewData.prayerEnabled
+    ).health] as const;
   }));
   const personActiveRhythms = profilePersonId === null
     ? []
@@ -1209,14 +1248,6 @@ function PreviewWorkspace({
       setImportRecoveryArchive(null);
       setImportRecoveryError(result.message);
     }
-  }
-
-  function recordPrayer(requestId: string): string | null {
-    if (!previewData.prayerEnabled) return prayerUnavailableMessage;
-    const result = recordPreviewPrayer(prayerRequests, requestId, new Date().toISOString());
-    if (!result.valid) return result.error;
-    setPrayerRequests(result.requests);
-    return null;
   }
 
   function refreshV1RecoveryCopy() {
@@ -1425,6 +1456,8 @@ function PreviewWorkspace({
     setV54RecoveryCopy(v54.kind === 'loaded' ? v54.raw : null);
     const v55 = loadV55RecoveryCopy(previewStorage);
     setV55RecoveryCopy(v55.kind === 'loaded' ? v55.raw : null);
+    const v58 = loadV58RecoveryCopy(previewStorage);
+    setV58RecoveryCopy(v58.kind === 'loaded' ? v58.raw : null);
   }
 
   function refreshV10RecoveryCopy() {
@@ -1613,6 +1646,7 @@ function PreviewWorkspace({
     if (!isIdentityCurrent()) return;
     const loaded = loadPreview(previewStorage, initialLoadDate);
     if (loaded.kind === 'loaded') {
+      setPreviewDataLoadError(null);
       expectedRaw.current = loaded.raw;
       setFreshInitialData(null);
       hydratedDataWithoutSave.current = loaded.data;
@@ -1622,6 +1656,7 @@ function PreviewWorkspace({
       setPersistenceStatus({ kind: 'saved' });
       setAutoSaveEnabled(true);
     } else if (loaded.kind === 'missing') {
+      setPreviewDataLoadError(null);
       expectedRaw.current = null;
       const initialData = initialPreviewData();
       setFreshInitialData(initialData);
@@ -1631,9 +1666,11 @@ function PreviewWorkspace({
       setPersistenceStatus({ kind: 'saving' });
       setAutoSaveEnabled(true);
     } else if (loaded.kind === 'corrupt' || loaded.kind === 'unsupported') {
+      setPreviewDataLoadError(loaded.message);
       expectedRaw.current = loaded.raw;
       setPersistenceStatus({ kind: loaded.kind, raw: loaded.raw, message: loaded.message });
     } else {
+      setPreviewDataLoadError(loaded.message);
       setPersistenceStatus({ kind: 'unavailable', message: loaded.message });
     }
     setHydrated(true);
@@ -1962,7 +1999,9 @@ function PreviewWorkspace({
 
   function createPrayerRequest(personId: PersonId, draft: PersonPrayerRequestDraft): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
-    const now = new Date().toISOString();
+    const instant = new Date();
+    const now = instant.toISOString();
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     const result = createPersonPrayerRequest(previewData.prayerRequests, {
       id: `prayer-request-${globalThis.crypto.randomUUID()}`,
       personId,
@@ -1970,10 +2009,15 @@ function PreviewWorkspace({
       title: draft.title.trim(),
       ...(draft.details.trim() ? { details: draft.details } : {}),
       status: 'active',
+      ...(draft.schedule ? { schedule: draft.schedule } : {}),
+      ...(draft.timeOfDay ? { timeOfDay: draft.timeOfDay } : {}),
       createdAt: now,
       updatedAt: now,
       prayerLogs: []
-    }, previewData.people.map(person => person.id));
+    }, previewData.people.map(person => person.id), {
+      currentDate: localDateInTimeZone(instant, timeZone),
+      timeZone
+    });
     if (!result.valid) return result.error;
     return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
   }
@@ -1985,14 +2029,20 @@ function PreviewWorkspace({
     draft: PersonPrayerRequestDraft
   ): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const instant = new Date();
+    const request = previewData.prayerRequests.find(item => item.id === requestId);
+    const timeZone = request?.scoring?.timeZone
+      ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+      ?? 'UTC';
     const result = updatePersonPrayerRequest(
       previewData.prayerRequests,
       requestId,
       expectedUpdatedAt,
       actorId,
       { ...draft, title: draft.title.trim() },
-      new Date().toISOString(),
-      previewData.people.map(person => person.id)
+      instant.toISOString(),
+      previewData.people.map(person => person.id),
+      { currentDate: localDateInTimeZone(instant, timeZone), timeZone }
     );
     if (!result.valid) return result.error;
     return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
@@ -2026,6 +2076,60 @@ function PreviewWorkspace({
       expectedUpdatedAt,
       actorId,
       { id: `prayer-log-${globalThis.crypto.randomUUID()}`, prayedAt: now },
+      previewData.people.map(person => person.id)
+    );
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
+  }
+
+  function savePrayerLog(
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    log: PersonPrayerLog
+  ): string | null {
+    if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const result = savePersonPrayerLog(
+      previewData.prayerRequests,
+      requestId,
+      expectedUpdatedAt,
+      actorId,
+      log,
+      new Date().toISOString(),
+      previewData.people.map(person => person.id)
+    );
+    if (!result.valid) return result.error;
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
+  }
+
+  function deletePrayerLog(
+    requestId: string,
+    expectedUpdatedAt: string,
+    actorId: PersonId,
+    logId: string
+  ): PersonPrayerLogUndo | string {
+    if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const result = deletePersonPrayerLog(
+      previewData.prayerRequests,
+      requestId,
+      expectedUpdatedAt,
+      actorId,
+      logId,
+      new Date().toISOString(),
+      previewData.people.map(person => person.id)
+    );
+    if (!result.valid) return result.error;
+    const error = persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
+    return error ?? result.undo ?? 'The prayer entry could not be made undoable.';
+  }
+
+  function undoPrayerLogDeletion(undo: PersonPrayerLogUndo, actorId: PersonId): string | null {
+    if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const result = undoDeletePersonPrayerLog(
+      previewData.prayerRequests,
+      undo,
+      actorId,
+      new Date().toISOString(),
       previewData.people.map(person => person.id)
     );
     if (!result.valid) return result.error;
@@ -2588,10 +2692,13 @@ function PreviewWorkspace({
     const validation = validateTimeBlockSettings(settings);
     if (!validation.valid) return validation.errors[0] ?? 'Time block settings are invalid.';
     const nextBlockIds = new Set(validation.settings.blocks.map(block => block.id));
-    const removedAssignedBlocks = [...assignedTimeBlockIds(previewData.savedRhythms)]
+    const removedAssignedBlocks = [...assignedTimeBlockIds([
+      ...previewData.savedRhythms,
+      ...previewData.prayerRequests
+    ])]
       .filter(id => !nextBlockIds.has(id));
     if (removedAssignedBlocks.length > 0) {
-      return 'A time block is still used by a current or historical Rhythm schedule. Keep the block to preserve those assignments.';
+      return 'A time block is still used by a current or historical Rhythm or Prayer schedule. Keep the block to preserve those assignments.';
     }
 
     return persistSeasonHistory({
@@ -4329,6 +4436,22 @@ function PreviewWorkspace({
                           )}
                         </section>
                       )}
+                      {settingsDetail === null && import.meta.env.MODE !== 'pages' && (
+                        <section className="settings-section" aria-label="Preview">
+                          <h3>Preview</h3>
+                          <a
+                            className="settings-link"
+                            href="/preview.html"
+                            aria-label="Component catalogue"
+                          >
+                            <SettingsDirectoryIcon name="categories" />
+                            <span className="settings-link__copy">
+                              <span className="settings-link__title">Component catalogue</span>
+                            </span>
+                            <span className="settings-link__chevron" aria-hidden="true">›</span>
+                          </a>
+                        </section>
+                      )}
                       <section className="settings-section" aria-labelledby="category-settings-title" hidden={settingsDetail !== 'categories'}>
                         <h3 id="category-settings-title">Categories</h3>
                         <CategorySettings
@@ -4353,7 +4476,10 @@ function PreviewWorkspace({
                         <h3 id="time-block-settings-title">Time blocks</h3>
                         <TimeBlocksSettings
                           settings={previewData.timeBlocks}
-                          assignedBlockIds={assignedTimeBlockIds(previewData.savedRhythms)}
+                          assignedBlockIds={assignedTimeBlockIds([
+                            ...previewData.savedRhythms,
+                            ...previewData.prayerRequests
+                          ])}
                           onSave={saveTimeBlockSettings}
                         />
                       </section>
@@ -4443,8 +4569,12 @@ function PreviewWorkspace({
               initializing={!hydrated}
               rhythms={editableTodayRhythms}
               rhythmScores={rhythmScoreResults}
+              prayerDataStatus={!hydrated
+                ? 'loading'
+                : previewDataLoadError ? 'error' : 'ready'}
+              {...(previewDataLoadError ? { prayerDataError: previewDataLoadError } : {})}
               prayerRequests={prayerRequests}
-              onPrayForRequest={recordPrayer}
+              onPrayForRequest={prayForRequest}
               categoryHealthScores={categoryHealthScores}
               foundations={foundationCatalogue}
               onNavigate={navigate}
@@ -4917,6 +5047,7 @@ function PreviewWorkspace({
           v50RecoveryCopy={v50RecoveryCopy}
           v54RecoveryCopy={v54RecoveryCopy}
           v55RecoveryCopy={v55RecoveryCopy}
+          v58RecoveryCopy={v58RecoveryCopy}
         />
       )}
       {healthFitnessView}
@@ -4931,7 +5062,9 @@ function PreviewWorkspace({
           prayerRequests={previewData.prayerRequests}
           navigationRequest={profileNavigationRequest}
           friendships={previewData.friendships}
-          today={localDateInTimeZone(new Date(), localTimeZone)}
+          today={localDateInTimeZone(scoringInstant, localTimeZone || 'UTC')}
+          prayerHealthTimeZone={localTimeZone || 'UTC'}
+          prayerHealthInstant={scoringInstant}
           rhythms={personActiveRhythms}
           archivedRhythms={personArchivedRhythms}
           foundations={foundationCatalogue}
@@ -4975,6 +5108,9 @@ function PreviewWorkspace({
           onUpdatePrayerRequest={editPrayerRequest}
           onPrayerRequestTransition={transitionPrayerRequest}
           onPrayForRequest={prayForRequest}
+          onSavePrayerLog={savePrayerLog}
+          onDeletePrayerLog={deletePrayerLog}
+          onUndoDeletePrayerLog={undoPrayerLogDeletion}
           onRemovePrayerRequest={removePrayerRequest}
           onClose={closePersonProfile}
         />
@@ -5006,11 +5142,6 @@ function PreviewWorkspace({
           <span>{rhythmConnectionNotice}</span>
           <button type="button" onClick={() => setRhythmConnectionNotice('')}>Dismiss</button>
         </p>
-      )}
-      {import.meta.env.MODE !== 'pages' && (
-        <footer className="preview-footer">
-          <a href="/preview.html">Component catalogue</a>
-        </footer>
       )}
       {activeRhythm && (
         <RhythmDetailsDialog

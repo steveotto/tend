@@ -90,6 +90,29 @@ export function addDays(value: string, amount: number): string {
     .toISOString().slice(0, 10);
 }
 
+export function rhythmOpportunityGraceExpired(input: {
+  schedule: RhythmSchedule;
+  opportunityEndDate: string;
+  asOfDate: string;
+  asOfTime?: string;
+  dueTime?: string;
+}): boolean {
+  if (input.opportunityEndDate >= input.asOfDate) return false;
+  const isPeriodBased = input.schedule.frequency === 'monthly'
+    || input.schedule.frequency === 'quarterly'
+    || input.schedule.frequency === 'yearly'
+    || input.schedule.frequency === 'weekly'
+      && input.schedule.weekdays.length === 1
+      && input.schedule.weeklyMode !== 'select-days';
+  if (isPeriodBased
+    || input.asOfTime === undefined
+    || input.dueTime === undefined
+    || input.opportunityEndDate !== addDays(input.asOfDate, -1)) {
+    return true;
+  }
+  return input.asOfTime >= input.dueTime;
+}
+
 function assertDate(value: string): void {
   if (!isValidLocalDate(value)) throw new RangeError(`Invalid local date: ${value}`);
 }
@@ -446,7 +469,13 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
       return {
         ...occurrence,
         completed,
-        missed: !completed && occurrence.periodEndDate < input.asOfDate
+        missed: !completed && rhythmOpportunityGraceExpired({
+          schedule: input.schedule,
+          opportunityEndDate: occurrence.periodEndDate,
+          asOfDate: input.asOfDate,
+          ...(input.asOfTime === undefined ? {} : { asOfTime: input.asOfTime }),
+          ...(input.dueTime === undefined ? {} : { dueTime: input.dueTime })
+        })
       };
     });
 
@@ -468,17 +497,27 @@ export function scoreRhythm(input: RhythmScoreInput): RhythmScore {
       return {
         ...occurrence,
         completed,
-        missed: !completed && occurrence.periodEndDate < input.asOfDate
+        missed: !completed && rhythmOpportunityGraceExpired({
+          schedule: input.schedule,
+          opportunityEndDate: occurrence.periodEndDate,
+          asOfDate: input.asOfDate,
+          ...(input.asOfTime === undefined ? {} : { asOfTime: input.asOfTime }),
+          ...(input.dueTime === undefined ? {} : { dueTime: input.dueTime })
+        })
       };
     });
-  let onTrackValue = 100;
+  let onTrackValue = 0;
   let hasOnTrackEvidence = false;
+  let hasQualifyingCompletion = false;
   const onTrackOccurrences = onTrackDueOccurrences.map(occurrence => {
     if (occurrence.completed) {
       onTrackValue = 100;
       hasOnTrackEvidence = true;
+      hasQualifyingCompletion = true;
     } else if (occurrence.missed) {
-      onTrackValue = Math.max(0, onTrackValue - POINTS_PER_CONSECUTIVE_MISS);
+      onTrackValue = hasQualifyingCompletion
+        ? Math.max(0, onTrackValue - POINTS_PER_CONSECUTIVE_MISS)
+        : 0;
       hasOnTrackEvidence = true;
     }
     return {

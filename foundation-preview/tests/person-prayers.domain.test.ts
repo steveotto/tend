@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   activePrayerRequestCount,
   createPersonPrayerRequest,
+  deletePersonPrayerLog,
   deletePersonPrayerRequest,
   personPrayerRequestsForPerson,
   prayerRequestHistorySummary,
   recordPersonPrayer,
+  savePersonPrayerLog,
   transitionPersonPrayerRequest,
+  undoDeletePersonPrayerLog,
   unlinkPersonPrayerRequest,
   updatePersonPrayerRequest,
   validatePersonPrayerRequestsCollection
@@ -123,6 +126,148 @@ describe('person-linked Prayer requests', () => {
     if (reopened.valid) expect(reopened.requests[0]).toMatchObject({ status: 'active', prayerLogs: [] });
   });
 
+  it('records Prayer schedule changes prospectively without inventing legacy baseline history', () => {
+    const legacy = request({
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'morning',
+      prayerLogs: [{ id: 'legacy-prayer', prayedAt: '2026-11-01T10:00:00.000Z' }]
+    });
+    const dailyToWeekly = updatePersonPrayerRequest(
+      [legacy],
+      legacy.id,
+      legacy.updatedAt,
+      owner,
+      {
+        title: legacy.title,
+        details: legacy.details ?? '',
+        sharedWith: legacy.sharedWith ?? [],
+        schedule: { frequency: 'weekly', weekdays: [1, 3] },
+        timeOfDay: 'evening'
+      },
+      '2026-11-03T12:00:00.000Z',
+      people,
+      { currentDate: '2026-11-03', timeZone: 'UTC' }
+    );
+    expect(dailyToWeekly.valid).toBe(true);
+    if (!dailyToWeekly.valid) return;
+    const first = dailyToWeekly.requests[0]!;
+    expect(first.scoring).toMatchObject({
+      trackingStartDate: '2026-11-03',
+      timeZone: 'UTC',
+      scheduleHistory: [
+        { kind: 'unknown', startDate: '2026-10-31' },
+        {
+          kind: 'scheduled',
+          startDate: '2026-11-03',
+          schedule: { frequency: 'weekly', weekdays: [1, 3] },
+          timeOfDay: 'evening'
+        }
+      ]
+    });
+
+    const weeklyToDaily = updatePersonPrayerRequest(
+      dailyToWeekly.requests,
+      first.id,
+      first.updatedAt,
+      owner,
+      {
+        title: first.title,
+        details: first.details ?? '',
+        sharedWith: first.sharedWith ?? [],
+        schedule: { frequency: 'daily', endDate: '2026-12-10' },
+        timeOfDay: 'evening'
+      },
+      '2026-11-05T12:00:00.000Z',
+      people,
+      { currentDate: '2026-11-05', timeZone: 'UTC' }
+    );
+    expect(weeklyToDaily.valid).toBe(true);
+    if (!weeklyToDaily.valid) return;
+    const second = weeklyToDaily.requests[0]!;
+    expect(second.scoring?.scheduleHistory).toMatchObject([
+      { kind: 'unknown', startDate: '2026-10-31' },
+      {
+        kind: 'scheduled',
+        startDate: '2026-11-03',
+        schedule: {
+          frequency: 'weekly',
+          weekdays: [1, 3],
+          endDate: '2026-11-04'
+        }
+      },
+      {
+        kind: 'scheduled',
+        startDate: '2026-11-05',
+        schedule: { frequency: 'daily', endDate: '2026-12-10' },
+        timeOfDay: 'evening'
+      }
+    ]);
+
+    const sameDayCorrection = updatePersonPrayerRequest(
+      weeklyToDaily.requests,
+      second.id,
+      second.updatedAt,
+      owner,
+      {
+        title: second.title,
+        details: second.details ?? '',
+        sharedWith: second.sharedWith ?? [],
+        schedule: { frequency: 'daily', endDate: '2026-12-12' },
+        timeOfDay: 'morning'
+      },
+      '2026-11-05T13:00:00.000Z',
+      people,
+      { currentDate: '2026-11-05', timeZone: 'UTC' }
+    );
+    expect(sameDayCorrection.valid).toBe(true);
+    if (!sameDayCorrection.valid) return;
+    const corrected = sameDayCorrection.requests[0]!;
+    expect(corrected.scoring?.scheduleHistory).toHaveLength(3);
+    expect(corrected.scoring?.scheduleHistory.at(-1)).toMatchObject({
+      startDate: '2026-11-05',
+      schedule: { frequency: 'daily', endDate: '2026-12-12' },
+      timeOfDay: 'morning'
+    });
+
+    const unchanged = updatePersonPrayerRequest(
+      sameDayCorrection.requests,
+      corrected.id,
+      corrected.updatedAt,
+      owner,
+      {
+        title: corrected.title,
+        details: corrected.details ?? '',
+        sharedWith: corrected.sharedWith ?? [],
+        schedule: corrected.schedule,
+        timeOfDay: corrected.timeOfDay
+      },
+      '2026-11-06T12:00:00.000Z',
+      people,
+      { currentDate: '2026-11-06', timeZone: 'UTC' }
+    );
+    expect(unchanged.valid).toBe(true);
+    if (!unchanged.valid) return;
+    expect(unchanged.requests[0]?.updatedAt).toBe(corrected.updatedAt);
+    expect(unchanged.requests[0]?.scoring).toEqual(corrected.scoring);
+
+    expect(updatePersonPrayerRequest(
+      unchanged.requests,
+      corrected.id,
+      legacy.updatedAt,
+      owner,
+      {
+        title: corrected.title,
+        details: corrected.details ?? '',
+        sharedWith: corrected.sharedWith ?? [],
+        schedule: corrected.schedule,
+        timeOfDay: corrected.timeOfDay
+      },
+      '2026-11-06T12:00:00.000Z',
+      people,
+      { currentDate: '2026-11-06', timeZone: 'UTC' }
+    )).toMatchObject({ valid: false, error: expect.stringMatching(/changed while you were editing/i) });
+  });
+
   it('records Prayed independently and restricts it to active requests', () => {
     const prayed = recordPersonPrayer(
       [request()],
@@ -155,6 +300,109 @@ describe('person-linked Prayer requests', () => {
     ).valid).toBe(false);
   });
 
+  it('edits, deletes, and restores one shared prayer log with identity and stale-revision safeguards', () => {
+    const original = request({
+      updatedAt: '2026-10-31T14:00:00.000Z',
+      prayerLogs: [
+        { id: 'old-log', prayedAt: '2026-10-30T08:15:30.123Z', notes: 'Keep this note.' },
+        { id: 'latest-log', prayedAt: '2026-10-31T08:15:00.000Z' }
+      ]
+    });
+    const edited = savePersonPrayerLog(
+      [original],
+      original.id,
+      original.updatedAt,
+      shared,
+      { id: 'old-log', prayedAt: '2026-10-29T08:15:30.123Z', notes: 'Edited note.' },
+      '2026-10-31T15:00:00.000Z',
+      people
+    );
+    expect(edited.valid).toBe(true);
+    if (!edited.valid) return;
+    expect(edited.requests[0]?.prayerLogs).toEqual([
+      { id: 'old-log', prayedAt: '2026-10-29T08:15:30.123Z', notes: 'Edited note.' },
+      { id: 'latest-log', prayedAt: '2026-10-31T08:15:00.000Z' }
+    ]);
+
+    const deleted = deletePersonPrayerLog(
+      edited.requests,
+      original.id,
+      '2026-10-31T15:00:00.000Z',
+      shared,
+      'latest-log',
+      '2026-10-31T16:00:00.000Z',
+      people
+    );
+    expect(deleted.valid).toBe(true);
+    if (!deleted.valid || !deleted.undo) return;
+    expect(deleted.requests[0]?.prayerLogs.map(log => log.id)).toEqual(['old-log']);
+
+    expect(undoDeletePersonPrayerLog(
+      deleted.requests,
+      deleted.undo,
+      shared,
+      '2026-10-31T17:00:00.000Z',
+      people
+    )).toMatchObject({
+      valid: true,
+      requests: [{
+        prayerLogs: [
+          { id: 'old-log', prayedAt: '2026-10-29T08:15:30.123Z', notes: 'Edited note.' },
+          { id: 'latest-log', prayedAt: '2026-10-31T08:15:00.000Z' }
+        ]
+      }]
+    });
+    expect(undoDeletePersonPrayerLog(
+      [request({ updatedAt: '2026-10-31T16:30:00.000Z' })],
+      deleted.undo,
+      shared,
+      '2026-10-31T17:00:00.000Z',
+      people
+    )).toMatchObject({ valid: false, error: expect.stringMatching(/changed after the entry was deleted/i) });
+    expect(deletePersonPrayerLog(
+      [original],
+      original.id,
+      original.updatedAt,
+      other,
+      'latest-log',
+      '2026-10-31T15:00:00.000Z',
+      people
+    )).toMatchObject({ valid: false, error: expect.stringMatching(/no longer available/i) });
+  });
+
+  it('keeps date-only and undated legacy entries honest and blocks unsafe imported identities', () => {
+    const legacy = request({
+      prayerLogs: [
+        { id: 'date-only', prayedOn: '2026-10-30', editable: false },
+        { id: 'missing-date', editable: false }
+      ]
+    });
+    expect(validatePersonPrayerRequestsCollection([legacy], people)).toBe(true);
+    expect(selectPersonPrayerHistory(legacy, '2026-10-31', 'UTC')).toMatchObject({
+      totalCount: 2,
+      datedCount: 1,
+      undatedCount: 1,
+      lastPrayedAt: null,
+      lastPrayedDate: '2026-10-30',
+      dailyCounts: [
+        { date: '2026-10-30', count: 1 },
+        { date: '2026-10-31', count: 0 }
+      ]
+    });
+    expect(savePersonPrayerLog(
+      [legacy],
+      legacy.id,
+      legacy.updatedAt,
+      owner,
+      { id: 'date-only', prayedOn: '2026-10-29' },
+      '2026-10-31T13:00:00.000Z',
+      people
+    )).toMatchObject({
+      valid: false,
+      error: expect.stringMatching(/no safely editable record identity/i)
+    });
+  });
+
   it('keeps undated history separate and counts only the requested dated window', () => {
     const history = selectPersonPrayerHistory(request({
       prayerLogs: [
@@ -172,6 +420,7 @@ describe('person-linked Prayer requests', () => {
       undatedCount: 1,
       futureDatedCount: 1,
       lastPrayedAt: '2026-11-01T10:00:00.000Z',
+      lastPrayedDate: '2026-11-01',
       recentWindowStart: '2026-10-03',
       recentCount: 2
     });
@@ -194,6 +443,7 @@ describe('person-linked Prayer requests', () => {
       undatedCount: 0,
       recentCount: 0,
       lastPrayedAt: null,
+      lastPrayedDate: null,
       dailyCounts: [{ date: '2026-11-01', count: 0 }]
     });
   });

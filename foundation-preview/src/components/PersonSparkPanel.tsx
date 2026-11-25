@@ -2,8 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { FriendshipData } from '../domain/friendships.ts';
 import type { PersonId, PersonPickerGroup, PersonPreview } from '../domain/preview-data.ts';
 import { syntheticPersonPickerGroups } from '../domain/preview-data.ts';
-import { activePersonSparkCompletion } from '../domain/person-sparks.ts';
+import {
+  activePersonSparkCompletion,
+  personSparksForPerson,
+  selectOpenPersonSparks
+} from '../domain/person-sparks.ts';
 import type { PersonSpark, PersonSparkDraft } from '../domain/person-sparks.ts';
+import { selectPersonSparksByStatus } from '../domain/home-sparks.ts';
 import { PersonSparkCard } from './PersonSparkCard.tsx';
 import { PersonSparkEditorDialog } from './PersonSparkEditorDialog.tsx';
 
@@ -48,10 +53,9 @@ export function PersonSparkPanel({
   const editorOpener = useRef<HTMLElement | null>(null);
   const editorWasOpen = useRef(false);
   const nextEditorKey = useRef(0);
-  const personSparks = sparks.filter(spark =>
-    spark.ownerId === personId || spark.sharedWith.includes(personId));
-  const activeSparks = personSparks.filter(spark => !spark.archived);
-  const archivedSparks = personSparks.filter(spark => spark.archived);
+  const personSparks = personSparksForPerson(sparks, personId);
+  const activeSparks = selectOpenPersonSparks(personSparks);
+  const archivedSparks = selectPersonSparksByStatus(personSparks, 'archived');
 
   useEffect(() => {
     if (editorWasOpen.current && !editor) {
@@ -123,7 +127,9 @@ export function PersonSparkPanel({
       {activeSparks.length > 0 ? (
         <ul className="person-spark-list">{activeSparks.map(renderSpark)}</ul>
       ) : (
-        <p className="person-spark-panel__empty">No Sparks yet.</p>
+        <p className="person-spark-panel__empty">
+          {personSparks.length > 0 ? 'No open Sparks yet.' : 'No Sparks yet.'}
+        </p>
       )}
       {archivedSparks.length > 0 && (
         <details className="person-spark-panel__archived">

@@ -8,6 +8,7 @@ import { CategoryAvailabilityProvider } from '../src/components/CategoryAvailabi
 import { defaultCategoryPreferences, defaultFoundationPreferences } from '../src/domain/category-availability.ts';
 import { addOrUpdateConnection, createFriendshipData, setFriendCadence } from '../src/domain/friendships.ts';
 import type { FriendshipConnection, FriendshipData } from '../src/domain/friendships.ts';
+import { recordPersonPrayer } from '../src/domain/person-prayers.ts';
 import {
   createPersonNote,
   deletePersonNote,
@@ -20,9 +21,10 @@ import type { PersonDetails } from '../src/domain/person-details.ts';
 import {
   createPersonPickerGroups,
   foundationCatalogue,
+  syntheticPeople,
   setPersonGroupMembership
 } from '../src/domain/preview-data.ts';
-import type { RhythmPreview } from '../src/domain/preview-data.ts';
+import type { PersonPreview, RhythmPreview } from '../src/domain/preview-data.ts';
 import type { PersonId } from '../src/domain/preview-data.ts';
 import type { RhythmScoreResult } from '../src/domain/rhythm-scoring.ts';
 import { localDateString } from '../src/domain/money-goals.ts';
@@ -111,9 +113,14 @@ function ProfileHarness({
   personId = 'sample-person-avery',
   category = 'friends',
   prayerEnabled = true,
+  today = '2026-10-29',
+  prayerHealthTimeZone,
+  prayerHealthInstant,
   initialDetails = [],
   initialNotes = [],
   failNoteUpdates = false,
+  canEditNotes = true,
+  people = syntheticPeople,
   rhythms = [linkedRhythm, otherRhythm],
   archivedRhythms = [],
   prayerRequests = [],
@@ -138,9 +145,14 @@ function ProfileHarness({
   personId?: PersonId;
   category?: 'marriage' | 'parenting' | 'friends' | null;
   prayerEnabled?: boolean;
+  today?: string;
+  prayerHealthTimeZone?: string;
+  prayerHealthInstant?: Date;
   initialDetails?: readonly PersonDetails[];
   initialNotes?: readonly PersonNote[];
   failNoteUpdates?: boolean;
+  canEditNotes?: boolean;
+  people?: readonly PersonPreview[];
   rhythms?: readonly RhythmPreview[];
   archivedRhythms?: readonly RhythmPreview[];
   prayerRequests?: readonly PersonPrayerRequest[];
@@ -164,6 +176,7 @@ function ProfileHarness({
 }) {
   const [friendships, setFriendships] = useState<FriendshipData>(initialFriendships);
   const [personNotes, setPersonNotes] = useState<PersonNote[]>([...initialNotes]);
+  const [savedPrayerRequests, setSavedPrayerRequests] = useState<PersonPrayerRequest[]>([...prayerRequests]);
   const emptyForPerson = createPersonPickerGroups().map(group => ({
     ...group,
     memberIds: group.memberIds.filter(id => id !== personId)
@@ -180,9 +193,12 @@ function ProfileHarness({
       <>
       <PersonProfileView
         personId={personId}
+        people={people}
         peopleGroups={groups}
         friendships={friendships}
-        today="2026-10-29"
+        today={today}
+        {...(prayerHealthTimeZone ? { prayerHealthTimeZone } : {})}
+        {...(prayerHealthInstant ? { prayerHealthInstant } : {})}
         rhythms={rhythms}
         archivedRhythms={archivedRhythms}
         foundations={foundationCatalogue}
@@ -192,7 +208,20 @@ function ProfileHarness({
         onEditPerson={onEditPerson}
         personDetails={initialDetails}
         personNotes={personNotes}
-        prayerRequests={prayerRequests}
+        prayerRequests={savedPrayerRequests}
+        onPrayForRequest={(requestId, expectedUpdatedAt, actorId) => {
+          const result = recordPersonPrayer(
+            savedPrayerRequests,
+            requestId,
+            expectedUpdatedAt,
+            actorId,
+            { id: 'profile-first-prayer', prayedAt: '2026-10-31T12:01:00.000Z' },
+            syntheticPeople.map(person => person.id)
+          );
+          if (!result.valid) return result.error;
+          setSavedPrayerRequests(result.requests);
+          return null;
+        }}
         personSparks={personSparks}
         onCreatePersonSpark={onCreatePersonSpark}
         onUpdatePersonSpark={onUpdatePersonSpark}
@@ -213,15 +242,19 @@ function ProfileHarness({
           setPersonNotes(result.notes);
           return null;
         }}
-        onUpdatePersonNote={(id, expectedUpdatedAt, actorId, draft) => {
-          if (failNoteUpdates) return 'Preview storage changed in another tab. No person note was saved.';
-          const result = updatePersonNote(
-            personNotes, id, expectedUpdatedAt, actorId, draft, '2026-10-31T14:00:00.000Z'
-          );
-          if (!result.valid) return result.error;
-          setPersonNotes(result.notes);
-          return null;
-        }}
+        {...(canEditNotes
+          ? {
+              onUpdatePersonNote: (id: string, expectedUpdatedAt: string, actorId: PersonId, draft: PersonNoteDraft) => {
+                if (failNoteUpdates) return 'Preview storage changed in another tab. No person note was saved.';
+                const result = updatePersonNote(
+                  personNotes, id, expectedUpdatedAt, actorId, draft, '2026-10-31T14:00:00.000Z'
+                );
+                if (!result.valid) return result.error;
+                setPersonNotes(result.notes);
+                return null;
+              }
+            }
+          : {})}
         onDeletePersonNote={(id, expectedUpdatedAt, actorId) => {
           const result = deletePersonNote(personNotes, id, expectedUpdatedAt, actorId);
           if (!result.valid) return result.error;
@@ -277,14 +310,18 @@ describe('shared person profile', () => {
 
     expect(screen.getByRole('main', { name: 'Avery Brooks' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Avery Brooks' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Today with Avery' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Rhythms' })).toBeTruthy();
     expect(screen.getByText('0 in queue')).toBeTruthy();
+    const rhythmHeader = screen.getByRole('heading', { name: 'Rhythms' })
+      .closest('.person-profile-tab-header');
+    expect(rhythmHeader?.querySelector('p')?.textContent).toBe('0 in queue');
+    expect(within(rhythmHeader as HTMLElement).getByRole('button', { name: 'Add rhythm' })).toBeTruthy();
     expect(screen.getByText('Friends')).toBeTruthy();
     expect(screen.getByRole('article', { name: 'Avery and Morgan walk' })).toBeTruthy();
     expect(screen.queryByRole('article', { name: 'Jordan walk' })).toBeNull();
     expect(screen.getByText('Take a walk and talk.')).toBeTruthy();
 
-    const addButton = screen.getByRole('button', { name: 'Add Rhythm' });
+    const addButton = screen.getByRole('button', { name: 'Add rhythm' });
     await user.click(addButton);
     expect(addRhythm).toHaveBeenCalledWith(expect.anything(), 'sample-person-avery');
     const card = screen.getByRole('article', { name: 'Avery and Morgan walk' });
@@ -423,7 +460,7 @@ describe('shared person profile', () => {
     expect(within(overall).getByRole('group', { name: 'Health by area' }).getAttribute('data-count')).toBe('3');
 
     await user.click(screen.getByRole('tab', { name: 'Prayer' }));
-    await user.click(screen.getByRole('button', { name: 'Add prayer request' }));
+    await user.click(screen.getByRole('button', { name: 'Add request' }));
     const title = screen.getByRole('textbox', { name: 'Title' }) as HTMLInputElement;
     await user.type(title, 'A saved draft');
 
@@ -675,6 +712,54 @@ describe('shared person profile', () => {
       .getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('updates overall and Prayer Health immediately after the first logged prayer', async () => {
+    const user = userEvent.setup();
+    const prayerRequest: PersonPrayerRequest = {
+      id: 'first-prayer-health-refresh',
+      personId: 'sample-person-avery',
+      title: 'First prayer',
+      status: 'active',
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'anytime',
+      createdAt: '2026-10-31T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      prayerLogs: []
+    };
+    render(
+      <ProfileHarness
+        rhythms={[]}
+        rhythmScores={new Map()}
+        prayerRequests={[prayerRequest]}
+        today="2026-10-31"
+        prayerHealthTimeZone="UTC"
+        prayerHealthInstant={new Date('2026-10-31T12:02:00.000Z')}
+      />
+    );
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    expect(within(overall).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuetext')).toBe('Score unavailable');
+    await user.click(within(overall).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    }));
+    const areas = within(overall).getByRole('group', { name: 'Health by area' });
+    expect(within(areas).getByRole('img', {
+      name: 'Prayer Health score: unavailable'
+    })).toBeTruthy();
+
+    await user.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+    const card = screen.getByRole('article', { name: 'First prayer' });
+    await user.click(within(card).getByRole('button', { name: 'Actions for First prayer' }));
+    await user.click(within(screen.getByRole('menu', { name: 'Actions for First prayer' }))
+      .getByRole('menuitem', { name: 'Pray' }));
+
+    expect(within(card).getByText('Prayed 1 time')).toBeTruthy();
+    expect(within(overall).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuenow')).toBe('100');
+    expect(within(areas).getByRole('meter', { name: 'Prayer Health score' })
+      .getAttribute('aria-valuenow')).toBe('100');
+  });
+
   it('keeps scored zero distinct from unavailable in compact and expanded summaries', async () => {
     const user = userEvent.setup();
     const rhythmScores = new Map<string, RhythmScoreResult>([
@@ -831,7 +916,7 @@ describe('shared person profile', () => {
       />
     );
     expect(screen.getByText('1 in queue')).toBeTruthy();
-    const queueHeading = screen.getByRole('heading', { name: 'Today with Avery' });
+    const queueHeading = screen.getByRole('heading', { name: 'Rhythms' });
     const rhythmCard = screen.getByRole('article', { name: 'Avery and Morgan walk' });
     expect(Boolean(queueHeading.compareDocumentPosition(rhythmCard) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     const componentScoresToggle = screen.getByRole('button', {
@@ -846,8 +931,32 @@ describe('shared person profile', () => {
     render(<ProfileHarness personId="sample-person-morgan" />);
     const profile = screen.getByRole('main', { name: 'Morgan Reed' });
     await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+    const connectionsHeader = within(profile).getByRole('heading', { name: 'Connections' })
+      .closest('.person-profile-tab-header');
+    expect(connectionsHeader?.querySelector('p')?.textContent).toBe('0 connections');
+    expect(within(connectionsHeader as HTMLElement).getByRole('button', {
+      name: 'Add connection'
+    })).toBeTruthy();
     expect(within(profile).queryByRole('combobox', { name: /Connection cadence/ })).toBeNull();
     expect(within(profile).getByRole('button', { name: 'Person settings' })).toBeTruthy();
+  });
+
+  it('uses the shared compact Tend button style for Rhythm, Connection, and Prayer actions', async () => {
+    const user = userEvent.setup();
+    render(<ProfileHarness />);
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    const expectSharedAction = (label: string) => {
+      const action = within(profile).getByRole('button', { name: label });
+      expect(action.classList.contains('btn')).toBe(true);
+      expect(action.classList.contains('mini')).toBe(true);
+      expect(action.classList.contains('person-profile-tab-header__action')).toBe(true);
+    };
+
+    expectSharedAction('Add rhythm');
+    await user.click(within(profile).getByRole('tab', { name: 'Connections' }));
+    expectSharedAction('Add connection');
+    await user.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+    expectSharedAction('Add request');
   });
 
   it('uses shared in-place tended rows for Person Rhythms and preserves counts, order, and Undo', async () => {
@@ -919,7 +1028,7 @@ describe('shared person profile', () => {
     const user = userEvent.setup();
     const addRhythm = vi.fn();
     render(<ProfileHarness rhythms={[]} onAddRhythm={addRhythm} />);
-    await user.click(screen.getByRole('button', { name: 'Add Rhythm' }));
+    await user.click(screen.getByRole('button', { name: 'Add rhythm' }));
     expect(addRhythm.mock.calls[0]?.[1]).toBe('sample-person-avery');
     expect(screen.getByText('No Rhythms yet.')).toBeTruthy();
   });
@@ -929,14 +1038,21 @@ describe('shared person profile', () => {
     render(<ProfileHarness rhythms={[]} />);
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
 
-    const addOpener = screen.getByRole('button', { name: '+ Add' });
+    const addOpener = screen.getByRole('button', { name: 'Add connection' });
     await user.click(addOpener);
     const editor = screen.getByRole('dialog', { name: 'Log connection' });
     expect(editor.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(within(editor).getByRole('button', { name: 'Close connection editor' })).toBeTruthy();
     expect(within(editor).getByRole('combobox', { name: 'Connection type: Text' })).toBeTruthy();
-    expect((within(editor).getAllByRole('checkbox') as HTMLInputElement[]).map(input => input.checked))
-      .toEqual([true, false, false]);
+    const peopleRow = within(editor).getByRole('button', { name: 'Choose people, Avery Brooks' });
+    await user.click(peopleRow);
+    const picker = screen.getByRole('dialog', { name: 'Choose people' });
+    expect(within(picker).getByRole('button', { name: 'Avery Brooks' }).getAttribute('aria-pressed'))
+      .toBe('true');
+    expect(within(picker).getByRole('button', { name: 'Morgan Reed' }).getAttribute('aria-pressed'))
+      .toBe('false');
+    await user.click(within(picker).getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(peopleRow);
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
     expect(document.activeElement).toBe(addOpener);
     expect(screen.getAllByText('No connections yet.').length).toBeGreaterThan(0);
@@ -971,10 +1087,37 @@ describe('shared person profile', () => {
       completed: false,
       completionHistory: []
     };
+    const completedSpark: PersonSpark = {
+      ...sparkWithoutDescription,
+      id: 'spark-completed',
+      title: 'Watch Backrooms',
+      completed: true,
+      completionHistory: [{
+        id: 'spark-completed-event',
+        source: 'legacy',
+        date: '2026-10-28',
+        completedAt: '2026-10-28T18:30:00.000Z',
+        legacyEventId: 'spark-completed-event'
+      }]
+    };
+    const archivedSpark: PersonSpark = {
+      ...sparkWithoutDescription,
+      id: 'spark-archived',
+      title: 'Archived idea',
+      archived: true
+    };
+    const sameTitleConnection: FriendshipConnection = {
+      id: 'unlinked-spark-title-match',
+      type: 'spark',
+      date: '2026-10-28',
+      participantIds: ['sample-person-avery'],
+      sparkTitleSnapshot: spark.title
+    };
     render(
       <ProfileHarness
         rhythms={[]}
-        personSparks={[spark, sparkWithoutDescription]}
+        initialFriendships={addOrUpdateConnection(createFriendshipData(), sameTitleConnection)}
+        personSparks={[spark, sparkWithoutDescription, completedSpark, archivedSpark]}
         onCreatePersonSpark={createSpark}
         onUpdatePersonSpark={updateSpark}
         onArchivePersonSpark={archiveSpark}
@@ -984,6 +1127,15 @@ describe('shared person profile', () => {
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
 
     const section = screen.getByRole('region', { name: 'Sparks' });
+    const openSparkList = section.querySelector('.person-spark-list');
+    expect(openSparkList?.querySelectorAll('.person-spark-card')).toHaveLength(2);
+    expect(openSparkList?.textContent).not.toContain(completedSpark.title);
+    expect(openSparkList?.textContent).not.toContain(archivedSpark.title);
+    expect(section.querySelector('.person-spark-panel__archived')?.textContent)
+      .toContain(archivedSpark.title);
+    expect(within(screen.getByRole('main', { name: 'Avery Brooks' })).getByRole('button', {
+      name: /Visit the garden, Spark connection/
+    })).toBeTruthy();
     const sparkCard = within(section).getByRole('article', { name: 'Visit the garden' });
     const disclosure = within(sparkCard).getByRole('button', { name: 'Expand Spark Visit the garden' });
     expect(disclosure.getAttribute('aria-expanded')).toBe('false');
@@ -1254,14 +1406,20 @@ describe('shared person profile', () => {
     expect(within(areas).getByRole('img', {
       name: 'Connections Health score: unavailable'
     })).toBeTruthy();
-    expect(within(areas).getByText(
+    const compactConnectionReason = within(areas).getByText(
       'Set a connection frequency in Person settings to calculate Connection Health.'
-    )).toBeTruthy();
+    );
+    expect(compactConnectionReason.classList.contains('visually-hidden')).toBe(true);
 
     await user.click(within(overall).getByRole('button', {
       name: 'Show Overall Health scoring explanation'
     }));
     const overallDetails = screen.getByRole('dialog', { name: 'Avery’s Overall Health details' });
+    const detailsAreas = within(overallDetails).getByRole('group', { name: 'Health by area' });
+    const detailsConnectionReason = within(detailsAreas).getByText(
+      'Set a connection frequency in Person settings to calculate Connection Health.'
+    );
+    expect(detailsConnectionReason.classList.contains('visually-hidden')).toBe(false);
     await user.click(within(overallDetails).getByRole('button', {
       name: 'Connections Health unavailable'
     }));
@@ -1273,7 +1431,7 @@ describe('shared person profile', () => {
     expect(within(connectionDetails).getByText('No cadence configured')).toBeTruthy();
   });
 
-  it('keeps Spark completion undo behind the existing explicit confirmation', async () => {
+  it('keeps completed Sparks out of the Person open list', async () => {
     const user = userEvent.setup();
     const undoSpark = vi.fn((_sparkId: string) => null);
     const spark: PersonSpark = {
@@ -1293,23 +1451,10 @@ describe('shared person profile', () => {
     };
     render(<ProfileHarness rhythms={[]} personSparks={[spark]} onUndoPersonSpark={undoSpark} />);
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
-    const card = screen.getByRole('article', { name: spark.title });
-    await user.click(within(card).getByRole('button', { name: `Expand Spark ${spark.title}` }));
-    const editButton = within(card).getByRole('button', { name: 'Edit Spark' });
-    await user.click(editButton);
-    const editor = screen.getByRole('dialog', { name: 'Edit Spark' });
-    await user.click(within(editor).getByRole('button', { name: 'Undo completion' }));
-    const confirmation = screen.getByRole('dialog', { name: 'Undo this Spark completion?' });
+    const section = screen.getByRole('region', { name: 'Sparks' });
+    expect(within(section).queryByRole('article', { name: spark.title })).toBeNull();
+    expect(within(section).getByText('No open Sparks yet.')).toBeTruthy();
     expect(undoSpark).not.toHaveBeenCalled();
-    expect(within(confirmation).getByText(/linked connection will be removed/i)).toBeTruthy();
-    await user.click(within(confirmation).getByRole('button', { name: 'Cancel' }));
-    expect(undoSpark).not.toHaveBeenCalled();
-    await user.click(within(editor).getByRole('button', { name: 'Undo completion' }));
-    await user.click(within(screen.getByRole('dialog', { name: 'Undo this Spark completion?' }))
-      .getByRole('button', { name: 'Undo completion' }));
-    expect(undoSpark).toHaveBeenCalledOnce();
-    expect(undoSpark).toHaveBeenCalledWith(spark.id);
-    expect(document.activeElement).toBe(editButton);
   });
 
   it('logs one shared event, recalculates the person projection after participant edits, and preserves cadence', async () => {
@@ -1350,22 +1495,32 @@ describe('shared person profile', () => {
 
     render(<StatefulProfileHarness />);
     await user.click(screen.getByRole('tab', { name: 'Connections' }));
-    await user.click(screen.getByRole('button', { name: '+ Add' }));
+    await user.click(screen.getByRole('button', { name: 'Add connection' }));
     const editor = screen.getByRole('dialog', { name: 'Log connection' });
     expect(editor.classList.contains('dialog--phone-fullscreen')).toBe(true);
     expect(within(editor).getByRole('combobox', { name: 'Connection type: Text' })).toBeTruthy();
-    await user.click(within(editor).getAllByRole('checkbox')[1]!);
+    const peopleRow = within(editor).getByRole('button', { name: 'Choose people, Avery Brooks' });
+    await user.click(peopleRow);
+    const peoplePicker = screen.getByRole('dialog', { name: 'Choose people' });
+    await user.click(within(peoplePicker).getByRole('button', { name: 'Morgan Reed' }));
+    await user.click(within(peoplePicker).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: 'Save connection' }));
 
     const stored = JSON.parse(screen.getByTestId('connection-state').textContent ?? '{}') as FriendshipData;
     expect(stored.connections).toHaveLength(1);
     expect(stored.connections[0]?.participantIds).toEqual(['sample-person-avery', 'sample-person-morgan']);
-    expect(screen.getByRole('button', { name: '+ Add' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add connection' })).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: /Connection cadence/ })).toBeNull();
     const connectionRow = screen.getByRole('button', { name: /^Text, Manual connection,/ });
     await user.click(connectionRow);
     const edit = screen.getByRole('dialog', { name: 'Connection details' });
-    await user.click(within(edit).getAllByRole('checkbox')[0]!);
+    const editPeopleRow = within(edit).getByRole('button', {
+      name: 'Choose people, Avery Brooks and Morgan Reed'
+    });
+    await user.click(editPeopleRow);
+    const editPeoplePicker = screen.getByRole('dialog', { name: 'Choose people' });
+    await user.click(within(editPeoplePicker).getByRole('button', { name: 'Avery Brooks' }));
+    await user.click(within(editPeoplePicker).getByRole('button', { name: 'Done' }));
     await user.click(within(edit).getByRole('button', { name: 'Save changes' }));
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Connections' }));
     expect(screen.getByText('No connections yet.')).toBeTruthy();
@@ -1447,23 +1602,47 @@ describe('shared person profile', () => {
     const user = userEvent.setup();
     render(<ProfileHarness rhythms={[]} />);
     const notesButton = screen.getByRole('button', { name: 'Notes (0)' });
+    expect(screen.getAllByRole('button', { name: 'Notes (0)' })).toHaveLength(1);
+    for (const tabName of ['Rhythms', 'Connections', 'Prayer'] as const) {
+      await user.click(screen.getByRole('tab', { name: tabName }));
+      expect(screen.getAllByRole('button', { name: 'Notes (0)' })).toHaveLength(1);
+      await user.click(notesButton);
+      expect(screen.getByRole('dialog', { name: 'Notes' })).toBeTruthy();
+      expect(screen.getByRole('region', { name: 'Avery Brooks notes' })).toBeTruthy();
+      expect(screen.getByText('No notes yet. Add a note to keep something meaningful in view.')).toBeTruthy();
+      await user.click(screen.getByRole('button', { name: 'Close notes' }));
+      expect(document.activeElement).toBe(notesButton);
+    }
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
     await user.click(notesButton);
-    expect(screen.getByRole('region', { name: 'Notes' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Return to profile tabs' }));
+    expect(screen.getByRole('dialog', { name: 'Notes' })).toBeTruthy();
+    expect(screen.getByText('No notes yet. Add a note to keep something meaningful in view.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Collapse notes drawer' }));
+    expect(screen.queryByRole('dialog', { name: 'Notes' })).toBeNull();
     expect(document.activeElement).toBe(notesButton);
     await user.click(notesButton);
-    expect(screen.getByText('No notes yet. Add a note to keep something meaningful in view.')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Notes (0)' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Notes' })).toBeTruthy();
+    const drawer = screen.getByRole('dialog', { name: 'Notes' });
+    fireEvent(drawer, new Event('cancel', { cancelable: true }));
+    expect(screen.queryByRole('dialog', { name: 'Notes' })).toBeNull();
+    expect(document.activeElement).toBe(notesButton);
+    await user.click(notesButton);
+    fireEvent.click(screen.getByRole('dialog', { name: 'Notes' }));
+    expect(screen.queryByRole('dialog', { name: 'Notes' })).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Add note' }));
+    await user.click(notesButton);
+    await user.click(screen.getByRole('button', { name: /Add note/ }));
+    expect(screen.queryByRole('dialog', { name: 'Notes' })).toBeNull();
     const editor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });
     const noteField = within(editor).getByRole('textbox', { name: 'Note' });
     await user.click(within(editor).getByRole('button', { name: 'Save note' }));
     expect(within(editor).getByText('Write something before saving this note.')).toBeTruthy();
     await user.type(noteField, 'First line{Enter}<script>plain text</script>');
-    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    await user.click(within(editor).getByRole('button', { name: 'Choose people, Avery Brooks' }));
     const picker = screen.getByRole('dialog', { name: 'Share note' });
-    expect(within(picker).queryByRole('button', { name: 'Avery Brooks' })).toBeNull();
+    const ownerOption = within(picker).getByRole('button', { name: 'Avery Brooks' });
+    expect(ownerOption.getAttribute('aria-pressed')).toBe('true');
+    expect((ownerOption as HTMLButtonElement).disabled).toBe(true);
     await user.click(within(picker).getByRole('button', { name: 'Morgan Reed' }));
     await user.click(within(picker).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: 'Save note' }));
@@ -1475,15 +1654,27 @@ describe('shared person profile', () => {
       sharedWith: ['sample-person-morgan'],
       content: 'First line\n<script>plain text</script>'
     });
-    expect(screen.getByRole('heading', { name: 'Notes (1)' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Notes' })).toBeTruthy();
 
+    await user.click(within(screen.getByRole('dialog', { name: 'Notes' }))
+      .getByRole('button', { name: 'Close notes' }));
+    for (const tabName of ['Rhythms', 'Connections', 'Prayer'] as const) {
+      await user.click(screen.getByRole('tab', { name: tabName }));
+      expect(screen.getAllByRole('button', { name: 'Notes (1)' })).toHaveLength(1);
+      await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+      expect(screen.getByRole('button', { name: /Open note updated/ })).toBeTruthy();
+      await user.click(screen.getByRole('button', { name: 'Close notes' }));
+    }
+    await user.click(screen.getByRole('tab', { name: 'Connections' }));
+    await user.click(notesButton);
     await user.click(screen.getByRole('button', { name: /Open note updated/ }));
     const detail = screen.getByRole('dialog', { name: 'Note' });
     expect(within(detail).getByText((_content, element) =>
       element?.textContent === 'First line\n<script>plain text</script>'
     )).toBeTruthy();
     expect(within(detail).queryByRole('script')).toBeNull();
-    expect(within(detail).getByText('Shared with Morgan Reed')).toBeTruthy();
+    expect(within(detail).getByRole('img', { name: 'Morgan Reed' })).toBeTruthy();
+    expect(within(detail).queryByText(/Shared with/)).toBeNull();
     await user.click(within(detail).getByRole('button', { name: 'Edit note' }));
     const edit = screen.getByRole('dialog', { name: 'Edit note' });
     await user.clear(within(edit).getByRole('textbox', { name: 'Note' }));
@@ -1505,6 +1696,7 @@ describe('shared person profile', () => {
     await user.click(within(screen.getByRole('dialog', { name: 'Delete this note?' })).getByRole('button', { name: 'Delete note' }));
     expect(JSON.parse(screen.getByTestId('saved-person-notes').textContent ?? '[]')).toHaveLength(0);
     expect(screen.getByText('No notes yet. Add a note to keep something meaningful in view.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Notes (0)' })).toBeTruthy();
   });
 
   it('shows a shared note in the linked person profile without changing primary ownership during edits', async () => {
@@ -1519,7 +1711,7 @@ describe('shared person profile', () => {
     };
     render(<ProfileHarness personId="sample-person-morgan" initialNotes={[sharedNote]} rhythms={[]} />);
     await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
-    expect(screen.getByRole('heading', { name: 'Notes (1)' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Notes' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: /Open note updated/ }));
     expect(screen.getByText(/Primary person: Avery Brooks/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Edit note' }));
@@ -1527,9 +1719,13 @@ describe('shared person profile', () => {
     expect(within(editor).getByText('Primary person: Avery Brooks. Ownership stays with them.')).toBeTruthy();
     await user.clear(within(editor).getByRole('textbox', { name: 'Note' }));
     await user.type(within(editor).getByRole('textbox', { name: 'Note' }), 'Updated from Morgan');
-    await user.click(within(editor).getByRole('button', { name: 'Choose people' }));
+    await user.click(within(editor).getByRole('button', { name: 'Choose people, Avery Brooks and Morgan Reed' }));
     const picker = screen.getByRole('dialog', { name: 'Share note' });
-    expect(within(picker).queryByRole('button', { name: 'Avery Brooks' })).toBeNull();
+    const ownerOption = within(picker).getByRole('button', { name: 'Avery Brooks' });
+    const sharedOption = within(picker).getByRole('button', { name: 'Morgan Reed' });
+    expect(ownerOption.getAttribute('aria-pressed')).toBe('true');
+    expect((ownerOption as HTMLButtonElement).disabled).toBe(true);
+    expect(sharedOption.getAttribute('aria-pressed')).toBe('true');
     await user.click(within(picker).getByRole('button', { name: 'Done' }));
     await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
     const stored = JSON.parse(screen.getByTestId('saved-person-notes').textContent ?? '[]') as PersonNote[];
@@ -1538,6 +1734,140 @@ describe('shared person profile', () => {
       content: 'Updated from Morgan',
       updatedAt: '2026-10-31T14:00:00.000Z'
     }]);
+  });
+
+  it('keeps note reading separate from direct pencil editing and returns to the drawer after cancel or save', async () => {
+    const user = userEvent.setup();
+    const note: PersonNote = {
+      id: 'read-edit-note',
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan'],
+      content: 'A note with separate read and edit actions',
+      createdAt: '2026-10-29T12:00:00.000Z',
+      updatedAt: '2026-10-30T12:00:00.000Z'
+    };
+    render(<ProfileHarness initialNotes={[note]} rhythms={[]} />);
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    const drawer = screen.getByRole('dialog', { name: 'Notes' });
+    const row = drawer.querySelector('.person-notes-row');
+    expect(row).toBeTruthy();
+    expect(row?.querySelectorAll('button')).toHaveLength(2);
+    const readButton = within(row as HTMLElement)
+      .getByRole('button', { name: /Open note updated/ });
+    await user.click(readButton);
+    const detail = screen.getByRole('dialog', { name: 'Note' });
+    expect(within(detail).getByText(note.content)).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'Edit note' })).toBeNull();
+    await user.click(within(detail).getByRole('button', { name: 'Close note' }));
+
+    await user.click(within(screen.getByRole('dialog', { name: 'Notes' }))
+      .getByRole('button', { name: /Edit note updated/ }));
+    const edit = screen.getByRole('dialog', { name: 'Edit note' });
+    const field = within(edit).getByRole('textbox', { name: 'Note' });
+    expect((field as HTMLTextAreaElement).value).toBe(note.content);
+    await user.clear(field);
+    await user.type(field, 'Cancelled draft');
+    await user.click(within(edit).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('dialog', { name: 'Notes' })).toBeTruthy();
+    expect(JSON.parse(screen.getByTestId('saved-person-notes').textContent ?? '[]'))
+      .toEqual([note]);
+
+    await user.click(within(screen.getByRole('dialog', { name: 'Notes' }))
+      .getByRole('button', { name: /Edit note updated/ }));
+    const saveEdit = screen.getByRole('dialog', { name: 'Edit note' });
+    const saveField = within(saveEdit).getByRole('textbox', { name: 'Note' });
+    await user.clear(saveField);
+    await user.type(saveField, 'Saved from the card pencil');
+    await user.click(within(saveEdit).getByRole('button', { name: 'Save changes' }));
+    expect(screen.getByRole('dialog', { name: 'Notes' })).toBeTruthy();
+    const saved = JSON.parse(screen.getByTestId('saved-person-notes').textContent ?? '[]') as PersonNote[];
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      id: note.id,
+      personId: note.personId,
+      sharedWith: note.sharedWith,
+      content: 'Saved from the card pencil'
+    });
+    expect(within(screen.getByRole('dialog', { name: 'Notes' }))
+      .getByText('Saved from the card pencil')).toBeTruthy();
+  });
+
+  it('filters note badges by stable profile ID while retaining distinct people with duplicate names', async () => {
+    const user = userEvent.setup();
+    const note: PersonNote = {
+      id: 'profile-filter-note',
+      personId: 'sample-person-avery',
+      sharedWith: ['sample-person-morgan', 'sample-person-morgan', 'sample-person-jordan'],
+      content: 'Shared with the other people',
+      createdAt: '2026-10-29T12:00:00.000Z',
+      updatedAt: '2026-10-30T12:00:00.000Z'
+    };
+    const averyProfile = render(
+      <ProfileHarness personId="sample-person-avery" initialNotes={[note]} rhythms={[]} />
+    );
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    let row = screen.getByRole('button', { name: /Open note updated/ }).closest('.person-notes-row');
+    expect(row).toBeTruthy();
+    expect(within(row as HTMLElement).getAllByRole('img').map(badge => badge.getAttribute('aria-label')))
+      .toEqual(['Morgan Reed', 'Jordan Bell']);
+    expect((JSON.parse(screen.getByTestId('saved-person-notes').textContent ?? '[]') as PersonNote[])[0]?.sharedWith)
+      .toEqual(note.sharedWith);
+
+    averyProfile.unmount();
+    render(<ProfileHarness personId="sample-person-morgan" initialNotes={[note]} rhythms={[]} />);
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    row = screen.getByRole('button', { name: /Open note updated/ }).closest('.person-notes-row');
+    expect(within(row as HTMLElement).getAllByRole('img').map(badge => badge.getAttribute('aria-label')))
+      .toEqual(['Avery Brooks', 'Jordan Bell']);
+
+    cleanup();
+    const duplicateNamePerson: PersonPreview = {
+      id: 'sample-person-morgan-copy',
+      displayName: 'Morgan Reed'
+    };
+    const duplicateNameNote = {
+      ...note,
+      id: 'duplicate-name-note',
+      sharedWith: ['sample-person-morgan', duplicateNamePerson.id]
+    };
+    render(
+      <ProfileHarness
+        personId="sample-person-avery"
+        people={[...syntheticPeople, duplicateNamePerson]}
+        initialNotes={[duplicateNameNote]}
+        rhythms={[]}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    row = screen.getByRole('button', { name: /Open note updated/ }).closest('.person-notes-row');
+    expect(within(row as HTMLElement).getAllByRole('img', { name: 'Morgan Reed' })).toHaveLength(2);
+
+    cleanup();
+    const privateNote = { ...note, id: 'no-other-people-note', sharedWith: [] };
+    render(
+      <ProfileHarness personId="sample-person-avery" initialNotes={[privateNote]} rhythms={[]} />
+    );
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    row = screen.getByRole('button', { name: /Open note updated/ }).closest('.person-notes-row');
+    expect(row?.querySelector('.person-notes-row__people')).toBeNull();
+  });
+
+  it('hides edit pencils and detail edit actions when no update command is available', async () => {
+    const user = userEvent.setup();
+    const note: PersonNote = {
+      id: 'read-only-note',
+      personId: 'sample-person-avery',
+      content: 'Read only note',
+      createdAt: '2026-10-29T12:00:00.000Z',
+      updatedAt: '2026-10-30T12:00:00.000Z'
+    };
+    render(<ProfileHarness initialNotes={[note]} canEditNotes={false} rhythms={[]} />);
+    await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
+    const drawer = screen.getByRole('dialog', { name: 'Notes' });
+    expect(within(drawer).queryByRole('button', { name: /Edit note updated/ })).toBeNull();
+    await user.click(within(drawer).getByRole('button', { name: /Open note updated/ }));
+    const detail = screen.getByRole('dialog', { name: 'Note' });
+    expect(within(detail).queryByRole('button', { name: 'Edit note' })).toBeNull();
   });
 
   it('retains failed edit drafts and restores focus after Escape and Cancel', async () => {
@@ -1551,7 +1881,7 @@ describe('shared person profile', () => {
     };
     render(<ProfileHarness initialNotes={[sharedNote]} rhythms={[]} failNoteUpdates />);
     await user.click(screen.getByRole('button', { name: 'Notes (1)' }));
-    const addButton = screen.getByRole('button', { name: 'Add note' });
+    const addButton = screen.getByRole('button', { name: /Add note/ });
     await user.click(addButton);
     const addEditor = screen.getByRole('dialog', { name: 'Add note for Avery Brooks' });
     fireEvent(addEditor, new Event('cancel', { bubbles: false, cancelable: true }));
@@ -1572,8 +1902,11 @@ describe('shared person profile', () => {
       .toBe('Preview storage changed in another tab. No person note was saved.');
     expect((field as HTMLTextAreaElement).value).toBe('Unsaved draft remains here');
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
-    expect(document.activeElement).toBe(editButton);
-    const closeNote = within(detail).getByRole('button', { name: 'Close note' });
+    const returnedEditButton = within(screen.getByRole('dialog', { name: 'Note' }))
+      .getByRole('button', { name: 'Edit note' });
+    expect(document.activeElement).toBe(returnedEditButton);
+    const closeNote = within(screen.getByRole('dialog', { name: 'Note' }))
+      .getByRole('button', { name: 'Close note' });
     await user.click(closeNote);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: /Open note updated/ }));
   });

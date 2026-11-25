@@ -49,13 +49,15 @@ export function PersonBadge(props: PersonBadgeProps) {
 
 export function PersonBadgeVisual({
   person,
-  displayNameMode = 'first'
+  displayNameMode = 'first',
+  theme
 }: {
   person: PersonPreview;
   displayNameMode?: 'first' | 'full';
+  theme?: 'prayer';
 }) {
   return (
-    <span className="person-badge-visual">
+    <span className={`person-badge-visual${theme ? ` person-badge-visual--${theme}` : ''}`}>
       <PersonAvatar person={person} />
       <span className="person-badge-name">
         {displayNameMode === 'full' ? person.displayName : personFirstName(person.displayName)}
