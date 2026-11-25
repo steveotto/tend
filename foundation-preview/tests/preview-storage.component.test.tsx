@@ -848,7 +848,7 @@ describe('synthetic preview storage adapter and envelope', () => {
       kind: 'error',
       diagnostic: {
         rejectedRule: 'immutable-recovery-copy-failed',
-        failureDetail: 'schema-58 recovery write blocked'
+        recoveryFailure: { kind: 'backup-write-exception', errorName: 'UnknownError' }
       }
     });
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(raw);
@@ -2429,7 +2429,10 @@ describe('synthetic preview storage adapter and envelope', () => {
     }))
       .toMatchObject({
         kind: 'error',
-        diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'Recovery write blocked' }
+        diagnostic: {
+          rejectedRule: 'immutable-recovery-copy-failed',
+          recoveryFailure: { kind: 'backup-write-exception', errorName: 'UnknownError' }
+        }
       });
     expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
     expect(values.has(PREVIEW_V3_RECOVERY_KEY)).toBe(false);
@@ -2471,7 +2474,10 @@ describe('synthetic preview storage adapter and envelope', () => {
       currentDate: '2026-10-21'
     })).toMatchObject({
       kind: 'error',
-      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v4 recovery write blocked' }
+      diagnostic: {
+        rejectedRule: 'immutable-recovery-copy-failed',
+        recoveryFailure: { kind: 'backup-write-exception', errorName: 'UnknownError' }
+      }
     });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
@@ -2514,7 +2520,10 @@ describe('synthetic preview storage adapter and envelope', () => {
       currentDate: '2026-10-21'
     })).toMatchObject({
       kind: 'error',
-      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v5 recovery write blocked' }
+      diagnostic: {
+        rejectedRule: 'immutable-recovery-copy-failed',
+        recoveryFailure: { kind: 'backup-write-exception', errorName: 'UnknownError' }
+      }
     });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
@@ -2687,7 +2696,10 @@ describe('synthetic preview storage adapter and envelope', () => {
       currentDate: '2026-10-21'
     })).toMatchObject({
       kind: 'error',
-      diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v8 recovery write blocked' }
+      diagnostic: {
+        rejectedRule: 'immutable-recovery-copy-failed',
+        recoveryFailure: { kind: 'backup-write-exception', errorName: 'UnknownError' }
+      }
     });
     expect(failingValues.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
   });
@@ -3129,7 +3141,10 @@ describe('synthetic preview storage adapter and envelope', () => {
         currentDate: '2026-10-21'
       })).toMatchObject({
         kind: 'error',
-        diagnostic: { rejectedRule: 'immutable-recovery-copy-failed', failureDetail: 'v10 recovery write blocked' }
+        diagnostic: {
+          rejectedRule: 'immutable-recovery-copy-failed',
+          recoveryFailure: { kind: 'backup-write-exception', errorName: 'UnknownError' }
+        }
       });
       expect(values.get(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
       expect(values.has(PREVIEW_V10_RECOVERY_KEY)).toBe(false);
@@ -3731,6 +3746,57 @@ async function openPreviewSettings(user: ReturnType<typeof userEvent.setup>): Pr
 }
 
 describe('preview backup controls', () => {
+  it('shows and exports only sanitized immutable recovery failure details', async () => {
+    const user = userEvent.setup();
+    const { createObjectURL } = setDownloadMocks();
+    render(
+      <PreviewDataControls
+        data={sampleWithHistory()}
+        status={{
+          kind: 'error',
+          message: 'Save blocked.',
+          diagnostic: {
+            operation: 'save',
+            sourceSchemaVersion: 44,
+            applicationSchemaVersion: PREVIEW_SCHEMA_VERSION,
+            rejectedRule: 'immutable-recovery-copy-failed',
+            recoveryKeyLookup: 'available-not-created',
+            migrationValidation: 'valid',
+            concurrentModification: 'not-detected',
+            latestDraft: 'failed',
+            failurePath: 'schemaVersion',
+            recoveryFailure: {
+              kind: 'backup-write-exception',
+              errorName: 'QuotaExceededError'
+            }
+          }
+        }}
+        currentDate="2026-10-21"
+        onImport={() => null}
+        onReset={() => null}
+        onRetrySave={() => {}}
+        onReloadExternal={() => null}
+        onReplaceExternal={() => null}
+      />
+    );
+
+    await user.click(screen.getByText('Technical save diagnostic'));
+    const diagnosticDetails = screen.getByText('Technical save diagnostic').closest('details')!;
+    expect(within(diagnosticDetails).getByText('backup-write-exception: QuotaExceededError')).toBeTruthy();
+    expect(within(diagnosticDetails).queryByText(/PRIVATE|https:|account/i)).toBeNull();
+    await user.click(within(diagnosticDetails).getByRole('button', { name: 'Download privacy-safe diagnostic' }));
+    const downloaded = createObjectURL.mock.calls[0]![0] as Blob;
+    const parsed = JSON.parse(await downloaded.text()) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      rejectedRule: 'immutable-recovery-copy-failed',
+      recoveryFailure: {
+        kind: 'backup-write-exception',
+        errorName: 'QuotaExceededError'
+      }
+    });
+    expect(JSON.stringify(parsed)).not.toMatch(/PRIVATE|https:|account-id|storage key/i);
+  });
+
   it('shows the v45 migration recovery failure and offers the original v45 archive', async () => {
     const user = userEvent.setup();
     const raw = olderSchemaRaw(45);

@@ -202,7 +202,20 @@ export type PreviewStorageDiagnostic = {
   sourceValidationCode?: string;
   sourceValidationPath?: string;
   failureDetail?: string;
+  recoveryFailure?: PreviewRecoveryFailure;
 };
+
+export type PreviewRecoveryErrorName =
+  | 'QuotaExceededError'
+  | 'SecurityError'
+  | 'InvalidStateError'
+  | 'UnknownError';
+
+export type PreviewRecoveryFailure =
+  | { kind: 'backup-write-exception'; errorName: PreviewRecoveryErrorName }
+  | { kind: 'read-back-exception'; errorName: PreviewRecoveryErrorName }
+  | { kind: 'storage-read-exception'; errorName: PreviewRecoveryErrorName }
+  | { kind: 'exact-byte-mismatch' };
 
 export function createPreviewStorageScope(
   storage: PreviewStorage,
@@ -385,7 +398,8 @@ function diagnosticForWriteFailure(
   operation: NonNullable<PreviewWriteOptions['operation']>,
   rejectedRule: string,
   concurrentModification: PreviewStorageDiagnostic['concurrentModification'],
-  failureDetail?: string
+  failureDetail?: string,
+  recoveryFailure?: PreviewRecoveryFailure
 ): PreviewStorageDiagnostic {
   let sourceSchemaVersion: number | null = null;
   if (sourceRaw !== null) {
@@ -445,7 +459,8 @@ function diagnosticForWriteFailure(
           sourceValidationPath: sourceValidation.path
         }
       : {}),
-    ...(failureDetail ? { failureDetail } : {})
+    ...(failureDetail ? { failureDetail } : {}),
+    ...(recoveryFailure ? { recoveryFailure } : {})
   };
 }
 
@@ -829,7 +844,8 @@ export function writePreview(
                     ? 'immutable-recovery-key-unavailable'
                     : 'immutable-recovery-copy-failed',
               recovery.kind === 'active-conflict' ? 'detected' : 'not-detected',
-              recovery.kind === 'error' ? recovery.message : undefined
+              undefined,
+              recovery.kind === 'error' ? recovery.failure : undefined
             )
           };
         }

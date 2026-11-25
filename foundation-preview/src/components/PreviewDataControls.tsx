@@ -957,6 +957,16 @@ export function PreviewDataControls({
               {status.diagnostic.failurePath && (
                 <><dt>Failure path</dt><dd>{status.diagnostic.failurePath}</dd></>
               )}
+              {status.diagnostic.recoveryFailure && (
+                <><dt>Recovery failure</dt>
+                  <dd>
+                    {status.diagnostic.recoveryFailure.kind}
+                    {'errorName' in status.diagnostic.recoveryFailure
+                      ? `: ${status.diagnostic.recoveryFailure.errorName}`
+                      : ''}
+                  </dd>
+                </>
+              )}
               {status.diagnostic.sourceValidationCode && status.diagnostic.sourceValidationPath && (
                 <><dt>Source validation</dt>
                   <dd>{status.diagnostic.sourceValidationCode} at {status.diagnostic.sourceValidationPath}</dd>

@@ -2666,11 +2666,21 @@ function PreviewWorkspace({
     }
     if (written.kind === 'error') {
       setAutoSaveEnabled(false);
-      const failureDetail = written.diagnostic
-        ? ` (${written.diagnostic.rejectedRule}${written.diagnostic.failurePath
-          ? ` at ${written.diagnostic.failurePath}`
-          : ''})`
+      const recoveryFailure = written.diagnostic?.recoveryFailure;
+      const recoveryFailureLabel = recoveryFailure
+        ? `${recoveryFailure.kind}${'errorName' in recoveryFailure
+          ? `: ${recoveryFailure.errorName}`
+          : ''}`
+        : null;
+      const diagnosticDetails = written.diagnostic
+        ? [
+            `${written.diagnostic.rejectedRule}${written.diagnostic.failurePath
+              ? ` at ${written.diagnostic.failurePath}`
+              : ''}`,
+            recoveryFailureLabel
+          ].filter((detail): detail is string => detail !== null).join('; ')
         : '';
+      const failureDetail = diagnosticDetails ? ` (${diagnosticDetails})` : '';
       const message = `${written.message}${failureDetail}`;
       setPersistenceStatus({
         kind: 'error',

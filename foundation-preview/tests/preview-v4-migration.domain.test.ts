@@ -990,8 +990,49 @@ describe('v4 migration and recovery domain', () => {
 
     expect(preserveProposedV4SourceRecovery(storage, raw)).toMatchObject({
       kind: 'error',
-      message: 'The exact recovery copy could not be verified.'
+      failure: { kind: 'exact-byte-mismatch' }
     });
+  });
+
+  it('reports an allow-listed backup-write exception without exposing its message', () => {
+    const raw = rawAtVersion(dataWithHistory(), 3);
+    const storage = {
+      getItem: (key: string) => key === PREVIEW_STORAGE_KEY ? raw : null,
+      setItem: () => {
+        throw new DOMException('PRIVATE_ACCOUNT_AND_DOCUMENT_CONTENT', 'QuotaExceededError');
+      }
+    };
+
+    const result = preserveProposedV4SourceRecovery(storage, raw);
+    expect(result).toEqual({
+      kind: 'error',
+      failure: { kind: 'backup-write-exception', errorName: 'QuotaExceededError' }
+    });
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_ACCOUNT_AND_DOCUMENT_CONTENT');
+  });
+
+  it('reports a read-back exception with only its allow-listed error name', () => {
+    const raw = rawAtVersion(dataWithHistory(), 3);
+    let recoveryReads = 0;
+    const storage = {
+      getItem: (key: string) => {
+        if (key === PREVIEW_STORAGE_KEY) return raw;
+        if (key === PREVIEW_V3_RECOVERY_KEY) {
+          recoveryReads += 1;
+          if (recoveryReads === 1) return null;
+          throw new DOMException('PRIVATE_CALENDAR_URL_AND_PRAYER_TEXT', 'SecurityError');
+        }
+        return null;
+      },
+      setItem: () => undefined
+    };
+
+    const result = preserveProposedV4SourceRecovery(storage, raw);
+    expect(result).toEqual({
+      kind: 'error',
+      failure: { kind: 'read-back-exception', errorName: 'SecurityError' }
+    });
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_CALENDAR_URL_AND_PRAYER_TEXT');
   });
 
   it('uses schema v25 for active preview serialization', () => {
