@@ -129,6 +129,7 @@ export function PersonProfileView({
   onUpdatePersonNote,
   onDeletePersonNote,
   onCreatePrayerRequest,
+  onRetryLocalSave,
   onUpdatePrayerRequest,
   onPrayerRequestTransition,
   onPrayForRequest,
@@ -184,6 +185,7 @@ export function PersonProfileView({
   onUpdatePersonNote?: (noteId: string, expectedUpdatedAt: string, actorId: PersonId, draft: PersonNoteDraft) => string | null;
   onDeletePersonNote?: (noteId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
   onCreatePrayerRequest?: (personId: PersonId, draft: PersonPrayerRequestDraft) => string | null;
+  onRetryLocalSave?: () => Promise<string | null>;
   onUpdatePrayerRequest?: (
     requestId: string,
     expectedUpdatedAt: string,
@@ -882,6 +884,7 @@ export function PersonProfileView({
               onCreate={(ownerId, draft) => onCreatePrayerRequest
                 ? onCreatePrayerRequest(ownerId, draft)
                 : 'Prayer requests are unavailable.'}
+              {...(onRetryLocalSave ? { onRetryLocalSave } : {})}
               onUpdate={(requestId, expectedUpdatedAt, actorId, draft) => onUpdatePrayerRequest
                 ? onUpdatePrayerRequest(requestId, expectedUpdatedAt, actorId, draft)
                 : 'Prayer requests are unavailable.'}

@@ -296,8 +296,11 @@ import {
   loadStrengthRepairRecoveryCopy,
   loadPreviewImportRecovery,
   loadPreview,
+  type PreviewRecoveryPreparationResult,
+  type PreviewWriteResult,
   writePreview
 } from './storage/preview-storage.ts';
+import type { PreviewImmutableRecoveryArchive } from './storage/preview-recovery-indexeddb.ts';
 
 const destinationLabels: Record<Exclude<Destination, 'today'>, string> = {
   focus: 'Focus',
@@ -311,6 +314,23 @@ const destinationLabels: Record<Exclude<Destination, 'today'>, string> = {
   finances: 'Finances',
   friendships: 'Friendships'
 };
+
+function recoveryPreparationMessage(result: Exclude<PreviewRecoveryPreparationResult, { kind: 'prepared' | 'not-needed' }>): string {
+  if (result.kind === 'conflict') {
+    return 'immutable-recovery-copy-conflict at schemaVersion; no changes were written.';
+  }
+  const failure = result.failure;
+  const detail = 'errorName' in failure
+    ? `${failure.kind}: ${failure.errorName}`
+    : failure.kind;
+  return `immutable-recovery-copy-failed at schemaVersion; ${detail}. No changes were written.`;
+}
+
+function isRecoveryPreparationPromise(
+  result: PreviewRecoveryPreparationResult | Promise<PreviewRecoveryPreparationResult>
+): result is Promise<PreviewRecoveryPreparationResult> {
+  return 'then' in result && typeof result.then === 'function';
+}
 const personProfileHistoryKey = 'tendPersonProfileId';
 const prayerUnavailableMessage = 'Prayer is turned off in Settings.';
 
@@ -467,13 +487,15 @@ export function App({
   authRefreshSequence = 0,
   onSignOut,
   accountBackupApi,
-  isAccountBackupIdentityCurrent
+  isAccountBackupIdentityCurrent,
+  immutableRecoveryArchive
 }: {
   identity?: PreviewIdentityState;
   authRefreshSequence?: number;
   onSignOut?: () => void | Promise<void>;
   accountBackupApi?: PreviewAccountBackupApi;
   isAccountBackupIdentityCurrent?: () => boolean;
+  immutableRecoveryArchive?: PreviewImmutableRecoveryArchive | null;
 } = {}) {
   const resolvedIdentity = useMemo(() => validatePreviewIdentity(identity), [identity]);
   const identityKey = previewIdentityKey(resolvedIdentity);
@@ -504,6 +526,7 @@ export function App({
     <PreviewWorkspace
       key={identityKey}
       identity={resolvedIdentity}
+      {...(immutableRecoveryArchive !== undefined ? { immutableRecoveryArchive } : {})}
       authRefreshSequence={authRefreshSequence}
       isIdentityCurrent={() => isIdentityCurrent(identityKey)}
       {...(isAccountBackupIdentityCurrent ? { isAccountBackupIdentityCurrent } : {})}
@@ -578,6 +601,7 @@ function SettingsDirectoryIcon({ name }: { name: SettingsIconName }) {
 
 function PreviewWorkspace({
   identity,
+  immutableRecoveryArchive,
   authRefreshSequence,
   isIdentityCurrent,
   isAccountBackupIdentityCurrent,
@@ -585,6 +609,7 @@ function PreviewWorkspace({
   onSignOut
 }: {
   identity: Extract<PreviewIdentityState, { kind: 'development' | 'authenticated' }>;
+  immutableRecoveryArchive?: PreviewImmutableRecoveryArchive | null;
   authRefreshSequence: number;
   isIdentityCurrent: () => boolean;
   isAccountBackupIdentityCurrent?: () => boolean;
@@ -592,7 +617,10 @@ function PreviewWorkspace({
   onSignOut?: () => void | Promise<void>;
 }) {
   const scoringInstant = useCurrentInstant();
-  const previewStorage = useMemo(() => browserPreviewStorage(identity), [identity]);
+  const previewStorage = useMemo(
+    () => browserPreviewStorage(identity, immutableRecoveryArchive),
+    [identity, immutableRecoveryArchive]
+  );
   const initialPreviewData = () => identity.kind === 'development'
     && import.meta.env.DEV
     ? createSamplePreviewData()
@@ -740,6 +768,7 @@ function PreviewWorkspace({
   const [v58RecoveryCopy, setV58RecoveryCopy] = useState<string | null>(null);
   const expectedRaw = useRef<string | null>(null);
   const externalRaw = useRef<string | null>(null);
+  const recoveryProtectionError = useRef<string | null>(null);
   const skipNextAutosave = useRef(false);
   const hydratedDataWithoutSave = useRef<PreviewData | null>(null);
   const morePageHeading = useRef<HTMLHeadingElement>(null);
@@ -824,11 +853,36 @@ function PreviewWorkspace({
     data: PreviewData,
     expected: string | null,
     options: Parameters<typeof writePreview>[3] = {}
-  ) {
+  ): PreviewWriteResult {
     if (!isIdentityCurrent()) {
       return { kind: 'error' as const, message: 'Preview identity changed. No changes were saved.' };
     }
+    const recoveryWasBlocked = recoveryProtectionError.current !== null;
+    if (recoveryProtectionError.current) {
+      const currentRecoveryError = recoveryProtectionError.current;
+      if (!expected || !previewStorage.prepareImmutableRecoveryCopy) {
+        return { kind: 'error', message: currentRecoveryError };
+      }
+      try {
+        const preparation = previewStorage.prepareImmutableRecoveryCopy(expected);
+        if (isRecoveryPreparationPromise(preparation)) {
+          return { kind: 'error', message: currentRecoveryError };
+        }
+        if (preparation.kind === 'error' || preparation.kind === 'conflict') {
+          const message = recoveryPreparationMessage(preparation);
+          recoveryProtectionError.current = message;
+          return { kind: 'error', message };
+        }
+        recoveryProtectionError.current = null;
+      } catch {
+        return { kind: 'error', message: currentRecoveryError };
+      }
+    }
     const written = writePreview(previewStorage, data, expected, options);
+    if (recoveryWasBlocked && written.kind === 'saved') {
+      setAutoSaveEnabled(true);
+      setPersistenceStatus({ kind: 'saved' });
+    }
     refreshRawRecoveryCopy();
     const v41Recovery = loadV41RecoveryCopy(previewStorage);
     setV41RecoveryCopy(v41Recovery.kind === 'loaded' ? v41Recovery.raw : null);
@@ -1627,7 +1681,7 @@ function PreviewWorkspace({
     }
   }
 
-  useEffect(() => {
+  function refreshAllRecoveryCopies() {
     refreshRawRecoveryCopy();
     refreshCloudRestoreRecoveryCopy();
     refreshStrengthRepairRecoveryCopy();
@@ -1643,38 +1697,80 @@ function PreviewWorkspace({
     refreshV9RecoveryCopy();
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
-    if (!isIdentityCurrent()) return;
-    const loaded = loadPreview(previewStorage, initialLoadDate);
-    if (loaded.kind === 'loaded') {
-      setPreviewDataLoadError(null);
-      expectedRaw.current = loaded.raw;
-      setFreshInitialData(null);
-      hydratedDataWithoutSave.current = loaded.data;
-      setPreviewData(loaded.data);
-      setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(loaded.data));
-      setPersistedCompletedRhythmIds(completedRhythmIdsForData(loaded.data));
-      setPersistenceStatus({ kind: 'saved' });
-      setAutoSaveEnabled(true);
-    } else if (loaded.kind === 'missing') {
-      setPreviewDataLoadError(null);
-      expectedRaw.current = null;
-      const initialData = initialPreviewData();
-      setFreshInitialData(initialData);
-      setPreviewData(initialData);
-      setPersistedSatisfiedRhythmIds(new Set());
-      setPersistedCompletedRhythmIds(new Set());
-      setPersistenceStatus({ kind: 'saving' });
-      setAutoSaveEnabled(true);
-    } else if (loaded.kind === 'corrupt' || loaded.kind === 'unsupported') {
-      setPreviewDataLoadError(loaded.message);
-      expectedRaw.current = loaded.raw;
-      setPersistenceStatus({ kind: loaded.kind, raw: loaded.raw, message: loaded.message });
-    } else {
-      setPreviewDataLoadError(loaded.message);
-      setPersistenceStatus({ kind: 'unavailable', message: loaded.message });
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setHydrated(false);
+    setAutoSaveEnabled(false);
+
+    async function hydrate() {
+      if (!isIdentityCurrent()) return;
+      const loaded = loadPreview(previewStorage, initialLoadDate);
+      let recoveryError: string | null = null;
+      if (loaded.kind === 'loaded' && previewStorage.prepareImmutableRecoveryCopy) {
+        try {
+          const preparation = previewStorage.prepareImmutableRecoveryCopy(loaded.raw);
+          const prepared = isRecoveryPreparationPromise(preparation)
+            ? await preparation
+            : preparation;
+          if (prepared.kind === 'error' || prepared.kind === 'conflict') {
+            recoveryError = recoveryPreparationMessage(prepared);
+          }
+        } catch {
+          recoveryError = 'immutable-recovery-copy-failed at schemaVersion; no changes were written.';
+        }
+      }
+      const recoveryArchiveLoad = previewStorage.loadImmutableRecoveryCopies?.();
+      if (recoveryArchiveLoad) {
+        void recoveryArchiveLoad.then(() => {
+          if (!cancelled && isIdentityCurrent()) refreshAllRecoveryCopies();
+        });
+      }
+      if (cancelled || !isIdentityCurrent()) return;
+      refreshAllRecoveryCopies();
+      if (loaded.kind === 'loaded') {
+        recoveryProtectionError.current = recoveryError;
+        setPreviewDataLoadError(null);
+        expectedRaw.current = loaded.raw;
+        setFreshInitialData(null);
+        hydratedDataWithoutSave.current = loaded.data;
+        setPreviewData(loaded.data);
+        setPersistedSatisfiedRhythmIds(satisfiedRhythmIdsForData(loaded.data));
+        setPersistedCompletedRhythmIds(completedRhythmIdsForData(loaded.data));
+        setPersistenceStatus(recoveryError
+          ? { kind: 'error', message: recoveryError }
+          : { kind: 'saved' });
+        setAutoSaveEnabled(recoveryError === null);
+      } else if (loaded.kind === 'missing') {
+        recoveryProtectionError.current = null;
+        setPreviewDataLoadError(null);
+        expectedRaw.current = null;
+        const initialData = initialPreviewData();
+        setFreshInitialData(initialData);
+        setPreviewData(initialData);
+        setPersistedSatisfiedRhythmIds(new Set());
+        setPersistedCompletedRhythmIds(new Set());
+        setPersistenceStatus({ kind: 'saving' });
+        setAutoSaveEnabled(true);
+      } else if (loaded.kind === 'corrupt' || loaded.kind === 'unsupported') {
+        recoveryProtectionError.current = null;
+        setPreviewDataLoadError(loaded.message);
+        expectedRaw.current = loaded.raw;
+        setPersistenceStatus({ kind: loaded.kind, raw: loaded.raw, message: loaded.message });
+      } else {
+        recoveryProtectionError.current = null;
+        setPreviewDataLoadError(loaded.message);
+        setPersistenceStatus({ kind: 'unavailable', message: loaded.message });
+      }
+      setHydrated(true);
     }
-    setHydrated(true);
-  }, []);
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [previewStorage]);
 
   useEffect(() => {
     if (!hydrated || !autoSaveEnabled) return;
@@ -3988,7 +4084,31 @@ function PreviewWorkspace({
     return written.message;
   }
 
-  function retrySave() {
+  async function retrySave(): Promise<string | null> {
+    if (!isIdentityCurrent()) return 'The active account changed. No changes were written.';
+    const activeRaw = expectedRaw.current;
+    if (activeRaw && previewStorage.prepareImmutableRecoveryCopy) {
+      try {
+        const prepared = await previewStorage.prepareImmutableRecoveryCopy(activeRaw);
+        if (prepared.kind === 'error' || prepared.kind === 'conflict') {
+          recoveryProtectionError.current = recoveryPreparationMessage(prepared);
+          setAutoSaveEnabled(false);
+          setPersistenceStatus({ kind: 'error', message: recoveryProtectionError.current });
+          return recoveryProtectionError.current;
+        }
+      } catch {
+        recoveryProtectionError.current = 'immutable-recovery-copy-failed at schemaVersion; no changes were written.';
+        setAutoSaveEnabled(false);
+        setPersistenceStatus({
+          kind: 'error',
+          message: recoveryProtectionError.current
+        });
+        return recoveryProtectionError.current;
+      }
+    }
+    if (!isIdentityCurrent()) return 'The active account changed. No changes were written.';
+    recoveryProtectionError.current = null;
+    refreshAllRecoveryCopies();
     skipNextAutosave.current = true;
     setAutoSaveEnabled(true);
     const written = writeCurrentPreview(previewData, expectedRaw.current, { currentDate, operation: 'save' });
@@ -4005,11 +4125,14 @@ function PreviewWorkspace({
     refreshV9RecoveryCopy();
     if (written.kind === 'saved') {
       expectedRaw.current = written.raw;
+      externalRaw.current = null;
       setPersistenceStatus({ kind: 'saved' });
+      return null;
     } else if (written.kind === 'conflict') {
       externalRaw.current = written.actualRaw;
       setAutoSaveEnabled(false);
       setPersistenceStatus({ kind: 'conflict' });
+      return 'Preview storage changed in another tab. Reload before saving to avoid overwriting newer data.';
     } else {
       setAutoSaveEnabled(false);
       setPersistenceStatus({
@@ -4017,6 +4140,7 @@ function PreviewWorkspace({
         message: written.message,
         ...(written.diagnostic ? { diagnostic: written.diagnostic } : {})
       });
+      return written.message;
     }
   }
 
@@ -4498,6 +4622,7 @@ function PreviewWorkspace({
                         <CalendarSourcesSettings
                           sources={previewData.calendarSources}
                           onSave={saveCalendarSources}
+                          onRetryLocalSave={retrySave}
                           showOnToday={previewData.showCalendarOnToday}
                           onShowOnTodayChange={setShowCalendarOnTodayPreference}
                           localReaderEnabled={identity.kind === 'development'}
@@ -5070,6 +5195,7 @@ function PreviewWorkspace({
           personDetails={previewData.personDetails}
           personNotes={previewData.personNotes}
           prayerRequests={previewData.prayerRequests}
+          onRetryLocalSave={retrySave}
           navigationRequest={profileNavigationRequest}
           friendships={previewData.friendships}
           today={localDateInTimeZone(scoringInstant, localTimeZone || 'UTC')}

@@ -221,6 +221,26 @@ function deferredAccountBackupApi() {
   };
 }
 
+function memoryRecoveryArchive() {
+  const records = new Map<string, string>();
+  return {
+    records,
+    async get(key: string) {
+      return records.get(key) ?? null;
+    },
+    async addIfAbsent(key: string, raw: string): Promise<'added' | 'exists'> {
+      if (records.has(key)) return 'exists';
+      records.set(key, raw);
+      return 'added';
+    },
+    async getAll(prefix: string) {
+      return [...records.entries()]
+        .filter(([key]) => key.startsWith(prefix))
+        .map(([key, raw]) => ({ key, raw }));
+    }
+  };
+}
+
 function schema45Raw(data: ReturnType<typeof createSamplePreviewData>): string {
   const current = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>;
   const envelope = withPreSparkSchema({
@@ -10198,7 +10218,7 @@ describe('Tend Today preview', () => {
     expect(parsePreviewBackup(originalRaw, currentDate).valid).toBe(true);
   });
 
-  it('preserves schema-44 Calendar settings in authenticated local storage and reloads them', async () => {
+  it('migrates schema-44 Calendar and Prayer saves through an exact account-scoped archive near localStorage quota', async () => {
     const user = userEvent.setup();
     const currentDate = localDateString(new Date());
     const accountId = 'c0000000-0000-4000-8000-000000000144';
@@ -10226,14 +10246,20 @@ describe('Tend Today preview', () => {
 
     const storage = window.localStorage;
     const writeOrder: string[] = [];
+    const recoveryArchive = memoryRecoveryArchive();
     const originalSetItem = storage.setItem.bind(storage);
     vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
-      if (key === recoveryKey) writeOrder.push('recovery');
+      if (key === recoveryKey) {
+        throw new DOMException('Synthetic storage quota failure', 'QuotaExceededError');
+      }
       if (key === accountKey) writeOrder.push('active');
       originalSetItem(key, value);
     });
     const view = testingRender(
-      <App identity={identity} />
+      <App
+        identity={identity}
+        immutableRecoveryArchive={recoveryArchive}
+      />
     );
     await screen.findByRole('button', { name: 'More, settings' });
     await openPreviewSettings(user, 'calendar');
@@ -10242,15 +10268,45 @@ describe('Tend Today preview', () => {
     await user.type(screen.getByLabelText('Calendar name'), 'Updated schema 44 calendar');
     await user.click(screen.getByRole('button', { name: 'Save calendar' }));
     expect(await screen.findByText('Updated schema 44 calendar')).toBeTruthy();
+    const calendarActiveWrites = writeOrder.filter(entry => entry === 'active').length;
+    expect(calendarActiveWrites).toBeGreaterThan(0);
+    expect(storage.getItem(recoveryKey)).toBeNull();
+    expect(recoveryArchive.records.get(recoveryKey)).toBe(originalRaw);
 
-    expect(writeOrder).toEqual(['recovery', 'active']);
-    expect(storage.getItem(recoveryKey)).toBe(originalRaw);
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    await user.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+    await user.click(within(profile).getByRole('button', { name: 'Add request' }));
+    const prayerEditor = screen.getByRole('dialog', { name: 'Add prayer request' });
+    await user.type(within(prayerEditor).getByRole('textbox', { name: 'Title' }), 'Quota-safe synthetic prayer');
+    await user.click(within(prayerEditor).getByRole('button', { name: 'Save request' }));
+    expect(await screen.findByText('Quota-safe synthetic prayer')).toBeTruthy();
+    expect(writeOrder.filter(entry => entry === 'active').length).toBeGreaterThan(calendarActiveWrites);
+    const savedAfterPrayer = parsePreviewBackup(storage.getItem(accountKey)!, currentDate);
+    expect(savedAfterPrayer.valid).toBe(true);
+    if (savedAfterPrayer.valid) {
+      expect(savedAfterPrayer.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+      expect(savedAfterPrayer.envelope.data.calendarSources[0]?.name).toBe('Updated schema 44 calendar');
+      expect(savedAfterPrayer.envelope.data.prayerRequests.some(request =>
+        request.title === 'Quota-safe synthetic prayer'
+      )).toBe(true);
+    }
 
     view.unmount();
-    testingRender(<App identity={identity} />);
+    testingRender(
+      <App identity={identity} immutableRecoveryArchive={recoveryArchive} />
+    );
     await openPreviewSettings(user, 'calendar');
     expect(await screen.findByText('Updated schema 44 calendar')).toBeTruthy();
-    expect(storage.getItem(recoveryKey)).toBe(originalRaw);
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    await user.click(within(screen.getByRole('main', { name: 'Avery Brooks' }))
+      .getByRole('tab', { name: 'Prayer' }));
+    expect(await screen.findByText('Quota-safe synthetic prayer')).toBeTruthy();
+    expect(recoveryArchive.records.get(recoveryKey)).toBe(originalRaw);
     expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBeNull();
   });
 
@@ -10303,7 +10359,6 @@ describe('Tend Today preview', () => {
       <App identity={identity} accountBackupApi={backup.api} />
     );
     await screen.findByRole('button', { name: 'More, settings' });
-    await waitFor(() => expect(backup.read).toHaveBeenCalled());
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
       .getByRole('button', { name: 'People' }));
     await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
@@ -10330,13 +10385,28 @@ describe('Tend Today preview', () => {
     }
 
     failRecoveryWrite = false;
+    await user.click(within(editor).getByRole('button', { name: 'Try safe save again' }));
+    expect((await within(editor).findByRole('alert')).textContent)
+      .toContain('The saved document is now safe. Save again to apply this prayer request.');
+    expect(title.value).toBe('Schema 44 prayer request');
+    expect(storage.getItem(recoveryKey)).toBe(originalRaw);
+    expect(writeOrder).toEqual(['recovery', 'active']);
+    const migrated = parsePreviewBackup(storage.getItem(accountKey)!, currentDate);
+    expect(migrated.valid).toBe(true);
+    if (migrated.valid) {
+      expect(migrated.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+      expect(migrated.envelope.data.prayerRequests).toEqual([]);
+      expect(migrated.envelope.data.goals[0]?.correctionHistory).toEqual(data.goals[0]?.correctionHistory);
+    }
+
     await user.click(within(editor).getByRole('button', { name: 'Save request' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add prayer request' })).toBeNull());
     expect(storage.getItem(recoveryKey)).toBe(originalRaw);
-    expect(writeOrder).toEqual(['recovery', 'active']);
+    expect(writeOrder).toEqual(['recovery', 'active', 'active']);
+    await waitFor(() => expect(backup.read).toHaveBeenCalled());
     backup.resolveRead(null);
     await waitFor(() => expect(backup.save).toHaveBeenCalledOnce(), { timeout: 5_000 });
-    expect(writeOrder).toEqual(['recovery', 'active', 'sync']);
+    expect(writeOrder).toEqual(['recovery', 'active', 'active', 'sync']);
 
     view.unmount();
     testingRender(<App identity={identity} />);
@@ -10354,6 +10424,87 @@ describe('Tend Today preview', () => {
       expect(saved.envelope.data.goals[0]?.correctionHistory).toEqual(data.goals[0]?.correctionHistory);
     }
     expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBeNull();
+  });
+
+  it('retains a Calendar draft while retrying exact schema-44 recovery after an archive failure', async () => {
+    const user = userEvent.setup();
+    const currentDate = localDateString(new Date());
+    const accountId = 'c0000000-0000-4000-8000-000000000146';
+    const accountKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
+    const recoveryKey = `${accountKey}${PREVIEW_V44_RECOVERY_KEY.slice(PREVIEW_STORAGE_KEY.length)}`;
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    const data = createSamplePreviewData();
+    data.calendarSources = [{
+      id: 'calendar-source-retry',
+      name: 'Original synthetic calendar',
+      url: 'https://p123-caldav.icloud.com/published/retry-synthetic',
+      enabled: true
+    }];
+    const originalRaw = schema44RawAtLength(data, 240_097);
+    window.localStorage.setItem(accountKey, originalRaw);
+
+    const storage = window.localStorage;
+    const writeOrder: string[] = [];
+    const originalSetItem = storage.setItem.bind(storage);
+    vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
+      if (key === recoveryKey) {
+        throw new DOMException('Synthetic storage quota failure', 'QuotaExceededError');
+      }
+      if (key === accountKey) writeOrder.push('active');
+      originalSetItem(key, value);
+    });
+
+    const recoveryArchive = memoryRecoveryArchive();
+    const originalAddIfAbsent = recoveryArchive.addIfAbsent.bind(recoveryArchive);
+    let failArchiveWrite = true;
+    recoveryArchive.addIfAbsent = async (key, raw) => {
+      if (failArchiveWrite) throw new DOMException('Synthetic archive failure', 'UnknownError');
+      writeOrder.push('recovery');
+      return originalAddIfAbsent(key, raw);
+    };
+
+    render(
+      <App identity={identity} immutableRecoveryArchive={recoveryArchive} />
+    );
+    await screen.findByRole('button', { name: 'More, settings' });
+    await openPreviewSettings(user, 'calendar');
+    await user.click(screen.getByRole('button', { name: 'Edit Original synthetic calendar' }));
+    const name = screen.getByRole('textbox', { name: 'Calendar name' }) as HTMLInputElement;
+    await user.clear(name);
+    await user.type(name, 'Updated synthetic calendar');
+    await user.click(screen.getByRole('button', { name: 'Save calendar' }));
+
+    expect(screen.getByRole('alert').textContent).toContain(
+      'immutable-recovery-copy-failed at schemaVersion'
+    );
+    expect(name.value).toBe('Updated synthetic calendar');
+    expect(storage.getItem(accountKey)).toBe(originalRaw);
+    expect(storage.getItem(recoveryKey)).toBeNull();
+    expect(recoveryArchive.records.get(recoveryKey)).toBeUndefined();
+    expect(writeOrder).toEqual([]);
+
+    failArchiveWrite = false;
+    await user.click(screen.getByRole('button', { name: 'Try safe save again' }));
+    expect(await screen.findByText('The saved document is now safe. Save this calendar again to apply your changes.'))
+      .toBeTruthy();
+    expect(name.value).toBe('Updated synthetic calendar');
+    expect(recoveryArchive.records.get(recoveryKey)).toBe(originalRaw);
+    expect(writeOrder).toEqual(['recovery', 'active']);
+    const migrated = parsePreviewBackup(storage.getItem(accountKey)!, currentDate);
+    expect(migrated.valid).toBe(true);
+    if (migrated.valid) {
+      expect(migrated.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+      expect(migrated.envelope.data.calendarSources[0]?.name).toBe('Original synthetic calendar');
+    }
+
+    await user.click(screen.getByRole('button', { name: 'Save calendar' }));
+    expect(await screen.findByText('Updated synthetic calendar')).toBeTruthy();
+    const saved = parsePreviewBackup(storage.getItem(accountKey)!, currentDate);
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      expect(saved.envelope.data.calendarSources[0]?.name).toBe('Updated synthetic calendar');
+    }
+    expect(writeOrder).toEqual(['recovery', 'active', 'active']);
   });
 
   it('saves one guided workout through the authoritative linked-Strength Rhythm path', async () => {

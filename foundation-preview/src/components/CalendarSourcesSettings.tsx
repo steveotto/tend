@@ -28,6 +28,7 @@ function draftFromSource(source: CalendarSource): CalendarSourceDraft {
 export function CalendarSourcesSettings({
   sources,
   onSave,
+  onRetryLocalSave,
   showOnToday = true,
   onShowOnTodayChange = () => undefined,
   localReaderEnabled = false,
@@ -35,6 +36,7 @@ export function CalendarSourcesSettings({
 }: {
   sources: readonly CalendarSource[];
   onSave: (sources: CalendarSource[]) => string | null;
+  onRetryLocalSave?: () => Promise<string | null>;
   showOnToday?: boolean;
   onShowOnTodayChange?: (show: boolean) => void;
   localReaderEnabled?: boolean;
@@ -119,6 +121,12 @@ export function CalendarSourcesSettings({
     if (saveError) return;
     setRemovalId(null);
     setNotice('Calendar removed.');
+  }
+
+  async function retrySafeSave() {
+    if (!onRetryLocalSave) return;
+    const retryError = await onRetryLocalSave();
+    setError(retryError ?? 'The saved document is now safe. Save this calendar again to apply your changes.');
   }
 
   return (
@@ -277,6 +285,16 @@ export function CalendarSourcesSettings({
             />
             Enable this calendar
           </label>
+          {error?.includes('immutable-recovery-copy-failed at schemaVersion')
+            && onRetryLocalSave && (
+              <button
+                type="button"
+                className="btn mini ghost"
+                onClick={() => void retrySafeSave()}
+              >
+                Try safe save again
+              </button>
+            )}
           <div className="calendar-sources-settings__form-actions">
             <button type="submit" className="btn mini">Save calendar</button>
             <button type="button" className="btn mini ghost" onClick={() => setDraft(null)}>Cancel</button>
