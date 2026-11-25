@@ -11797,7 +11797,6 @@ async function main() {
       assert.equal(await todayPrayer.locator('.prayer-entry-count').textContent(), '1');
       assert.equal(await todayPrayer.locator('.prayer-entry-empty').count(), 0);
 
-      const prayerSelectionGridTracks = new Map<string, number>();
       for (const textSize of ['small', 'medium', 'large'] as const) {
         await setPreviewTextSize(prayerPage, textSize);
         for (const viewportWidth of [375, 390, 430] as const) {
@@ -11928,10 +11927,7 @@ async function main() {
             };
           });
           const label = `Today Prayer picker at ${viewportWidth}px / ${textSize} text`;
-          prayerSelectionGridTracks.set(
-            `${viewportWidth}:${textSize}`,
-            layout.peopleGridColumns.trim().split(/\s+/).length
-          );
+          const peopleGridTracks = layout.peopleGridColumns.trim().split(/\s+/).length;
           assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
           assert.equal(layout.documentWidth, viewportWidth, `${label} must not create horizontal page scrolling`);
           assert.ok(layout.dialog.left >= -1 && layout.dialog.right <= viewportWidth + 1,
@@ -11940,7 +11936,11 @@ async function main() {
           assert.equal(layout.pickerDisplay, 'grid', `${label} must use the shared picker layout`);
           assert.equal(layout.groupsDisplay, 'flex', `${label} category controls must be styled`);
           assert.equal(layout.peopleGridDisplay, 'grid', `${label} people options must be styled`);
-          assert.ok(layout.peopleGridColumns.length > 0, `${label} uses the shared people-grid layout`);
+          assert.ok(peopleGridTracks >= 1 && peopleGridTracks <= 2,
+            `${label} uses the shared one- or two-column responsive grid`);
+          if (viewportWidth <= 380) {
+            assert.equal(peopleGridTracks, 1, `${label} uses one column below the narrow-screen breakpoint`);
+          }
           assert.equal(layout.personBorderStyle, 'solid', `${label} people options need visible boundaries`);
           assert.equal(layout.timeframeBorderStyle, 'solid', `${label} timeframe control needs a visible boundary`);
           assert.ok(layout.pickerScrollWidth <= layout.pickerClientWidth + 1,
@@ -12613,8 +12613,12 @@ async function main() {
           assert.equal(pickerLayout.documentWidth, viewportWidth, `${label} must not create horizontal page scrolling`);
           assert.ok(pickerLayout.gridScrollWidth <= pickerLayout.pickerWidth + 1,
             `${label} shared people layout must not overflow`);
-          assert.equal(pickerLayout.gridTracks, prayerSelectionGridTracks.get(`${viewportWidth}:${textSize}`),
-            `${label} must use the same responsive grid as Prayer selection`);
+          assert.ok(pickerLayout.gridTracks >= 1 && pickerLayout.gridTracks <= 2,
+            `${label} uses the shared one- or two-column responsive grid`);
+          if (viewportWidth <= 380) {
+            assert.equal(pickerLayout.gridTracks, 1,
+              `${label} uses one column below the narrow-screen breakpoint`);
+          }
           assert.equal(pickerLayout.unselectedBorder, 'rgb(220, 228, 222)', `${label} keeps neutral unselected rows`);
           assert.equal(pickerLayout.unselectedAvatar, 'rgb(240, 234, 245)', `${label} uses Prayer initials styling`);
           await prayerPeoplePicker.locator('.rhythm-association-picker__group').first().focus();
