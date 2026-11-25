@@ -43,6 +43,7 @@ export function PersonPrayerPanel({
   requests,
   targetRequestId,
   onCreate,
+  onRetryLocalSave,
   onUpdate,
   onTransition,
   onPray,
@@ -61,6 +62,7 @@ export function PersonPrayerPanel({
   requests: readonly PersonPrayerRequest[];
   targetRequestId?: string | null;
   onCreate: (personId: PersonId, draft: PersonPrayerRequestDraft) => string | null;
+  onRetryLocalSave?: () => Promise<string | null>;
   onUpdate: (
     requestId: string,
     expectedUpdatedAt: string,
@@ -183,6 +185,15 @@ export function PersonPrayerPanel({
     }
     editor.onReturn?.();
     setEditor(null);
+  }
+
+  async function retrySafeSave() {
+    if (!onRetryLocalSave) return;
+    const retryError = await onRetryLocalSave();
+    setEditor(current => current ? {
+      ...current,
+      error: retryError ?? 'The saved document is now safe. Save again to apply this prayer request.'
+    } : current);
   }
 
   function closeEditor() {
@@ -406,6 +417,16 @@ export function PersonPrayerPanel({
               </button>
             </div>
             {editor.error && <p className="person-prayer-panel__error" role="alert">{editor.error}</p>}
+            {editor.error.includes('immutable-recovery-copy-failed at schemaVersion')
+              && onRetryLocalSave && (
+                <button
+                  type="button"
+                  className="btn mini ghost"
+                  onClick={() => void retrySafeSave()}
+                >
+                  Try safe save again
+                </button>
+              )}
             <div className="person-prayer-form__actions">
               <button type="button" className="btn mini ghost" onClick={closeEditor}>Cancel</button>
               <button type="submit" className="btn mini">{editor.request ? 'Save changes' : 'Save request'}</button>

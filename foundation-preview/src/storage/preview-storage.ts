@@ -67,6 +67,12 @@ import {
   proposedV4RecoveryKeyForRaw,
   proposedV4SourceVersionForRaw
 } from './preview-v4-recovery.ts';
+import {
+  IndexedDbPreviewImmutableRecoveryArchive
+} from './preview-recovery-indexeddb.ts';
+import type {
+  PreviewImmutableRecoveryArchive
+} from './preview-recovery-indexeddb.ts';
 
 export {
   PREVIEW_STORAGE_KEY,
@@ -136,7 +142,12 @@ export const PREVIEW_ACCOUNT_STORAGE_PREFIX = 'tend2:preview:account';
 const previewImportRecoveryFormat = 'tend.preview-import-recovery';
 const previewImportSyncGuardFormat = 'tend.preview-import-sync-guard';
 
-export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'> & Partial<Pick<Storage, 'removeItem'>>;
+export type PreviewStorage = Pick<Storage, 'getItem' | 'setItem'> & Partial<Pick<Storage, 'removeItem'>> & {
+  prepareImmutableRecoveryCopy?: (
+    raw: string
+  ) => PreviewRecoveryPreparationResult | Promise<PreviewRecoveryPreparationResult>;
+  loadImmutableRecoveryCopies?: () => void | Promise<void>;
+};
 export type PreviewStorageScope = {
   key: string;
   storage: PreviewStorage;
@@ -216,6 +227,12 @@ export type PreviewRecoveryFailure =
   | { kind: 'read-back-exception'; errorName: PreviewRecoveryErrorName }
   | { kind: 'storage-read-exception'; errorName: PreviewRecoveryErrorName }
   | { kind: 'exact-byte-mismatch' };
+
+export type PreviewRecoveryPreparationResult =
+  | { kind: 'not-needed' }
+  | { kind: 'prepared' }
+  | { kind: 'conflict' }
+  | { kind: 'error'; failure: PreviewRecoveryFailure };
 
 export function createPreviewStorageScope(
   storage: PreviewStorage,
@@ -1127,15 +1144,239 @@ export function writePreview(
   }
 }
 
-export function browserPreviewStorage(
-  identity: PreviewIdentityState = DEVELOPMENT_PREVIEW_IDENTITY
+function previewRecoveryErrorName(error: unknown): PreviewRecoveryErrorName {
+  let name: unknown;
+  try {
+    name = typeof error === 'object' && error !== null && 'name' in error
+      ? error.name
+      : null;
+  } catch {
+    name = null;
+  }
+  switch (name) {
+    case 'QuotaExceededError':
+    case 'SecurityError':
+    case 'InvalidStateError':
+    case 'UnknownError':
+      return name;
+    default:
+      return 'UnknownError';
+  }
+}
+
+function preparationError(failure: PreviewRecoveryFailure): PreviewRecoveryPreparationResult {
+  return { kind: 'error', failure };
+}
+
+function createPreparationArchiveKey(scopeKey: string, recoveryKey: string): string {
+  return `${scopeKey}${recoveryKey.slice(PREVIEW_STORAGE_KEY.length)}`;
+}
+
+function writeAndVerifyLocalRecoveryCopy(
+  scopedStorage: PreviewStorage,
+  recoveryKey: string,
+  raw: string
+): PreviewRecoveryPreparationResult {
+  try {
+    scopedStorage.setItem(recoveryKey, raw);
+  } catch (error) {
+    return preparationError({
+      kind: 'backup-write-exception',
+      errorName: previewRecoveryErrorName(error)
+    });
+  }
+
+  let actualRawAfterCopy: string | null;
+  let recoveryRaw: string | null;
+  try {
+    actualRawAfterCopy = scopedStorage.getItem(PREVIEW_STORAGE_KEY);
+    recoveryRaw = scopedStorage.getItem(recoveryKey);
+  } catch (error) {
+    return preparationError({
+      kind: 'read-back-exception',
+      errorName: previewRecoveryErrorName(error)
+    });
+  }
+  if (actualRawAfterCopy !== raw) return { kind: 'conflict' };
+  if (recoveryRaw !== raw) {
+    if (recoveryRaw !== null) return { kind: 'conflict' };
+    return preparationError({ kind: 'exact-byte-mismatch' });
+  }
+  return { kind: 'prepared' };
+}
+
+function isBackupWriteFailure(
+  result: PreviewRecoveryPreparationResult
+): result is Extract<PreviewRecoveryPreparationResult, { kind: 'error' }> {
+  return result.kind === 'error' && result.failure.kind === 'backup-write-exception';
+}
+
+function createPreviewRecoveryPreparation(
+  scopedStorage: PreviewStorage,
+  scopeKey: string,
+  recoveryArchive: PreviewImmutableRecoveryArchive | null,
+  recoveryCache: Map<string, string>
+): (raw: string) => PreviewRecoveryPreparationResult | Promise<PreviewRecoveryPreparationResult> {
+  return raw => {
+    const recoveryKey = proposedV4RecoveryKeyForRaw(raw);
+    if (!recoveryKey) return { kind: 'not-needed' };
+
+    let activeRaw: string | null;
+    let existingLocalRaw: string | null;
+    try {
+      activeRaw = scopedStorage.getItem(PREVIEW_STORAGE_KEY);
+      if (activeRaw !== raw) return { kind: 'conflict' };
+      existingLocalRaw = scopedStorage.getItem(recoveryKey);
+    } catch (error) {
+      return preparationError({
+        kind: 'storage-read-exception',
+        errorName: previewRecoveryErrorName(error)
+      });
+    }
+    if (existingLocalRaw === raw) return { kind: 'prepared' };
+    if (existingLocalRaw !== null) return { kind: 'conflict' };
+    if (!recoveryArchive) {
+      return writeAndVerifyLocalRecoveryCopy(scopedStorage, recoveryKey, raw);
+    }
+
+    const archiveKey = createPreparationArchiveKey(scopeKey, recoveryKey);
+    return (async () => {
+      let existingArchiveRaw: string | null;
+      try {
+        existingArchiveRaw = await recoveryArchive.get(archiveKey);
+      } catch (error) {
+        return preparationError({
+          kind: 'storage-read-exception',
+          errorName: previewRecoveryErrorName(error)
+        });
+      }
+      if (existingArchiveRaw !== null) {
+        if (existingArchiveRaw !== raw) return { kind: 'conflict' };
+        try {
+          if (scopedStorage.getItem(PREVIEW_STORAGE_KEY) !== raw) return { kind: 'conflict' };
+        } catch (error) {
+          return preparationError({
+            kind: 'read-back-exception',
+            errorName: previewRecoveryErrorName(error)
+          });
+        }
+        recoveryCache.set(recoveryKey, raw);
+        return { kind: 'prepared' };
+      }
+
+      const localResult = writeAndVerifyLocalRecoveryCopy(scopedStorage, recoveryKey, raw);
+      if (!isBackupWriteFailure(localResult)) return localResult;
+
+      let writeResult: 'added' | 'exists';
+      try {
+        writeResult = await recoveryArchive.addIfAbsent(archiveKey, raw);
+      } catch (error) {
+        return preparationError({
+          kind: 'backup-write-exception',
+          errorName: previewRecoveryErrorName(error)
+        });
+      }
+
+      let recoveryRaw: string | null;
+      try {
+        recoveryRaw = await recoveryArchive.get(archiveKey);
+      } catch (error) {
+        return preparationError({
+          kind: 'read-back-exception',
+          errorName: previewRecoveryErrorName(error)
+        });
+      }
+      if (writeResult === 'exists' && recoveryRaw !== raw) return { kind: 'conflict' };
+      if (recoveryRaw !== raw) {
+        return preparationError({ kind: 'exact-byte-mismatch' });
+      }
+      try {
+        if (scopedStorage.getItem(PREVIEW_STORAGE_KEY) !== raw) return { kind: 'conflict' };
+      } catch (error) {
+        return preparationError({
+          kind: 'read-back-exception',
+          errorName: previewRecoveryErrorName(error)
+        });
+      }
+      recoveryCache.set(recoveryKey, raw);
+      return { kind: 'prepared' };
+    })();
+  };
+}
+
+export function createPreviewBrowserStorage(
+  storage: PreviewStorage,
+  identity: PreviewIdentityState,
+  recoveryArchive?: PreviewImmutableRecoveryArchive | null
 ): PreviewStorage {
-  const scope = createPreviewStorageScope({
+  const scope = createPreviewStorageScope(storage, identity);
+  if (!scope) throw new Error('Preview storage is unavailable without an authenticated identity.');
+  const archive = recoveryArchive === undefined
+    ? typeof globalThis.indexedDB === 'undefined'
+      ? null
+      : new IndexedDbPreviewImmutableRecoveryArchive(globalThis.indexedDB)
+    : recoveryArchive;
+  const recoveryCache = new Map<string, string>();
+  let recoveryArchiveReadError: DOMException | null = null;
+  const adapter: PreviewStorage = {
+    getItem: key => {
+      const cachedRaw = recoveryCache.get(key);
+      let localRaw: string | null;
+      try {
+        localRaw = scope.storage.getItem(key);
+      } catch (error) {
+        if (cachedRaw !== undefined) return cachedRaw;
+        if (recoveryArchiveReadError && /^tend2:synthetic-preview:v\d+-recovery$/.test(key)) {
+          throw recoveryArchiveReadError;
+        }
+        throw error;
+      }
+      if (localRaw !== null) return localRaw;
+      if (cachedRaw !== undefined) return cachedRaw;
+      if (recoveryArchiveReadError && /^tend2:synthetic-preview:v\d+-recovery$/.test(key)) {
+        throw recoveryArchiveReadError;
+      }
+      return null;
+    },
+    setItem: (key, value) => scope.storage.setItem(key, value),
+    ...(scope.storage.removeItem
+      ? { removeItem: (key: string) => scope.storage.removeItem?.(key) }
+      : {}),
+    prepareImmutableRecoveryCopy: createPreviewRecoveryPreparation(
+      scope.storage,
+      scope.key,
+      archive,
+      recoveryCache
+    ),
+    loadImmutableRecoveryCopies: () => {
+      if (!archive) return;
+      return archive.getAll(`${scope.key}:v`).then(entries => {
+        for (const entry of entries) {
+          const suffix = entry.key.slice(scope.key.length);
+          if (/^:v\d+-recovery$/.test(suffix)) {
+            recoveryCache.set(`${PREVIEW_STORAGE_KEY}${suffix}`, entry.raw);
+          }
+        }
+        recoveryArchiveReadError = null;
+      }).catch(error => {
+        recoveryArchiveReadError = new DOMException(
+          'Immutable recovery archive is unavailable.',
+          previewRecoveryErrorName(error)
+        );
+      });
+    }
+  };
+  return adapter;
+}
+
+export function browserPreviewStorage(
+  identity: PreviewIdentityState = DEVELOPMENT_PREVIEW_IDENTITY,
+  recoveryArchive?: PreviewImmutableRecoveryArchive | null
+): PreviewStorage {
+  return createPreviewBrowserStorage({
     getItem: key => window.localStorage.getItem(key),
     setItem: (key, value) => window.localStorage.setItem(key, value)
-  }, identity);
-  if (!scope) throw new Error('Preview storage is unavailable without an authenticated identity.');
-  return scope.storage;
+  }, identity, recoveryArchive);
 }
 
 export function loadV1RecoveryCopy(storage: PreviewStorage): RecoveryCopyReadResult {
