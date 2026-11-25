@@ -22895,7 +22895,7 @@ button.strength-guided__performance:focus-visible {
   align-items: baseline;
   justify-content: center;
   flex-wrap: nowrap;
-  gap: 3px;
+  gap: 0;
   max-width: 100%;
   white-space: nowrap;
   font-size: calc(18px * var(--app-text-scale, 1));

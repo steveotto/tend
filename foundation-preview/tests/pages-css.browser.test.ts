@@ -2772,6 +2772,11 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
               const iconRect = icon?.getBoundingClientRect();
               const strongRect = strong?.getBoundingClientRect();
               const deltaRect = delta.getBoundingClientRect();
+              const valuePartsFit = [caret, text, unit].every(part => {
+                const rect = part?.getBoundingClientRect();
+                return !!rect && rect.left >= deltaRect.left - 1
+                  && rect.right <= deltaRect.right + 1;
+              });
               return {
                 background: getComputedStyle(delta).backgroundColor,
                 height: delta.getBoundingClientRect().height,
@@ -2786,7 +2791,8 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
                 unitText: unit?.textContent?.trim() ?? null,
                 strongFits: !!strongRect
                   && strongRect.left >= deltaRect.left - 1
-                  && strongRect.right <= deltaRect.right + 1,
+                  && strongRect.right <= deltaRect.right + 1
+                  && valuePartsFit,
                 iconAndLabel: !!dtRect && !!iconRect
                   && Math.abs(iconRect.top - dtRect.top) < 2
                   && iconRect.left < dtRect.right,
