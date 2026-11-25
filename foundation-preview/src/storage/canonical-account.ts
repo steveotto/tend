@@ -44,6 +44,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function classicPrayerSharedWith(prayer: Record<string, unknown>): string[] {
+  if (prayer.sharedWith === undefined) return [];
+  if (!Array.isArray(prayer.sharedWith)
+    || !prayer.sharedWith.every(personId => typeof personId === 'string')) {
+    throw new Error('A canonical Prayer record has invalid participant references. No data was changed.');
+  }
+  return prayer.sharedWith;
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 function errorCode(error: unknown): string {
   return isRecord(error) && typeof error.code === 'string' ? error.code : '';
 }
@@ -190,28 +203,38 @@ function previewSchedule(schedule: RhythmSchedule | undefined):
 export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnvelope {
   const data: PreviewData = createEmptyPreviewData();
   if (!isRecord(state)) return createPreviewEnvelope(data);
+  if (state.people !== undefined && !Array.isArray(state.people)) {
+    throw new Error('Canonical People records have an invalid collection shape. No data was changed.');
+  }
+  if (state.prayers !== undefined && !Array.isArray(state.prayers)) {
+    throw new Error('Canonical Prayer records have an invalid collection shape. No data was changed.');
+  }
+  const classicPrayers = Array.isArray(state.prayers) ? state.prayers : [];
   const previousEnvelope = storedPreviewEnvelope(state);
   const previousRequests = previousEnvelope?.data.prayerRequests ?? [];
 
   if (Array.isArray(state.people)) {
-    data.people = state.people.flatMap((person): PersonPreview[] => {
-      if (!isRecord(person) || typeof person.id !== 'string' || typeof person.name !== 'string') return [];
-      return [{ id: person.id as PersonPreview['id'], displayName: person.name }];
+    data.people = state.people.map((person): PersonPreview => {
+      if (!isRecord(person) || typeof person.id !== 'string' || typeof person.name !== 'string') {
+        throw new Error('A canonical Person record has an invalid structure. No data was changed.');
+      }
+      return { id: person.id as PersonPreview['id'], displayName: person.name };
     });
   }
 
   const canonicalPersonIds = new Set(data.people.map(person => person.id));
   const referencedPersonIds = new Set<string>();
-  if (Array.isArray(state.prayers)) {
-    for (const prayer of state.prayers) {
-      if (!isRecord(prayer)) continue;
-      if (typeof prayer.personId === 'string') referencedPersonIds.add(prayer.personId);
-      if (Array.isArray(prayer.sharedWith)) {
-        prayer.sharedWith.forEach(id => {
-          if (typeof id === 'string') referencedPersonIds.add(id);
-        });
-      }
+  for (const prayer of classicPrayers) {
+    if (!isRecord(prayer) || typeof prayer.id !== 'string') {
+      throw new Error('A canonical Prayer record has an invalid structure. No data was changed.');
     }
+    if (prayer.personId !== undefined && typeof prayer.personId !== 'string') {
+      throw new Error('A canonical Prayer record has an invalid owner reference. No data was changed.');
+    }
+    const sharedWith = classicPrayerSharedWith(prayer);
+    const ownerId = prayer.personId;
+    if (typeof ownerId === 'string') referencedPersonIds.add(ownerId);
+    sharedWith.forEach(personId => referencedPersonIds.add(personId));
   }
   const previousPeople = previousEnvelope?.data.people;
   if (Array.isArray(previousPeople)) {
@@ -229,103 +252,105 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
     }
   }
 
-  if (Array.isArray(state.prayers)) {
-    data.prayerRequests = state.prayers.flatMap((prayer): PersonPrayerRequest[] => {
-      if (!isRecord(prayer) || typeof prayer.id !== 'string') return [];
-      const personId = typeof prayer.personId === 'string'
-        ? prayer.personId
-        : Array.isArray(prayer.sharedWith) && typeof prayer.sharedWith[0] === 'string'
-          ? prayer.sharedWith[0]
-          : null;
-      if (personId === null) return [];
-      if (!data.people.some(person => person.id === personId)) {
-        throw new Error(
-          'A canonical Prayer request references a Person missing from the account and its saved Prayer metadata. No data was changed.'
-        );
-      }
+  data.prayerRequests = classicPrayers.map((prayer): PersonPrayerRequest => {
+    if (!isRecord(prayer) || typeof prayer.id !== 'string') {
+      throw new Error('A canonical Prayer record has an invalid structure. No data was changed.');
+    }
+    const prayerId = prayer.id;
+    const classicSharedWith = classicPrayerSharedWith(prayer);
+    const personId = typeof prayer.personId === 'string'
+      ? prayer.personId
+      : typeof classicSharedWith[0] === 'string'
+        ? classicSharedWith[0]
+        : null;
+    if (personId === null) {
+      throw new Error('A canonical Prayer record has no resolvable owner. No data was changed.');
+    }
+    if (!data.people.some(person => person.id === personId)) {
+      throw new Error(
+        'A canonical Prayer request references a Person missing from the account and its saved Prayer metadata. No data was changed.'
+      );
+    }
 
-      let logs: PersonPrayerRequest['prayerLogs'] = [];
-      if (Array.isArray(prayer.prayerLogs)) {
-        logs = prayer.prayerLogs.map((log, index) =>
-          parseClassicPrayerLog(log, prayer.id as string, index)
-        );
-        if (logs.length === 0) {
-          const legacy = validDateOnly(prayer.lastPrayed)
-            ? {
-                id: `${prayer.id}-legacy-log`,
-                prayedOn: prayer.lastPrayed,
-                editable: false as const
-              }
-            : timestamp(prayer.lastPrayed)
-              ? {
-                  id: `${prayer.id}-legacy-log`,
-                  prayedAt: timestamp(prayer.lastPrayed)!,
-                  editable: false as const
-                }
-              : null;
-          if (legacy) logs = [legacy];
-        }
-        const previous = previousRequests.find(request => request.id === prayer.id);
-        if (previous) {
-          const previousBySignature = new Map<string, PersonPrayerRequest['prayerLogs'][number][]>();
-          for (const log of previous.prayerLogs) {
-            const signature = prayerLogSignature(log);
-            previousBySignature.set(signature, [...(previousBySignature.get(signature) ?? []), log]);
-          }
-          logs = logs.map(log => {
-            const matches = previousBySignature.get(prayerLogSignature(log));
-            const match = matches?.shift();
-            return match ? { ...match } : log;
-          });
-        }
-      } else {
+    let logs: PersonPrayerRequest['prayerLogs'] = [];
+    if (Array.isArray(prayer.prayerLogs)) {
+      logs = prayer.prayerLogs.map((log, index) =>
+        parseClassicPrayerLog(log, prayerId, index)
+      );
+      if (logs.length === 0) {
         const legacy = validDateOnly(prayer.lastPrayed)
           ? {
-              id: `${prayer.id}-legacy-log`,
+            id: `${prayerId}-legacy-log`,
               prayedOn: prayer.lastPrayed,
               editable: false as const
             }
           : timestamp(prayer.lastPrayed)
             ? {
-                id: `${prayer.id}-legacy-log`,
+                id: `${prayerId}-legacy-log`,
                 prayedAt: timestamp(prayer.lastPrayed)!,
                 editable: false as const
               }
             : null;
         if (legacy) logs = [legacy];
       }
+      const previous = previousRequests.find(request => request.id === prayerId);
+      if (previous) {
+        const previousBySignature = new Map<string, PersonPrayerRequest['prayerLogs'][number][]>();
+        for (const log of previous.prayerLogs) {
+          const signature = prayerLogSignature(log);
+          previousBySignature.set(signature, [...(previousBySignature.get(signature) ?? []), log]);
+        }
+        logs = logs.map(log => {
+          const matches = previousBySignature.get(prayerLogSignature(log));
+          const match = matches?.shift();
+          return match ? { ...match } : log;
+        });
+      }
+    } else {
+      const legacy = validDateOnly(prayer.lastPrayed)
+        ? {
+          id: `${prayerId}-legacy-log`,
+            prayedOn: prayer.lastPrayed,
+            editable: false as const
+          }
+        : timestamp(prayer.lastPrayed)
+          ? {
+            id: `${prayerId}-legacy-log`,
+            prayedAt: timestamp(prayer.lastPrayed)!,
+            editable: false as const
+            }
+          : null;
+      if (legacy) logs = [legacy];
+    }
 
-      const createdAt = timestamp(prayer.added) ?? timestamp(prayer.createdAt) ?? '1970-01-01T00:00:00.000Z';
-      const updatedAt = timestamp(prayer.updatedAt) ?? createdAt;
-      const status = prayer.answered ? 'answered' : prayer.archived ? 'archived' : 'active';
-      const schedule = classicSchedule(prayer);
-      const timeOfDay = previewTime(prayer.tod);
-      const previousRequest = previousRequests.find(request => request.id === prayer.id);
-      const sharedWith = Array.isArray(prayer.sharedWith)
-        ? prayer.sharedWith.filter((id): id is string => typeof id === 'string')
-        : [];
-      return [{
-        id: prayer.id,
-        personId: personId as PersonPrayerRequest['personId'],
-        ...(sharedWith.length > 0 ? { sharedWith } : {}),
-        title: typeof prayer.text === 'string' ? prayer.text : 'Prayer',
-        ...(typeof prayer.details === 'string' ? { details: prayer.details } : {}),
-        status,
-        ...(schedule ? { schedule } : {}),
-        ...(timeOfDay ? { timeOfDay } : {}),
-        ...(previousRequest?.scoring === undefined ? {} : { scoring: previousRequest.scoring }),
-        createdAt,
-        updatedAt,
-        ...(status === 'answered' && typeof prayer.answeredDate === 'string'
-          ? { answeredAt: timestamp(prayer.answeredDate) ?? updatedAt }
-          : {}),
-        ...(status === 'archived' && typeof prayer.archivedDate === 'string'
-          ? { archivedAt: timestamp(prayer.archivedDate) ?? updatedAt }
-          : {}),
-        prayerLogs: logs
-      }];
-    });
-  }
+    const createdAt = timestamp(prayer.added) ?? timestamp(prayer.createdAt) ?? '1970-01-01T00:00:00.000Z';
+    const updatedAt = timestamp(prayer.updatedAt) ?? createdAt;
+    const status = prayer.answered ? 'answered' : prayer.archived ? 'archived' : 'active';
+    const schedule = classicSchedule(prayer);
+    const timeOfDay = previewTime(prayer.tod);
+    const previousRequest = previousRequests.find(request => request.id === prayerId);
+    const sharedWith = classicSharedWith.filter(id => id !== personId);
+    return {
+      id: prayerId,
+      personId: personId as PersonPrayerRequest['personId'],
+      ...(sharedWith.length > 0 ? { sharedWith } : {}),
+      title: typeof prayer.text === 'string' ? prayer.text : 'Prayer',
+      ...(typeof prayer.details === 'string' ? { details: prayer.details } : {}),
+      status,
+      ...(schedule ? { schedule } : {}),
+      ...(timeOfDay ? { timeOfDay } : {}),
+      ...(previousRequest?.scoring === undefined ? {} : { scoring: previousRequest.scoring }),
+      createdAt,
+      updatedAt,
+      ...(status === 'answered' && typeof prayer.answeredDate === 'string'
+        ? { answeredAt: timestamp(prayer.answeredDate) ?? updatedAt }
+        : {}),
+      ...(status === 'archived' && typeof prayer.archivedDate === 'string'
+        ? { archivedAt: timestamp(prayer.archivedDate) ?? updatedAt }
+        : {}),
+      prayerLogs: logs
+    };
+  });
 
   return createPreviewEnvelope(data);
 }
@@ -334,6 +359,12 @@ export function mergePrayerRequestsIntoClassicState(
   state: Record<string, unknown>,
   envelope: PreviewEnvelope
 ): Record<string, unknown> {
+  if (state.prayers !== undefined && !Array.isArray(state.prayers)) {
+    throw new CanonicalAccountSaveError(
+      'invalid',
+      'The canonical Prayer collection is invalid. No data was changed.'
+    );
+  }
   const existing = Array.isArray(state.prayers) ? state.prayers : [];
   const nextIds = new Set(envelope.data.prayerRequests.map(request => request.id));
   const unsupportedIds = new Set(
@@ -355,9 +386,10 @@ export function mergePrayerRequestsIntoClassicState(
       ? original.sharedWith.filter((id): id is string => typeof id === 'string')
       : [];
     const originalStatus = original.answered ? 'answered' : original.archived ? 'archived' : 'active';
+    const requestSharedWith = request.sharedWith ?? [];
     const changed = request.title !== originalTitle
       || (request.details ?? undefined) !== originalDetails
-      || JSON.stringify(request.sharedWith ?? []) !== JSON.stringify(originalShared)
+      || JSON.stringify(requestSharedWith) !== JSON.stringify(originalShared.filter(id => id !== request.personId))
       || request.status !== originalStatus
       || request.schedule !== undefined
       || request.timeOfDay !== undefined;
@@ -398,13 +430,24 @@ export function mergePrayerRequestsIntoClassicState(
     const previousLogs = previousRequest?.prayerLogs ?? [];
     const legacyOnly = request.prayerLogs.length > 0
       && request.prayerLogs.every(log => log.id.endsWith('-legacy-log'));
+    const originalSharedWith = isRecord(original)
+      && Array.isArray(original.sharedWith)
+      && original.sharedWith.every(personId => typeof personId === 'string')
+      ? original.sharedWith as string[]
+      : null;
+    const requestSharedWith = request.sharedWith ?? [];
+    const preserveLegacyOwnerMembership = originalSharedWith?.includes(request.personId) === true
+      && sameStrings(
+        originalSharedWith.filter(personId => personId !== request.personId),
+        requestSharedWith
+      );
     const output: Record<string, unknown> = {
       ...(isRecord(original) ? original : {}),
       id: request.id,
       text: request.title,
       ...(request.details ? { details: request.details } : {}),
       personId: request.personId,
-      sharedWith: request.sharedWith ?? [],
+      sharedWith: preserveLegacyOwnerMembership ? originalSharedWith : requestSharedWith,
       updatedAt: request.updatedAt
     };
     delete output.answered;

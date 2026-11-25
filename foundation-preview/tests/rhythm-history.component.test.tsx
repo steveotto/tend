@@ -1876,7 +1876,7 @@ describe('shared Rhythm history', () => {
     const { rhythm, records } = scoredTodayFixture();
     render(
       <RhythmHistoryView
-        rhythm={rhythm}
+        rhythm={{ ...rhythm, timeLabel: undefined }}
         datedCompletions={records}
         completionHistoryAvailable
       />
@@ -2227,7 +2227,10 @@ describe('shared Rhythm history', () => {
 
     rerender(
       <RhythmHistoryView
-        rhythm={rhythmForSchedule({ frequency: 'daily' }, addCalendarDays(asOfDate, -2))}
+        rhythm={{
+          ...rhythmForSchedule({ frequency: 'daily' }, addCalendarDays(asOfDate, -2)),
+          timeLabel: undefined
+        }}
         completionHistoryAvailable
       />
     );
@@ -2452,14 +2455,14 @@ describe('shared Rhythm history', () => {
   it('labels a pending current date as current state rather than as a missed occurrence', async () => {
     const user = userEvent.setup();
     const asOfDate = localDateInTimeZone(new Date(), 'UTC');
-    const rhythm = rhythmForSchedule({ frequency: 'daily' }, addCalendarDays(asOfDate, -1));
+    const rhythm = rhythmForSchedule({ frequency: 'daily' }, addCalendarDays(asOfDate, -2));
     render(<RhythmHistoryView rhythm={rhythm} completionHistoryAvailable />);
     await openRhythmScoringDetails(user);
     const timeline = screen.getByRole('list', { name: 'On Track score changes' });
     const entries = within(timeline).getAllByRole('listitem');
     expect(entries.map(entry => entry.querySelector('span:nth-child(2)')?.textContent)).toEqual([
-      `${shortTestDate(addCalendarDays(asOfDate, -1))} · Created`,
-      `${shortTestDate(addCalendarDays(asOfDate, -1))} · Missed`,
+      `${shortTestDate(addCalendarDays(asOfDate, -2))} · Created`,
+      `${shortTestDate(addCalendarDays(asOfDate, -2))} · Missed`,
       `Today · ${shortTestDate(asOfDate)}`
     ]);
     expect(entries[1]?.getAttribute('aria-label')).toMatch(/Missed scheduled occurrence on/);
@@ -2925,8 +2928,10 @@ describe('shared Rhythm history', () => {
   });
 
   it('shows the first missed Rhythm opportunity as zero with an honest never-tended explanation', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
     const user = userEvent.setup();
     const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    vi.setSystemTime(new Date(`${asOfDate}T19:00:00.000Z`));
     const trackingStartDate = addCalendarDays(asOfDate, -1);
     const schedule = { frequency: 'daily' as const };
     const rhythmId = 'never-tended-daily-connection';

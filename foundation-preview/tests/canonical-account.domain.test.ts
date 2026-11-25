@@ -9,7 +9,8 @@ import type { CanonicalAccountSupabaseClient } from '../src/storage/canonical-ac
 import {
   createPreviewEnvelope,
   createEmptyPreviewData,
-  PREVIEW_SCHEMA_VERSION
+  PREVIEW_SCHEMA_VERSION,
+  validatePreviewEnvelope
 } from '../src/domain/preview-state.ts';
 import type { PreviewEnvelope } from '../src/domain/preview-state.ts';
 import { selectPersonPrayerHealth } from '../src/domain/person-prayer-health.ts';
@@ -46,6 +47,78 @@ function clientFor(state: Record<string, unknown>, saveResult: unknown = { revis
 }
 
 describe('canonical authenticated account adapter', () => {
+  it('validates legacy owner membership on a fresh device without rewriting its raw association', () => {
+    const classic = {
+      people: [
+        { id: 'avery', name: 'Avery' },
+        { id: 'morgan', name: 'Morgan' }
+      ],
+      prayers: [{
+        id: 'legacy-prayer',
+        personId: 'avery',
+        sharedWith: ['avery', 'morgan'],
+        text: 'Synthetic legacy request',
+        added: '2026-11-20',
+        updatedAt: '2026-11-24T12:00:00.000Z',
+        freq: 'daily',
+        prayerLogs: [Date.parse('2026-11-22T12:00:00.000Z')],
+        unknownPrayerField: { preserve: true }
+      }],
+      unrelatedAccountField: { preserve: true }
+    };
+
+    const freshDeviceEnvelope = convertClassicStateToPreviewEnvelope(classic);
+    const validation = validatePreviewEnvelope(freshDeviceEnvelope, '2026-11-25');
+    expect(validation.valid).toBe(true);
+    expect(freshDeviceEnvelope.data.prayerRequests[0]?.sharedWith).toEqual(['morgan']);
+    expect(freshDeviceEnvelope.data.prayerRequests[0]?.prayerLogs).toMatchObject([{
+      prayedAt: '2026-11-22T12:00:00.000Z'
+    }]);
+
+    const merged = mergePrayerRequestsIntoClassicState(classic, freshDeviceEnvelope);
+    expect(merged.prayers).toMatchObject([{
+      id: 'legacy-prayer',
+      personId: 'avery',
+      sharedWith: ['avery', 'morgan'],
+      unknownPrayerField: { preserve: true }
+    }]);
+    expect(merged.unrelatedAccountField).toEqual({ preserve: true });
+  });
+
+  it('reports malformed canonical Prayer rows instead of silently omitting them', () => {
+    expect(() => convertClassicStateToPreviewEnvelope({
+      people: [{ id: 'avery', name: 'Avery' }],
+      prayers: [{ text: 'Unresolved synthetic row' }]
+    })).toThrow('canonical Prayer record');
+  });
+
+  it('rejects malformed People collections and rows instead of omitting account records', () => {
+    expect(() => convertClassicStateToPreviewEnvelope({
+      people: { id: 'avery', name: 'Avery' },
+      prayers: []
+    })).toThrow('People records have an invalid collection shape');
+    expect(() => convertClassicStateToPreviewEnvelope({
+      people: [{ id: 'avery' }],
+      prayers: []
+    })).toThrow('canonical Person record');
+  });
+
+  it('does not replace a malformed canonical Prayer collection during a save', async () => {
+    const state = {
+      people: [{ id: 'avery', name: 'Avery' }],
+      prayers: { unexpected: true },
+      unrelatedAccountField: { preserve: true }
+    };
+    const { client, rpc } = clientFor(state);
+    const api = createCanonicalAccountApi(client);
+
+    await expect(api.save(createPreviewEnvelope(createEmptyPreviewData()), 1))
+      .rejects.toMatchObject({ kind: 'invalid' });
+    expect(rpc).not.toHaveBeenCalled();
+    expect(state.prayers).toEqual({ unexpected: true });
+    expect(state.unrelatedAccountField).toEqual({ preserve: true });
+  });
+
   it('converts a Classic person prayer and eligible history into the canonical React request model', async () => {
     const { client } = clientFor({
       people: [{ id: 'avery', name: 'Avery' }],
@@ -591,7 +664,10 @@ describe('canonical authenticated account adapter', () => {
 
   it('preserves unrelated canonical fields and unknown Prayer fields across merge and conversion', () => {
     const classic = {
-      people: [{ id: 'avery', name: 'Avery', privateProfileField: 'keep-me' }],
+      people: [
+        { id: 'avery', name: 'Avery', privateProfileField: 'keep-me' },
+        { id: 'friend', name: 'Friend' }
+      ],
       rhythms: [{ id: 'rhythm-1', title: 'Call', unknownRhythmField: { nested: true } }],
       datedRhythmCompletions: [{ rhythmId: 'rhythm-1', date: '2026-11-24', precision: 'minute' }],
       connections: [{ id: 'connection-1', personId: 'avery', unknown: 'preserve' }],
@@ -620,13 +696,14 @@ describe('canonical authenticated account adapter', () => {
     const request = envelope.data.prayerRequests.find(item => item.id === 'prayer-1');
     expect(request).toMatchObject({
       personId: 'avery',
-      sharedWith: ['avery', 'friend'],
+      sharedWith: ['friend'],
       title: 'Original title snapshot',
       details: 'Exact details',
       schedule: { frequency: 'daily', endDate: '2026-12-31' },
       timeOfDay: 'morning',
       prayerLogs: [{ prayedAt: '2026-11-22T12:00:00.000Z' }]
     });
+    expect(validatePreviewEnvelope(envelope, '2026-11-25').valid).toBe(true);
 
     const edited = createPreviewEnvelope({
       ...envelope.data,
