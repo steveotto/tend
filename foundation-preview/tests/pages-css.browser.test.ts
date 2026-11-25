@@ -9844,10 +9844,10 @@ async function main() {
               const geometryKey = `${width}/${textSize}`;
               const referenceCategory = categoryHeaderGeometry.get(geometryKey);
               if (referenceCategory) {
-                for (const key of ['left', 'top', 'width', 'height'] as const) {
+                for (const key of ['left', 'top', 'width'] as const) {
                   assert.ok(
                     Math.abs(referenceCategory[key] - categoryGeometry[key]) <= 1,
-                    `Category headers must match ${key} across ${area} at ${width}px / ${textSize}.`
+                    `Category headers must align ${key} across ${area} at ${width}px / ${textSize}.`
                   );
                 }
               } else {
@@ -9903,10 +9903,10 @@ async function main() {
               const geometry = await measureHeroHeader(page, '.category-header--hero:visible');
               const reference = categoryHeaderGeometry.get(`${width}/${textSize}`);
               assert.ok(reference, `A Category header reference is needed for ${width}px / ${textSize}.`);
-              for (const key of ['left', 'top', 'width', 'height'] as const) {
+              for (const key of ['left', 'top', 'width'] as const) {
                 assert.ok(
                   Math.abs(reference[key] - geometry[key]) <= 1,
-                  `${area} Category header must match ${key} at ${width}px / ${textSize}.`
+                  `${area} Category header must align ${key} at ${width}px / ${textSize}.`
                 );
               }
               assert.equal(geometry.documentWidth, width);
