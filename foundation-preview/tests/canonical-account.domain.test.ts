@@ -85,6 +85,85 @@ describe('canonical authenticated account adapter', () => {
     expect(merged.unrelatedAccountField).toEqual({ preserve: true });
   });
 
+  it('preserves explicit no-person Classic Prayers outside the Person projection', () => {
+    const globalPrayer = {
+      id: 'global-prayer',
+      personId: null,
+      sharedWith: ['morgan'],
+      faithOwner: 'me',
+      text: 'Synthetic account-level Prayer',
+      added: '2026-11-20',
+      prayerLogs: [Date.parse('2026-11-22T12:00:00.000Z')],
+      unknownPrayerField: { preserve: ['exactly'] }
+    };
+    const associatedPrayer = {
+      id: 'person-prayer',
+      personId: 'avery',
+      sharedWith: ['avery', 'morgan'],
+      text: 'Synthetic Person-associated Prayer',
+      added: '2026-11-20',
+      prayerLogs: [Date.parse('2026-11-23T12:00:00.000Z')]
+    };
+    const classic = {
+      people: [
+        { id: 'avery', name: 'Avery' },
+        { id: 'morgan', name: 'Morgan' }
+      ],
+      prayers: [globalPrayer, associatedPrayer],
+      unrelatedAccountField: { preserve: true },
+      [CANONICAL_PREVIEW_ENVELOPE_KEY]: createPreviewEnvelope({
+        ...createEmptyPreviewData(),
+        people: [
+          { id: 'avery', displayName: 'Avery' },
+          { id: 'morgan', displayName: 'Morgan' }
+        ],
+        prayerRequests: [{
+          id: 'global-prayer',
+          personId: 'morgan',
+          title: 'Synthetic account-level Prayer',
+          status: 'active',
+          createdAt: '2026-11-20T00:00:00.000Z',
+          updatedAt: '2026-11-20T00:00:00.000Z',
+          prayerLogs: [{
+            id: 'global-prayer-log',
+            prayedAt: '2026-11-22T12:00:00.000Z'
+          }]
+        }]
+      })
+    };
+
+    const preview = convertClassicStateToPreviewEnvelope(classic);
+    expect(preview.data.prayerRequests.map(request => request.id)).toEqual(['person-prayer']);
+    expect(preview.data.prayerRequests[0]).toMatchObject({
+      personId: 'avery',
+      sharedWith: ['morgan']
+    });
+
+    const merged = mergePrayerRequestsIntoClassicState(classic, preview);
+    if (!Array.isArray(merged.prayers)) throw new Error('Merged Prayer records must remain an array.');
+    expect(merged.prayers).toHaveLength(2);
+    expect(merged.prayers[0]).toEqual(globalPrayer);
+    expect(merged.prayers[1]).toMatchObject({
+      id: 'person-prayer',
+      personId: 'avery',
+      sharedWith: ['avery', 'morgan'],
+      prayerLogs: [Date.parse('2026-11-23T12:00:00.000Z')]
+    });
+    expect(merged.unrelatedAccountField).toEqual(classic.unrelatedAccountField);
+  });
+
+  it('continues rejecting non-null, non-string canonical Prayer person references', () => {
+    expect(() => convertClassicStateToPreviewEnvelope({
+      people: [{ id: 'avery', name: 'Avery' }],
+      prayers: [{
+        id: 'malformed-prayer',
+        personId: 42,
+        text: 'Synthetic malformed Prayer',
+        prayerLogs: []
+      }]
+    })).toThrow('invalid owner reference');
+  });
+
   it('reports malformed canonical Prayer rows instead of silently omitting them', () => {
     expect(() => convertClassicStateToPreviewEnvelope({
       people: [{ id: 'avery', name: 'Avery' }],

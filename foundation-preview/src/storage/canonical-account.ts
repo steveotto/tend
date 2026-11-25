@@ -228,7 +228,9 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
     if (!isRecord(prayer) || typeof prayer.id !== 'string') {
       throw new Error('A canonical Prayer record has an invalid structure. No data was changed.');
     }
-    if (prayer.personId !== undefined && typeof prayer.personId !== 'string') {
+    if (prayer.personId !== undefined
+      && prayer.personId !== null
+      && typeof prayer.personId !== 'string') {
       throw new Error('A canonical Prayer record has an invalid owner reference. No data was changed.');
     }
     const sharedWith = classicPrayerSharedWith(prayer);
@@ -252,7 +254,12 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
     }
   }
 
-  data.prayerRequests = classicPrayers.map((prayer): PersonPrayerRequest => {
+  // Explicit null is the Classic representation of a Prayer with no Person association.
+  // Keep it in canonical state without projecting it into Person-scoped Prayer views.
+  const personAssociatedPrayers = classicPrayers.filter(
+    prayer => !isRecord(prayer) || prayer.personId !== null
+  );
+  data.prayerRequests = personAssociatedPrayers.map((prayer): PersonPrayerRequest => {
     if (!isRecord(prayer) || typeof prayer.id !== 'string') {
       throw new Error('A canonical Prayer record has an invalid structure. No data was changed.');
     }
@@ -410,6 +417,7 @@ export function mergePrayerRequestsIntoClassicState(
   const preserved = existing.filter(prayer => {
     if (!isRecord(prayer) || typeof prayer.id !== 'string') return true;
     if (unsupportedIds.has(prayer.id)) return true;
+    if (prayer.personId === null && !nextIds.has(prayer.id)) return true;
     if (nextIds.has(prayer.id)) return false;
     if (previousIds.has(prayer.id)) return false;
     return true;
