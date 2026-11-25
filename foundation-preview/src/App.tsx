@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useCurrentInstant } from './components/useCurrentInstant.ts';
+import { useCurrentInstantController } from './components/useCurrentInstant.ts';
 import type { MouseEvent } from 'react';
 import { AppNavigation } from './components/AppNavigation.tsx';
 import type { CategoryTabNavigationRequest, Destination } from './components/AppNavigation.tsx';
@@ -616,7 +616,7 @@ function PreviewWorkspace({
   accountBackupApi?: PreviewAccountBackupApi;
   onSignOut?: () => void | Promise<void>;
 }) {
-  const scoringInstant = useCurrentInstant();
+  const { instant: scoringInstant, refresh: refreshScoringInstant } = useCurrentInstantController();
   const previewStorage = useMemo(
     () => browserPreviewStorage(identity, immutableRecoveryArchive),
     [identity, immutableRecoveryArchive]
@@ -2115,7 +2115,7 @@ function PreviewWorkspace({
       timeZone
     });
     if (!result.valid) return result.error;
-    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request', instant);
   }
 
   function editPrayerRequest(
@@ -2141,7 +2141,7 @@ function PreviewWorkspace({
       { currentDate: localDateInTimeZone(instant, timeZone), timeZone }
     );
     if (!result.valid) return result.error;
-    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request', instant);
   }
 
   function transitionPrayerRequest(
@@ -2151,21 +2151,23 @@ function PreviewWorkspace({
     transition: PrayerRequestTransition
   ): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const instant = new Date();
     const result = transitionPersonPrayerRequest(
       previewData.prayerRequests,
       requestId,
       expectedUpdatedAt,
       actorId,
       transition,
-      new Date().toISOString()
+      instant.toISOString()
     );
     if (!result.valid) return result.error;
-    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request', instant);
   }
 
   function prayForRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
-    const now = new Date().toISOString();
+    const instant = new Date();
+    const now = instant.toISOString();
     const result = recordPersonPrayer(
       previewData.prayerRequests,
       requestId,
@@ -2175,7 +2177,7 @@ function PreviewWorkspace({
       previewData.people.map(person => person.id)
     );
     if (!result.valid) return result.error;
-    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log', instant);
   }
 
   function savePrayerLog(
@@ -2185,17 +2187,18 @@ function PreviewWorkspace({
     log: PersonPrayerLog
   ): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const instant = new Date();
     const result = savePersonPrayerLog(
       previewData.prayerRequests,
       requestId,
       expectedUpdatedAt,
       actorId,
       log,
-      new Date().toISOString(),
+      instant.toISOString(),
       previewData.people.map(person => person.id)
     );
     if (!result.valid) return result.error;
-    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log', instant);
   }
 
   function deletePrayerLog(
@@ -2205,35 +2208,38 @@ function PreviewWorkspace({
     logId: string
   ): PersonPrayerLogUndo | string {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const instant = new Date();
     const result = deletePersonPrayerLog(
       previewData.prayerRequests,
       requestId,
       expectedUpdatedAt,
       actorId,
       logId,
-      new Date().toISOString(),
+      instant.toISOString(),
       previewData.people.map(person => person.id)
     );
     if (!result.valid) return result.error;
-    const error = persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
+    const error = persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log', instant);
     return error ?? result.undo ?? 'The prayer entry could not be made undoable.';
   }
 
   function undoPrayerLogDeletion(undo: PersonPrayerLogUndo, actorId: PersonId): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const instant = new Date();
     const result = undoDeletePersonPrayerLog(
       previewData.prayerRequests,
       undo,
       actorId,
-      new Date().toISOString(),
+      instant.toISOString(),
       previewData.people.map(person => person.id)
     );
     if (!result.valid) return result.error;
-    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log');
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log', instant);
   }
 
   function removePrayerRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
+    const instant = new Date();
     const request = previewData.prayerRequests.find(item => item.id === requestId);
     if (!request) return 'This prayer request is no longer available.';
     const result = request.personId === actorId
@@ -2243,10 +2249,10 @@ function PreviewWorkspace({
           requestId,
           expectedUpdatedAt,
           actorId,
-          new Date().toISOString()
+          instant.toISOString()
         );
     if (!result.valid) return result.error;
-    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request');
+    return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request', instant);
   }
 
   function createPersonSparkForProfile(ownerId: PersonId, draft: PersonSparkDraft): string | null {
@@ -2740,7 +2746,11 @@ function PreviewWorkspace({
     return result.errors;
   }
 
-  function persistSeasonHistory(nextData: PreviewData, action: string): string | null {
+  function persistSeasonHistory(
+    nextData: PreviewData,
+    action: string,
+    scoringInstant?: Date
+  ): string | null {
     const written = writeCurrentPreview(nextData, expectedRaw.current, { currentDate });
     refreshV29RecoveryCopy();
     refreshV30RecoveryCopy();
@@ -2788,6 +2798,7 @@ function PreviewWorkspace({
     expectedRaw.current = written.raw;
     externalRaw.current = null;
     skipNextAutosave.current = true;
+    if (scoringInstant) refreshScoringInstant(scoringInstant);
     setPreviewData(nextData);
     setAutoSaveEnabled(true);
     setPersistenceStatus({ kind: 'saved' });

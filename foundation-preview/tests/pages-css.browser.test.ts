@@ -7852,7 +7852,7 @@ async function main() {
 
                 await measureToggle.focus();
                 await page.keyboard.press('Enter');
-                await page.waitForTimeout(220);
+                await page.waitForTimeout(300);
                 const expandedLayout = await root.evaluate(element => {
                   const button = element.querySelector<HTMLElement>('.category-health-summary')
                     ?.querySelector<HTMLButtonElement>('.health-score-breakdown__measure-toggle');
@@ -12679,18 +12679,96 @@ async function main() {
         for (const viewportWidth of [375, 390, 430] as const) {
           await prayerPage.setViewportSize({ width: viewportWidth, height: 844 });
           await historyTrigger.click();
+          const collapsedHeader = await prayerHistory.evaluate(dialog => {
+            const details = dialog.querySelector<HTMLDetailsElement>('.person-prayer-history__logged');
+            const summary = details?.querySelector<HTMLElement>(':scope > summary');
+            const heading = summary?.querySelector<HTMLElement>('.rhythm-history-view__logged-heading');
+            const count = summary?.querySelector<HTMLElement>('.rhythm-history-view__logged-count');
+            const chevrons = summary?.querySelectorAll('.disclosure-chevron');
+            if (!details || !summary || !heading || !count || !chevrons) {
+              throw new Error('Prayer history must use the shared logged-section disclosure.');
+            }
+            const summaryBounds = summary.getBoundingClientRect();
+            const headingBounds = heading.getBoundingClientRect();
+            const countBounds = count.getBoundingClientRect();
+            const chevronBounds = chevrons[0]?.getBoundingClientRect();
+            if (!chevronBounds) throw new Error('Prayer history disclosure chevron is missing.');
+            return {
+              isOpen: details.open,
+              expanded: summary.getAttribute('aria-expanded'),
+              display: getComputedStyle(summary).display,
+              listStyle: getComputedStyle(summary).listStyleType,
+              markerContent: getComputedStyle(summary, '::marker').content,
+              gap: getComputedStyle(summary).columnGap,
+              headingToCountGap: countBounds.left - headingBounds.right,
+              summaryRight: summaryBounds.right,
+              chevronRight: chevronBounds.right,
+              chevronCount: chevrons.length
+            };
+          });
+          const label = `Prayer history at ${viewportWidth}px / ${textSize} text`;
+          assert.equal(collapsedHeader.isOpen, false, `${label} initially stays collapsed`);
+          assert.equal(collapsedHeader.expanded, 'false', `${label} exposes collapsed state`);
+          assert.equal(collapsedHeader.display, 'flex', `${label} separates the title and count chip`);
+          assert.equal(collapsedHeader.listStyle, 'none', `${label} suppresses the native disclosure marker`);
+          assert.equal(collapsedHeader.markerContent, '""', `${label} suppresses the native disclosure marker`);
+          assert.equal(collapsedHeader.gap, '10px', `${label} gives the count chip clear spacing`);
+          assert.ok(collapsedHeader.headingToCountGap >= 8, `${label} count chip does not touch the title`);
+          assert.ok(collapsedHeader.summaryRight - collapsedHeader.chevronRight < 2,
+            `${label} aligns its single custom chevron at the right edge`);
+          assert.equal(collapsedHeader.chevronCount, 1, `${label} renders one custom chevron`);
+          if (viewportWidth === 375 && textSize === 'small') {
+            const disclosure = prayerHistory.locator('.rhythm-history-view__logged-summary');
+            await disclosure.focus();
+            await disclosure.press('Enter');
+            await prayerPage.waitForFunction(() => {
+              const details = document.querySelector<HTMLDetailsElement>('.person-prayer-history__logged');
+              return details?.open === true
+                && details.querySelector('summary')?.getAttribute('aria-expanded') === 'true';
+            });
+            assert.equal(await disclosure.getAttribute('aria-expanded'), 'true',
+              'Keyboard activation exposes expanded state.');
+            await disclosure.press('Space');
+            await prayerPage.waitForFunction(() => {
+              const details = document.querySelector<HTMLDetailsElement>('.person-prayer-history__logged');
+              return details?.open === false
+                && details.querySelector('summary')?.getAttribute('aria-expanded') === 'false';
+            });
+            assert.equal(await disclosure.getAttribute('aria-expanded'), 'false',
+              'Keyboard activation restores collapsed state.');
+          }
           await prayerHistory.getByRole('button', { name: 'Logged prayers (3)' }).click();
           assert.equal(await prayerHistory.locator('.rhythm-history-view__logged-entry').count(), 3);
           const lifecycleLayout = await prayerHistory.evaluate(dialog => {
             const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region');
             const summary = dialog.querySelector<HTMLElement>('.person-prayer-history__summary');
+            const loggedSection = dialog.querySelector<HTMLElement>('.person-prayer-history__logged');
+            const logButton = dialog.querySelector<HTMLElement>('.person-prayer-history__log-button');
             const entries = [...dialog.querySelectorAll<HTMLElement>('.rhythm-history-view__logged-entry')];
             const actionButtons = [...dialog.querySelectorAll<HTMLElement>(
               '.person-prayer-history__logged .rhythm-history-view__entry-action'
             )];
-            if (!region || !summary || entries.length !== 3 || actionButtons.length < 6) {
+            if (!region || !summary || !loggedSection || !logButton || entries.length !== 3 || actionButtons.length < 6) {
               throw new Error('Prayer detail needs its Health card and saved entry actions.');
             }
+            const firstEntry = entries[0]!;
+            const firstCopy = firstEntry.querySelector<HTMLElement>('.rhythm-history-view__logged-entry-copy');
+            const firstTitle = firstCopy?.querySelector<HTMLElement>('strong');
+            const firstActions = firstEntry.querySelector<HTMLElement>('.rhythm-history-view__logged-entry-actions');
+            if (!firstCopy || !firstTitle || !firstActions) {
+              throw new Error('Prayer log rows need a title, copy, and grouped actions.');
+            }
+            const originalTitle = firstTitle.textContent;
+            firstTitle.textContent = 'Avery Brooks prayer reflection '.repeat(8);
+            const firstCopyBounds = firstCopy.getBoundingClientRect();
+            const firstActionsBounds = firstActions.getBoundingClientRect();
+            const longTitleFits = firstTitle.scrollWidth <= firstTitle.clientWidth + 1;
+            firstTitle.textContent = originalTitle;
+            const loggedStyle = getComputedStyle(loggedSection);
+            const entryStyle = getComputedStyle(firstEntry);
+            const logButtonStyle = getComputedStyle(logButton);
+            const titleBounds = firstTitle.getBoundingClientRect();
+            const sectionBounds = loggedSection.getBoundingClientRect();
             return {
               viewportWidth: document.documentElement.clientWidth,
               documentWidth: document.documentElement.scrollWidth,
@@ -12698,6 +12776,28 @@ async function main() {
               clientHeight: region.clientHeight,
               summaryScrollWidth: summary.scrollWidth,
               summaryClientWidth: summary.clientWidth,
+              loggedSurface: loggedStyle.backgroundColor,
+              loggedBorder: loggedStyle.borderTopColor,
+              entrySurface: entryStyle.backgroundColor,
+              entryPadding: entryStyle.padding,
+              logButton: {
+                color: logButtonStyle.color,
+                background: logButtonStyle.backgroundColor,
+                border: logButtonStyle.borderTopColor,
+                radius: logButtonStyle.borderTopLeftRadius
+              },
+              titleColor: getComputedStyle(loggedSection.querySelector(
+                '.rhythm-history-view__logged-heading'
+              )!).color,
+              countSurface: getComputedStyle(loggedSection.querySelector(
+                '.rhythm-history-view__logged-count'
+              )!).backgroundColor,
+              sectionBounds: { left: sectionBounds.left, right: sectionBounds.right },
+              longTitleFits,
+              longCopyBottom: firstCopyBounds.bottom,
+              actionsTop: firstActionsBounds.top,
+              actionColors: actionButtons.slice(0, 2).map(button => getComputedStyle(button).color),
+              titleHeight: titleBounds.height,
               entryWidths: entries.map(entry => ({
                 scroll: entry.scrollWidth,
                 client: entry.clientWidth
@@ -12713,9 +12813,35 @@ async function main() {
               })
             };
           });
-          const label = `Prayer history at ${viewportWidth}px / ${textSize} text`;
           assert.equal(lifecycleLayout.viewportWidth, viewportWidth);
           assert.equal(lifecycleLayout.documentWidth, viewportWidth, `${label} must not overflow horizontally`);
+          assert.equal(lifecycleLayout.loggedSurface, 'rgb(255, 255, 255)',
+            `${label} logged section uses the neutral white card surface`);
+          assert.equal(lifecycleLayout.loggedBorder, 'rgb(220, 228, 222)',
+            `${label} logged section uses the neutral border`);
+          assert.equal(lifecycleLayout.entrySurface, 'rgb(255, 255, 255)',
+            `${label} Prayer log rows remain white`);
+          assert.equal(lifecycleLayout.entryPadding, '10px 12px',
+            `${label} Prayer log rows keep the shared card padding`);
+          assert.equal(lifecycleLayout.logButton.background, 'rgb(255, 255, 255)',
+            `${label} Log a prayer is a secondary action`);
+          assert.equal(lifecycleLayout.logButton.border, 'rgb(210, 197, 223)',
+            `${label} Log a prayer uses the Prayer purple border`);
+          assert.equal(lifecycleLayout.logButton.color, 'rgb(112, 90, 141)',
+            `${label} Log a prayer uses the Prayer purple text`);
+          assert.equal(lifecycleLayout.logButton.radius, '10px',
+            `${label} Log a prayer keeps the standard rounded-rectangle shape`);
+          assert.equal(lifecycleLayout.titleColor, 'rgb(112, 90, 141)',
+            `${label} the history title keeps a restrained purple accent`);
+          assert.equal(lifecycleLayout.countSurface, 'rgb(240, 234, 245)',
+            `${label} the count chip uses the light Prayer accent`);
+          assert.ok(lifecycleLayout.longTitleFits, `${label} long text wraps instead of clipping`);
+          assert.ok(lifecycleLayout.actionsTop >= lifecycleLayout.longCopyBottom - 1,
+            `${label} edit/delete controls sit below long copy without crowding it`);
+          assert.deepEqual(lifecycleLayout.actionColors, [
+            'rgb(128, 98, 154)',
+            'rgb(164, 56, 56)'
+          ], `${label} edit remains purple and delete remains destructive red`);
           assert.ok(lifecycleLayout.scrollHeight > lifecycleLayout.clientHeight,
             `${label} remains vertically scrollable`);
           assert.ok(lifecycleLayout.summaryScrollWidth <= lifecycleLayout.summaryClientWidth + 1,

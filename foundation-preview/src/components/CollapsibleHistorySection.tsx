@@ -26,6 +26,7 @@ export function CollapsibleHistorySection({
       onToggle={event => onExpandedChange(event.currentTarget.open)}
     >
       <summary
+        className="rhythm-history-view__logged-summary"
         ref={element => {
           if (summaryRef) summaryRef.current = element;
         }}

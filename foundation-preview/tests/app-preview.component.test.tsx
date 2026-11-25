@@ -83,6 +83,7 @@ import type {
   PreviewAccountBackupRecord
 } from '../src/storage/preview-account-backup.ts';
 import { createAuthenticatedPreviewIdentity } from '../src/domain/preview-identity.ts';
+import { selectPersonPrayerHealth } from '../src/domain/person-prayer-health.ts';
 import { installMemoryStorage, type MemoryStorage } from './memory-storage.ts';
 import { historyButtonName } from './history-button-name.ts';
 
@@ -1093,6 +1094,243 @@ describe('Tend Today preview', () => {
       .getAttribute('aria-pressed')).toBe('true');
     expect(within(selection).queryByRole('button', { name: 'Account Alpha Person' })).toBeNull();
     expect(within(selection).queryByText('Account Alpha saved prayer request')).toBeNull();
+  });
+
+  it('refreshes authenticated Prayer Health from local saves before delayed account sync', async () => {
+    vi.useFakeTimers();
+    const initialInstant = new Date('2026-11-20T10:00:00.000Z');
+    vi.setSystemTime(initialInstant);
+    const accountId = 'c0000000-0000-4000-8000-000000000151';
+    const personId = '10000000-0000-4000-8000-000000000151';
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    const storage = browserPreviewStorage(identity);
+    const data = createEmptyPreviewData();
+    data.prayerEnabled = true;
+    data.people = [{ id: personId, displayName: 'Refresh Test Person' }];
+    data.prayerRequests = [{
+      id: 'authenticated-prayer-health-refresh',
+      personId,
+      title: 'Refresh Health request',
+      status: 'active',
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'anytime',
+      createdAt: '2026-10-01T10:00:00.000Z',
+      updatedAt: '2026-10-01T10:00:00.000Z',
+      prayerLogs: []
+    }];
+    const envelope = createPreviewEnvelope(data);
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(envelope));
+    const accountRecord: PreviewAccountBackupRecord = {
+      document: envelope,
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      revision: 8,
+      updatedAt: initialInstant.toISOString()
+    };
+    let resolveAccountSave: ((revision: number) => void) | null = null;
+    const accountBackupApi: PreviewAccountBackupApi = {
+      read: vi.fn(async () => structuredClone(accountRecord)),
+      save: vi.fn((_document, _expectedRevision) => new Promise<number>(resolve => {
+        resolveAccountSave = resolve;
+      }))
+    };
+
+    testingRender(<App identity={identity} accountBackupApi={accountBackupApi} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open profile for Refresh Test Person' }));
+    const profile = screen.getByRole('main', { name: 'Refresh Test Person' });
+    const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    fireEvent.click(within(overall).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    }));
+    const areas = within(overall).getByRole('group', { name: 'Health by area' });
+    expect(within(areas).getByRole('img', { name: 'Prayer Health score: unavailable' })).toBeTruthy();
+    fireEvent.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+
+    act(() => vi.setSystemTime(new Date(initialInstant.getTime() + 10_000)));
+    const card = screen.getByRole('article', { name: 'Refresh Health request' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Actions for Refresh Health request' }));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Actions for Refresh Health request' }))
+      .getByRole('menuitem', { name: 'Pray' }));
+
+    expect(within(card).getByText('Prayed 1 time')).toBeTruthy();
+    expect(within(card).getByLabelText(/^Last prayed:/).textContent).not.toContain('Not yet');
+    const savedForScore = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+      localDateString(new Date())
+    );
+    if (!savedForScore.valid) throw new Error('Authenticated local Prayer save was not readable.');
+    const immediateSavedRequest = savedForScore.envelope.data.prayerRequests[0];
+    const prayedAt = immediateSavedRequest?.prayerLogs[0]?.prayedAt;
+    if (!prayedAt) throw new Error('The saved Prayer log has no canonical completion time.');
+    const immediateScoringInstant = new Date(prayedAt);
+    const immediateTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const prayerSelection = selectPersonPrayerHealth(
+      savedForScore.envelope.data.prayerRequests,
+      personId,
+      localDateInTimeZone(immediateScoringInstant, immediateTimeZone),
+      immediateTimeZone,
+      immediateScoringInstant,
+      savedForScore.envelope.data.timeBlocks
+    );
+    const expectedSavedRequestScore = prayerSelection.requests[0]?.score ?? null;
+    if (expectedSavedRequestScore === null || prayerSelection.score === null) {
+      throw new Error('Prayer Health was not available from the successfully saved log.');
+    }
+    expect(Number(within(areas).getByRole('meter', { name: 'Prayer Health score' })
+      .getAttribute('aria-valuenow'))).toBe(prayerSelection.score);
+    expect(Number(within(overall).getByRole('meter', { name: 'Overall Health score' })
+      .getAttribute('aria-valuenow'))).toBe(prayerSelection.score);
+    expect(accountBackupApi.save).not.toHaveBeenCalled();
+
+    fireEvent.click(within(card).getByRole('button', {
+      name: 'View prayer history for Refresh Health request'
+    }));
+    const history = screen.getByRole('dialog', { name: 'Prayer history' });
+    const requestHealth = within(history).getByRole('region', {
+      name: 'Health, Consistency, and On Track scores for this prayer request'
+    });
+    expect(Number(within(requestHealth).getByRole('meter', { name: 'Health score' })
+      .getAttribute('aria-valuenow'))).toBe(expectedSavedRequestScore);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(900);
+      await Promise.resolve();
+    });
+    expect(accountBackupApi.save).toHaveBeenCalledOnce();
+    expect(resolveAccountSave).not.toBeNull();
+    expect(Number(within(requestHealth).getByRole('meter', { name: 'Health score' })
+      .getAttribute('aria-valuenow'))).toBe(expectedSavedRequestScore);
+    await act(async () => {
+      resolveAccountSave?.(9);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    fireEvent.click(within(history).getByRole('button', { name: 'Logged prayers (1)' }));
+    fireEvent.click(within(history).getByRole('button', { name: /Edit logged prayer/ }));
+    const logForm = within(history).getByRole('heading', { name: 'Edit logged prayer' }).closest('form');
+    if (!logForm) throw new Error('Prayer log editor did not open.');
+    fireEvent.change(within(logForm).getByRole('textbox', { name: /Notes/ }), {
+      target: { value: 'Updated locally' }
+    });
+    fireEvent.click(within(logForm).getByRole('button', { name: 'Save changes' }));
+    expect(within(history).getByText('Updated locally')).toBeTruthy();
+    expect(Number(within(requestHealth).getByRole('meter', { name: 'Health score' })
+      .getAttribute('aria-valuenow'))).toBe(expectedSavedRequestScore);
+
+    fireEvent.click(within(history).getByRole('button', { name: /Delete logged prayer/ }));
+    const confirmation = within(history).getByRole('alertdialog');
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Delete prayer' }));
+    expect(within(requestHealth).getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
+    expect(within(areas).getByRole('img', { name: 'Prayer Health score: unavailable' })).toBeTruthy();
+
+    fireEvent.click(within(history).getByRole('button', { name: 'Undo' }));
+    expect(Number(within(requestHealth).getByRole('meter', { name: 'Health score' })
+      .getAttribute('aria-valuenow'))).toBe(expectedSavedRequestScore);
+    expect(within(areas).getByRole('meter', { name: 'Prayer Health score' })
+      .getAttribute('aria-valuenow')).toBe(String(prayerSelection.score));
+
+    fireEvent.click(within(history).getByRole('button', {
+      name: 'Edit prayer request Refresh Health request'
+    }));
+    const requestEditor = screen.getByRole('dialog', { name: 'Prayer request details' });
+    fireEvent.click(within(requestEditor).getByRole('combobox', { name: 'Frequency: Daily' }));
+    fireEvent.click(within(requestEditor).getByRole('option', { name: 'Weekly' }));
+    fireEvent.click(within(requestEditor).getByRole('radio', { name: 'Wednesday' }));
+    fireEvent.click(within(requestEditor).getByRole('button', { name: 'Save changes' }));
+    const saved = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY) ?? '',
+      localDateString(new Date())
+    );
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    const savedRequest = saved.envelope.data.prayerRequests[0];
+    expect(savedRequest?.schedule).toEqual({ frequency: 'weekly', weekdays: [3] });
+    if (!savedRequest?.scoring) throw new Error('Prayer schedule revision was not recorded.');
+    expect(savedRequest.scoring.scheduleHistory.at(-1)).toMatchObject({
+      kind: 'scheduled',
+      schedule: { frequency: 'weekly', weekdays: [3] }
+    });
+    expect(savedRequest.scoring.scheduleHistory.slice(0, -1)
+      .some(segment => segment.kind === 'unknown')).toBe(true);
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const scoringInstant = new Date(savedRequest.updatedAt);
+    const expectedRequestScore = selectPersonPrayerHealth(
+      saved.envelope.data.prayerRequests,
+      personId,
+      localDateInTimeZone(scoringInstant, timeZone),
+      timeZone,
+      scoringInstant,
+      saved.envelope.data.timeBlocks
+    ).requests[0]?.score ?? null;
+    const reopenedHistory = screen.getByRole('dialog', { name: 'Prayer history' });
+    const updatedRequestHealth = within(reopenedHistory).getByRole('region', {
+      name: 'Health, Consistency, and On Track scores for this prayer request'
+    });
+    if (expectedRequestScore === null) {
+      expect(within(updatedRequestHealth).getByRole('img', { name: 'Health: Not enough data' })).toBeTruthy();
+    } else {
+      expect(Number(within(updatedRequestHealth).getByRole('meter', { name: 'Health score' })
+        .getAttribute('aria-valuenow'))).toBe(expectedRequestScore);
+    }
+    expect(accountBackupApi.save).toHaveBeenCalledOnce();
+  });
+
+  it('does not award Prayer Health when an authenticated local Prayer save fails', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-20T10:00:00.000Z'));
+    const accountId = 'c0000000-0000-4000-8000-000000000152';
+    const personId = '10000000-0000-4000-8000-000000000152';
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    const storage = browserPreviewStorage(identity);
+    const data = createEmptyPreviewData();
+    data.prayerEnabled = true;
+    data.people = [{ id: personId, displayName: 'Failed Save Person' }];
+    data.prayerRequests = [{
+      id: 'authenticated-prayer-health-failed-save',
+      personId,
+      title: 'Failed Save request',
+      status: 'active',
+      schedule: { frequency: 'daily' },
+      createdAt: '2026-10-01T10:00:00.000Z',
+      updatedAt: '2026-10-01T10:00:00.000Z',
+      prayerLogs: []
+    }];
+    const originalRaw = JSON.stringify(createPreviewEnvelope(data));
+    storage.setItem(PREVIEW_STORAGE_KEY, originalRaw);
+    const accountKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
+    const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation((key, value) => {
+      if (key === accountKey) throw new DOMException('Synthetic quota failure', 'QuotaExceededError');
+      originalSetItem(key, value);
+    });
+
+    testingRender(<App identity={identity} />);
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open profile for Failed Save Person' }));
+    const profile = screen.getByRole('main', { name: 'Failed Save Person' });
+    const overall = within(profile).getByRole('region', { name: 'Overall Health summary' });
+    fireEvent.click(within(overall).getByRole('button', {
+      name: 'Show Overall Health component scores breakdown'
+    }));
+    const areas = within(overall).getByRole('group', { name: 'Health by area' });
+    fireEvent.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+    const card = screen.getByRole('article', { name: 'Failed Save request' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Actions for Failed Save request' }));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Actions for Failed Save request' }))
+      .getByRole('menuitem', { name: 'Pray' }));
+
+    expect(screen.getByText(/could not save this prayer log/i)).toBeTruthy();
+    expect(within(card).getByText('Prayed 0 times')).toBeTruthy();
+    expect(within(areas).getByRole('img', { name: 'Prayer Health score: unavailable' })).toBeTruthy();
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
+    expect(parsePreviewBackup(originalRaw, localDateString(new Date())).valid).toBe(true);
   });
 
   it('restores a valid account copy over invalid saved bytes without a stale autosave', async () => {

@@ -10589,8 +10589,8 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .person-prayer-history__logged {
-  border-color: var(--tend-prayer-border);
-  background: color-mix(in srgb, var(--tend-prayer-surface) 52%, var(--tend-canvas));
+  border-color: var(--tend-line);
+  background: var(--tend-surface);
 }
 
 .person-prayer-history__logged > summary {
@@ -10611,7 +10611,29 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 }
 
 .person-prayer-history__logged .rhythm-history-view__logged-entry {
+  border-color: var(--tend-line);
+  background: var(--tend-surface);
+}
+
+.person-prayer-history__logged .person-prayer-history__log-button {
   border-color: var(--tend-prayer-border);
+  background: var(--tend-surface);
+  color: var(--tend-prayer-text);
+}
+
+.person-prayer-history__logged .person-prayer-history__log-button:hover:not(:disabled) {
+  border-color: var(--tend-prayer-border);
+  background: var(--tend-prayer-surface);
+}
+
+.person-prayer-history__logged .person-prayer-history__log-button:focus-visible {
+  outline: 2px solid var(--tend-prayer-text);
+  outline-offset: 2px;
+}
+
+.person-prayer-history__logged .rhythm-history-view__logged-entry-date {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .person-prayer-history__logged .rhythm-history-view__entry-action {
@@ -10637,6 +10659,16 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
 .person-prayer-history__logged .rhythm-history-view__entry-action:disabled {
   opacity: 0.48;
   cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .person-prayer-history__logged .rhythm-history-view__logged-entry-content {
+    flex-direction: column;
+  }
+
+  .person-prayer-history__logged .rhythm-history-view__logged-entry-actions {
+    margin: 0 0 0 auto;
+  }
 }
 
 .person-prayer-history__legacy-note,
@@ -29648,7 +29680,7 @@ button.person-health-component-score:focus-visible {
   gap: 12px;
 }
 
-.tend-app-preview .rhythm-history-view__logged-moments > summary {
+.rhythm-history-view__logged-summary {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -29658,7 +29690,11 @@ button.person-health-component-score:focus-visible {
   list-style: none;
 }
 
-.tend-app-preview .rhythm-history-view__logged-moments > summary::-webkit-details-marker {
+.rhythm-history-view__logged-summary::marker {
+  content: "";
+}
+
+.rhythm-history-view__logged-summary::-webkit-details-marker {
   display: none;
 }
 
@@ -29683,13 +29719,13 @@ button.person-health-component-score:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.tend-app-preview .rhythm-history-view__logged-moments > summary > .disclosure-chevron {
+.rhythm-history-view__logged-summary > .disclosure-chevron {
   flex: 0 0 16px;
   margin-left: auto;
   transition: transform 140ms ease;
 }
 
-.tend-app-preview .rhythm-history-view__logged-moments > summary > .disclosure-chevron--expanded {
+.rhythm-history-view__logged-summary > .disclosure-chevron--expanded {
   transform: rotate(180deg);
 }
 
