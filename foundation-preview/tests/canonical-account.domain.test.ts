@@ -152,16 +152,41 @@ describe('canonical authenticated account adapter', () => {
     expect(merged.unrelatedAccountField).toEqual(classic.unrelatedAccountField);
   });
 
-  it('continues rejecting non-null, non-string canonical Prayer person references', () => {
-    expect(() => convertClassicStateToPreviewEnvelope({
+  it('reports only sanitized structure for invalid owner references and performs no account write', async () => {
+    const state = {
       people: [{ id: 'avery', name: 'Avery' }],
+      unrelatedAccountField: { preserve: true },
       prayers: [{
-        id: 'malformed-prayer',
-        personId: 42,
-        text: 'Synthetic malformed Prayer',
-        prayerLogs: []
+        id: 'synthetic-private-prayer-id',
+        personId: { id: 'avery', imported: true },
+        sharedWith: ['morgan', 42],
+        text: 'Synthetic private Prayer text',
+        prayerLogs: [Date.parse('2026-11-24T12:00:00.000Z')],
+        unknownField: { keep: true }
       }]
-    })).toThrow('invalid owner reference');
+    };
+    const originalState = structuredClone(state);
+    const { client, rpc } = clientFor(state);
+    const api = createCanonicalAccountApi(client);
+    const error = await api.read().then(
+      () => null,
+      (readError: unknown) => readError
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    if (!(error instanceof Error)) throw new Error('Expected canonical Prayer validation to fail.');
+    expect(error.message).toContain('invalid owner reference');
+    expect(error.message).toContain('"personIdType":"object"');
+    expect(error.message).toContain('"personIdFieldTypes":{"id":"string","imported":"boolean"}');
+    expect(error.message).toContain('"personIdObjectIdMatchesPerson":true');
+    expect(error.message).toContain('"sharedWithType":"array"');
+    expect(error.message).toContain('"sharedWithElementTypes":{"number":1,"string":1}');
+    expect(error.message).not.toContain('avery');
+    expect(error.message).not.toContain('morgan');
+    expect(error.message).not.toContain('Synthetic private Prayer text');
+    expect(error.message).not.toContain('synthetic-private-prayer-id');
+    expect(state).toEqual(originalState);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('reports malformed canonical Prayer rows instead of silently omitting them', () => {

@@ -44,6 +44,55 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function jsonValueType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function jsonValueTypeCounts(values: readonly unknown[]): Record<string, number> {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const type = jsonValueType(value);
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  return Object.fromEntries([...counts.entries()].sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function sanitizedPrayerOwnerDiagnostic(
+  prayer: Record<string, unknown>,
+  canonicalPersonIds: ReadonlySet<string>
+): string {
+  const personId = prayer.personId;
+  const objectKeys = isRecord(personId) ? Object.keys(personId).sort() : [];
+  const ownerIdMatchesPerson = isRecord(personId) && typeof personId.id === 'string'
+    ? canonicalPersonIds.has(personId.id)
+    : null;
+  const arrayIdMatchesPerson = Array.isArray(personId)
+    ? personId.some(value => typeof value === 'string' && canonicalPersonIds.has(value))
+    : null;
+  const sharedWith = prayer.sharedWith;
+  const diagnostic = {
+    personIdType: jsonValueType(personId),
+    ...(isRecord(personId) ? {
+      personIdFieldTypes: Object.fromEntries(
+        objectKeys.slice(0, 12).map(key => [key, jsonValueType(personId[key])])
+      ),
+      personIdFieldTypesTruncated: objectKeys.length > 12
+    } : {}),
+    ...(Array.isArray(personId) ? {
+      personIdElementTypes: jsonValueTypeCounts(personId),
+      personIdStringElementMatchesPerson: arrayIdMatchesPerson
+    } : {}),
+    personIdObjectIdMatchesPerson: ownerIdMatchesPerson,
+    sharedWithType: jsonValueType(sharedWith),
+    ...(Array.isArray(sharedWith) ? {
+      sharedWithElementTypes: jsonValueTypeCounts(sharedWith)
+    } : {})
+  };
+  return JSON.stringify(diagnostic);
+}
+
 function classicPrayerSharedWith(prayer: Record<string, unknown>): string[] {
   if (prayer.sharedWith === undefined) return [];
   if (!Array.isArray(prayer.sharedWith)
@@ -231,7 +280,11 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
     if (prayer.personId !== undefined
       && prayer.personId !== null
       && typeof prayer.personId !== 'string') {
-      throw new Error('A canonical Prayer record has an invalid owner reference. No data was changed.');
+      throw new Error(
+        `A canonical Prayer record has an invalid owner reference. Diagnostic: ${
+          sanitizedPrayerOwnerDiagnostic(prayer, canonicalPersonIds)
+        }. No data was changed.`
+      );
     }
     const sharedWith = classicPrayerSharedWith(prayer);
     const ownerId = prayer.personId;

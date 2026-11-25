@@ -174,7 +174,7 @@ describe('upcoming calendar agenda', () => {
     expectNoCalendarSettingsInstructions();
   });
 
-  it('keeps visible events while refreshing and announces a quiet update', async () => {
+  it('keeps visible events while refreshing and labels their last update time', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-14T10:00:00Z'));
     const source = { id: 'calendar', name: 'Synthetic', url: 'https://p.icloud.com/a' };
     const firstEvent = event('visible', 'Synthetic visible event', source.name, Date.parse('2026-11-14T12:00:00Z'));
@@ -197,7 +197,7 @@ describe('upcoming calendar agenda', () => {
     );
 
     expect(screen.getByText(firstEvent.title)).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe('Updating events…');
+    expect(screen.getByRole('status').textContent).toMatch(/^Showing stale events from .+ while updating\.$/);
     expect(screen.queryByText('Loading events…')).toBeNull();
     expect(screen.getByRole('list', { name: 'Calendar events for today' })).toBeTruthy();
 
@@ -205,7 +205,7 @@ describe('upcoming calendar agenda', () => {
       resolveRefresh(response({ events: [firstEvent], issueCount: 0 }));
       await Promise.resolve();
     });
-    await waitFor(() => expect(screen.queryByText('Updating events…')).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Showing stale events from .* while updating\./)).toBeNull());
   });
 
   it('uses identical calendar outlines with the requested Today, Week, and Month marks', () => {
