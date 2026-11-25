@@ -198,6 +198,29 @@ function schema44Raw(data: ReturnType<typeof createSamplePreviewData>): string {
   return JSON.stringify(envelope);
 }
 
+function schema44RawAtLength(data: ReturnType<typeof createSamplePreviewData>, length: number): string {
+  const raw = schema44Raw(data);
+  return raw.length >= length ? raw : `${raw}${' '.repeat(length - raw.length)}`;
+}
+
+function deferredAccountBackupApi() {
+  let resolveRead: ((record: PreviewAccountBackupRecord | null) => void) | null = null;
+  const read = vi.fn(() => new Promise<PreviewAccountBackupRecord | null>(resolve => {
+    resolveRead = resolve;
+  }));
+  const save = vi.fn(async (...args: Parameters<PreviewAccountBackupApi['save']>) => args[1] + 1);
+  const api: PreviewAccountBackupApi = { read, save };
+  return {
+    api,
+    read,
+    save,
+    resolveRead(record: PreviewAccountBackupRecord | null) {
+      if (!resolveRead) throw new Error('The initial account read has not started.');
+      resolveRead(record);
+    }
+  };
+}
+
 function schema45Raw(data: ReturnType<typeof createSamplePreviewData>): string {
   const current = JSON.parse(JSON.stringify(createPreviewEnvelope(data))) as ReturnType<typeof createPreviewEnvelope>;
   const envelope = withPreSparkSchema({
@@ -10173,6 +10196,164 @@ describe('Tend Today preview', () => {
     expect(window.localStorage.getItem(PREVIEW_STORAGE_KEY)).toBe(originalRaw);
     expect(window.localStorage.getItem(PREVIEW_V44_RECOVERY_KEY)).toBe(conflictingArchive);
     expect(parsePreviewBackup(originalRaw, currentDate).valid).toBe(true);
+  });
+
+  it('preserves schema-44 Calendar settings in authenticated local storage and reloads them', async () => {
+    const user = userEvent.setup();
+    const currentDate = localDateString(new Date());
+    const accountId = 'c0000000-0000-4000-8000-000000000144';
+    const accountKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
+    const recoveryKey = `${accountKey}${PREVIEW_V44_RECOVERY_KEY.slice(PREVIEW_STORAGE_KEY.length)}`;
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    const data = createSamplePreviewData();
+    data.goals[0]!.correctionHistory.push({
+      effectiveDate: '2026-10-18',
+      previousBalanceMinor: 120_000,
+      previousNote: 'Synthetic historical correction',
+      replacedAt: '2026-10-20T12:30:00.000Z'
+    });
+    data.calendarSources = [{
+      id: 'calendar-source-schema-44-calendar',
+      name: 'Existing schema 44 calendar',
+      url: 'https://p123-caldav.icloud.com/published/schema-44-synthetic',
+      enabled: true
+    }];
+    const originalRaw = schema44RawAtLength(data, 240_097);
+    expect(originalRaw.length).toBe(240_097);
+    const parsedOriginal = parsePreviewBackup(originalRaw, currentDate);
+    expect(parsedOriginal.valid, parsedOriginal.valid ? undefined : parsedOriginal.message).toBe(true);
+    window.localStorage.setItem(accountKey, originalRaw);
+
+    const storage = window.localStorage;
+    const writeOrder: string[] = [];
+    const originalSetItem = storage.setItem.bind(storage);
+    vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
+      if (key === recoveryKey) writeOrder.push('recovery');
+      if (key === accountKey) writeOrder.push('active');
+      originalSetItem(key, value);
+    });
+    const view = testingRender(
+      <App identity={identity} />
+    );
+    await screen.findByRole('button', { name: 'More, settings' });
+    await openPreviewSettings(user, 'calendar');
+    await user.click(screen.getByRole('button', { name: 'Edit Existing schema 44 calendar' }));
+    await user.clear(screen.getByLabelText('Calendar name'));
+    await user.type(screen.getByLabelText('Calendar name'), 'Updated schema 44 calendar');
+    await user.click(screen.getByRole('button', { name: 'Save calendar' }));
+    expect(await screen.findByText('Updated schema 44 calendar')).toBeTruthy();
+
+    expect(writeOrder).toEqual(['recovery', 'active']);
+    expect(storage.getItem(recoveryKey)).toBe(originalRaw);
+
+    view.unmount();
+    testingRender(<App identity={identity} />);
+    await openPreviewSettings(user, 'calendar');
+    expect(await screen.findByText('Updated schema 44 calendar')).toBeTruthy();
+    expect(storage.getItem(recoveryKey)).toBe(originalRaw);
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBeNull();
+  });
+
+  it('keeps a schema-44 Prayer draft and local records unchanged when its exact backup fails, then retries once before sync', async () => {
+    const user = userEvent.setup();
+    const currentDate = localDateString(new Date());
+    const accountId = 'c0000000-0000-4000-8000-000000000145';
+    const accountKey = `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountId}`;
+    const recoveryKey = `${accountKey}${PREVIEW_V44_RECOVERY_KEY.slice(PREVIEW_STORAGE_KEY.length)}`;
+    const identity = createAuthenticatedPreviewIdentity(accountId, 1);
+    const data = createSamplePreviewData();
+    data.goals[0]!.correctionHistory.push({
+      effectiveDate: '2026-10-18',
+      previousBalanceMinor: 120_000,
+      previousNote: 'Synthetic historical correction',
+      replacedAt: '2026-10-20T12:30:00.000Z'
+    });
+    const originalRaw = schema44RawAtLength(data, 240_097);
+    expect(parsePreviewBackup(originalRaw, currentDate).valid).toBe(true);
+    window.localStorage.setItem(accountKey, originalRaw);
+
+    const storage = window.localStorage;
+    const writeOrder: string[] = [];
+    const originalSetItem = storage.setItem.bind(storage);
+    let failRecoveryWrite = true;
+    vi.spyOn(storage, 'setItem').mockImplementation((key, value) => {
+      if (key === recoveryKey && failRecoveryWrite) {
+        throw new DOMException('Synthetic storage quota failure', 'QuotaExceededError');
+      }
+      if (key === recoveryKey) writeOrder.push('recovery');
+      if (key === accountKey) writeOrder.push('active');
+      originalSetItem(key, value);
+    });
+
+    const backup = deferredAccountBackupApi();
+    backup.save.mockImplementation(async (_document, expectedRevision) => {
+      writeOrder.push('sync');
+      expect(storage.getItem(recoveryKey)).toBe(originalRaw);
+      const active = parsePreviewBackup(storage.getItem(accountKey)!, currentDate);
+      expect(active.valid).toBe(true);
+      if (active.valid) {
+        expect(active.sourceSchemaVersion).toBe(PREVIEW_SCHEMA_VERSION);
+        expect(active.envelope.data.prayerRequests).toHaveLength(1);
+        expect(active.envelope.data.goals[0]?.correctionHistory).toEqual(data.goals[0]?.correctionHistory);
+      }
+      return expectedRevision + 1;
+    });
+
+    const view = testingRender(
+      <App identity={identity} accountBackupApi={backup.api} />
+    );
+    await screen.findByRole('button', { name: 'More, settings' });
+    await waitFor(() => expect(backup.read).toHaveBeenCalled());
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    await user.click(within(profile).getByRole('tab', { name: 'Prayer' }));
+    await user.click(within(profile).getByRole('button', { name: 'Add request' }));
+    const editor = screen.getByRole('dialog', { name: 'Add prayer request' });
+    const title = within(editor).getByRole('textbox', { name: 'Title' }) as HTMLInputElement;
+    await user.type(title, 'Schema 44 prayer request');
+    await user.click(within(editor).getByRole('button', { name: 'Save request' }));
+
+    expect(within(editor).getByRole('alert').textContent)
+      .toContain('immutable-recovery-copy-failed at schemaVersion; backup-write-exception: QuotaExceededError');
+    expect(within(editor).getByRole('alert').textContent).not.toContain('Synthetic storage quota failure');
+    expect(title.value).toBe('Schema 44 prayer request');
+    expect(storage.getItem(accountKey)).toBe(originalRaw);
+    expect(storage.getItem(recoveryKey)).toBeNull();
+    expect(backup.save).not.toHaveBeenCalled();
+    const unchanged = parsePreviewBackup(originalRaw, currentDate);
+    expect(unchanged.valid).toBe(true);
+    if (unchanged.valid) {
+      expect(unchanged.envelope.data.prayerRequests).toEqual([]);
+      expect(unchanged.envelope.data.goals[0]?.correctionHistory).toEqual(data.goals[0]?.correctionHistory);
+    }
+
+    failRecoveryWrite = false;
+    await user.click(within(editor).getByRole('button', { name: 'Save request' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add prayer request' })).toBeNull());
+    expect(storage.getItem(recoveryKey)).toBe(originalRaw);
+    expect(writeOrder).toEqual(['recovery', 'active']);
+    backup.resolveRead(null);
+    await waitFor(() => expect(backup.save).toHaveBeenCalledOnce(), { timeout: 5_000 });
+    expect(writeOrder).toEqual(['recovery', 'active', 'sync']);
+
+    view.unmount();
+    testingRender(<App identity={identity} />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'People' }));
+    await user.click(screen.getByRole('button', { name: 'Open profile for Avery Brooks' }));
+    const reloadedProfile = screen.getByRole('main', { name: 'Avery Brooks' });
+    await user.click(within(reloadedProfile).getByRole('tab', { name: 'Prayer' }));
+    expect(await screen.findByText('Schema 44 prayer request')).toBeTruthy();
+    const saved = parsePreviewBackup(storage.getItem(accountKey)!, currentDate);
+    expect(saved.valid).toBe(true);
+    if (saved.valid) {
+      expect(saved.envelope.data.prayerRequests.filter(request => request.title === 'Schema 44 prayer request'))
+        .toHaveLength(1);
+      expect(saved.envelope.data.goals[0]?.correctionHistory).toEqual(data.goals[0]?.correctionHistory);
+    }
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBeNull();
   });
 
   it('saves one guided workout through the authoritative linked-Strength Rhythm path', async () => {

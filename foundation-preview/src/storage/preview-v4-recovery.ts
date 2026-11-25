@@ -1,5 +1,9 @@
 import { PREVIEW_BACKUP_FORMAT } from '../domain/preview-state.ts';
-import type { PreviewStorage } from './preview-storage.ts';
+import type {
+  PreviewRecoveryErrorName,
+  PreviewRecoveryFailure,
+  PreviewStorage
+} from './preview-storage.ts';
 
 export const PREVIEW_STORAGE_KEY = 'tend2:synthetic-preview';
 export const PREVIEW_RAW_RECOVERY_KEY = 'tend2:synthetic-preview:raw-recovery';
@@ -133,10 +137,26 @@ export type ProposedRecoveryResult =
   | { kind: 'conflict'; key: string; existingRaw: string }
   | { kind: 'active-conflict'; actualRaw: string | null }
   | { kind: 'unsupported'; message: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; failure: PreviewRecoveryFailure };
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Browser storage is unavailable.';
+function safeRecoveryErrorName(error: unknown): PreviewRecoveryErrorName {
+  try {
+    if (typeof error === 'object' && error !== null && 'name' in error) {
+      const name = error.name;
+      if (typeof name === 'string') {
+        switch (name) {
+          case 'QuotaExceededError':
+          case 'SecurityError':
+          case 'InvalidStateError':
+          case 'UnknownError':
+            return name;
+        }
+      }
+    }
+  } catch {
+    return 'UnknownError';
+  }
+  return 'UnknownError';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -170,22 +190,52 @@ export function preserveProposedV4SourceRecovery(
     return { kind: 'unsupported', message: 'The source envelope version has no approved recovery key.' };
   }
 
+  let actualRaw: string | null;
   try {
-    const actualRaw = storage.getItem(PREVIEW_STORAGE_KEY);
-    if (actualRaw !== raw) return { kind: 'active-conflict', actualRaw };
-    const existingRaw = storage.getItem(key);
-    if (existingRaw === raw) return { kind: 'preserved', key, raw };
-    if (existingRaw !== null) return { kind: 'conflict', key, existingRaw };
-    storage.setItem(key, raw);
-    const actualRawAfterCopy = storage.getItem(PREVIEW_STORAGE_KEY);
-    if (actualRawAfterCopy !== raw) return { kind: 'active-conflict', actualRaw: actualRawAfterCopy };
-    if (storage.getItem(key) !== raw) {
-      return { kind: 'error', message: 'The exact recovery copy could not be verified.' };
-    }
-    return { kind: 'preserved', key, raw };
+    actualRaw = storage.getItem(PREVIEW_STORAGE_KEY);
   } catch (error) {
-    return { kind: 'error', message: errorMessage(error) };
+    return {
+      kind: 'error',
+      failure: { kind: 'storage-read-exception', errorName: safeRecoveryErrorName(error) }
+    };
   }
+  if (actualRaw !== raw) return { kind: 'active-conflict', actualRaw };
+
+  let existingRaw: string | null;
+  try {
+    existingRaw = storage.getItem(key);
+  } catch (error) {
+    return {
+      kind: 'error',
+      failure: { kind: 'storage-read-exception', errorName: safeRecoveryErrorName(error) }
+    };
+  }
+  if (existingRaw === raw) return { kind: 'preserved', key, raw };
+  if (existingRaw !== null) return { kind: 'conflict', key, existingRaw };
+
+  try {
+    storage.setItem(key, raw);
+  } catch (error) {
+    return {
+      kind: 'error',
+      failure: { kind: 'backup-write-exception', errorName: safeRecoveryErrorName(error) }
+    };
+  }
+
+  let actualRawAfterCopy: string | null;
+  let recoveryRaw: string | null;
+  try {
+    actualRawAfterCopy = storage.getItem(PREVIEW_STORAGE_KEY);
+    recoveryRaw = storage.getItem(key);
+  } catch (error) {
+    return {
+      kind: 'error',
+      failure: { kind: 'read-back-exception', errorName: safeRecoveryErrorName(error) }
+    };
+  }
+  if (actualRawAfterCopy !== raw) return { kind: 'active-conflict', actualRaw: actualRawAfterCopy };
+  if (recoveryRaw !== raw) return { kind: 'error', failure: { kind: 'exact-byte-mismatch' } };
+  return { kind: 'preserved', key, raw };
 }
 
 export function proposedV4RecoveryKeyForRaw(raw: string): string | null {
