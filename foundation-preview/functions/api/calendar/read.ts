@@ -54,6 +54,14 @@ export async function onRequest(context: { request: Request }): Promise<Response
         stageStartedAt = performance.now();
         log({ stage, outcome: 'started' });
       },
+      onSubstage: (substage, outcome, details) => {
+        log({
+          stage: 'upstream_fetch',
+          substage,
+          outcome,
+          ...details
+        });
+      },
       onDiagnostic: diagnostic => {
         log({
           stage: 'feed_parse',

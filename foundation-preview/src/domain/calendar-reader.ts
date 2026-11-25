@@ -11,6 +11,10 @@ const maximumRequestBytes = 16_384;
 const maximumFeedBytes = 5 * 1_048_576;
 const maximumRangeMs = 32 * 86_400_000;
 const maximumRedirects = 3;
+const maximumRetryAfterMs = 1_000;
+const feedReadProgressBytes = 1_048_576;
+const feedReadProgressChunks = 16;
+const maximumFeedReadProgressEvents = 16;
 const requestTimeoutMs = 10_000;
 
 type CalendarFailureCode =
@@ -39,9 +43,45 @@ type FailureMetadata = {
 export type CalendarReaderStage =
   | 'request_validation'
   | 'request_body'
+  | 'upstream_request'
   | 'upstream_fetch'
+  | 'feed_body_read'
+  | 'feed_decode'
   | 'feed_parse'
   | 'response_serialization';
+
+type CalendarReaderSubstage =
+  | 'feed_url_prepare'
+  | 'upstream_request_prepare'
+  | 'upstream_request'
+  | 'upstream_response_headers'
+  | 'feed_body_read'
+  | 'feed_buffer_copy'
+  | 'feed_decode';
+
+type SafeContentEncoding = 'none' | 'gzip' | 'br' | 'deflate' | 'other';
+
+type CalendarReaderSubstageDetails = {
+  elapsedMs?: number;
+  status?: number;
+  declaredBytes?: number;
+  feedBytes?: number;
+  chunkCount?: number;
+  contentEncoding?: SafeContentEncoding;
+  calendarContentType?: boolean;
+  hasLocationHeader?: boolean;
+};
+
+type CalendarReaderSubstageOutcome = 'started' | 'progress' | 'completed';
+
+function safeContentEncoding(headers: Headers): SafeContentEncoding {
+  const value = headers.get('content-encoding');
+  if (!value) return 'none';
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'gzip' || normalized === 'br' || normalized === 'deflate'
+    ? normalized
+    : 'other';
+}
 
 class CalendarReaderError extends Error {
   constructor(
@@ -189,30 +229,118 @@ function validRequestInput(value: unknown): value is {
   return validation.valid;
 }
 
+function upstreamRetryDelayMs(response: Response): number | null {
+  const retryAfter = response.headers.get('retry-after');
+  if (retryAfter === null) return 200 + Math.floor(Math.random() * 200);
+
+  const seconds = Number(retryAfter);
+  const requestedDelay = Number.isFinite(seconds)
+    ? seconds * 1_000
+    : Date.parse(retryAfter) - Date.now();
+  return Number.isFinite(requestedDelay)
+    && requestedDelay >= 0
+    && requestedDelay <= maximumRetryAfterMs
+    ? requestedDelay
+    : null;
+}
+
+function waitForRetry(signal: AbortSignal, delayMs: number): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise(resolve => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const finish = () => {
+      clearTimeout(timeoutId);
+      signal.removeEventListener('abort', finish);
+      resolve();
+    };
+    timeoutId = setTimeout(finish, delayMs);
+    signal.addEventListener('abort', finish, { once: true });
+  });
+}
+
 async function readFeed(
   rawUrl: string,
   fetchImpl: typeof fetch,
   signal: AbortSignal,
-  onException?: (stage: CalendarReaderStage, error: unknown) => void
+  onException?: (stage: CalendarReaderStage, error: unknown) => void,
+  onSubstage?: (
+    substage: CalendarReaderSubstage,
+    outcome: CalendarReaderSubstageOutcome,
+    details?: CalendarReaderSubstageDetails
+  ) => void
 ): Promise<string> {
+  const urlPrepareStartedAt = performance.now();
+  onSubstage?.('feed_url_prepare', 'started');
   let url = parseFeedUrl(rawUrl);
+  onSubstage?.('feed_url_prepare', 'completed', {
+    elapsedMs: Math.max(0, Math.round(performance.now() - urlPrepareStartedAt))
+  });
+  let transientRetryUsed = false;
   for (let redirect = 0; redirect <= maximumRedirects; redirect += 1) {
-    let response: Response;
-    try {
-      response = await fetchImpl(url, {
+    let response: Response | null = null;
+    let declaredLength: number | null = null;
+    let calendarContentType = false;
+    while (true) {
+      const requestPrepareStartedAt = performance.now();
+      onSubstage?.('upstream_request_prepare', 'started');
+      const requestOptions: RequestInit = {
         method: 'GET',
         headers: { accept: 'text/calendar' },
         redirect: 'manual',
         cache: 'no-store',
         signal
+      };
+      onSubstage?.('upstream_request_prepare', 'completed', {
+        elapsedMs: Math.max(0, Math.round(performance.now() - requestPrepareStartedAt))
       });
-    } catch (error) {
-      onException?.('upstream_fetch', error);
-      if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError')) {
-        throw new CalendarReaderError('upstream-timeout');
+      const requestStartedAt = performance.now();
+      onSubstage?.('upstream_request', 'started');
+      try {
+        response = await fetchImpl(url, requestOptions);
+      } catch (error) {
+        onException?.('upstream_request', error);
+        if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError')) {
+          throw new CalendarReaderError('upstream-timeout');
+        }
+        throw new CalendarReaderError('upstream-network-failed');
       }
-      throw new CalendarReaderError('upstream-network-failed');
+      onSubstage?.('upstream_request', 'completed', {
+        elapsedMs: Math.max(0, Math.round(performance.now() - requestStartedAt)),
+        status: response.status
+      });
+
+      const responseHeadersStartedAt = performance.now();
+      onSubstage?.('upstream_response_headers', 'started');
+      const responseStatus = response.status;
+      const contentLengthHeader = response.headers.get('content-length');
+      declaredLength = contentLengthHeader === null ? null : Number(contentLengthHeader);
+      const contentType = response.headers.get('content-type');
+      calendarContentType = contentType?.split(';', 1)[0]?.trim().toLowerCase() === 'text/calendar';
+      onSubstage?.('upstream_response_headers', 'completed', {
+        elapsedMs: Math.max(0, Math.round(performance.now() - responseHeadersStartedAt)),
+        status: responseStatus,
+        ...(declaredLength !== null && Number.isSafeInteger(declaredLength) && declaredLength >= 0
+          ? { declaredBytes: declaredLength }
+          : {}),
+        contentEncoding: safeContentEncoding(response.headers),
+        calendarContentType,
+        hasLocationHeader: response.headers.has('location')
+      });
+
+      const retryableStatus = responseStatus === 500
+        || responseStatus === 502
+        || responseStatus === 503
+        || responseStatus === 504;
+      if (!retryableStatus || transientRetryUsed) break;
+
+      const delayMs = upstreamRetryDelayMs(response);
+      if (delayMs === null) break;
+      transientRetryUsed = true;
+      await response.body?.cancel();
+      await waitForRetry(signal, delayMs);
+      if (signal.aborted) throw new CalendarReaderError('upstream-timeout');
     }
+    if (!response) throw new CalendarReaderError('feed-retrieval-failed');
 
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
@@ -232,29 +360,64 @@ async function readFeed(
       await response.body?.cancel();
       throw new CalendarReaderError('feed-http-rejected', { upstreamStatus: response.status });
     }
-    if (response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'text/calendar') {
+    if (!calendarContentType) {
       await response.body?.cancel();
       throw new CalendarReaderError('feed-type-rejected');
     }
 
-    const declaredSize = Number(response.headers.get('content-length'));
-    if (Number.isFinite(declaredSize) && declaredSize > maximumFeedBytes) {
+    if (declaredLength !== null && Number.isFinite(declaredLength) && declaredLength > maximumFeedBytes) {
       await response.body?.cancel();
       throw new CalendarReaderError('feed-too-large', {
-        ...(Number.isSafeInteger(declaredSize) ? { feedBytes: declaredSize } : {}),
+        ...(Number.isSafeInteger(declaredLength) ? { feedBytes: declaredLength } : {}),
         limitBytes: maximumFeedBytes
       });
     }
 
+    const bodyReadStartedAt = performance.now();
+    onSubstage?.('feed_body_read', 'started');
     const reader = response.body?.getReader();
-    if (!reader) return '';
+    if (!reader) {
+      onSubstage?.('feed_body_read', 'completed', {
+        elapsedMs: Math.max(0, Math.round(performance.now() - bodyReadStartedAt)),
+        feedBytes: 0,
+        chunkCount: 0
+      });
+      onSubstage?.('feed_buffer_copy', 'started');
+      onSubstage?.('feed_buffer_copy', 'completed', {
+        elapsedMs: 0,
+        feedBytes: 0,
+        chunkCount: 0
+      });
+      onSubstage?.('feed_decode', 'started');
+      onSubstage?.('feed_decode', 'completed', { elapsedMs: 0, feedBytes: 0 });
+      return '';
+    }
     const chunks: Uint8Array[] = [];
     let size = 0;
+    let chunkCount = 0;
+    let progressEventCount = 0;
+    let nextProgressBytes = feedReadProgressBytes;
+    let nextProgressChunks = feedReadProgressChunks;
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        chunkCount += 1;
         size += value.byteLength;
+        if (progressEventCount < maximumFeedReadProgressEvents
+          && (size >= nextProgressBytes || chunkCount >= nextProgressChunks)) {
+          onSubstage?.('feed_body_read', 'progress', {
+            elapsedMs: Math.max(0, Math.round(performance.now() - bodyReadStartedAt)),
+            feedBytes: size,
+            chunkCount
+          });
+          progressEventCount += 1;
+          nextProgressBytes = size + feedReadProgressBytes;
+          nextProgressChunks = Math.max(
+            chunkCount + feedReadProgressChunks,
+            chunkCount * 2
+          );
+        }
         if (size > maximumFeedBytes) {
           await reader.cancel();
           throw new CalendarReaderError('feed-too-large', {
@@ -266,7 +429,7 @@ async function readFeed(
       }
     } catch (error) {
       if (error instanceof CalendarReaderError) throw error;
-      onException?.('upstream_fetch', error);
+      onException?.('feed_body_read', error);
       if (signal.aborted || (error instanceof Error && error.name === 'TimeoutError')) {
         throw new CalendarReaderError('upstream-timeout');
       }
@@ -275,16 +438,35 @@ async function readFeed(
       reader.releaseLock();
     }
 
+    onSubstage?.('feed_body_read', 'completed', {
+      elapsedMs: Math.max(0, Math.round(performance.now() - bodyReadStartedAt)),
+      feedBytes: size,
+      chunkCount
+    });
+    onSubstage?.('feed_buffer_copy', 'started');
+    const copyStartedAt = performance.now();
     const body = new Uint8Array(size);
     let offset = 0;
     for (const chunk of chunks) {
       body.set(chunk, offset);
       offset += chunk.byteLength;
     }
+    onSubstage?.('feed_buffer_copy', 'completed', {
+      elapsedMs: Math.max(0, Math.round(performance.now() - copyStartedAt)),
+      feedBytes: size,
+      chunkCount
+    });
+    onSubstage?.('feed_decode', 'started');
+    const decodeStartedAt = performance.now();
     try {
-      return new TextDecoder('utf-8', { fatal: true }).decode(body);
+      const decoded = new TextDecoder('utf-8', { fatal: true }).decode(body);
+      onSubstage?.('feed_decode', 'completed', {
+        elapsedMs: Math.max(0, Math.round(performance.now() - decodeStartedAt)),
+        feedBytes: size
+      });
+      return decoded;
     } catch (error) {
-      onException?.('upstream_fetch', error);
+      onException?.('feed_decode', error);
       throw new CalendarReaderError('feed-parse-failed');
     }
   }
@@ -298,6 +480,11 @@ export async function handleCalendarRead(
     timeoutMs?: number;
     onStage?: (stage: CalendarReaderStage) => void;
     onException?: (stage: CalendarReaderStage, error: unknown) => void;
+    onSubstage?: (
+      substage: CalendarReaderSubstage,
+      outcome: CalendarReaderSubstageOutcome,
+      details?: CalendarReaderSubstageDetails
+    ) => void;
     onDiagnostic?: (diagnostic: CalendarExpansionLimitDiagnostic) => void;
   } = {}
 ): Promise<Response> {
@@ -381,7 +568,8 @@ export async function handleCalendarRead(
       input.source.url,
       options.fetchImpl ?? fetch,
       controller.signal,
-      options.onException
+      options.onException,
+      options.onSubstage
     );
     stage = 'feed_parse';
     options.onStage?.(stage);

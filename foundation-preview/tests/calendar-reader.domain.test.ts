@@ -171,9 +171,13 @@ describe('Cloudflare Pages Calendar reader', () => {
     const entries = log.mock.calls.map(([entry]) => JSON.parse(String(entry)) as {
       requestId: string;
       stage?: string;
+      substage?: string;
       outcome?: string;
       elapsedMs?: number;
       status?: number;
+      declaredBytes?: number;
+      feedBytes?: number;
+      chunkCount?: number;
     });
 
     expect(response.headers.get('x-tend-calendar-request-id')).toBe(requestId);
@@ -187,15 +191,203 @@ describe('Cloudflare Pages Calendar reader', () => {
       'response_serialization',
       'request_complete'
     ]));
+    expect(entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'feed_url_prepare',
+        outcome: 'started'
+      }),
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'feed_url_prepare',
+        outcome: 'completed'
+      }),
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'upstream_request',
+        outcome: 'started'
+      }),
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'upstream_request_prepare',
+        outcome: 'completed'
+      }),
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'upstream_request',
+        outcome: 'completed',
+        status: 200
+      }),
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'upstream_response_headers',
+        outcome: 'completed',
+        status: 200,
+        contentEncoding: 'none',
+        calendarContentType: true,
+        hasLocationHeader: false
+      }),
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'feed_body_read',
+        outcome: 'completed',
+        feedBytes: new TextEncoder().encode(feed).byteLength,
+        chunkCount: expect.any(Number)
+      }),
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'feed_buffer_copy',
+        outcome: 'completed',
+        feedBytes: new TextEncoder().encode(feed).byteLength,
+        chunkCount: expect.any(Number)
+      }),
+      expect.objectContaining({
+        requestId,
+        stage: 'upstream_fetch',
+        substage: 'feed_decode',
+        outcome: 'completed'
+      })
+    ]));
     const elapsedValues = entries.flatMap(entry => entry.elapsedMs === undefined ? [] : [entry.elapsedMs]);
     expect(elapsedValues.every(value => Number.isSafeInteger(value) && value >= 0)).toBe(true);
     expect(entries.find(entry => entry.stage === 'request_complete')).toMatchObject({
       outcome: 'ok',
       status: 200
     });
+    expect(entries.find(entry => entry.substage === 'upstream_response_headers'))
+      .not.toHaveProperty('declaredBytes');
     const loggedText = log.mock.calls.map(([entry]) => String(entry)).join('\n');
     expect(loggedText).not.toContain('Synthetic event');
     expect(loggedText).not.toContain(source.url);
+  });
+
+  it('records bounded feed-read progress without logging calendar content', async () => {
+    const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const expandedFeed = feed.replace(
+      'END:VEVENT',
+      `${Array.from({ length: 60 }, (_, index) => `X-TEST-${index}:ok`).join('\r\n')}\r\nX-PADDING:${'x'.repeat(20_000)}\r\nEND:VEVENT`
+    );
+    const bytes = new TextEncoder().encode(expandedFeed);
+    let offset = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset >= bytes.byteLength) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(bytes.slice(offset, offset + 1));
+        offset += 1;
+      }
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, {
+      headers: {
+        'content-type': 'text/calendar',
+        'content-length': String(bytes.byteLength)
+      }
+    })));
+
+    await onRequest({ request: request(validBody(), { requestId }) });
+
+    const entries = log.mock.calls.map(([entry]) => JSON.parse(String(entry)) as {
+      requestId: string;
+      stage?: string;
+      substage?: string;
+      outcome?: string;
+      feedBytes?: number;
+      chunkCount?: number;
+    });
+    const progressEntries = entries.filter(entry =>
+      entry.stage === 'upstream_fetch'
+      && entry.substage === 'feed_body_read'
+      && entry.outcome === 'progress'
+    );
+    expect(progressEntries.length).toBeGreaterThan(0);
+    expect(progressEntries.length).toBeLessThanOrEqual(16);
+    expect(progressEntries[0]).toMatchObject({
+      requestId,
+      feedBytes: 16,
+      chunkCount: 16
+    });
+    expect(entries).toContainEqual(expect.objectContaining({
+      stage: 'upstream_fetch',
+      substage: 'upstream_response_headers',
+      outcome: 'completed',
+      declaredBytes: bytes.byteLength
+    }));
+    expect(entries).toContainEqual(expect.objectContaining({
+      stage: 'upstream_fetch',
+      substage: 'feed_body_read',
+      outcome: 'completed',
+      feedBytes: bytes.byteLength,
+      chunkCount: bytes.byteLength
+    }));
+    const loggedText = log.mock.calls.map(([entry]) => String(entry)).join('\n');
+    expect(loggedText).not.toContain('Synthetic event');
+    expect(loggedText).not.toContain('X-TEST-0');
+    expect(loggedText).not.toContain(source.url);
+  });
+
+  it('sanitizes response-header diagnostics and omits absent content length', async () => {
+    const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => calendarResponse(feed, {
+      'content-encoding': 'private-encoding-label',
+      'content-type': 'text/calendar; private=header-value',
+      location: 'https://calendar.example.invalid/private-feed-token'
+    })));
+
+    await onRequest({ request: request(validBody(), { requestId }) });
+
+    const entries = log.mock.calls.map(([entry]) => JSON.parse(String(entry)) as Record<string, unknown>);
+    const headers = entries.find(entry =>
+      entry.substage === 'upstream_response_headers' && entry.outcome === 'completed'
+    );
+    expect(headers).toMatchObject({
+      requestId,
+      contentEncoding: 'other',
+      calendarContentType: true,
+      hasLocationHeader: true
+    });
+    expect(headers).not.toHaveProperty('declaredBytes');
+    const loggedText = log.mock.calls.map(([entry]) => String(entry)).join('\n');
+    expect(loggedText).not.toContain('private-encoding-label');
+    expect(loggedText).not.toContain('private=header-value');
+    expect(loggedText).not.toContain('private-feed-token');
+    expect(loggedText).not.toContain(source.url);
+  });
+
+  it('retries one transient provider 503 within the Pages Function request', async () => {
+    const requestId = 'c3b19aa7-9e44-4c5f-9f7d-26770998f56a';
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('temporary provider failure', { status: 503 }))
+      .mockResolvedValueOnce(calendarResponse());
+    vi.stubGlobal('fetch', fetchImpl);
+    vi.useFakeTimers();
+    try {
+      const pendingResponse = onRequest({
+        request: request(validBody(), { requestId })
+      });
+      await vi.advanceTimersByTimeAsync(500);
+      const response = await pendingResponse;
+      const result = await response.json() as { events: unknown[]; issueCount: number };
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('x-tend-calendar-request-id')).toBe(requestId);
+      expect(result.events).toHaveLength(1);
+      expect(result.issueCount).toBe(0);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('distinguishes a serialized client error from a serialization failure', async () => {
@@ -237,6 +429,7 @@ describe('Cloudflare Pages Calendar reader', () => {
     const entries = log.mock.calls.map(([entry]) => JSON.parse(String(entry)) as {
       requestId: string;
       stage?: string;
+      substage?: string;
       outcome?: string;
       exceptionType?: string;
     });
@@ -246,9 +439,21 @@ describe('Cloudflare Pages Calendar reader', () => {
     expect(response.status).toBe(502);
     expect(exceptionEntry).toMatchObject({
       requestId,
-      stage: 'upstream_fetch',
+      stage: 'upstream_request',
       exceptionType: 'TypeError'
     });
+    expect(entries).toContainEqual(expect.objectContaining({
+      requestId,
+      stage: 'upstream_fetch',
+      substage: 'upstream_request',
+      outcome: 'started'
+    }));
+    expect(entries).not.toContainEqual(expect.objectContaining({
+      requestId,
+      stage: 'upstream_fetch',
+      substage: 'upstream_request',
+      outcome: 'completed'
+    }));
     expect(loggedText).not.toContain('private upstream response detail');
     expect(loggedText).not.toContain(source.url);
   });
@@ -371,6 +576,21 @@ describe('Cloudflare Pages Calendar reader', () => {
     expect(result).toContain('"upstreamStatus":503');
     expect(result).not.toContain('upstream-private-response');
     expect(result).not.toContain(source.url);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a transient upstream response beyond its Retry-After window', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(
+      'upstream-private-response',
+      { status: 503, headers: { 'retry-after': '30' } }
+    ));
+    const response = await handleCalendarRead(request(validBody()), { fetchImpl });
+    const result = await response.text();
+
+    expect(response.status).toBe(502);
+    expect(result).toContain('"code":"feed-http-rejected"');
+    expect(result).not.toContain('upstream-private-response');
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it('reports parsing failures without exposing feed contents', async () => {
