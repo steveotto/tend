@@ -316,6 +316,13 @@ function failureDiagnostic(
   ].join(' · ');
 }
 
+function formatLastUpdatedAt(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(timestamp);
+}
+
 export function CalendarAgendaSection({
   sources,
   timeZone,
@@ -337,6 +344,7 @@ export function CalendarAgendaSection({
     failures: [],
     issueCount: 0
   });
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const now = useCurrentInstant().getTime();
   const enabledSources = useMemo(
     () => sources.filter(source => source.enabled !== false),
@@ -350,6 +358,7 @@ export function CalendarAgendaSection({
   useEffect(() => {
     if (!readerEnabled || enabledSources.length === 0) {
       setState({ kind: 'ready', events: [], failures: [], issueCount: 0 });
+      setLastUpdatedAt(null);
       return;
     }
 
@@ -403,6 +412,7 @@ export function CalendarAgendaSection({
       const events = results.flatMap(result => result.result?.events ?? [])
         .sort((left, right) => left.startsAt - right.startsAt);
       const issueCount = results.reduce((count, result) => count + (result.result?.issueCount ?? 0), 0);
+      if (results.some(result => result.result !== null)) setLastUpdatedAt(Date.now());
       setState({
         kind: events.length > 0 || failures.length === 0 ? 'ready' : 'error',
         events,
@@ -545,7 +555,9 @@ export function CalendarAgendaSection({
             </ol>
             {busy && visibleEvents.length > 0 && (
               <p className="calendar-updating" role="status" aria-live="polite">
-                Updating events…
+                {lastUpdatedAt === null
+                  ? 'Updating events…'
+                  : `Showing stale events from ${formatLastUpdatedAt(lastUpdatedAt)} while updating.`}
               </p>
             )}
           </>

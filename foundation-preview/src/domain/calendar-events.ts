@@ -52,6 +52,9 @@ const maximumEventComponentsPerFeed = 8_192;
 const maximumRecurrenceValuesPerFeed = 1_024;
 const maximumExpandedOccurrencesPerFeed = 4_096;
 const maximumUncountedDailyInterval = 1;
+const maximumCachedTimeZoneFormatters = 16;
+
+type TimeZoneFormatterCache = Map<string, Intl.DateTimeFormat>;
 
 function parseLocalDate(value: string): DateParts | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -84,8 +87,15 @@ function shiftMonth(parts: DateParts): DateParts {
   };
 }
 
-function partsAt(instant: number, timeZone: string): DateParts & { hour: number; minute: number; second: number } {
-  const parts = new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn', {
+function timeZoneFormatter(timeZone: string, cache: TimeZoneFormatterCache): Intl.DateTimeFormat {
+  const cached = cache.get(timeZone);
+  if (cached) {
+    cache.delete(timeZone);
+    cache.set(timeZone, cached);
+    return cached;
+  }
+
+  const formatter = new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn', {
     timeZone,
     year: 'numeric',
     month: '2-digit',
@@ -94,7 +104,21 @@ function partsAt(instant: number, timeZone: string): DateParts & { hour: number;
     minute: '2-digit',
     second: '2-digit',
     hourCycle: 'h23'
-  }).formatToParts(new Date(instant));
+  });
+  if (cache.size >= maximumCachedTimeZoneFormatters) {
+    const oldest = cache.keys().next();
+    if (!oldest.done) cache.delete(oldest.value);
+  }
+  cache.set(timeZone, formatter);
+  return formatter;
+}
+
+function partsAt(
+  instant: number,
+  timeZone: string,
+  formatters: TimeZoneFormatterCache
+): DateTimeParts {
+  const parts = timeZoneFormatter(timeZone, formatters).formatToParts(new Date(instant));
   const values = Object.fromEntries(parts.map(part => [part.type, Number(part.value)]));
   return {
     year: values.year!,
@@ -106,11 +130,15 @@ function partsAt(instant: number, timeZone: string): DateParts & { hour: number;
   };
 }
 
-function zonedDateTimeToInstant(parts: DateParts, timeZone: string): number {
+function zonedDateTimeToInstant(
+  parts: DateParts,
+  timeZone: string,
+  formatters: TimeZoneFormatterCache
+): number {
   const target = Date.UTC(parts.year, parts.month - 1, parts.day);
   let guess = target;
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const actual = partsAt(guess, timeZone);
+    const actual = partsAt(guess, timeZone, formatters);
     const represented = Date.UTC(
       actual.year,
       actual.month - 1,
@@ -127,7 +155,7 @@ function zonedDateTimeToInstant(parts: DateParts, timeZone: string): number {
   const targetDate = localDateKey(parts);
   let low = Math.floor((target - 3 * 86_400_000) / 1000);
   let high = Math.ceil((target + 3 * 86_400_000) / 1000);
-  const dateAt = (seconds: number) => localDateKey(partsAt(seconds * 1000, timeZone));
+  const dateAt = (seconds: number) => localDateKey(partsAt(seconds * 1000, timeZone, formatters));
   if (dateAt(low) >= targetDate || dateAt(high) < targetDate) {
     throw new RangeError('Could not resolve the local calendar day in the selected time zone.');
   }
@@ -139,7 +167,11 @@ function zonedDateTimeToInstant(parts: DateParts, timeZone: string): number {
   return high * 1000;
 }
 
-export function zonedWallTimeToInstant(parts: DateTimeParts, timeZone: string): number {
+function zonedWallTimeToInstantWithCache(
+  parts: DateTimeParts,
+  timeZone: string,
+  formatters: TimeZoneFormatterCache
+): number {
   const target = Date.UTC(
     parts.year,
     parts.month - 1,
@@ -150,7 +182,7 @@ export function zonedWallTimeToInstant(parts: DateTimeParts, timeZone: string): 
   );
   let guess = target;
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const actual = partsAt(guess, timeZone);
+    const actual = partsAt(guess, timeZone, formatters);
     const represented = Date.UTC(
       actual.year,
       actual.month - 1,
@@ -164,6 +196,10 @@ export function zonedWallTimeToInstant(parts: DateTimeParts, timeZone: string): 
     guess += difference;
   }
   throw new RangeError('Could not resolve the local calendar time in the selected time zone.');
+}
+
+export function zonedWallTimeToInstant(parts: DateTimeParts, timeZone: string): number {
+  return zonedWallTimeToInstantWithCache(parts, timeZone, new Map());
 }
 
 function eventTimeZone(
@@ -197,25 +233,30 @@ function eventTimeZone(
 function eventTimeToInstant(
   time: ICAL.Time,
   fallbackTimeZone: string,
+  formatters: TimeZoneFormatterCache,
   component?: ICAL.Component,
   propertyName?: string
 ): number {
   const timeZone = eventTimeZone(time, fallbackTimeZone, component, propertyName);
   if (timeZone === null) return time.toJSDate().getTime();
-  return zonedWallTimeToInstant({
+  return zonedWallTimeToInstantWithCache({
     year: time.year,
     month: time.month,
     day: time.day,
     hour: time.hour,
     minute: time.minute,
     second: time.second
-  }, timeZone);
+  }, timeZone, formatters);
 }
 
-function localDayRange(parts: DateParts, timeZone: string): { start: number; end: number } {
+function localDayRange(
+  parts: DateParts,
+  timeZone: string,
+  formatters: TimeZoneFormatterCache
+): { start: number; end: number } {
   return {
-    start: zonedDateTimeToInstant(parts, timeZone),
-    end: zonedDateTimeToInstant(shiftDate(parts, 1), timeZone)
+    start: zonedDateTimeToInstant(parts, timeZone, formatters),
+    end: zonedDateTimeToInstant(shiftDate(parts, 1), timeZone, formatters)
   };
 }
 
@@ -227,14 +268,15 @@ export function getCalendarRangeWindow(
   if (!Number.isSafeInteger(now) || !Number.isFinite(new Date(now).getTime())) {
     throw new RangeError('A valid instant is required to calculate a calendar range.');
   }
-  const today = partsAt(now, timeZone);
-  const start = zonedDateTimeToInstant(today, timeZone);
+  const formatters: TimeZoneFormatterCache = new Map();
+  const today = partsAt(now, timeZone, formatters);
+  const start = zonedDateTimeToInstant(today, timeZone, formatters);
   const endDate = range === 'today'
     ? shiftDate(today, 1)
     : range === 'week'
       ? shiftDate(today, 7)
       : shiftMonth(today);
-  return { start, end: zonedDateTimeToInstant(endDate, timeZone) };
+  return { start, end: zonedDateTimeToInstant(endDate, timeZone, formatters) };
 }
 
 export function formatCalendarRangeLabel(
@@ -242,6 +284,7 @@ export function formatCalendarRangeLabel(
   window: CalendarRangeWindow,
   timeZone: string
 ): string {
+  const formatters: TimeZoneFormatterCache = new Map();
   const shortDate = new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
@@ -255,8 +298,8 @@ export function formatCalendarRangeLabel(
       timeZone
     }).format(window.start)}`;
   }
-  const first = partsAt(window.start, timeZone);
-  const last = partsAt(window.end - 1, timeZone);
+  const first = partsAt(window.start, timeZone, formatters);
+  const last = partsAt(window.end - 1, timeZone, formatters);
   const startDate = shortDate.format(window.start);
   const endDate = first.month === last.month && first.year === last.year
     ? String(last.day)
@@ -395,7 +438,8 @@ function recurrenceSeekStart(
   event: ICAL.Event,
   component: ICAL.Component,
   queryStart: number,
-  timeZone: string
+  timeZone: string,
+  formatters: TimeZoneFormatterCache
 ): ICAL.Time | null {
   const rules = component.getAllProperties('rrule');
   if (rules.length === 0 || rules.some(property => {
@@ -412,10 +456,10 @@ function recurrenceSeekStart(
   if (!start) return null;
   const earliestPossibleStart = queryStart - Math.abs(event.duration.toSeconds()) * 1_000;
   const referenceDate = start.isDate
-    ? partsAt(earliestPossibleStart, timeZone)
+    ? partsAt(earliestPossibleStart, timeZone, formatters)
     : (() => {
       const startTimeZone = eventTimeZone(start, timeZone, component, 'dtstart');
-      if (startTimeZone) return partsAt(earliestPossibleStart, startTimeZone);
+      if (startTimeZone) return partsAt(earliestPossibleStart, startTimeZone, formatters);
       const localTime = ICAL.Time.fromJSDate(new Date(earliestPossibleStart), true).convertToZone(start.zone);
       return { year: localTime.year, month: localTime.month, day: localTime.day };
     })();
@@ -451,7 +495,8 @@ function isWithinQuery(
   timeZone: string,
   localDay: { start: number; end: number } | null,
   timedStartsAt: number,
-  timedEndsAt: number
+  timedEndsAt: number,
+  formatters: TimeZoneFormatterCache
 ): boolean {
   if (query.kind === 'local-day') {
     return isWithinLocalDay(
@@ -464,8 +509,8 @@ function isWithinQuery(
       timedEndsAt,
     );
   }
-  const startsAt = allDay ? eventStartsAt(start, allDay, timeZone) : timedStartsAt;
-  const endsAt = allDay ? eventEndsAt(end, true, timeZone) : timedEndsAt;
+  const startsAt = allDay ? eventStartsAt(start, allDay, timeZone, formatters) : timedStartsAt;
+  const endsAt = allDay ? eventEndsAt(end, true, timeZone, formatters) : timedEndsAt;
   return query.kind === 'upcoming'
     ? endsAt > query.now
     : endsAt > query.start && startsAt < query.end;
@@ -475,24 +520,26 @@ function eventStartsAt(
   time: ICAL.Time,
   allDay: boolean,
   timeZone: string,
+  formatters: TimeZoneFormatterCache,
   component?: ICAL.Component,
   propertyName = 'dtstart'
 ): number {
   return allDay
-    ? zonedDateTimeToInstant(parseLocalDate(dateOnlyKey(time))!, timeZone)
-    : eventTimeToInstant(time, timeZone, component, propertyName);
+    ? zonedDateTimeToInstant(parseLocalDate(dateOnlyKey(time))!, timeZone, formatters)
+    : eventTimeToInstant(time, timeZone, formatters, component, propertyName);
 }
 
 function eventEndsAt(
   time: ICAL.Time,
   allDay: boolean,
   timeZone: string,
+  formatters: TimeZoneFormatterCache,
   component?: ICAL.Component,
   propertyName = component?.hasProperty('dtend') ? 'dtend' : 'dtstart'
 ): number {
   return allDay
-    ? zonedDateTimeToInstant(parseLocalDate(dateOnlyKey(time))!, timeZone)
-    : eventTimeToInstant(time, timeZone, component, propertyName);
+    ? zonedDateTimeToInstant(parseLocalDate(dateOnlyKey(time))!, timeZone, formatters)
+    : eventTimeToInstant(time, timeZone, formatters, component, propertyName);
 }
 
 function parseCalendarFeed(
@@ -520,9 +567,10 @@ function parseCalendarFeed(
 
   let calendar: ICAL.Component;
   let localDay: { start: number; end: number } | null = null;
+  const formatters: TimeZoneFormatterCache = new Map();
   try {
-    if (date) localDay = localDayRange(date, timeZone);
-    new Intl.DateTimeFormat('en', { timeZone }).format();
+    timeZoneFormatter(timeZone, formatters).format();
+    if (date) localDay = localDayRange(date, timeZone, formatters);
     calendar = ICAL.Component.fromString(raw);
     if (calendar.name !== 'vcalendar') throw new TypeError('Expected a VCALENDAR component.');
   } catch {
@@ -611,8 +659,8 @@ function parseCalendarFeed(
         const start = event.startDate;
         const end = event.endDate;
         const allDay = start.isDate;
-        const startsAt = eventStartsAt(start, allDay, timeZone, component);
-        const duration = eventEndsAt(end, allDay, timeZone, component) - startsAt;
+        const startsAt = eventStartsAt(start, allDay, timeZone, formatters, component);
+        const duration = eventEndsAt(end, allDay, timeZone, formatters, component) - startsAt;
         if (!isWithinQuery(
           start,
           end,
@@ -621,12 +669,13 @@ function parseCalendarFeed(
           timeZone,
           localDay,
           startsAt,
-          startsAt + duration
+          startsAt + duration,
+          formatters
         )) continue;
       }
       const maySeek = exceptions.length === 0 || canSeekPastExactExceptions;
       const seekStart = maySeek
-        ? recurrenceSeekStart(event, component, queryStart, timeZone)
+        ? recurrenceSeekStart(event, component, queryStart, timeZone, formatters)
         : null;
       const iterator = event.isRecurring() ? event.iterator(seekStart ?? undefined) : null;
       if (seekStart && iterator) iterator.next();
@@ -660,21 +709,23 @@ function parseCalendarFeed(
         const end = details.endDate;
         const occurrenceAllDay = start.isDate;
         const occurrenceComponent = details.item.component;
-        const startsAt = eventStartsAt(start, occurrenceAllDay, timeZone, occurrenceComponent);
+        const startsAt = eventStartsAt(start, occurrenceAllDay, timeZone, formatters, occurrenceComponent);
         const duration = eventEndsAt(
           details.item.endDate,
           occurrenceAllDay,
           timeZone,
+          formatters,
           occurrenceComponent
         ) - eventStartsAt(
           details.item.startDate,
           occurrenceAllDay,
           timeZone,
+          formatters,
           occurrenceComponent
         );
         const timedEndsAt = startsAt + duration;
         const endsAt = occurrenceAllDay
-          ? eventEndsAt(end, true, timeZone)
+          ? eventEndsAt(end, true, timeZone, formatters)
           : timedEndsAt;
         if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt < startsAt) {
           issues.push({ eventNumber, kind: 'invalid-event' });
@@ -688,7 +739,8 @@ function parseCalendarFeed(
           timeZone,
           localDay,
           startsAt,
-          timedEndsAt
+          timedEndsAt,
+          formatters
         );
         if (!inQuery) {
           if (query.kind === 'local-day') {
@@ -748,11 +800,11 @@ function parseCalendarFeed(
             const start = exception.startDate;
             const end = exception.endDate;
             const allDay = start.isDate;
-            const startsAt = eventStartsAt(start, allDay, timeZone, exceptionComponent);
-            const duration = eventEndsAt(end, allDay, timeZone, exceptionComponent) - startsAt;
+            const startsAt = eventStartsAt(start, allDay, timeZone, formatters, exceptionComponent);
+            const duration = eventEndsAt(end, allDay, timeZone, formatters, exceptionComponent) - startsAt;
             const timedEndsAt = startsAt + duration;
             const endsAt = allDay
-              ? eventEndsAt(end, true, timeZone)
+              ? eventEndsAt(end, true, timeZone, formatters)
               : timedEndsAt;
             if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt) || endsAt < startsAt) {
               issues.push({
@@ -769,7 +821,8 @@ function parseCalendarFeed(
               timeZone,
               localDay,
               startsAt,
-              timedEndsAt
+              timedEndsAt,
+              formatters
             )) continue;
             events.push({
               id: `${source.id}:${event.uid || `event-${eventNumber}`}:${start.toICALString()}`,

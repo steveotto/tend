@@ -385,6 +385,27 @@ async function openTechnicalAlert() {
 }
 
 describe('Preview account sync', () => {
+  it('shows sanitized canonical-read diagnostics without saving or changing device storage', async () => {
+    const data = createSamplePreviewData();
+    const { storage, values } = makeStorage(data);
+    const previousRaw = values.get(PREVIEW_STORAGE_KEY);
+    const diagnostic = 'A canonical Prayer record has an invalid owner reference. Diagnostic: {"personIdType":"object","personIdFieldTypes":{"id":"string"},"personIdFieldTypesTruncated":false,"personIdObjectIdMatchesPerson":true,"sharedWithType":"array","sharedWithElementTypes":{"string":1}}. No data was changed.';
+    const read = vi.fn(async () => { throw new Error(diagnostic); });
+    const save = vi.fn(async () => 2);
+
+    render(
+      <Browser
+        api={{ read, save }}
+        storage={storage}
+      />
+    );
+
+    expect(await screen.findByText(diagnostic)).toBeTruthy();
+    expect(read).toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(values.get(PREVIEW_STORAGE_KEY)).toBe(previousRaw);
+  });
+
   it('opens the separate recovery screen without another account read', async () => {
     const data = createSamplePreviewData();
     const service = backend(cloudRecord(data));

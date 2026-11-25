@@ -42,6 +42,49 @@ const newYorkTimeZone = [
 ].join('\r\n');
 
 describe('calendar feed reader', () => {
+  it('reuses timezone formatters when parsing many events in the same zone', () => {
+    const raw = calendar(Array.from({ length: 100 }, (_, index) => [
+      'BEGIN:VEVENT',
+      `UID:formatter-reuse-${index}`,
+      'DTSTART;TZID=America/New_York:20261114T080000',
+      'DTEND;TZID=America/New_York:20261114T090000',
+      'SUMMARY:Synthetic event',
+      'END:VEVENT'
+    ].join('\r\n')).join('\r\n'));
+    const dateTimeFormatDescriptor = Object.getOwnPropertyDescriptor(Intl, 'DateTimeFormat');
+    if (!dateTimeFormatDescriptor || typeof dateTimeFormatDescriptor.value !== 'function') {
+      throw new Error('Intl.DateTimeFormat is unavailable.');
+    }
+    let formatterConstructions = 0;
+    Object.defineProperty(Intl, 'DateTimeFormat', {
+      ...dateTimeFormatDescriptor,
+      value: new Proxy(dateTimeFormatDescriptor.value, {
+        construct(target, args, newTarget) {
+          formatterConstructions += 1;
+          return Reflect.construct(target, args, newTarget);
+        }
+      })
+    });
+
+    try {
+      const result = parseCalendarFeedForRange(
+        raw,
+        source,
+        Date.UTC(2026, 10, 14),
+        Date.UTC(2026, 11, 15),
+        'UTC'
+      );
+
+      expect(result.valid).toBe(true);
+      if (!result.valid) return;
+      expect(result.events).toHaveLength(100);
+      expect(result.events[0]?.startsAt).toBe(Date.UTC(2026, 10, 14, 13));
+      expect(formatterConstructions).toBe(2);
+    } finally {
+      Object.defineProperty(Intl, 'DateTimeFormat', dateTimeFormatDescriptor);
+    }
+  });
+
   it('calculates local Today, Week, and Month boundaries with calendar arithmetic', () => {
     const now = Date.parse('2026-03-08T16:00:00Z');
     const today = getCalendarRangeWindow('today', now, 'America/New_York');
