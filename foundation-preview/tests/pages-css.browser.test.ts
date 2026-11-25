@@ -4881,6 +4881,237 @@ try {
 }
 }
 
+async function verifyCanonicalPrayerFreshDeviceRoundTrip(browser: Browser): Promise<void> {
+  type BrowserPrayerLog = { id: string; prayedAt?: string; prayedOn?: string };
+  type BrowserPrayerRequest = {
+    id: string;
+    personId: string;
+    title: string;
+    updatedAt: string;
+    sharedWith?: string[];
+    prayerLogs: BrowserPrayerLog[];
+  };
+  type BrowserRoundTripResult = {
+    document: { data: { prayerRequests: BrowserPrayerRequest[] } };
+    revision: number;
+    savedRevision: number;
+    state: Record<string, unknown>;
+  };
+
+  const port = await availablePort();
+  const devUrl = `http://127.0.0.1:${port}`;
+  let devServer: ReturnType<typeof spawn> | undefined;
+  const contexts: Awaited<ReturnType<Browser['newContext']>>[] = [];
+
+  try {
+    devServer = spawn(process.execPath, [
+      viteCli,
+      '--host',
+      '127.0.0.1',
+      '--port',
+      String(port),
+      '--strictPort'
+    ], { cwd: previewDirectory, stdio: 'ignore' });
+    await waitForPreview(`${devUrl}/app-preview.html`, devServer);
+
+    const previousEnvelopeData = createEmptyPreviewData();
+    previousEnvelopeData.people = [
+      { id: 'avery', displayName: 'Avery' },
+      { id: 'morgan', displayName: 'Morgan' }
+    ];
+    previousEnvelopeData.prayerRequests = [{
+      id: 'global-prayer',
+      personId: 'morgan',
+      title: 'Synthetic account-level Prayer',
+      status: 'active',
+      createdAt: '2026-11-20T00:00:00.000Z',
+      updatedAt: '2026-11-20T00:00:00.000Z',
+      prayerLogs: [{
+        id: 'global-prayer-log',
+        prayedAt: '2026-11-22T12:00:00.000Z'
+      }]
+    }];
+    const initialState = {
+      people: [
+        { id: 'avery', name: 'Avery', unknownPersonField: { preserve: true } },
+        { id: 'morgan', name: 'Morgan' }
+      ],
+      prayers: [
+        {
+          id: 'global-prayer',
+          personId: null,
+          sharedWith: ['morgan'],
+          faithOwner: 'me',
+          text: 'Synthetic account-level Prayer',
+          added: '2026-11-20',
+          prayerLogs: [Date.parse('2026-11-22T12:00:00.000Z')],
+          unknownPrayerField: { preserve: ['exactly'] }
+        },
+        {
+          id: 'person-prayer',
+          personId: 'avery',
+          sharedWith: ['avery', 'morgan'],
+          text: 'Synthetic Person-associated Prayer',
+          added: '2026-11-20',
+          prayerLogs: [Date.parse('2026-11-23T12:00:00.000Z')],
+          unknownPrayerField: { preserve: true }
+        }
+      ],
+      unrelatedAccountField: { preserve: true },
+      tend2AuthenticatedEnvelope: createPreviewEnvelope(previousEnvelopeData)
+    };
+
+    const runAdapter = async (
+      state: Record<string, unknown>,
+      revision: number,
+      action: 'laptop-save' | 'device-save' | 'reload'
+    ): Promise<BrowserRoundTripResult> => {
+      const context = await browser.newContext();
+      contexts.push(context);
+      const page = await context.newPage();
+      page.setDefaultTimeout(5_000);
+      await page.route('**/*', route => {
+        if (new URL(route.request().url()).origin === devUrl) return route.continue();
+        return route.abort();
+      });
+      await page.goto(`${devUrl}/app-preview.html`);
+      return page.evaluate(async ({ state, revision, action, apiModuleUrl, stateModuleUrl }) => {
+        const { createCanonicalAccountApi } = await import(apiModuleUrl);
+        const { createPreviewEnvelope } = await import(stateModuleUrl);
+        let canonicalState = structuredClone(state);
+        let canonicalRevision = revision;
+        const client = {
+          from(table: string) {
+            if (table !== 'tend_user_state') throw new Error(`Unexpected table: ${table}`);
+            return {
+              select() {
+                return {
+                  async maybeSingle() {
+                    return {
+                      data: {
+                        state: structuredClone(canonicalState),
+                        schema_version: 1,
+                        revision: canonicalRevision,
+                        updated_at: '2026-11-24T12:00:00.000Z'
+                      },
+                      error: null
+                    };
+                  }
+                };
+              }
+            };
+          },
+          async rpc(name: string, parameters: Record<string, unknown>) {
+            if (name !== 'tend_save_user_state') throw new Error(`Unexpected RPC: ${name}`);
+            if (parameters.p_expected_revision !== canonicalRevision) {
+              return { data: null, error: { code: '40001' } };
+            }
+            const nextState = parameters.p_state;
+            if (typeof nextState !== 'object' || nextState === null || Array.isArray(nextState)) {
+              throw new Error('The adapter attempted to save a non-object account state.');
+            }
+            canonicalState = structuredClone(nextState) as Record<string, unknown>;
+            canonicalRevision += 1;
+            return {
+              data: [{ revision: canonicalRevision, updated_at: '2026-11-25T12:00:00.000Z' }],
+              error: null
+            };
+          }
+        };
+        const api = createCanonicalAccountApi(client);
+        const loaded = await api.read();
+        if (!loaded) throw new Error('The populated synthetic account was not available.');
+        if (action === 'reload') {
+          return {
+            document: loaded.document,
+            revision: loaded.revision,
+            savedRevision: loaded.revision,
+            state: canonicalState
+          };
+        }
+
+        const documentData = structuredClone(loaded.document.data) as {
+          prayerRequests: BrowserPrayerRequest[];
+          [key: string]: unknown;
+        };
+        const personPrayer = documentData.prayerRequests.find(
+          prayer => prayer.id === 'person-prayer'
+        );
+        if (!personPrayer) throw new Error('The Person-associated Prayer was not projected.');
+        if (action === 'laptop-save') {
+          personPrayer.title = 'Laptop-edited synthetic Prayer';
+          personPrayer.updatedAt = '2026-11-24T13:00:00.000Z';
+        } else {
+          personPrayer.prayerLogs.push({
+            id: 'fresh-device-log',
+            prayedAt: '2026-11-24T14:00:00.000Z'
+          });
+          personPrayer.updatedAt = '2026-11-24T14:00:00.000Z';
+        }
+        const document = createPreviewEnvelope(documentData);
+        const savedRevision = await api.save(document, loaded.revision);
+        return {
+          document: loaded.document,
+          revision: loaded.revision,
+          savedRevision,
+          state: canonicalState
+        };
+      }, {
+        state,
+        revision,
+        action,
+        apiModuleUrl: `${devUrl}/src/storage/canonical-account.ts`,
+        stateModuleUrl: `${devUrl}/src/domain/preview-state.ts`
+      });
+    };
+
+    const laptopSave = await runAdapter(initialState, 1, 'laptop-save');
+    assert.equal(laptopSave.savedRevision, 2);
+    const freshDeviceSave = await runAdapter(laptopSave.state, laptopSave.savedRevision, 'device-save');
+    assert.equal(freshDeviceSave.revision, 2, 'The clean device must load the laptop revision.');
+    assert.equal(freshDeviceSave.document.data.prayerRequests[0]?.personId, 'avery');
+    assert.deepEqual(freshDeviceSave.document.data.prayerRequests[0]?.sharedWith, ['morgan']);
+    assert.equal(freshDeviceSave.savedRevision, 3);
+
+    const laptopReload = await runAdapter(freshDeviceSave.state, freshDeviceSave.savedRevision, 'reload');
+    assert.equal(laptopReload.revision, 3, 'The laptop reload must observe the fresh-device save.');
+    const reloadedPrayer = laptopReload.document.data.prayerRequests.find(
+      prayer => prayer.id === 'person-prayer'
+    );
+    assert.ok(reloadedPrayer);
+    assert.equal(reloadedPrayer.title, 'Laptop-edited synthetic Prayer');
+    assert.deepEqual(
+      reloadedPrayer.prayerLogs.map(log => log.prayedAt),
+      ['2026-11-23T12:00:00.000Z', '2026-11-24T14:00:00.000Z']
+    );
+
+    const prayers = laptopReload.state.prayers;
+    assert.ok(Array.isArray(prayers));
+    assert.deepEqual(prayers[0], initialState.prayers[0],
+      'The null-associated Prayer and its raw logs/unknown fields must remain exact.');
+    assert.deepEqual(prayers[1], {
+      ...initialState.prayers[1],
+      prayerLogs: [
+        Date.parse('2026-11-23T12:00:00.000Z'),
+        Date.parse('2026-11-24T14:00:00.000Z')
+      ],
+      text: 'Laptop-edited synthetic Prayer',
+      updatedAt: '2026-11-24T14:00:00.000Z',
+      answered: false,
+      archived: false,
+      prayed: 2,
+      lastPrayed: '2026-11-24T14:00:00.000Z'
+    });
+    assert.deepEqual(laptopReload.state.people, initialState.people);
+    assert.deepEqual(laptopReload.state.unrelatedAccountField, initialState.unrelatedAccountField);
+  } finally {
+    await Promise.all(contexts.map(context => context.close()));
+    if (devServer?.pid && devServer.exitCode === null && devServer.signalCode === null) {
+      devServer.kill('SIGTERM');
+    }
+  }
+}
+
 async function main() {
   const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'tend-pages-css-'));
   const catalogOutputDirectory = await mkdtemp(path.join(os.tmpdir(), 'tend-catalog-css-'));
@@ -4944,6 +5175,7 @@ async function main() {
     ], { cwd: previewDirectory, stdio: 'inherit' });
     await waitForPreview(`${baseUrl}/app-preview.html`, previewServer);
     browser = await chromium.launch({ headless: true });
+    await verifyCanonicalPrayerFreshDeviceRoundTrip(browser);
     await verifyClassicSparkPalette(browser);
     await run(process.execPath, [
       viteCli,
