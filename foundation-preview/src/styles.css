@@ -23343,6 +23343,13 @@ button.strength-guided__performance:focus-visible {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .cardio-all-activities-summary .cardio-activity-summary__value {
+    max-width: 100%;
+    flex-wrap: wrap;
+    gap: 0 0.32em;
+    white-space: normal;
+  }
+
   .cardio-weekly-summary .cardio-activity-summary__metrics {
     grid-template-columns: minmax(0, 1fr);
   }
