@@ -5463,7 +5463,13 @@ async function main() {
                   height: brandTagline.getBoundingClientRect().height,
                   right: brandTagline.getBoundingClientRect().right,
                   clientWidth: brandTagline.clientWidth,
-                  scrollWidth: brandTagline.scrollWidth
+                  scrollWidth: brandTagline.scrollWidth,
+                  textRight: (() => {
+                    const textRange = document.createRange();
+                    textRange.selectNodeContents(brandTagline);
+                    return textRange.getBoundingClientRect().right;
+                  })(),
+                  actionsLeft: headerActions.getBoundingClientRect().left
                 },
                 overflowingElements: [...document.querySelectorAll<HTMLElement>('*')]
                   .filter(element => !element.closest('.areanav') && element.getBoundingClientRect().right > document.documentElement.clientWidth + 1)
@@ -5622,8 +5628,11 @@ async function main() {
             assert.equal(phoneStyles.homeLayout.separateCategoryShellAbsent, true);
             assert.equal(phoneStyles.brandTagline.whiteSpace, 'nowrap');
             assert.ok(phoneStyles.brandTagline.height < 25);
-            assert.equal(phoneStyles.brandTagline.scrollWidth, phoneStyles.brandTagline.clientWidth);
             assert.ok(phoneStyles.brandTagline.right <= viewportWidth);
+            assert.ok(phoneStyles.brandTagline.textRight <= phoneStyles.brandTagline.actionsLeft,
+              `The tagline must not overlap mobile actions at ${viewportWidth}px / ${expected.size}: ${JSON.stringify(phoneStyles.brandTagline)}`);
+            assert.ok(phoneStyles.brandTagline.textRight <= viewportWidth,
+              `The tagline text must remain inside the viewport at ${viewportWidth}px / ${expected.size}.`);
             assert.equal(phoneStyles.headerActionsDisplay, 'flex');
             assert.equal(phoneStyles.bottomNavigation.position, 'fixed');
             assert.equal(phoneStyles.bottomNavigation.bottom, 844);
