@@ -33,6 +33,7 @@ import { FinanceGoalsView } from './components/FinanceGoalsView.tsx';
 import { PreviewDataControls } from './components/PreviewDataControls.tsx';
 import type { PreviewPersistenceStatus } from './components/PreviewDataControls.tsx';
 import { PreviewAccountSync } from './components/PreviewAccountSync.tsx';
+import { ReadOnlyAccountDataCheck } from './components/ReadOnlyAccountDataCheck.tsx';
 import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
 import { TextSizeSettings } from './components/TextSizeSettings.tsx';
 import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
@@ -616,6 +617,8 @@ function PreviewWorkspace({
   accountBackupApi?: PreviewAccountBackupApi;
   onSignOut?: () => void | Promise<void>;
 }) {
+  const readOnlyAccountCheckMode = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('sync-check') === 'read-only';
   const { instant: scoringInstant, refresh: refreshScoringInstant } = useCurrentInstantController();
   const previewStorage = useMemo(
     () => browserPreviewStorage(identity, immutableRecoveryArchive),
@@ -632,7 +635,8 @@ function PreviewWorkspace({
   const [settingsReturnTo, setSettingsReturnTo] = useState<SettingsDetail | null>(null);
   const weatherTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const todayWeather = useTodayWeather(
-    destination === 'today' || (destination === 'more' && moreSettingsOpen),
+    !readOnlyAccountCheckMode
+      && (destination === 'today' || (destination === 'more' && moreSettingsOpen)),
     weatherTimeZone
   );
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
@@ -1708,7 +1712,9 @@ function PreviewWorkspace({
       if (!isIdentityCurrent()) return;
       const loaded = loadPreview(previewStorage, initialLoadDate);
       let recoveryError: string | null = null;
-      if (loaded.kind === 'loaded' && previewStorage.prepareImmutableRecoveryCopy) {
+      if (!readOnlyAccountCheckMode
+        && loaded.kind === 'loaded'
+        && previewStorage.prepareImmutableRecoveryCopy) {
         try {
           const preparation = previewStorage.prepareImmutableRecoveryCopy(loaded.raw);
           const prepared = isRecoveryPreparationPromise(preparation)
@@ -1721,14 +1727,16 @@ function PreviewWorkspace({
           recoveryError = 'immutable-recovery-copy-failed at schemaVersion; no changes were written.';
         }
       }
-      const recoveryArchiveLoad = previewStorage.loadImmutableRecoveryCopies?.();
+      const recoveryArchiveLoad = readOnlyAccountCheckMode
+        ? null
+        : previewStorage.loadImmutableRecoveryCopies?.();
       if (recoveryArchiveLoad) {
         void recoveryArchiveLoad.then(() => {
           if (!cancelled && isIdentityCurrent()) refreshAllRecoveryCopies();
         });
       }
       if (cancelled || !isIdentityCurrent()) return;
-      refreshAllRecoveryCopies();
+      if (!readOnlyAccountCheckMode) refreshAllRecoveryCopies();
       if (loaded.kind === 'loaded') {
         recoveryProtectionError.current = recoveryError;
         setPreviewDataLoadError(null);
@@ -1741,7 +1749,7 @@ function PreviewWorkspace({
         setPersistenceStatus(recoveryError
           ? { kind: 'error', message: recoveryError }
           : { kind: 'saved' });
-        setAutoSaveEnabled(recoveryError === null);
+        setAutoSaveEnabled(!readOnlyAccountCheckMode && recoveryError === null);
       } else if (loaded.kind === 'missing') {
         recoveryProtectionError.current = null;
         setPreviewDataLoadError(null);
@@ -1751,8 +1759,13 @@ function PreviewWorkspace({
         setPreviewData(initialData);
         setPersistedSatisfiedRhythmIds(new Set());
         setPersistedCompletedRhythmIds(new Set());
-        setPersistenceStatus({ kind: 'saving' });
-        setAutoSaveEnabled(true);
+        setPersistenceStatus(readOnlyAccountCheckMode
+          ? {
+            kind: 'unavailable',
+            message: 'No saved local data was initialized in read-only account check mode.'
+          }
+          : { kind: 'saving' });
+        setAutoSaveEnabled(!readOnlyAccountCheckMode);
       } else if (loaded.kind === 'corrupt' || loaded.kind === 'unsupported') {
         recoveryProtectionError.current = null;
         setPreviewDataLoadError(loaded.message);
@@ -1773,7 +1786,7 @@ function PreviewWorkspace({
   }, [previewStorage]);
 
   useEffect(() => {
-    if (!hydrated || !autoSaveEnabled) return;
+    if (readOnlyAccountCheckMode || !hydrated || !autoSaveEnabled) return;
     if (hydratedDataWithoutSave.current === previewData) return;
     if (hydratedDataWithoutSave.current !== null) hydratedDataWithoutSave.current = null;
     if (skipNextAutosave.current) {
@@ -1807,10 +1820,10 @@ function PreviewWorkspace({
         ...(saved.diagnostic ? { diagnostic: saved.diagnostic } : {})
       });
     }
-  }, [previewData, hydrated, autoSaveEnabled]);
+  }, [previewData, hydrated, autoSaveEnabled, readOnlyAccountCheckMode]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (readOnlyAccountCheckMode || !hydrated) return;
     return listenForPreviewChanges(newValue => {
       if (!isIdentityCurrent()) return;
       if (newValue === expectedRaw.current) return;
@@ -1818,7 +1831,7 @@ function PreviewWorkspace({
       setAutoSaveEnabled(false);
       setPersistenceStatus({ kind: 'conflict' });
     }, identity);
-  }, [hydrated]);
+  }, [hydrated, readOnlyAccountCheckMode]);
 
   useEffect(() => {
     if (persistenceStatus.kind !== 'error' && persistenceStatus.kind !== 'conflict') return;
@@ -4323,6 +4336,22 @@ function PreviewWorkspace({
 
   if (!hydrated) {
     return <PreviewAccessState title="Opening Preview" message="Loading this session’s local data." />;
+  }
+
+  if (readOnlyAccountCheckMode) {
+    return (
+      <ReadOnlyAccountDataCheck
+        accountId={identity.kind === 'authenticated' ? identity.accountId : null}
+        api={identity.kind === 'authenticated' ? accountBackupApi ?? null : null}
+        currentDate={currentDate}
+        data={previewData}
+        isIdentityCurrent={() => isIdentityCurrent()
+          && (identity.kind !== 'authenticated'
+            || (isAccountBackupIdentityCurrent?.() ?? true))}
+        localRaw={expectedRaw.current}
+        storage={previewStorage}
+      />
+    );
   }
 
   return (

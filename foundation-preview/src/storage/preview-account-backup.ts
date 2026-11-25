@@ -14,6 +14,34 @@ export type PreviewAccountBackupRecord = {
   schemaVersion: number;
   revision: number;
   updatedAt: string | null;
+  canonicalStructure?: {
+    people: number;
+    prayers: number;
+    prayerLogs: number;
+    prayersWithNullPersonId: number;
+    embeddedPreview?: {
+      present: boolean;
+      schemaVersion: number | null;
+      people: number;
+      personDetails: number;
+      personPhotos: number;
+      personNotes: number;
+      personSparks: number;
+      prayerRequests: number;
+      prayerLogs: number;
+      savedRhythms: number;
+      datedRhythmCompletions: number;
+      activeRhythmCompletions: number;
+      rhythmCompletionOverrides: number;
+      rhythmHistoryIds: number;
+      strengthWorkouts: number;
+      weightWeighIns: number;
+      cardioRuns: number;
+      flexibilitySessions: number;
+      categoryPreferenceKeys: number;
+      foundationPreferenceKeys: number;
+    };
+  };
 };
 
 export type PreviewAccountRecoveryArchive = {

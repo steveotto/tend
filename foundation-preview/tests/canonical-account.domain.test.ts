@@ -47,6 +47,142 @@ function clientFor(state: Record<string, unknown>, saveResult: unknown = { revis
 }
 
 describe('canonical authenticated account adapter', () => {
+  it('returns sanitized stored and projected counts with the read revision', async () => {
+    const state = {
+      people: [
+        { id: 'private-person-one', name: 'Private name one' },
+        { id: 'private-person-two', name: 'Private name two' }
+      ],
+      prayers: [
+        {
+          id: 'private-prayer-one',
+          personId: 'private-person-one',
+          text: 'Private Prayer text one',
+          prayerLogs: [
+            Date.parse('2026-11-22T12:00:00.000Z'),
+            Date.parse('2026-11-23T12:00:00.000Z')
+          ]
+        },
+        {
+          id: 'private-prayer-two',
+          personId: null,
+          sharedWith: ['private-person-two'],
+          text: 'Private Prayer text two',
+          prayerLogs: [Date.parse('2026-11-24T12:00:00.000Z')]
+        },
+        {
+          id: 'private-prayer-three',
+          personId: 'private-person-two',
+          text: 'Private Prayer text three',
+          prayerLogs: [Date.parse('2026-11-25T12:00:00.000Z')]
+        }
+      ]
+    };
+    const { client, rpc } = clientFor(state);
+
+    const record = await createCanonicalAccountApi(client).read();
+
+    expect(record).toMatchObject({
+      revision: 1,
+      canonicalStructure: {
+        people: 2,
+        prayers: 3,
+        prayerLogs: 4,
+        prayersWithNullPersonId: 1
+      }
+    });
+    expect(record?.document).toMatchObject({
+      data: {
+        people: [{ id: 'private-person-one' }, { id: 'private-person-two' }],
+        prayerRequests: [{ id: 'private-prayer-one' }, { id: 'private-prayer-three' }]
+      }
+    });
+    expect(JSON.stringify(record?.canonicalStructure)).not.toMatch(/private|name|text/i);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('reports embedded People, photo, and scoring-input presence using counts only', async () => {
+    const data = createEmptyPreviewData();
+    data.people = [{ id: 'private-person', displayName: 'Private profile name' }];
+    data.personDetails = [{
+      personId: 'private-person',
+      relationshipLabel: 'Private relationship label',
+      photoDataUrl: 'data:image/jpeg;base64,/9j/2Q=='
+    }];
+    data.personNotes = [{
+      id: 'private-note-id',
+      personId: 'private-person',
+      content: 'Private note content',
+      createdAt: '2026-11-20T12:00:00.000Z',
+      updatedAt: '2026-11-20T12:00:00.000Z'
+    }];
+    data.savedRhythms = [{
+      id: 'user-rhythm-00000000-0000-4000-8000-000000000002',
+      title: 'Private Rhythm title',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      personIds: ['private-person'],
+      categoryIds: ['health'],
+      primaryFoundationId: 'health-strength',
+      secondaryFoundationIds: [],
+      schedule: { frequency: 'daily' }
+    }];
+    data.datedRhythmCompletions = [{
+      id: 'private-completion-id',
+      rhythmId: 'user-rhythm-00000000-0000-4000-8000-000000000002',
+      effectiveDate: '2026-11-20',
+      localTime: '08:00',
+      timeZone: 'UTC',
+      completedAt: '2026-11-20T08:00:00.000Z',
+      recordedAt: '2026-11-20T08:00:00.000Z'
+    }];
+    data.rhythmHistoryIds = ['user-rhythm-00000000-0000-4000-8000-000000000002'];
+    const state = mergePrayerRequestsIntoClassicState({
+      people: [{ id: 'private-person', name: 'Private profile name' }],
+      prayers: []
+    }, createPreviewEnvelope(data));
+    const { client, rpc } = clientFor(state);
+
+    const record = await createCanonicalAccountApi(client, () => '2026-11-25').read();
+
+    expect(record?.canonicalStructure?.embeddedPreview).toMatchObject({
+      present: true,
+      schemaVersion: PREVIEW_SCHEMA_VERSION,
+      people: 1,
+      personDetails: 1,
+      personPhotos: 1,
+      personNotes: 1,
+      savedRhythms: 1,
+      datedRhythmCompletions: 1,
+      rhythmHistoryIds: 1,
+      categoryPreferenceKeys: Object.keys(data.categoryPreferences).length,
+      foundationPreferenceKeys: Object.keys(data.foundationPreferences).length
+    });
+    expect(JSON.stringify(record?.canonicalStructure)).not.toMatch(/private|relationship|content|name/i);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('refuses to overwrite an invalid embedded Preview document during save', async () => {
+    const state = {
+      people: [{ id: 'avery', name: 'Avery' }],
+      prayers: [],
+      [CANONICAL_PREVIEW_ENVELOPE_KEY]: {
+        format: 'tend.synthetic-preview',
+        schemaVersion: 999,
+        data: { privateField: 'must remain untouched' }
+      }
+    };
+    const originalState = structuredClone(state);
+    const { client, rpc } = clientFor(state);
+    const api = createCanonicalAccountApi(client, () => '2026-11-25');
+
+    await expect(api.save(createPreviewEnvelope(createEmptyPreviewData()), 1))
+      .rejects.toThrow('embedded Preview account data is unsupported');
+
+    expect(state).toEqual(originalState);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('validates legacy owner membership on a fresh device without rewriting its raw association', () => {
     const classic = {
       people: [
@@ -83,6 +219,51 @@ describe('canonical authenticated account adapter', () => {
       unknownPrayerField: { preserve: true }
     }]);
     expect(merged.unrelatedAccountField).toEqual({ preserve: true });
+  });
+
+  it('uses current canonical status and participants instead of stale optional Preview fields', () => {
+    const previousEnvelope = createPreviewEnvelope({
+      ...createEmptyPreviewData(),
+      people: [
+        { id: 'avery', displayName: 'Avery' },
+        { id: 'morgan', displayName: 'Morgan' }
+      ],
+      prayerRequests: [{
+        id: 'status-prayer',
+        personId: 'avery',
+        sharedWith: ['morgan'],
+        title: 'Synthetic request',
+        status: 'answered',
+        answeredAt: '2026-11-20T12:00:00.000Z',
+        createdAt: '2026-11-01T12:00:00.000Z',
+        updatedAt: '2026-11-20T12:00:00.000Z',
+        prayerLogs: []
+      }]
+    });
+    const converted = convertClassicStateToPreviewEnvelope({
+      people: [
+        { id: 'avery', name: 'Avery' },
+        { id: 'morgan', name: 'Morgan' }
+      ],
+      prayers: [{
+        id: 'status-prayer',
+        personId: 'avery',
+        sharedWith: [],
+        text: 'Synthetic request',
+        answered: false,
+        archived: false,
+        prayerLogs: []
+      }],
+      [CANONICAL_PREVIEW_ENVELOPE_KEY]: previousEnvelope
+    }, '2026-11-25');
+
+    expect(converted.data.prayerRequests[0]).toMatchObject({
+      status: 'active',
+      title: 'Synthetic request'
+    });
+    expect(converted.data.prayerRequests[0]?.answeredAt).toBeUndefined();
+    expect(converted.data.prayerRequests[0]?.archivedAt).toBeUndefined();
+    expect(converted.data.prayerRequests[0]?.sharedWith).toBeUndefined();
   });
 
   it('preserves explicit no-person Classic Prayers outside the Person projection', () => {

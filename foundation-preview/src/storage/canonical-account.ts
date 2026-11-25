@@ -1,8 +1,10 @@
 import {
   createEmptyPreviewData,
-  createPreviewEnvelope
+  createPreviewEnvelope,
+  validatePreviewEnvelope
 } from '../domain/preview-state.ts';
 import type { PreviewEnvelope, PreviewData } from '../domain/preview-state.ts';
+import { localDateString } from '../domain/money-goals.ts';
 import type { PreviewAccountBackupApi, PreviewAccountBackupRecord } from './preview-account-backup.ts';
 import type { PersonPrayerRequest } from '../domain/person-prayers.ts';
 import type { PersonPreview } from '../domain/preview-data.ts';
@@ -42,6 +44,65 @@ export class CanonicalAccountSaveError extends Error {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function canonicalStructureCounts(state: Record<string, unknown>) {
+  const people = Array.isArray(state.people) ? state.people : [];
+  const prayers = Array.isArray(state.prayers) ? state.prayers : [];
+  let prayerLogs = 0;
+  let prayersWithNullPersonId = 0;
+  for (const prayer of prayers) {
+    if (!isRecord(prayer)) continue;
+    if (Array.isArray(prayer.prayerLogs)) prayerLogs += prayer.prayerLogs.length;
+    if (prayer.personId === null) prayersWithNullPersonId += 1;
+  }
+  return {
+    people: people.length,
+    prayers: prayers.length,
+    prayerLogs,
+    prayersWithNullPersonId
+  };
+}
+
+function storedPreviewStructureCounts(state: Record<string, unknown>) {
+  const rawEnvelope = state[CANONICAL_PREVIEW_ENVELOPE_KEY];
+  const envelope = isRecord(rawEnvelope) ? rawEnvelope : null;
+  const data = envelope && isRecord(envelope.data) ? envelope.data : null;
+  const strength = data && isRecord(data.strength) ? data.strength : null;
+  const weight = data && isRecord(data.weight) ? data.weight : null;
+  const cardio = data && isRecord(data.cardio) ? data.cardio : null;
+  const flexibility = data && isRecord(data.flexibility) ? data.flexibility : null;
+  const count = (value: unknown) => Array.isArray(value) ? value.length : 0;
+  const keyCount = (value: unknown) => isRecord(value) ? Object.keys(value).length : 0;
+  const personDetails = Array.isArray(data?.personDetails) ? data.personDetails : [];
+  const prayerRequests = Array.isArray(data?.prayerRequests) ? data.prayerRequests : [];
+  return {
+    present: rawEnvelope !== undefined && rawEnvelope !== null,
+    schemaVersion: envelope && Number.isSafeInteger(envelope.schemaVersion)
+      ? envelope.schemaVersion as number
+      : null,
+    people: count(data?.people),
+    personDetails: count(data?.personDetails),
+    personPhotos: personDetails.filter(details =>
+      isRecord(details) && typeof details.photoDataUrl === 'string' && details.photoDataUrl.length > 0
+    ).length,
+    personNotes: count(data?.personNotes),
+    personSparks: count(data?.personSparks),
+    prayerRequests: prayerRequests.length,
+    prayerLogs: prayerRequests.reduce((total, request) =>
+      total + (isRecord(request) ? count(request.prayerLogs) : 0), 0),
+    savedRhythms: count(data?.savedRhythms),
+    datedRhythmCompletions: count(data?.datedRhythmCompletions),
+    activeRhythmCompletions: count(data?.activeRhythmCompletions),
+    rhythmCompletionOverrides: count(data?.rhythmCompletionOverrides),
+    rhythmHistoryIds: count(data?.rhythmHistoryIds),
+    strengthWorkouts: count(strength?.workouts),
+    weightWeighIns: count(weight?.weighIns),
+    cardioRuns: count(cardio?.runs),
+    flexibilitySessions: count(flexibility?.sessions),
+    categoryPreferenceKeys: keyCount(data?.categoryPreferences),
+    foundationPreferenceKeys: keyCount(data?.foundationPreferences)
+  };
 }
 
 function jsonValueType(value: unknown): string {
@@ -173,11 +234,21 @@ function parseClassicPrayerLog(
   return { id, editable: false };
 }
 
-function storedPreviewEnvelope(state: Record<string, unknown>): PreviewEnvelope | null {
+function validatedStoredPreviewEnvelope(
+  state: Record<string, unknown>,
+  currentDate: string
+): PreviewEnvelope | null {
   const value = state[CANONICAL_PREVIEW_ENVELOPE_KEY];
-  if (!isRecord(value) || value.format !== 'tend.synthetic-preview'
-    || !isRecord(value.data) || !Array.isArray(value.data.prayerRequests)) return null;
-  return value as unknown as PreviewEnvelope;
+  if (value === undefined) return null;
+  const validation = validatePreviewEnvelope(value, currentDate);
+  if (!validation.valid) {
+    const code = validation.diagnostic?.code ?? 'preview.validation.failed';
+    const path = validation.diagnostic?.path ?? 'data';
+    throw new Error(
+      `The embedded Preview account data is ${validation.kind}. Diagnostic: ${code} at ${path}. No data was changed.`
+    );
+  }
+  return validation.envelope;
 }
 
 function classicSchedule(prayer: Record<string, unknown>): RhythmSchedule | undefined {
@@ -249,9 +320,15 @@ function previewSchedule(schedule: RhythmSchedule | undefined):
   return null;
 }
 
-export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnvelope {
-  const data: PreviewData = createEmptyPreviewData();
-  if (!isRecord(state)) return createPreviewEnvelope(data);
+export function convertClassicStateToPreviewEnvelope(
+  state: unknown,
+  currentDate = localDateString(new Date())
+): PreviewEnvelope {
+  if (!isRecord(state)) return createPreviewEnvelope(createEmptyPreviewData());
+  const previousEnvelope = validatedStoredPreviewEnvelope(state, currentDate);
+  const data: PreviewData = previousEnvelope
+    ? createPreviewEnvelope(previousEnvelope.data).data
+    : createEmptyPreviewData();
   if (state.people !== undefined && !Array.isArray(state.people)) {
     throw new Error('Canonical People records have an invalid collection shape. No data was changed.');
   }
@@ -259,20 +336,29 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
     throw new Error('Canonical Prayer records have an invalid collection shape. No data was changed.');
   }
   const classicPrayers = Array.isArray(state.prayers) ? state.prayers : [];
-  const previousEnvelope = storedPreviewEnvelope(state);
   const previousRequests = previousEnvelope?.data.prayerRequests ?? [];
 
   if (Array.isArray(state.people)) {
-    data.people = state.people.map((person): PersonPreview => {
+    const canonicalPeople = state.people.map((person): PersonPreview => {
       if (!isRecord(person) || typeof person.id !== 'string' || typeof person.name !== 'string') {
         throw new Error('A canonical Person record has an invalid structure. No data was changed.');
       }
       return { id: person.id as PersonPreview['id'], displayName: person.name };
     });
+    const canonicalPeopleById = new Map(canonicalPeople.map(person => [person.id, person]));
+    const mergedPeople = data.people.map(person => {
+      const canonical = canonicalPeopleById.get(person.id);
+      if (!canonical) return person;
+      canonicalPeopleById.delete(person.id);
+      return { ...person, displayName: canonical.displayName };
+    });
+    data.people = [
+      ...mergedPeople,
+      ...canonicalPeopleById.values()
+    ];
   }
 
   const canonicalPersonIds = new Set(data.people.map(person => person.id));
-  const referencedPersonIds = new Set<string>();
   for (const prayer of classicPrayers) {
     if (!isRecord(prayer) || typeof prayer.id !== 'string') {
       throw new Error('A canonical Prayer record has an invalid structure. No data was changed.');
@@ -286,43 +372,41 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
         }. No data was changed.`
       );
     }
-    const sharedWith = classicPrayerSharedWith(prayer);
-    const ownerId = prayer.personId;
-    if (typeof ownerId === 'string') referencedPersonIds.add(ownerId);
-    sharedWith.forEach(personId => referencedPersonIds.add(personId));
+    classicPrayerSharedWith(prayer);
   }
-  const previousPeople = previousEnvelope?.data.people;
-  if (Array.isArray(previousPeople)) {
-    for (const person of previousPeople) {
-      if (!isRecord(person)
-        || typeof person.id !== 'string'
-        || typeof person.displayName !== 'string'
-        || canonicalPersonIds.has(person.id)
-        || !referencedPersonIds.has(person.id)) continue;
-      data.people.push({
-        id: person.id as PersonPreview['id'],
-        displayName: person.displayName,
-        ...(typeof person.avatarUrl === 'string' ? { avatarUrl: person.avatarUrl } : {})
-      });
-    }
-  }
-
   // Explicit null is the Classic representation of a Prayer with no Person association.
   // Keep it in canonical state without projecting it into Person-scoped Prayer views.
+  const explicitlyUnassociatedPrayerIds = new Set(classicPrayers.flatMap(prayer =>
+    isRecord(prayer) && typeof prayer.id === 'string' && prayer.personId === null
+      ? [prayer.id]
+      : []
+  ));
   const personAssociatedPrayers = classicPrayers.filter(
     prayer => !isRecord(prayer) || prayer.personId !== null
   );
-  data.prayerRequests = personAssociatedPrayers.map((prayer): PersonPrayerRequest => {
+  const previousRequestsById = new Map(previousRequests.map(request => [request.id, request]));
+  const canonicalRequests = personAssociatedPrayers.map((prayer): PersonPrayerRequest => {
     if (!isRecord(prayer) || typeof prayer.id !== 'string') {
       throw new Error('A canonical Prayer record has an invalid structure. No data was changed.');
     }
     const prayerId = prayer.id;
+    const previousRequest = previousRequestsById.get(prayerId);
     const classicSharedWith = classicPrayerSharedWith(prayer);
+    let previousRequestFields: Omit<PersonPrayerRequest, 'answeredAt' | 'archivedAt' | 'sharedWith'> | {} = {};
+    if (previousRequest) {
+      const {
+        answeredAt: _answeredAt,
+        archivedAt: _archivedAt,
+        sharedWith: _sharedWith,
+        ...fields
+      } = previousRequest;
+      previousRequestFields = fields;
+    }
     const personId = typeof prayer.personId === 'string'
       ? prayer.personId
       : typeof classicSharedWith[0] === 'string'
         ? classicSharedWith[0]
-        : null;
+        : previousRequest?.personId ?? null;
     if (personId === null) {
       throw new Error('A canonical Prayer record has no resolvable owner. No data was changed.');
     }
@@ -383,19 +467,34 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
       if (legacy) logs = [legacy];
     }
 
-    const createdAt = timestamp(prayer.added) ?? timestamp(prayer.createdAt) ?? '1970-01-01T00:00:00.000Z';
-    const updatedAt = timestamp(prayer.updatedAt) ?? createdAt;
-    const status = prayer.answered ? 'answered' : prayer.archived ? 'archived' : 'active';
-    const schedule = classicSchedule(prayer);
-    const timeOfDay = previewTime(prayer.tod);
-    const previousRequest = previousRequests.find(request => request.id === prayerId);
-    const sharedWith = classicSharedWith.filter(id => id !== personId);
+    if (logs.length === 0 && previousRequest?.prayerLogs.length) {
+      logs = previousRequest.prayerLogs.map(log => ({ ...log }));
+    }
+
+    const createdAt = timestamp(prayer.added)
+      ?? timestamp(prayer.createdAt)
+      ?? previousRequest?.createdAt
+      ?? '1970-01-01T00:00:00.000Z';
+    const updatedAt = timestamp(prayer.updatedAt) ?? previousRequest?.updatedAt ?? createdAt;
+    const hasCanonicalStatus = typeof prayer.answered === 'boolean' || typeof prayer.archived === 'boolean';
+    const status = hasCanonicalStatus
+      ? prayer.answered ? 'answered' : prayer.archived ? 'archived' : 'active'
+      : previousRequest?.status ?? 'active';
+    const schedule = classicSchedule(prayer) ?? previousRequest?.schedule;
+    const timeOfDay = previewTime(prayer.tod) ?? previousRequest?.timeOfDay;
+    const sharedWithSource = Array.isArray(prayer.sharedWith)
+      ? classicSharedWith
+      : previousRequest?.sharedWith ?? [];
+    const sharedWith = sharedWithSource.filter(id => id !== personId);
     return {
+      ...previousRequestFields,
       id: prayerId,
       personId: personId as PersonPrayerRequest['personId'],
       ...(sharedWith.length > 0 ? { sharedWith } : {}),
-      title: typeof prayer.text === 'string' ? prayer.text : 'Prayer',
-      ...(typeof prayer.details === 'string' ? { details: prayer.details } : {}),
+      title: typeof prayer.text === 'string' ? prayer.text : previousRequest?.title ?? 'Prayer',
+      ...(typeof prayer.details === 'string'
+        ? { details: prayer.details }
+        : previousRequest?.details === undefined ? {} : { details: previousRequest.details }),
       status,
       ...(schedule ? { schedule } : {}),
       ...(timeOfDay ? { timeOfDay } : {}),
@@ -404,20 +503,32 @@ export function convertClassicStateToPreviewEnvelope(state: unknown): PreviewEnv
       updatedAt,
       ...(status === 'answered' && typeof prayer.answeredDate === 'string'
         ? { answeredAt: timestamp(prayer.answeredDate) ?? updatedAt }
+        : status === 'answered' && previousRequest?.answeredAt
+          ? { answeredAt: previousRequest.answeredAt }
         : {}),
       ...(status === 'archived' && typeof prayer.archivedDate === 'string'
         ? { archivedAt: timestamp(prayer.archivedDate) ?? updatedAt }
+        : status === 'archived' && previousRequest?.archivedAt
+          ? { archivedAt: previousRequest.archivedAt }
         : {}),
       prayerLogs: logs
     };
   });
+  const canonicalRequestsById = new Map(canonicalRequests.map(request => [request.id, request]));
+  data.prayerRequests = [
+    ...previousRequests
+      .filter(request => !explicitlyUnassociatedPrayerIds.has(request.id))
+      .map(request => canonicalRequestsById.get(request.id) ?? request),
+    ...canonicalRequests.filter(request => !previousRequestsById.has(request.id))
+  ];
 
   return createPreviewEnvelope(data);
 }
 
 export function mergePrayerRequestsIntoClassicState(
   state: Record<string, unknown>,
-  envelope: PreviewEnvelope
+  envelope: PreviewEnvelope,
+  currentDate = localDateString(new Date())
 ): Record<string, unknown> {
   if (state.prayers !== undefined && !Array.isArray(state.prayers)) {
     throw new CanonicalAccountSaveError(
@@ -460,7 +571,7 @@ export function mergePrayerRequestsIntoClassicState(
       );
     }
   }
-  const previousEnvelope = storedPreviewEnvelope(state);
+  const previousEnvelope = validatedStoredPreviewEnvelope(state, currentDate);
   let previousIds = new Set<string>();
   if (previousEnvelope) {
     previousIds = new Set(
@@ -617,7 +728,8 @@ export function mergePrayerRequestsIntoClassicState(
 }
 
 export function createCanonicalAccountApi(
-  client: CanonicalAccountSupabaseClient
+  client: CanonicalAccountSupabaseClient,
+  currentDate: () => string = () => localDateString(new Date())
 ): PreviewAccountBackupApi {
   let inFlightRead: Promise<PreviewAccountBackupRecord | null> | null = null;
 
@@ -639,12 +751,16 @@ export function createCanonicalAccountApi(
       throw new Error('The canonical Tend account schema is not supported. No data was changed.');
     }
 
-    const document = convertClassicStateToPreviewEnvelope(data.state);
+    const document = convertClassicStateToPreviewEnvelope(data.state, currentDate());
     return {
       document,
       revision: data.revision as number,
       schemaVersion: document.schemaVersion,
-      updatedAt: data.updated_at as string | null
+      updatedAt: data.updated_at as string | null,
+      canonicalStructure: {
+        ...canonicalStructureCounts(data.state),
+        embeddedPreview: storedPreviewStructureCounts(data.state)
+      }
     };
   }
 
@@ -699,7 +815,7 @@ export function createCanonicalAccountApi(
         );
       }
       const baseState = isRecord(data) && isRecord(data.state) ? data.state : {};
-      const nextState = mergePrayerRequestsIntoClassicState(baseState, document);
+      const nextState = mergePrayerRequestsIntoClassicState(baseState, document, currentDate());
       const result = await client.rpc('tend_save_user_state', {
         p_state: nextState,
         p_expected_revision: expectedRevision,

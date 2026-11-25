@@ -18,6 +18,10 @@ import type { PreviewData } from '../src/domain/preview-state.ts';
 import { prepareDatedRhythmCompletion } from '../src/domain/rhythm-completion.ts';
 import { saveStrengthWorkoutLog } from '../src/domain/strength.ts';
 import { rhythmTimeValueFromLabel } from '../src/domain/rhythm-schedule.ts';
+import { selectStrengthCategoryScore } from '../src/domain/category-scoring.ts';
+import { selectRhythmScore } from '../src/domain/rhythm-scoring.ts';
+import { todayRhythms } from '../src/domain/preview-data.ts';
+import { peopleWithSavedPhotos } from '../src/domain/person-details.ts';
 import type {
   PreviewAccountBackupApi,
   PreviewAccountBackupRecord,
@@ -101,6 +105,42 @@ function makeStorage(initialData?: PreviewData) {
     setItem: (key, value) => values.set(key, value)
   };
   return { storage, values };
+}
+
+function strengthCategoryHealth(data: PreviewData): number | null {
+  const saved = data.savedRhythms.find(
+    rhythm => rhythm.id === 'user-rhythm-00000000-0000-4000-8000-000000000001'
+  );
+  if (!saved) throw new Error('Synthetic scoring Rhythm was not restored.');
+  const completions = data.datedRhythmCompletions.filter(
+    completion => completion.rhythmId === saved.id
+  );
+  const rhythm = {
+    ...todayRhythms[0]!,
+    ...saved,
+    categoryIds: ['health'] as const,
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: [],
+    healthLogCapability: 'workout' as const,
+    completionHistory: completions
+  };
+  const score = selectRhythmScore({
+    rhythmId: saved.id,
+    cadence: saved.cadence,
+    ...(saved.schedule === undefined ? {} : { schedule: saved.schedule }),
+    ...(saved.scoring === undefined ? {} : { scoring: saved.scoring }),
+    ...(saved.createdLocalDate === undefined ? {} : { createdLocalDate: saved.createdLocalDate }),
+    ...(saved.createdTimeZone === undefined ? {} : { createdTimeZone: saved.createdTimeZone }),
+    records: completions,
+    recordsAvailable: data.rhythmHistoryIds.includes(saved.id),
+    asOfDate: currentDate,
+    timeZone: saved.scoring?.timeZone ?? 'UTC'
+  });
+  return selectStrengthCategoryScore(
+    [rhythm],
+    new Map([[saved.id, score]]),
+    data.archivedRhythmIds
+  ).health;
 }
 
 function backend(initial?: PreviewAccountBackupRecord) {
@@ -1621,6 +1661,56 @@ describe('Preview account sync', () => {
       { id: 'avery', displayName: 'Avery' },
       { id: 'morgan', displayName: 'Morgan' }
     ];
+    seedData.personDetails = [{
+      personId: 'avery',
+      relationshipLabel: 'Synthetic friend',
+      birthday: { monthDay: '05-02', year: 1990 },
+      connectionStyle: 'qt',
+      photoDataUrl: 'data:image/jpeg;base64,/9j/2Q=='
+    }];
+    seedData.savedRhythms = [{
+      id: 'user-rhythm-00000000-0000-4000-8000-000000000001',
+      title: 'Synthetic strength Rhythm',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      personIds: ['avery'],
+      categoryIds: ['health'],
+      schedule: { frequency: 'daily' },
+      scoring: {
+        trackingStartDate: '2026-10-01',
+        timeZone: 'UTC',
+        scheduleHistory: [{
+          kind: 'scheduled',
+          id: 'sync-strength-season',
+          startDate: '2026-10-01',
+          schedule: { frequency: 'daily' },
+          timeOfDay: 'morning',
+          paletteToken: 'fern'
+        }]
+      },
+      createdLocalDate: '2026-10-01',
+      createdTimeZone: 'UTC',
+      primaryFoundationId: 'health-strength',
+      secondaryFoundationIds: [],
+      healthLogCapability: 'workout'
+    }];
+    seedData.datedRhythmCompletions = [{
+      id: 'sync-strength-completion',
+      rhythmId: 'user-rhythm-00000000-0000-4000-8000-000000000001',
+      effectiveDate: '2026-11-05',
+      localTime: '08:00',
+      timeZone: 'UTC',
+      completedAt: '2026-11-05T08:00:00.000Z',
+      recordedAt: '2026-11-05T08:00:00.000Z',
+      memory: 'Synthetic completion'
+    }];
+    seedData.rhythmHistoryIds = ['user-rhythm-00000000-0000-4000-8000-000000000001'];
+    seedData.categoryPreferences = {
+      ...seedData.categoryPreferences,
+      marriage: false,
+      dating: true
+    };
+    const savedEnvelopeData = createPreviewEnvelope(seedData).data;
     seedData.prayerRequests = [{
       id: 'legacy-prayer',
       personId: 'avery',
@@ -1637,6 +1727,8 @@ describe('Preview account sync', () => {
         notes: 'Synthetic history only'
       }]
     }];
+    const expectedStrengthHealth = strengthCategoryHealth(seedData);
+    expect(expectedStrengthHealth).not.toBeNull();
     let canonicalState = mergePrayerRequestsIntoClassicState({
       people: [
         { id: 'avery', name: 'Avery' },
@@ -1682,7 +1774,7 @@ describe('Preview account sync', () => {
     const api = createCanonicalAccountApi({
       from,
       rpc
-    } satisfies CanonicalAccountSupabaseClient);
+    } satisfies CanonicalAccountSupabaseClient, () => currentDate);
     const initialCloud = await api.read();
     expect(initialCloud).not.toBeNull();
     const validated = validatePreviewAccountBackup(initialCloud!, currentDate);
@@ -1719,6 +1811,16 @@ describe('Preview account sync', () => {
     );
     expect(beforeEdit.valid).toBe(true);
     if (!beforeEdit.valid) throw new Error('Fresh-device legacy Prayer fixture did not validate.');
+    expect(beforeEdit.envelope.data.personDetails).toEqual(seedData.personDetails);
+    expect(beforeEdit.envelope.data.savedRhythms).toEqual(savedEnvelopeData.savedRhythms);
+    expect(beforeEdit.envelope.data.datedRhythmCompletions).toEqual(seedData.datedRhythmCompletions);
+    expect(beforeEdit.envelope.data.rhythmHistoryIds).toEqual(seedData.rhythmHistoryIds);
+    expect(beforeEdit.envelope.data.categoryPreferences).toEqual(seedData.categoryPreferences);
+    expect(peopleWithSavedPhotos(
+      beforeEdit.envelope.data.people,
+      beforeEdit.envelope.data.personDetails
+    )[0]?.avatarUrl).toBe('data:image/jpeg;base64,/9j/2Q==');
+    expect(strengthCategoryHealth(beforeEdit.envelope.data)).toBe(expectedStrengthHealth);
     expect(beforeEdit.envelope.data.prayerRequests[0]).toMatchObject({
       sharedWith: ['morgan'],
       schedule: { frequency: 'weekly', weekdays: [1, 3], weeklyMode: 'select-days' },
@@ -1757,6 +1859,12 @@ describe('Preview account sync', () => {
     expect(reloaded.valid).toBe(true);
     if (!reloaded.valid) throw new Error('Original-device reload did not validate.');
     expect(reloaded.envelope.data.people.map(person => person.id)).toEqual(['avery', 'morgan']);
+    expect(reloaded.envelope.data.personDetails).toEqual(seedData.personDetails);
+    expect(reloaded.envelope.data.savedRhythms).toEqual(savedEnvelopeData.savedRhythms);
+    expect(reloaded.envelope.data.datedRhythmCompletions).toEqual(seedData.datedRhythmCompletions);
+    expect(reloaded.envelope.data.rhythmHistoryIds).toEqual(seedData.rhythmHistoryIds);
+    expect(reloaded.envelope.data.categoryPreferences).toEqual(seedData.categoryPreferences);
+    expect(strengthCategoryHealth(reloaded.envelope.data)).toBe(expectedStrengthHealth);
     expect(reloaded.envelope.data.prayerRequests[0]).toMatchObject({
       title: 'Edited on second device',
       sharedWith: ['morgan'],
