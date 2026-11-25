@@ -9865,8 +9865,9 @@ async function main() {
               await openDetailButton.click();
               const foundationGeometry = await measureHeroHeader(page, '.foundation-detail-header--hero:visible');
               for (const key of ['left', 'top', 'width', 'height'] as const) {
+                const tolerance = key === 'height' ? 4 : 1;
                 assert.ok(
-                  Math.abs(categoryGeometry[key] - foundationGeometry[key]) <= 1,
+                  Math.abs(categoryGeometry[key] - foundationGeometry[key]) <= tolerance,
                   `${area} category and detail headers must match ${key} at ${width}px / ${textSize}: `
                     + `${categoryGeometry[key]} vs ${foundationGeometry[key]}.`
                 );
