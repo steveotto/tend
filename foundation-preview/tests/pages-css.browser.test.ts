@@ -2594,12 +2594,28 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
           viewportWidth: document.documentElement.clientWidth,
           documentWidth: document.documentElement.scrollWidth,
           cardWidth: card.clientWidth,
+          overflowingElements: [...document.body.querySelectorAll<HTMLElement>('*')]
+            .map(element => {
+              const rect = element.getBoundingClientRect();
+              return {
+                tag: element.tagName.toLowerCase(),
+                className: typeof element.className === 'string' ? element.className : '',
+                left: Math.round(rect.left * 100) / 100,
+                right: Math.round(rect.right * 100) / 100,
+                width: Math.round(rect.width * 100) / 100,
+                scrollWidth: element.scrollWidth,
+                clientWidth: element.clientWidth
+              };
+            })
+            .filter(element => element.left < -0.5 || element.right > document.documentElement.clientWidth + 0.5)
+            .slice(0, 12),
           rows: layouts
         };
       });
       const label = `Cardio history at ${viewportWidth}px / ${textSize} text`;
       assert.equal(layout.viewportWidth, viewportWidth, `${label} viewport`);
-      assert.equal(layout.documentWidth, viewportWidth, `${label} must not create page overflow`);
+      assert.equal(layout.documentWidth, viewportWidth,
+        `${label} must not create page overflow: ${JSON.stringify(layout.overflowingElements)}`);
       assert.ok(layout.cardWidth <= viewportWidth);
       for (const [index, row] of layout.rows.entries()) {
         assert.ok(row.rowWidth <= layout.cardWidth + 1, `${label} row ${index + 1} must fit the card.`);
