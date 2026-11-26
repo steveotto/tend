@@ -4182,6 +4182,20 @@ try {
     assert.ok(areaButtonNames.some(name => name.trim() === 'Dating'),
       `Dating should be visible in the synthetic preview; saved preference: ${String(persistedDatingPreference)}; buttons: ${JSON.stringify(areaButtonNames)}.`);
     await page.locator('.areanav button').filter({ hasText: 'Dating' }).click();
+    await setPreviewTextSize(page, 'medium');
+    await page.setViewportSize({ width: 320, height: 844 });
+    const datingHeader = page.locator('.category-header--hero:visible');
+    await datingHeader.waitFor({ state: 'visible' });
+    const datingTagline = datingHeader.locator('.category-header__copy p');
+    assert.equal(await datingTagline.textContent(), 'Structure beats good intentions');
+    const datingTaglineHeight = await datingTagline.evaluate(element => ({
+      height: element.getBoundingClientRect().height,
+      lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight)
+    }));
+    assert.ok(datingTaglineHeight.height > datingTaglineHeight.lineHeight,
+      'Dating tagline should wrap at 320px.');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByRole('tab', { name: 'Rhythms', exact: true }).click();
 
     for (const textSize of ['small', 'medium', 'large'] as const) {
@@ -8273,6 +8287,21 @@ async function main() {
             assert.equal(await categorySizeToggle.getAttribute('data-text-size'), textSize);
             const root = page.locator('main.category-page--segmented:not([hidden])');
             await root.waitFor();
+            if (categoryName === 'Parenting' && textSize === 'medium') {
+              await page.setViewportSize({ width: 320, height: 844 });
+              const tagline = page.locator(
+                '.category-header--hero:visible .category-header__copy p'
+              );
+              assert.equal(await tagline.textContent(), 'Structure beats good intentions');
+              const taglineHeight = await tagline.evaluate(element => ({
+                height: element.getBoundingClientRect().height,
+                lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight)
+              }));
+              assert.ok(taglineHeight.height > taglineHeight.lineHeight,
+                'Parenting tagline should wrap at 320px.');
+              assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
+              await page.setViewportSize({ width: 375, height: 844 });
+            }
             if (categoryName === 'Health & Fitness') {
               const measureToggle = root.locator(
                 '.category-health-summary .health-score-breakdown__measure-toggle'
@@ -10353,6 +10382,9 @@ async function main() {
               await page.setViewportSize({ width, height: 900 });
               await page.locator(categoryHeader).waitFor({ state: 'visible' });
               await prepare?.();
+              const tagline = page.locator(`${categoryHeader} .category-header__copy p`);
+              assert.equal(await tagline.textContent(), 'Structure beats good intentions',
+                `${area} should use the shared Category tagline.`);
               const categoryGeometry = await measureHeroHeader(page, categoryHeader);
               const geometryKey = `${width}/${textSize}`;
               const referenceCategory = categoryHeaderGeometry.get(geometryKey);
@@ -10414,6 +10446,11 @@ async function main() {
             await setPreviewTextSize(page, textSize);
             for (const width of [375, 390, 430, 1280] as const) {
               await page.setViewportSize({ width, height: 900 });
+              const categoryHeader = page.locator('.category-header--hero:visible');
+              await categoryHeader.waitFor({ state: 'visible' });
+              const tagline = categoryHeader.locator('.category-header__copy p');
+              assert.equal(await tagline.textContent(), 'Structure beats good intentions',
+                `${area} should use the shared Category tagline.`);
               const geometry = await measureHeroHeader(page, '.category-header--hero:visible');
               const reference = categoryHeaderGeometry.get(`${width}/${textSize}`);
               assert.ok(reference, `A Category header reference is needed for ${width}px / ${textSize}.`);
@@ -10436,6 +10473,28 @@ async function main() {
               );
             }
           }
+        };
+
+        const verifyCategoryTaglineWrapAt320 = async (area: string) => {
+          await page.setViewportSize({ width: 1280, height: 900 });
+          await areaNavigation.getByRole('button', { name: area, exact: true }).click();
+          await setPreviewTextSize(page, 'medium');
+          await page.setViewportSize({ width: 320, height: 844 });
+          const categoryHeader = page.locator('.category-header--hero:visible');
+          await categoryHeader.waitFor({ state: 'visible' });
+          const tagline = categoryHeader.locator('.category-header__copy p');
+          assert.equal(await tagline.textContent(), 'Structure beats good intentions',
+            `${area} should use the shared Category tagline.`);
+          const taglineHeight = await tagline.evaluate(element => ({
+            height: element.getBoundingClientRect().height,
+            lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight)
+          }));
+          assert.ok(taglineHeight.height > taglineHeight.lineHeight,
+            `${area} tagline should wrap at 320px.`);
+          const geometry = await measureHeroHeader(page, '.category-header--hero:visible');
+          assert.equal(geometry.documentWidth, 320, `${area} must not overflow at 320px.`);
+          assert.equal(geometry.contentFits, true);
+          assert.equal(geometry.iconBesideCopy, true);
         };
 
         const activeFoundationBack = page.getByRole('button', { name: 'All Foundations', exact: true });
@@ -10473,6 +10532,15 @@ async function main() {
           }
         });
         await verifyCategoryOnly('Friendships');
+        for (const area of [
+          'Faith',
+          'Marriage',
+          'Health & Fitness',
+          'Finances',
+          'Friendships'
+        ]) {
+          await verifyCategoryTaglineWrapAt320(area);
+        }
       }
 
       if (identity === 'dashboard') {

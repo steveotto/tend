@@ -1,6 +1,18 @@
 # Tend 2 Foundation handoff
 
-## Rhythm schedule grouping (release in progress)
+## Category header tagline (release in progress)
+
+Every Category header now uses the exact shared phrase **“Structure beats good intentions”**, replacing the prior category-specific copy while preserving each title, icon, colors, scores, and other content. The shared `CategoryHeader` remains the only implementation; Foundation and Principle detail headers are unchanged. Existing Marriage hero styling and responsive rules are reused without new styles.
+
+**Component reuse map:** `CategoryHeader` → `MarriageView` (Marriage, Dating, Parenting, Faith, and Friendships), `FinanceGoalsView` (Finances), `HealthFitnessView` (Health & Fitness), and `FriendshipsView`. Category-specific subtitle props/configuration were removed from the shared consumers. No category-specific header or style was added. Runtime component and app tests cover the shared phrase, while the browser contract verifies exact copy and wrapping at 320px for all seven Categories. Existing typography, alignment, spacing, and icon placement are checked against the established hero-header contract. Foundation and Principle headers are intentional exceptions and remain untouched.
+
+**Validation:** semantic typecheck passed; component tests passed **1,961/1,961 across 120 files**; reader tests **7/7**; legacy tests **177/177**; browser CSS contract passed, including every Category at 320px; recovery browser contract passed; Pages + scoring production builds passed; isolated preview production build passed; Pages artifact tests passed **10/10**; `git diff --check` passed. Builds emit Vite's existing large-client-chunk advisory.
+
+**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, with current `origin/main` merged locally (base revision `78f8eb8a7ada25dfcd0bd1cba72d248208fec763`). The preserved handoff commit `cdf52b92` remains in history. Deployment revision will be added after the release is merged and verified.
+
+**Production release:** implementation and checks are complete; PR, merge, and Cloudflare Pages deployment are pending. Archived Rhythms and sorting remain deferred.
+
+## Rhythm schedule grouping (deployed)
 
 Rhythms are now organized into the Faith Category → Rhythms Daily, Weekly, and Seasonal & Annual groups on Person profiles, All Items, and shared Foundation/Principle views. The extracted `RhythmScheduleGroups` component is also used by Faith itself, preserving its headings, counts, empty states, spacing, and shared Rhythm cards. It delegates all classification to `categoryRhythmGroup`, including every-two-weeks under Custom schedule. Rhythms with unsupported/legacy schedules remain visible under Unclassified schedule rather than disappearing from All Items counts. Person scopes, due/tended controls, associations, scores, and actions remain in their original renderers; All Items keeps Spark/Prayer sections, search/filter/edit-return behavior, counts, and archived exclusion.
 

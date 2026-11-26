@@ -494,7 +494,6 @@ export function FinanceGoalsView({
           titleId="finances-heading"
           icon={<AreaIcon id="finances" />}
           onHome={onToday}
-          subtitle="Build Finance Health with Rhythms; track goal balances with manual check-ins."
         />
       )}
       {!selectedFoundation && (

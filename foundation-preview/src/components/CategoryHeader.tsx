@@ -6,15 +6,14 @@ type CategoryHeaderProps = {
   titleId: string;
   icon: ReactNode;
   onHome: () => void;
-  subtitle?: string;
 };
 
-export function CategoryHeader({ title, titleId, icon, onHome, subtitle }: CategoryHeaderProps) {
+export function CategoryHeader({ title, titleId, icon, onHome }: CategoryHeaderProps) {
   const header = (
     <header className="category-header category-header--hero">
       <div className="category-header__copy page-hero-header__copy">
         <h2 id={titleId}>{title}</h2>
-        {subtitle && <p>{subtitle}</p>}
+        <p>Structure beats good intentions</p>
       </div>
       <span className="page-hero-header__icon page-hero-header__icon--category" aria-hidden="true">
         {icon}
