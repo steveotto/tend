@@ -1,5 +1,17 @@
 # Tend 2 Foundation handoff
 
+## Archived Rhythms Settings page (release in progress)
+
+**Implementation:** Settings now includes an Archived Rhythms entry directly beneath All items. The dedicated page reuses All Items’ search, Person/Frequency/Time-of-day filters, counts, clear-filter and empty-state structure, plus the shared `RhythmScheduleGroups` grouping. Type is fixed to Rhythms and the page filters the account’s archived saved Rhythms only. Archived cards reuse the existing Rhythm card/details/editor, are untendable, retain Person associations through `personIds`, and use the existing restore/unarchive command. Restored items leave this page and return to All items through the live archived-ID state.
+
+**Component reuse map:** `ArchivedRhythmsPage` composes `RhythmScheduleGroups`, `RhythmDetailsDialog`, `MultiSelectDropdown`, and the existing All Items filter domain/selector. No archived-category-specific card or editor was added. `RhythmDetailsDialog` gained a typed opt-in for an inline edit action used only by the archived Settings page; all existing inline cards retain their prior edit behavior. The existing category/Person archived dialogs remain unchanged.
+
+**Regression coverage:** focused domain/component/App tests cover archived-only scope, fixed Type, realtime title/details search, Person/Frequency/Time filters, only-saved associations, untendable cards, restore, preserved editor fields, and search/edit-return state. Viewing/filtering/restoring uses existing explicit account state changes; restore preserves rhythm identity, history, description, and People fields.
+
+**Validation:** semantic typecheck passed; full component suite passed **1,966/1,966 across 121 files**; reader tests **7/7**; legacy tests **177/177**; browser CSS contract passed; recovery browser contract passed; Pages and scoring builds passed; Pages artifact tests **10/10** passed; `git diff --check` passed. The build retains the existing large-client-chunk advisory.
+
+**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, aligned with `origin/main` at `9d7accc8fd79db3478b0377d506bc2ff104322f3` before this feature commit. `supabase/.temp/`, Person-association implementation, grouping, tagline, unrelated work, sorting, and release data remain preserved. Deployment will be recorded after merge.
+
 ## Person association display consistency (release in progress)
 
 **Confirmed cause:** shared Rhythm association rendering treated every account-supplied person as linked, instead of intersecting that list with the Rhythm's saved `personIds`. The details dialog also inferred an association from a non-empty people list. This establishes a display-path defect; no live account records were read, so persisted corruption is not established.

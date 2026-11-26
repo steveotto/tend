@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultAllItemsFilters, selectAllItems } from '../src/domain/all-items.ts';
+import { defaultAllItemsFilters, selectAllItems, selectArchivedRhythms } from '../src/domain/all-items.ts';
 import type { AllItemsFilters } from '../src/domain/all-items.ts';
 import type { PersonPrayerRequest } from '../src/domain/person-prayers.ts';
 import type { PersonSpark } from '../src/domain/person-sparks.ts';
@@ -65,6 +65,40 @@ function filters(patch: Partial<AllItemsFilters>): AllItemsFilters {
 }
 
 describe('All items selector', () => {
+  it('selects only archived Rhythms and applies Person, frequency, time, and search filters', () => {
+    const alexLinked = rhythm('alex-linked', 'Daily Alex practice', {
+      personIds: [personA],
+      description: 'Call Alex',
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'morning'
+    });
+    const unassociated = rhythm('unassociated', 'Quiet reflection', {
+      personIds: [],
+      schedule: { frequency: 'weekly', weekdays: [1] },
+      timeOfDay: 'anytime'
+    });
+    const active = rhythm('active', 'Active rhythm', {
+      personIds: [personA],
+      schedule: { frequency: 'daily' }
+    });
+    const archivedIds = new Set([alexLinked.id, unassociated.id]);
+
+    expect(selectArchivedRhythms([alexLinked, unassociated, active], archivedIds, filters({
+      type: ['rhythms']
+    })).map(item => item.id)).toEqual([alexLinked.id, unassociated.id]);
+    expect(selectArchivedRhythms([alexLinked, unassociated], archivedIds, filters({
+      type: ['rhythms'],
+      person: [personA],
+      frequency: ['daily'],
+      timeOfDay: ['morning'],
+      search: 'alex'
+    }))).toEqual([alexLinked]);
+    expect(selectArchivedRhythms([alexLinked, unassociated], archivedIds, filters({
+      type: ['rhythms'],
+      person: ['none'],
+      search: 'quiet'
+    }))).toEqual([unassociated]);
+  });
   it('combines type, person, frequency, and time selections with AND semantics', () => {
     const dailyRhythm = rhythm('daily', 'Daily practice', {
       personIds: [personA],

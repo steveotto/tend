@@ -36,6 +36,7 @@ import { PreviewAccountSync } from './components/PreviewAccountSync.tsx';
 import { ReadOnlyAccountDataCheck } from './components/ReadOnlyAccountDataCheck.tsx';
 import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
 import { AllItemsPage } from './components/AllItemsPage.tsx';
+import { ArchivedRhythmsPage } from './components/ArchivedRhythmsPage.tsx';
 import { TextSizeSettings } from './components/TextSizeSettings.tsx';
 import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
@@ -558,6 +559,7 @@ function PreviewAccessState({ title, message }: { title: string; message: string
 
 type SettingsDetail =
   | 'all-items'
+  | 'archived-rhythms'
   | 'categories'
   | 'prayer'
   | 'appearance'
@@ -567,7 +569,7 @@ type SettingsDetail =
   | 'save-sync'
   | 'backup-recovery';
 
-type SettingsIconName = 'categories' | 'prayer' | 'appearance' | 'time-blocks' | 'calendar' | 'weather' | 'backup-recovery' | 'settings' | 'items';
+type SettingsIconName = 'categories' | 'prayer' | 'appearance' | 'time-blocks' | 'calendar' | 'weather' | 'backup-recovery' | 'settings' | 'items' | 'archived';
 
 function SettingsDirectoryIcon({ name }: { name: SettingsIconName }) {
   return (
@@ -610,6 +612,10 @@ function SettingsDirectoryIcon({ name }: { name: SettingsIconName }) {
           <rect x="4" y="4" width="16" height="5" rx="1" />
           <rect x="4" y="11" width="16" height="5" rx="1" />
           <path d="M4 20h16" />
+        </>}
+        {name === 'archived' && <>
+          <rect x="3.5" y="5" width="17" height="12" rx="2" />
+          <path d="M3.5 9h17M9 13h6" />
         </>}
       </svg>
     </span>
@@ -4222,6 +4228,7 @@ function PreviewWorkspace({
     ] },
     { title: 'Your data', items: [
       { detail: 'all-items', label: 'All items', summary: 'Review your Rhythms, Sparks, and Prayer requests.', icon: 'items' },
+      { detail: 'archived-rhythms', label: 'Archived Rhythms', summary: 'View and restore archived account Rhythms.', icon: 'archived' },
       { detail: 'backup-recovery', label: 'Backup & recovery', summary: 'Export, import, and restore your data.', icon: 'backup-recovery' }
     ] }
   ];
@@ -4741,6 +4748,23 @@ function PreviewWorkspace({
                           onDeletePrayerLog={deletePrayerLog}
                           onUndoDeletePrayerLog={undoPrayerLogDeletion}
                           onRemovePrayerRequest={removePrayerRequest}
+                        />
+                      </div>
+                      <div className="settings-page__detail-slot" hidden={settingsDetail !== 'archived-rhythms'}>
+                        <ArchivedRhythmsPage
+                          rhythms={archivedProfileRhythmCandidates}
+                          archivedRhythmIds={previewData.archivedRhythmIds}
+                          completedRhythmIds={allItemCompletedRhythmIds}
+                          rhythmScores={rhythmScoreResults}
+                          people={peopleWithPhotos}
+                          peopleGroups={resolvedPeopleGroups}
+                          foundations={foundationCatalogue}
+                          onRhythmHistory={openRhythmHistory}
+                          onPersonSelect={openPersonProfile}
+                          onOpenCategory={categoryId => navigate(categoryId)}
+                          onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+                          onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                          onRestoreRhythm={restoreRhythm}
                         />
                       </div>
                       <div className="settings-page__detail-slot" hidden={settingsDetail !== 'save-sync'}>

@@ -29644,6 +29644,83 @@ dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-full
   max-width: 100%;
 }
 
+.archived-rhythms-page {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.archived-rhythms-page__search,
+.archived-rhythms-page__filters,
+.archived-rhythms-page__results,
+.archived-rhythms-page__groups,
+.archived-rhythms-page__group,
+.archived-rhythms-page__list,
+.archived-rhythms-page__empty {
+  min-width: 0;
+}
+
+.archived-rhythms-page__search .utility-search-field {
+  width: 100%;
+  max-width: 100%;
+}
+
+.archived-rhythms-page__filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.archived-rhythms-page__results {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.archived-rhythms-page__results p {
+  margin: 0;
+  color: var(--ink-soft, #5c6a61);
+}
+
+.archived-rhythms-page__groups {
+  display: grid;
+  gap: 20px;
+}
+
+.archived-rhythms-page__group {
+  display: grid;
+  gap: 8px;
+}
+
+.archived-rhythms-page__group > h4 {
+  margin: 0;
+  color: var(--ink, #25332b);
+}
+
+.archived-rhythms-page__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.archived-rhythms-page__list > li {
+  min-width: 0;
+}
+
+.archived-rhythms-page__empty {
+  margin: 0;
+  padding: 14px;
+  color: var(--ink-soft, #5c6a61);
+  text-align: center;
+  background: var(--mist, #edf3ef);
+  border-radius: 12px;
+}
+
 .all-items-page > h3 {
   margin: 0;
 }
@@ -29753,6 +29830,13 @@ dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-full
   cursor: pointer;
 }
 
+.all-items-filter__trigger:disabled {
+  cursor: default;
+  color: var(--ink, #25332b);
+  background: var(--paper, #fff);
+  opacity: 1;
+}
+
 .all-items-filter__option:hover {
   background: var(--canvas, #f3f5f3);
 }
@@ -29846,6 +29930,17 @@ dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-full
   min-width: 0;
 }
 
+.all-items-page__list > li > .archived-rhythms-dialog__restore {
+  margin-top: 8px;
+  margin-left: auto;
+}
+
+.archived-rhythms-page__list > li > .archived-rhythms-dialog__restore {
+  display: block;
+  margin-top: 8px;
+  margin-left: auto;
+}
+
 .all-items-page__empty {
   margin: 0;
   padding: 14px;
@@ -29897,10 +29992,16 @@ dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-full
   .all-items-page__filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .archived-rhythms-page__filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 380px) {
   .all-items-page__filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .archived-rhythms-page__filters {
     grid-template-columns: minmax(0, 1fr);
   }
 }

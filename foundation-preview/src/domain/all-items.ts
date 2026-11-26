@@ -99,6 +99,29 @@ export function selectAllItems(
   };
 }
 
+export function selectArchivedRhythms(
+  rhythms: readonly RhythmPreview[],
+  archivedRhythmIds: ReadonlySet<string>,
+  filters: AllItemsFilters
+): RhythmPreview[] {
+  if (!matchesSelection(filters.type, 'rhythms')) return [];
+  return sortByTitle(rhythms.filter(rhythm =>
+    archivedRhythmIds.has(rhythm.id)
+    && (() => {
+      const legacyTimeLabelValue = legacyTimeLabel(rhythm);
+      return matchesFilters({
+        people: rhythm.personIds ?? [],
+        frequency: rhythmFrequency(rhythm),
+        timeOfDay: rhythm.timeOfDay
+          ?? (legacyTimeLabelValue ? rhythmTimeValueFromLegacyLabel(legacyTimeLabelValue) : undefined)
+          ?? null,
+        title: rhythm.title,
+        details: rhythm.description ?? ''
+      }, filters);
+    })()
+  ));
+}
+
 function legacyTimeLabel(rhythm: RhythmPreview): string | undefined {
   if (!('timeLabel' in rhythm)) return undefined;
   return typeof rhythm.timeLabel === 'string' ? rhythm.timeLabel : undefined;
