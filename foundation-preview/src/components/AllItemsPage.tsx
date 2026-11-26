@@ -24,6 +24,7 @@ import type {
 import { PersonSparkPanel } from './PersonSparkPanel.tsx';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
+import { RhythmScheduleGroups } from './RhythmScheduleGroups.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { MultiSelectDropdown } from './MultiSelectDropdown.tsx';
@@ -219,38 +220,44 @@ export function AllItemsPage(props: AllItemsPageProps) {
           {selection.rhythms.length > 0 && (
             <section className="all-items-page__group" aria-labelledby="all-items-rhythms-heading">
               <h4 id="all-items-rhythms-heading">Rhythms ({selection.rhythms.length})</h4>
-              <ul className="all-items-page__list">
-                {selection.rhythms.map(rhythm => {
-                  const completed = props.completedRhythmIds.has(rhythm.id);
-                  const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
-                  const isInactive = Boolean(schedule?.endDate && schedule.endDate < props.today);
-                  return (
-                    <li key={rhythm.id}>
-                      <RhythmDetailsDialog
-                        rhythm={rhythm}
-                        inline
-                        completed={completed}
-                        healthScore={rhythmHealthScore(props.rhythmScores.get(rhythm.id))}
-                        people={props.people}
-                        foundations={props.foundations}
-                        relatedRhythms={activeRhythms}
-                        onPersonSelect={props.onPersonSelect}
-                        onOpenCategory={props.onOpenCategory}
-                        onOpenFoundation={props.onOpenFoundation}
-                        onHistory={event => props.onRhythmHistory(rhythm.id, event)}
-                        {...(isInactive ? { statusLabel: 'Inactive' } : {})}
-                        {...(!isInactive ? {
-                          onTend: (event: MouseEvent<HTMLButtonElement>) => props.onTendRhythm(rhythm.id, event)
-                        } : {})}
-                        {...(!isInactive && completed
-                          ? { onUndo: () => props.onUndoRhythm(rhythm.id) }
-                          : {})}
-                        onClose={() => undefined}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
+              <RhythmScheduleGroups
+                rhythms={selection.rhythms}
+                categoryToken="all-items-rhythms"
+                renderGroup={groupRhythms => (
+                  <ul className="all-items-page__list">
+                    {groupRhythms.map(rhythm => {
+                      const completed = props.completedRhythmIds.has(rhythm.id);
+                      const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+                      const isInactive = Boolean(schedule?.endDate && schedule.endDate < props.today);
+                      return (
+                        <li key={rhythm.id}>
+                          <RhythmDetailsDialog
+                            rhythm={rhythm}
+                            inline
+                            completed={completed}
+                            healthScore={rhythmHealthScore(props.rhythmScores.get(rhythm.id))}
+                            people={props.people}
+                            foundations={props.foundations}
+                            relatedRhythms={activeRhythms}
+                            onPersonSelect={props.onPersonSelect}
+                            onOpenCategory={props.onOpenCategory}
+                            onOpenFoundation={props.onOpenFoundation}
+                            onHistory={event => props.onRhythmHistory(rhythm.id, event)}
+                            {...(isInactive ? { statusLabel: 'Inactive' } : {})}
+                            {...(!isInactive ? {
+                              onTend: (event: MouseEvent<HTMLButtonElement>) => props.onTendRhythm(rhythm.id, event)
+                            } : {})}
+                            {...(!isInactive && completed
+                              ? { onUndo: () => props.onUndoRhythm(rhythm.id) }
+                              : {})}
+                            onClose={() => undefined}
+                          />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              />
             </section>
           )}
           {selection.sparks.length > 0 && (

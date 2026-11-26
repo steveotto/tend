@@ -54,6 +54,7 @@ import type { HealthAggregateEvidence } from './HealthScoringDetailsCard.tsx';
 import { createPersonHealthRollup } from './HealthRollupDiagram.tsx';
 import { TendedRhythmList } from './TendedRhythmList.tsx';
 import { TendedRhythmItems } from './TendedRhythmItems.tsx';
+import { RhythmScheduleGroups } from './RhythmScheduleGroups.tsx';
 import { selectTendedRhythmDisplayIds } from '../domain/category-rhythms.ts';
 import { useAvailablePersonGroups, usePrayerEnabled } from './CategoryAvailabilityContext.tsx';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
@@ -499,7 +500,6 @@ export function PersonProfileView({
   }
   const duePersonRhythms = selectPersonRhythmsDueToday(personRhythms, personId, today);
   const dueRhythmIds = new Set(duePersonRhythms.map(rhythm => rhythm.id));
-  const otherPersonRhythms = personRhythms.filter(rhythm => !dueRhythmIds.has(rhythm.id));
   const personArchivedRhythms = archivedRhythms.filter(rhythm => rhythm.personIds?.includes(personId));
 
   useEffect(() => {
@@ -773,42 +773,50 @@ export function PersonProfileView({
                 onUndoTendedRhythm,
                 itemProps
               }) => {
-                return duePersonRhythms.length > 0
-                  ? (
-                    <TendedRhythmItems
-                      className="marriage-rhythm-list current-plan-item-group"
-                      rhythms={duePersonRhythms}
-                      tendedRhythmIds={displayedTendedIds}
-                      displayItems={tendedDisplayItems}
-                      expandedRhythmIds={expandedTendedRhythmIds}
-                      onToggleRhythm={onToggleTendedRhythm}
-                      itemProps={itemProps}
-                      renderRhythmCard={rhythm => renderPersonRhythm(
-                        rhythm,
-                        displayedTendedIds.has(rhythm.id)
-                      )}
-                      renderExpandedRhythm={item => renderPersonRhythm(
-                        item.rhythm,
-                        true,
-                        onUndoTendedRhythm
-                      )}
-                    />
-                  )
-                  : (
-                    <p className="friendships-empty">
-                      {personRhythms.length === 0 ? 'No Rhythms yet.' : 'No Rhythms due today.'}
-                    </p>
-                  );
+                return (
+                  <RhythmScheduleGroups
+                    rhythms={personRhythms}
+                    categoryToken={`person-profile-${personId}-rhythms`}
+                    emptyCollectionMessage={personRhythms.length === 0
+                      ? <h4 className="marriage-empty-state">No Rhythms yet.</h4>
+                      : undefined}
+                    renderGroup={groupRhythms => {
+                      const dueGroupRhythms = groupRhythms.filter(rhythm => dueRhythmIds.has(rhythm.id));
+                      const otherGroupRhythms = groupRhythms.filter(rhythm => !dueRhythmIds.has(rhythm.id));
+                      return (
+                        <>
+                          {dueGroupRhythms.length > 0 && (
+                            <TendedRhythmItems
+                              className="marriage-rhythm-list current-plan-item-group"
+                              rhythms={dueGroupRhythms}
+                              tendedRhythmIds={displayedTendedIds}
+                              displayItems={tendedDisplayItems}
+                              expandedRhythmIds={expandedTendedRhythmIds}
+                              onToggleRhythm={onToggleTendedRhythm}
+                              itemProps={itemProps}
+                              renderRhythmCard={rhythm => renderPersonRhythm(
+                                rhythm,
+                                displayedTendedIds.has(rhythm.id)
+                              )}
+                              renderExpandedRhythm={item => renderPersonRhythm(
+                                item.rhythm,
+                                true,
+                                onUndoTendedRhythm
+                              )}
+                            />
+                          )}
+                          {otherGroupRhythms.length > 0 && (
+                            <div className="marriage-rhythm-list current-plan-item-group">
+                              {otherGroupRhythms.map(rhythm => renderPersonRhythm(rhythm))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    }}
+                  />
+                );
               }}
             </TendedRhythmList>
-            {otherPersonRhythms.length > 0 && (
-              <section className="person-profile__other-rhythms" aria-labelledby="person-profile-other-rhythms">
-                <h4 id="person-profile-other-rhythms">Other Rhythms</h4>
-                <div className="marriage-rhythm-list current-plan-item-group">
-                  {otherPersonRhythms.map(rhythm => renderPersonRhythm(rhythm))}
-                </div>
-              </section>
-            )}
             <ArchivedRhythmsControl
               count={personArchivedRhythms.length}
               openerRef={archiveOpener}
