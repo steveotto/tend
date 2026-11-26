@@ -902,6 +902,11 @@ export function resolveTodayRhythms(savedRhythms: readonly SavedRhythm[]): Rhyth
   return [...editable, ...custom];
 }
 
+export function resolveSavedTodayRhythms(savedRhythms: readonly SavedRhythm[]): RhythmPreview[] {
+  const savedIds = new Set(savedRhythms.map(rhythm => rhythm.id));
+  return resolveTodayRhythms(savedRhythms).filter(rhythm => savedIds.has(rhythm.id));
+}
+
 export function applySavedRhythmOverrides(
   rhythm: RhythmPreview,
   saved?: SavedRhythm

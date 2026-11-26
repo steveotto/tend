@@ -9,6 +9,7 @@ import {
   isEditableRhythmId,
   normalizeRhythmPersonIds,
   resolveTodayRhythms,
+  resolveSavedTodayRhythms,
   rhythmDraftFrom,
   rhythmsForCategory,
   restoreRhythmId,
@@ -261,6 +262,25 @@ describe('synthetic Rhythm editor domain', () => {
       status: 'Due today'
     });
     expect(rhythmsForCategory(resolved, 'marriage').map(rhythm => rhythm.id)).toEqual([id]);
+  });
+
+  it('resolves only explicitly saved Rhythms for authenticated account views', () => {
+    expect(resolveSavedTodayRhythms([])).toEqual([]);
+    expect(resolveTodayRhythms([]).map(rhythm => rhythm.id))
+      .toEqual(todayRhythms.map(rhythm => rhythm.id));
+
+    const fixture = todayRhythms[0]!;
+    const savedFixture: SavedRhythm = {
+      id: fixture.id,
+      title: 'Saved built-in Rhythm',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      personIds: [],
+      categoryIds: ['faith']
+    };
+    expect(resolveSavedTodayRhythms([savedFixture])).toMatchObject([
+      { id: fixture.id, title: 'Saved built-in Rhythm' }
+    ]);
   });
 
   it('edits an existing fixture with the same identity and overlays only editable fields', () => {

@@ -1963,6 +1963,29 @@ async function verifyFitnessLogDialogLayout(
 async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, baseUrl: string) {
   const previewData = createEmptyPreviewData();
   const today = localDateString(new Date());
+  previewData.savedRhythms = [{
+    id: 'user-rhythm-c2000000-0000-4000-8000-000000000001',
+    title: 'Synthetic Strength Rhythm',
+    description: 'A synthetic saved Rhythm for Foundation layout coverage.',
+    cadence: 'Daily',
+    timeLabel: 'Morning',
+    timeOfDay: 'morning',
+    schedule: { frequency: 'daily' },
+    personIds: [],
+    categoryIds: ['health'],
+    primaryFoundationId: 'health-strength',
+    secondaryFoundationIds: []
+  }, {
+    id: 'sample-pray-together',
+    title: 'Pray together',
+    description: 'A synthetic saved built-in Rhythm for completion layout coverage.',
+    cadence: 'Daily',
+    timeLabel: 'Morning',
+    timeOfDay: 'morning',
+    schedule: { frequency: 'daily' },
+    personIds: ['sample-person-avery'],
+    categoryIds: ['faith']
+  }];
   const personId = 'sample-person-avery';
   const sparkPersonId = 'layout-spark-person';
   const shortPersonId = 'layout-short-person';
@@ -2173,7 +2196,7 @@ async function verifyFoundationAlignmentAndDialogScrolling(browser: Browser, bas
   });
   await page.goto(`${baseUrl}/app-preview.html?identity=dashboard`);
   await page.locator('.home-dashboard').waitFor();
-  await page.getByRole('button', { name: 'Health & Fitness' }).click();
+  await page.getByRole('button', { name: 'Health & Fitness', exact: true }).click();
   await page.getByRole('tab', { name: 'Foundations' }).click();
 
   const foundations = [
@@ -5281,6 +5304,15 @@ async function main() {
 
     const dashboardPrayerFixture = createSamplePreviewData();
     const dashboardPrayerNow = new Date().toISOString();
+    dashboardPrayerFixture.savedRhythms = [{
+      id: 'sample-pray-together',
+      title: 'Pray together',
+      description: 'A synthetic saved Rhythm for account-facing layout coverage.',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      personIds: ['sample-person-avery'],
+      categoryIds: ['faith']
+    }];
     dashboardPrayerFixture.prayerRequests = [{
       id: 'browser-no-person-prayer-request',
       personId: null,
@@ -12212,6 +12244,15 @@ async function main() {
       const prayerDetails = Array.from({ length: 20 }, (_, index) =>
         `Synthetic prayer context ${index + 1} explains the request with enough detail to test responsive wrapping, dialog scrolling, and preservation of the complete text.`
       ).join(' ');
+      prayerFixture.savedRhythms = [{
+        id: 'sample-pray-together',
+        title: 'Pray together',
+        description: 'A synthetic saved Rhythm for the authenticated profile layout.',
+        cadence: 'Daily',
+        timeLabel: 'Morning',
+        personIds: ['sample-person-avery'],
+        categoryIds: ['faith']
+      }];
       prayerFixture.prayerRequests = [{
         id: 'browser-prayer-request',
         personId: 'sample-person-avery',
