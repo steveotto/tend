@@ -2,7 +2,12 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AllItemsPage } from '../src/components/AllItemsPage.tsx';
-import { createPersonPickerGroups, createSamplePeople, todayRhythms } from '../src/domain/preview-data.ts';
+import {
+  createPersonPickerGroups,
+  createSamplePeople,
+  foundationCatalogue,
+  todayRhythms
+} from '../src/domain/preview-data.ts';
 import type { PersonId, RhythmPreview } from '../src/domain/preview-data.ts';
 import type { PersonPrayerRequest } from '../src/domain/person-prayers.ts';
 import type { PersonSpark } from '../src/domain/person-sparks.ts';
@@ -75,6 +80,7 @@ function pageProps<T extends object = {}>(overrides?: T) {
     archivedRhythmIds: [],
     sparks: [],
     prayerRequests: [],
+    rhythmScores: new Map(),
     people,
     peopleGroups: createPersonPickerGroups(),
     foundations: [],
@@ -82,7 +88,7 @@ function pageProps<T extends object = {}>(overrides?: T) {
     today: '2026-10-31',
     timeZone: 'UTC',
     prayerEnabled: true,
-    onEditRhythm: vi.fn(),
+    onRhythmHistory: vi.fn(),
     onTendRhythm: vi.fn(),
     onUndoRhythm: vi.fn(),
     onPersonSelect: vi.fn(),
@@ -104,7 +110,7 @@ function pageProps<T extends object = {}>(overrides?: T) {
 }
 
 describe('All items page', () => {
-  it('retains every supported status in the type groups', async () => {
+  it('excludes archived Rhythms but retains other supported statuses', async () => {
     const user = userEvent.setup();
     render(<AllItemsPage {...pageProps({
       completedRhythmIds: new Set([rhythm.id]),
@@ -113,28 +119,61 @@ describe('All items page', () => {
       prayerRequests: [archivedPrayer]
     })} />);
 
-    expect(screen.getByText('Archived', { selector: '.rhythm-archived-badge' })).toBeTruthy();
+    expect(screen.queryByRole('article', { name: 'All items rhythm' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Expand Spark Archived Spark' }));
     await user.click(screen.getByRole('button', { name: 'Expand Spark Completed Spark' }));
     expect(screen.getByText('Archived', { selector: '.person-spark-card__status' })).toBeTruthy();
     expect(screen.getByText(/Completed/, { selector: '.person-spark-card__status' })).toBeTruthy();
     expect(screen.getByText('Archived', { selector: '.person-prayer-card__status' })).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toContain('4 items');
+    expect(screen.getByRole('status').textContent).toContain('3 items');
   });
 
-  it('keeps filters and refreshed results after the existing Rhythm editor is opened', async () => {
+  it('renders the same inline Rhythm card and history action used by Home and People', async () => {
     const user = userEvent.setup();
-    const onEditRhythm = vi.fn();
-    const originalProps = pageProps({ onEditRhythm });
-    const view = render(<AllItemsPage {...originalProps} />);
+    const onRhythmHistory = vi.fn();
+    const cardRhythm: RhythmPreview = {
+      ...rhythm,
+      categoryIds: ['faith'],
+      primaryFoundationId: 'faith-prayer'
+    };
+    render(<AllItemsPage {...pageProps({
+      rhythms: [cardRhythm],
+      foundations: foundationCatalogue,
+      onRhythmHistory
+    })} />);
+
+    const card = screen.getByRole('article', { name: 'All items rhythm' });
+    expect(card.classList.contains('today-rhythm-details-dialog--inline')).toBe(true);
+    expect(card.querySelector('.rhythm-card--details-summary')).toBeNull();
+    expect(card.querySelector('.today-rhythm-details__title-score-row')).toBeTruthy();
+    expect(card.querySelector('.today-rhythm-details__footer')).toBeTruthy();
+    expect(card.querySelector('.today-rhythm-details__edit-icon')).toBeNull();
+    expect(card.querySelector('.today-rhythm-details__association-people')).toBeTruthy();
+    expect(card.querySelector('.rhythm-area-badge__visual')).toBeTruthy();
+    expect(card.querySelector('.rhythm-card__tend')).toBeTruthy();
+    expect(card.querySelector('.today-rhythm-details__history-button')).toBeTruthy();
+
+    await user.click(within(card).getByRole('button', {
+      name: /View scores and history for All items rhythm/
+    }));
+    expect(onRhythmHistory).toHaveBeenCalledOnce();
+    expect(onRhythmHistory.mock.calls[0]?.[0]).toBe(rhythm.id);
+  });
+
+  it('keeps filters and refreshed results when the standard Rhythm history/edit flow returns', async () => {
+    const user = userEvent.setup();
+    const onRhythmHistory = vi.fn();
+    const view = render(<AllItemsPage {...pageProps({ onRhythmHistory })} />);
 
     await selectFilterOptions(user, 'Type', ['Rhythms']);
     await selectFilterOptions(user, 'Person', [people[0]!.displayName]);
     await selectFilterOptions(user, 'Frequency', ['Daily']);
     await selectFilterOptions(user, 'Time of day', ['Morning']);
-    await user.click(screen.getByRole('button', { name: 'Edit All items rhythm' }));
+    await user.click(screen.getByRole('button', {
+      name: /View scores and history for All items rhythm/
+    }));
 
-    expect(onEditRhythm).toHaveBeenCalledOnce();
+    expect(onRhythmHistory).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: 'Type: Rhythms' })).toBeTruthy();
     expect(screen.getByRole('button', { name: `Person: ${people[0]!.displayName}` })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Frequency: Daily' })).toBeTruthy();
@@ -143,7 +182,7 @@ describe('All items page', () => {
     const renamedRhythm = { ...rhythm, title: 'Updated rhythm title' };
     view.rerender(<AllItemsPage {...pageProps({
       rhythms: [renamedRhythm],
-      onEditRhythm
+      onRhythmHistory
     })} />);
 
     expect(screen.getByRole('heading', { name: 'Updated rhythm title' })).toBeTruthy();
@@ -404,30 +443,32 @@ describe('All items page', () => {
     expect(screen.getByRole('button', { name: 'Type: All types' })).toBeTruthy();
   });
 
-  it('preserves search text and filters after opening an existing item editor', async () => {
+  it('preserves search text and filters when the standard Rhythm history/edit route returns', async () => {
     const user = userEvent.setup();
-    const onEditRhythm = vi.fn();
+    const onRhythmHistory = vi.fn();
     const detailedRhythm = {
       ...rhythm,
       description: 'A shared detail to find'
     };
     const view = render(<AllItemsPage {...pageProps({
       rhythms: [detailedRhythm],
-      onEditRhythm
+      onRhythmHistory
     })} />);
 
     const search = screen.getByRole('searchbox', { name: 'Search titles and details' }) as HTMLInputElement;
     await user.type(search, 'shared detail');
     await selectFilterOptions(user, 'Type', ['Rhythms']);
-    await user.click(screen.getByRole('button', { name: 'Edit All items rhythm' }));
+    await user.click(screen.getByRole('button', {
+      name: /View scores and history for All items rhythm/
+    }));
 
-    expect(onEditRhythm).toHaveBeenCalledOnce();
+    expect(onRhythmHistory).toHaveBeenCalledOnce();
     expect(search.value).toBe('shared detail');
     expect(screen.getByRole('button', { name: 'Type: Rhythms' })).toBeTruthy();
 
     view.rerender(<AllItemsPage {...pageProps({
       rhythms: [{ ...detailedRhythm, title: 'Updated rhythm title' }],
-      onEditRhythm
+      onRhythmHistory
     })} />);
 
     expect(search.value).toBe('shared detail');

@@ -1,12 +1,20 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
-import { effectiveRhythmSchedule, rhythmTimeLabel, rhythmTimeValueFromLegacyLabel } from '../domain/rhythm-schedule.ts';
+import { effectiveRhythmSchedule } from '../domain/rhythm-schedule.ts';
 import type { PersonPrayerLog, PersonPrayerLogUndo, PersonPrayerRequest, PersonPrayerRequestDraft, PrayerRequestTransition } from '../domain/person-prayers.ts';
 import type { PersonSpark, PersonSparkDraft } from '../domain/person-sparks.ts';
-import { rhythmLastTendedLabel } from '../domain/preview-data.ts';
-import type { FoundationPreview, PersonId, PersonPickerGroup, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
+import {
+  peopleForRhythm,
+  type FoundationPreview,
+  type PersonId,
+  type PersonPickerGroup,
+  type PersonPreview,
+  type RhythmPreview
+} from '../domain/preview-data.ts';
 import type { FriendshipData } from '../domain/friendships.ts';
 import { defaultAllItemsFilters, selectAllItems } from '../domain/all-items.ts';
+import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
+import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import type {
   AllItemsFilters,
   AllItemsFrequencyFilter,
@@ -16,7 +24,7 @@ import type {
 } from '../domain/all-items.ts';
 import { PersonSparkPanel } from './PersonSparkPanel.tsx';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
-import { RhythmCard } from './Cards.tsx';
+import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { MultiSelectDropdown } from './MultiSelectDropdown.tsx';
@@ -44,6 +52,7 @@ type AllItemsPageProps = {
   archivedRhythmIds: readonly string[];
   sparks: readonly PersonSpark[];
   prayerRequests: readonly PersonPrayerRequest[];
+  rhythmScores: ReadonlyMap<string, RhythmScoreResult>;
   people: readonly PersonPreview[];
   peopleGroups: readonly PersonPickerGroup[];
   foundations: readonly FoundationPreview[];
@@ -51,7 +60,7 @@ type AllItemsPageProps = {
   today: string;
   timeZone: string;
   prayerEnabled: boolean;
-  onEditRhythm: (rhythm: RhythmPreview, event: MouseEvent<HTMLButtonElement>) => void;
+  onRhythmHistory: (rhythmId: string, event: MouseEvent<HTMLButtonElement>) => void;
   onTendRhythm: (rhythmId: string, event: MouseEvent<HTMLButtonElement>) => void;
   onUndoRhythm: (rhythmId: string) => void;
   onPersonSelect: (personId: PersonId) => void;
@@ -99,12 +108,17 @@ export function AllItemsPage(props: AllItemsPageProps) {
     ...defaultAllItemsFilters
   });
   const timeOptions = useRhythmTimeOptions();
+  const archivedRhythmIds = new Set(props.archivedRhythmIds);
+  const activeRhythms = props.rhythms.filter(rhythm => !archivedRhythmIds.has(rhythm.id));
   const selection = selectAllItems({
     rhythms: props.rhythms,
+    archivedRhythmIds,
     sparks: props.sparks,
     prayerRequests: props.prayerRequests
   }, filters);
-  const totalItems = props.rhythms.length + props.sparks.length + props.prayerRequests.length;
+  const totalItems = activeRhythms.length
+    + props.sparks.length
+    + props.prayerRequests.length;
   const hasActiveFilters = filters.type !== 'all'
     || filters.person !== 'all'
     || filters.frequency !== 'all'
@@ -120,20 +134,6 @@ export function AllItemsPage(props: AllItemsPageProps) {
     { value: 'not-applicable', label: 'No applicable time setting' },
     ...timeOptions
   ];
-
-  function lastTendedLabel(rhythm: RhythmPreview, completed: boolean) {
-    return rhythmLastTendedLabel(rhythm, completed, props.today);
-  }
-
-  function timeLabel(rhythm: RhythmPreview) {
-    const legacyTimeLabel = 'timeLabel' in rhythm && typeof rhythm.timeLabel === 'string'
-      ? rhythm.timeLabel
-      : undefined;
-    const value = rhythm.timeOfDay ?? (legacyTimeLabel
-      ? rhythmTimeValueFromLegacyLabel(legacyTimeLabel)
-      : undefined);
-    return value ? rhythmTimeLabel(value, timeOptions) : undefined;
-  }
 
   return (
     <section className="all-items-page" aria-labelledby="all-items-heading">
@@ -212,7 +212,7 @@ export function AllItemsPage(props: AllItemsPageProps) {
       {selection.count === 0 ? (
         <p className="all-items-page__empty">
           {totalItems === 0
-            ? 'There are no items in this account yet.'
+            ? 'There are no items to show.'
             : 'No items match these filters. Clear filters to see everything.'}
         </p>
       ) : (
@@ -222,34 +222,31 @@ export function AllItemsPage(props: AllItemsPageProps) {
               <h4 id="all-items-rhythms-heading">Rhythms ({selection.rhythms.length})</h4>
               <ul className="all-items-page__list">
                 {selection.rhythms.map(rhythm => {
-                  const archived = props.archivedRhythmIds.includes(rhythm.id);
                   const completed = props.completedRhythmIds.has(rhythm.id);
                   const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
-                  const rhythmTimeLabel = timeLabel(rhythm);
-                  const isInactive = !archived && Boolean(schedule?.endDate && schedule.endDate < props.today);
+                  const isInactive = Boolean(schedule?.endDate && schedule.endDate < props.today);
                   return (
                     <li key={rhythm.id}>
-                      <RhythmCard
+                      <RhythmDetailsDialog
                         rhythm={rhythm}
-                        variant="details-summary"
-                        archived={archived}
+                        inline
                         completed={completed}
-                        {...(isInactive ? { statusLabel: 'Inactive' } : {})}
-                        {...(schedule ? { schedule } : rhythm.cadence ? { cadence: rhythm.cadence } : {})}
-                        {...(rhythmTimeLabel ? { timeLabel: rhythmTimeLabel } : {})}
-                        lastTended={lastTendedLabel(rhythm, completed)}
-                        onEdit={(event: MouseEvent<HTMLButtonElement>) => props.onEditRhythm(rhythm, event)}
-                        {...(!archived && !isInactive ? {
-                          onTend: (event: MouseEvent<HTMLButtonElement>) => props.onTendRhythm(rhythm.id, event)
-                        } : {})}
-                        {...(!archived && !isInactive && completed
-                          ? { onUndo: () => props.onUndoRhythm(rhythm.id) }
-                          : {})}
-                        people={props.people}
+                        healthScore={rhythmHealthScore(props.rhythmScores.get(rhythm.id))}
+                        people={peopleForRhythm(rhythm, props.people)}
                         foundations={props.foundations}
+                        relatedRhythms={activeRhythms}
                         onPersonSelect={props.onPersonSelect}
                         onOpenCategory={props.onOpenCategory}
                         onOpenFoundation={props.onOpenFoundation}
+                        onHistory={event => props.onRhythmHistory(rhythm.id, event)}
+                        {...(isInactive ? { statusLabel: 'Inactive' } : {})}
+                        {...(!isInactive ? {
+                          onTend: (event: MouseEvent<HTMLButtonElement>) => props.onTendRhythm(rhythm.id, event)
+                        } : {})}
+                        {...(!isInactive && completed
+                          ? { onUndo: () => props.onUndoRhythm(rhythm.id) }
+                          : {})}
+                        onClose={() => undefined}
                       />
                     </li>
                   );

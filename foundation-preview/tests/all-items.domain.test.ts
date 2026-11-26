@@ -178,7 +178,7 @@ describe('All items selector', () => {
     expect(anytime.sparks).toEqual([]);
   });
 
-  it('retains completed, archived, and answered records and sorts each type by title', () => {
+  it('excludes archived Rhythms while retaining archived Sparks and Prayers', () => {
     const archivedRhythm = rhythm('archived-rhythm', 'Zulu rhythm');
     const completedSpark = spark('completed-spark', 'Bravo Spark', { completed: true });
     const archivedSpark = spark('archived-spark', 'Alpha Spark', { archived: true });
@@ -187,13 +187,21 @@ describe('All items selector', () => {
 
     const result = selectAllItems({
       rhythms: [archivedRhythm],
+      archivedRhythmIds: new Set([archivedRhythm.id]),
       sparks: [completedSpark, archivedSpark],
       prayerRequests: [archivedPrayer, answeredPrayer]
     }, defaultAllItemsFilters);
 
-    expect(result.rhythms).toEqual([archivedRhythm]);
+    expect(result.rhythms).toEqual([]);
     expect(result.sparks.map(item => item.id)).toEqual(['archived-spark', 'completed-spark']);
     expect(result.prayerRequests.map(item => item.id)).toEqual(['answered-prayer', 'archived-prayer']);
+    expect(result.count).toBe(4);
+    expect(selectAllItems({
+      rhythms: [archivedRhythm],
+      archivedRhythmIds: new Set([archivedRhythm.id]),
+      sparks: [],
+      prayerRequests: []
+    }, filters({ search: 'Zulu' })).count).toBe(0);
   });
 
   it('supports all model frequencies, including custom intervals', () => {

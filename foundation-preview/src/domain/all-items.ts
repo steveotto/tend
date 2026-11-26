@@ -41,6 +41,7 @@ export const defaultAllItemsFilters: AllItemsFilters = {
 
 export type AllItemsCollections = {
   rhythms: readonly RhythmPreview[];
+  archivedRhythmIds?: ReadonlySet<string>;
   sparks: readonly PersonSpark[];
   prayerRequests: readonly PersonPrayerRequest[];
 };
@@ -59,16 +60,17 @@ export function selectAllItems(
   const rhythms = !matchesSelection(filters.type, 'rhythms')
     ? []
     : sortByTitle(collections.rhythms.filter(rhythm => {
+        if (collections.archivedRhythmIds?.has(rhythm.id)) return false;
         const timeLabel = legacyTimeLabel(rhythm);
         return matchesFilters({
-        people: rhythm.personIds ?? [],
-        frequency: rhythmFrequency(rhythm),
-        timeOfDay: rhythm.timeOfDay
-          ?? (timeLabel ? rhythmTimeValueFromLegacyLabel(timeLabel) : undefined)
-          ?? null,
-        title: rhythm.title,
-        details: rhythm.description ?? ''
-      }, filters);
+          people: rhythm.personIds ?? [],
+          frequency: rhythmFrequency(rhythm),
+          timeOfDay: rhythm.timeOfDay
+            ?? (timeLabel ? rhythmTimeValueFromLegacyLabel(timeLabel) : undefined)
+            ?? null,
+          title: rhythm.title,
+          details: rhythm.description ?? ''
+        }, filters);
       }));
   const sparks = !matchesSelection(filters.type, 'sparks')
     ? []

@@ -5503,6 +5503,69 @@ async function main() {
         await page.getByRole('button', { name: /Settings/ }).click();
         await page.getByRole('button', { name: 'All items' }).click();
         await page.locator('.all-items-page').waitFor();
+        await page.setViewportSize({ width: 375, height: 812 });
+        const standardRhythmCard = (scope: Locator) => scope
+          .locator('.today-rhythm-details-dialog--inline')
+          .filter({ has: page.getByRole('heading', { name: 'Pray together' }) });
+        const rhythmPresentation = async (card: Locator) => card.evaluate(element => {
+          const history = element.querySelector<HTMLElement>('.today-rhythm-details__history-button');
+          const tend = element.querySelector<HTMLElement>('.rhythm-card__tend');
+          const footer = element.querySelector<HTMLElement>('.today-rhythm-details__footer');
+          const title = element.querySelector<HTMLElement>('.today-rhythm-details__title-score-row h3');
+          if (!history || !tend || !footer || !title) {
+            throw new Error('The shared inline Rhythm card is missing a standard action or footer.');
+          }
+          const rect = (item: HTMLElement) => {
+            const bounds = item.getBoundingClientRect();
+            return { width: Math.round(bounds.width), height: Math.round(bounds.height) };
+          };
+          const style = getComputedStyle(element);
+          return {
+            background: style.backgroundColor,
+            border: style.borderColor,
+            borderRadius: style.borderRadius,
+            padding: style.padding,
+            titleFontSize: getComputedStyle(title).fontSize,
+            history: rect(history),
+            tend: rect(tend),
+            tendBackground: getComputedStyle(tend).backgroundColor,
+            footerBorder: getComputedStyle(footer).borderTopColor,
+            footerPadding: getComputedStyle(footer).paddingTop,
+            peopleBadges: element.querySelectorAll('.today-rhythm-details__association-people').length
+          };
+        });
+        const allItemsRhythm = standardRhythmCard(page.locator('.all-items-page'));
+        await allItemsRhythm.waitFor();
+        const allItemsPresentation = await rhythmPresentation(allItemsRhythm);
+
+        await page.getByRole('button', { name: 'Today', exact: true }).click();
+        await page.getByRole('tab', { name: 'All today' }).click();
+        const timeframeDisclosures = page.locator('.today-plan__agenda-rail .today-timeframe-header__disclosure');
+        for (let index = 0; index < await timeframeDisclosures.count(); index += 1) {
+          const disclosure = timeframeDisclosures.nth(index);
+          if (await disclosure.getAttribute('aria-expanded') === 'false') await disclosure.click();
+        }
+        const homeRhythm = standardRhythmCard(page.locator('.home-dashboard'));
+        await homeRhythm.waitFor();
+        const homePresentation = await rhythmPresentation(homeRhythm);
+
+        await page.getByRole('button', { name: 'People', exact: true }).click();
+        await page.getByRole('button', { name: 'Open profile for Avery Brooks' }).click();
+        const personProfile = page.getByRole('main', { name: 'Avery Brooks' });
+        await personProfile.getByRole('tab', { name: 'Rhythms' }).click();
+        const personRhythm = standardRhythmCard(personProfile);
+        await personRhythm.waitFor();
+        const personPresentation = await rhythmPresentation(personRhythm);
+        assert.deepEqual(homePresentation, allItemsPresentation,
+          'All items and Home must render the shared Rhythm card consistently at 375px.');
+        assert.deepEqual(personPresentation, allItemsPresentation,
+          'All items and People must render the shared Rhythm card consistently at 375px.');
+
+        await personProfile.getByRole('button', { name: /Back to/ }).click();
+        await page.getByRole('button', { name: 'More, settings' }).click();
+        await page.getByRole('button', { name: /Settings/ }).click();
+        await page.getByRole('button', { name: 'All items' }).click();
+        await page.locator('.all-items-page').waitFor();
         for (const width of [320, 375, 390, 430]) {
           await page.setViewportSize({ width, height: 812 });
           const layout = await page.locator('.all-items-page__filters').evaluate(filters => {

@@ -4692,6 +4692,7 @@ function PreviewWorkspace({
                           rhythms={allItemRhythms}
                           completedRhythmIds={allItemCompletedRhythmIds}
                           archivedRhythmIds={previewData.archivedRhythmIds}
+                          rhythmScores={rhythmScoreResults}
                           sparks={previewData.personSparks}
                           prayerRequests={previewData.prayerRequests}
                           people={peopleWithPhotos}
@@ -4701,7 +4702,7 @@ function PreviewWorkspace({
                           today={currentDate}
                           timeZone={localTimeZone || 'UTC'}
                           prayerEnabled={previewData.prayerEnabled}
-                          onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                          onRhythmHistory={openRhythmHistory}
                           onTendRhythm={openCompletion}
                           onUndoRhythm={undoTend}
                           onPersonSelect={openPersonProfile}
