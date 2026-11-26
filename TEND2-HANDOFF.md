@@ -1,6 +1,6 @@
 # Tend 2 Foundation handoff
 
-## Archived Rhythms Settings page (release in progress)
+## Archived Rhythms Settings page (deployed)
 
 **Implementation:** Settings now includes an Archived Rhythms entry directly beneath All items. The dedicated page reuses All Items’ search, Person/Frequency/Time-of-day filters, counts, clear-filter and empty-state structure, plus the shared `RhythmScheduleGroups` grouping. Type is fixed to Rhythms and the page filters the account’s archived saved Rhythms only. Archived cards reuse the existing Rhythm card/details/editor, are untendable, retain Person associations through `personIds`, and use the existing restore/unarchive command. Restored items leave this page and return to All items through the live archived-ID state.
 
@@ -10,7 +10,9 @@
 
 **Validation:** semantic typecheck passed; full component suite passed **1,966/1,966 across 121 files**; reader tests **7/7**; legacy tests **177/177**; browser CSS contract passed; recovery browser contract passed; Pages and scoring builds passed; Pages artifact tests **10/10** passed; `git diff --check` passed. The build retains the existing large-client-chunk advisory.
 
-**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, aligned with `origin/main` at `9d7accc8fd79db3478b0377d506bc2ff104322f3` before this feature commit. `supabase/.temp/`, Person-association implementation, grouping, tagline, unrelated work, sorting, and release data remain preserved. Deployment will be recorded after merge.
+**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`. Implementation commit `e9c2e8eb416938518c50a61a234a700d00fef5d5`; PR [#153](https://github.com/steveotto/tend/pull/153) merged to `main` as `b36d0a95703b07844ad9c1e78bfca73eec864dc2`. `supabase/.temp/`, Person-association implementation, grouping, tagline, unrelated work, sorting, and release data remain preserved.
+
+**Production release:** PR #153 required validation passed in [run 45901658938](https://github.com/steveotto/tend/actions/runs/45901658938), and Cloudflare Pages passed deployment `34657bc5-d9ba-4fdd-900a-68c73d8372c4`. The post-merge main validation passed in [run 45902476494](https://github.com/steveotto/tend/actions/runs/45902476494). `https://tendwhatmatters.com/` returned HTTP 200 after merge and now references `assets/main-C9vJ2XpI.js` with CSS `assets/main-Bo4MVkPj.css`. Sorting remains deferred.
 
 ## Person association display consistency (release in progress)
 
