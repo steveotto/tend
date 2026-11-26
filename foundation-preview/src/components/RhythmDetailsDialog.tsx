@@ -312,8 +312,9 @@ export function RhythmDetailsDialog({
                 embedded
                 dialogLayout
                 headingId="rhythm-details-title"
-                onSave={record => {
-                  return onSaveCompletion(record);
+                people={people ?? []}
+                onSave={(record, participantIds) => {
+                  return onSaveCompletion(record, participantIds);
                 }}
                 onCancel={closeCompletion}
                 onSaved={onClose}

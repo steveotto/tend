@@ -4,7 +4,6 @@ import { effectiveRhythmSchedule } from '../domain/rhythm-schedule.ts';
 import type { PersonPrayerLog, PersonPrayerLogUndo, PersonPrayerRequest, PersonPrayerRequestDraft, PrayerRequestTransition } from '../domain/person-prayers.ts';
 import type { PersonSpark, PersonSparkDraft } from '../domain/person-sparks.ts';
 import {
-  peopleForRhythm,
   type FoundationPreview,
   type PersonId,
   type PersonPickerGroup,
@@ -232,7 +231,7 @@ export function AllItemsPage(props: AllItemsPageProps) {
                         inline
                         completed={completed}
                         healthScore={rhythmHealthScore(props.rhythmScores.get(rhythm.id))}
-                        people={peopleForRhythm(rhythm, props.people)}
+                        people={props.people}
                         foundations={props.foundations}
                         relatedRhythms={activeRhythms}
                         onPersonSelect={props.onPersonSelect}

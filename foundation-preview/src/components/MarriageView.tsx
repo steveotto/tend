@@ -765,7 +765,7 @@ function TodayTogether({
                       inline
                       completed={displayedTendedIds.has(rhythm.id)}
                       statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
-                      people={peopleForRhythm(rhythm, people)}
+                      people={people}
                       foundations={foundations}
                       relatedRhythms={rhythms}
                       onPersonSelect={onPersonSelect}

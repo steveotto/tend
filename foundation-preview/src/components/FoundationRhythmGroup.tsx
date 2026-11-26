@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react';
 import type { Destination } from './AppNavigation.tsx';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
-import { peopleForRhythm, type FoundationPreview, type PersonId, type PersonPreview, type RhythmPreview } from '../domain/preview-data.ts';
+import { type FoundationPreview, type PersonId, type PersonPreview, type RhythmPreview } from '../domain/preview-data.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
@@ -60,7 +60,7 @@ export function FoundationRhythmGroup({
               rhythm={rhythm}
               inline
               completed={completedRhythms.has(rhythm.id)}
-              people={peopleForRhythm(rhythm, people)}
+              people={people}
               foundations={foundations}
               relatedRhythms={rhythms}
               {...(onPersonSelect ? { onPersonSelect } : {})}

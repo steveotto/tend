@@ -5,7 +5,7 @@ import { RhythmCompletionDialog } from '../src/components/RhythmCompletionDialog
 import { RhythmCompletionForm } from '../src/components/RhythmCompletionForm.tsx';
 import { TimeDial } from '../src/components/TimeDial.tsx';
 import { localDateString } from '../src/domain/money-goals.ts';
-import { todayRhythms } from '../src/domain/preview-data.ts';
+import { syntheticPeople, todayRhythms } from '../src/domain/preview-data.ts';
 import type { RhythmCompletionRecord } from '../src/domain/rhythm-completion.ts';
 
 afterEach(() => {
@@ -347,6 +347,7 @@ describe('Rhythm completion controls', () => {
     render(
       <RhythmCompletionForm
         rhythm={{ ...connectionRhythm, personIds: [...connectionRhythm.personIds] }}
+        people={syntheticPeople}
         onSave={onSave}
         onCancel={() => undefined}
         onSaved={onSaved}
@@ -379,6 +380,7 @@ describe('Rhythm completion controls', () => {
     render(
       <RhythmCompletionForm
         rhythm={{ ...connectionRhythm, personIds: [...connectionRhythm.personIds] }}
+        people={syntheticPeople}
         onSave={onSave}
         onCancel={() => undefined}
         onSaved={() => undefined}

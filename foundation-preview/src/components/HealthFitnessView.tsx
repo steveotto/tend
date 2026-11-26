@@ -31,7 +31,7 @@ import { selectFoundationScore } from '../domain/foundation-scoring.ts';
 import type { CategoryTabNavigationRequest, Destination } from './AppNavigation.tsx';
 import { healthFoundationDefinitions, syntheticPeople } from '../domain/preview-data.ts';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
-import { peopleForRhythm, rhythmLastActivityLabel } from '../domain/preview-data.ts';
+import { rhythmLastActivityLabel } from '../domain/preview-data.ts';
 import { isRhythmRelevantOnDate, rhythmsForSuggestionSource } from '../domain/category-rhythms.ts';
 import { effectiveRhythmSchedule, rhythmScheduleSummary, rhythmTimeLabel, rhythmTimeValueFromLabel } from '../domain/rhythm-schedule.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
@@ -656,7 +656,7 @@ export function HealthFitnessView({
                             inline
                             completed={displayedTendedIds.has(rhythm.id)}
                             statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
-                            people={peopleForRhythm(rhythm, people)}
+                            people={people}
                             foundations={foundations}
                             relatedRhythms={rhythms}
                             onPersonSelect={onPersonSelect}

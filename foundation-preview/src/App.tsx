@@ -96,7 +96,6 @@ import {
   datingRhythmSuggestionGroups,
   datingRhythmSuggestions,
   personById,
-  peopleForRhythm,
   todayRhythms,
   type CategoryRhythmSuggestionGroupDefinition,
   type CategoryRhythmSuggestionTemplate,
@@ -5436,7 +5435,7 @@ function PreviewWorkspace({
           {...(seasonRangeUndo?.rhythmId === activeRhythm.id
             ? { onUndoSeasonRange: undoSeasonRange }
             : {})}
-          people={peopleForRhythm(activeRhythm, peopleWithPhotos)}
+          people={peopleWithPhotos}
           foundations={foundationCatalogue}
           relatedRhythms={scoredRhythms}
           rhythmScores={rhythmScoreResults}
@@ -5482,7 +5481,8 @@ function PreviewWorkspace({
       {completionDialogRhythm && (
         <RhythmCompletionDialog
           rhythm={completionDialogRhythm}
-          onSave={saveDatedCompletion}
+          people={peopleWithPhotos}
+          onSave={(record, participantIds) => saveDatedCompletion(record, participantIds)}
           onClose={() => setCompletionDialogRhythmId(null)}
         />
       )}

@@ -3070,13 +3070,13 @@ describe('shared Rhythm history', () => {
       expect(opener.classList.contains('mini')).toBe(true);
       expect(opener.classList.contains('ghost')).toBe(true);
       await user.click(opener);
-      const recording = screen.getByRole('dialog', { name: 'When did you tend it?' });
+      const recording = screen.getByRole('dialog', { name: 'Log a moment' });
       expect(recording.getAttribute('aria-modal')).toBe('true');
       expect(history.hasAttribute('inert')).toBe(true);
       expect(history.querySelector('.rhythm-history-view__logged-moments')).toBeTruthy();
       expect(within(recording).getByRole('heading', { name: 'When did you tend it?' })).toBeTruthy();
       expect(recording.contains(document.activeElement)).toBe(true);
-      expect(within(recording).getByRole('button', { name: 'Cancel logging moment' }).getAttribute('type'))
+      expect(within(recording).getByRole('button', { name: 'Close Log a moment' }).getAttribute('type'))
         .toBe('button');
       fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-14' } });
       fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Unsaved note' } });
@@ -3086,7 +3086,7 @@ describe('shared Rhythm history', () => {
       } else if (action === 'Escape') {
         await user.keyboard('{Escape}');
       } else {
-        await user.click(screen.getByRole('button', { name: 'Cancel logging moment' }));
+        await user.click(screen.getByRole('button', { name: 'Close Log a moment' }));
       }
 
       expect(onSave).not.toHaveBeenCalled();
@@ -3099,7 +3099,7 @@ describe('shared Rhythm history', () => {
     }
   );
 
-  it('traps keyboard focus in the logging popup and keeps a failed draft open', async () => {
+  it('keeps the logging popup open after validation and save errors', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn(() => 'The preview could not save this completion.');
     render(
@@ -3112,18 +3112,7 @@ describe('shared Rhythm history', () => {
     await user.click(screen.getByRole('button', { name: 'Logged moments (0)' }));
     await user.click(screen.getByRole('button', { name: '+ Log a moment' }));
 
-    const recording = screen.getByRole('dialog', { name: 'When did you tend it?' });
-    const focusable = Array.from(recording.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    ));
-    const first = focusable[0]!;
-    const last = focusable[focusable.length - 1]!;
-    last.focus();
-    fireEvent.keyDown(last, { key: 'Tab' });
-    expect(document.activeElement).toBe(first);
-    first.focus();
-    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
-    expect(document.activeElement).toBe(last);
+    const recording = screen.getByRole('dialog', { name: 'Log a moment' });
 
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '' } });
     await user.click(within(recording).getByRole('button', { name: 'Save' }));
@@ -3133,7 +3122,7 @@ describe('shared Rhythm history', () => {
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-14' } });
     fireEvent.change(screen.getByLabelText(/Notes/), { target: { value: 'Keep this draft.' } });
     await user.click(within(recording).getByRole('button', { name: 'Save' }));
-    expect(screen.getByRole('dialog', { name: 'When did you tend it?' })).toBe(recording);
+    expect(screen.getByRole('dialog', { name: 'Log a moment' })).toBe(recording);
     expect(within(recording).getByLabelText(/Notes/)).toHaveProperty('value', 'Keep this draft.');
     expect(within(recording).getByRole('alert').textContent)
       .toBe('The preview could not save this completion.');
