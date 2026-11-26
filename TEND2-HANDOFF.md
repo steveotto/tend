@@ -1,6 +1,6 @@
 # Tend 2 Foundation handoff
 
-## Category header tagline (release in progress)
+## Category header tagline (deployed)
 
 Every Category header now uses the exact shared phrase **“Structure beats good intentions”**, replacing the prior category-specific copy while preserving each title, icon, colors, scores, and other content. The shared `CategoryHeader` remains the only implementation; Foundation and Principle detail headers are unchanged. Existing Marriage hero styling and responsive rules are reused without new styles.
 
@@ -8,9 +8,9 @@ Every Category header now uses the exact shared phrase **“Structure beats good
 
 **Validation:** semantic typecheck passed; component tests passed **1,961/1,961 across 120 files**; reader tests **7/7**; legacy tests **177/177**; browser CSS contract passed, including every Category at 320px; recovery browser contract passed; Pages + scoring production builds passed; isolated preview production build passed; Pages artifact tests passed **10/10**; `git diff --check` passed. Builds emit Vite's existing large-client-chunk advisory.
 
-**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, with current `origin/main` merged locally (base revision `78f8eb8a7ada25dfcd0bd1cba72d248208fec763`). The preserved handoff commit `cdf52b92` remains in history. Deployment revision will be added after the release is merged and verified.
+**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, now advanced to `origin/main` at `e216b06833b0d98edc5f8268c1ca179f35c67374`. The preserved handoff commit `cdf52b92` remains in history.
 
-**Production release:** implementation and checks are complete; PR, merge, and Cloudflare Pages deployment are pending. Archived Rhythms and sorting remain deferred.
+**Production release:** PR [#149](https://github.com/steveotto/tend/pull/149) merged on 2026-11-26 as application revision `e216b06833b0d98edc5f8268c1ca179f35c67374`. Post-merge validation passed in [run 45856715648](https://github.com/steveotto/tend/actions/runs/45856715648), and the Pages workflow completed successfully. After merge, `https://tendwhatmatters.com/` returned HTTP 200 and referenced `assets/main-Cuwf7cXA.js`; the served bundle contains the exact new tagline. Archived Rhythms and sorting remain deferred.
 
 ## Rhythm schedule grouping (deployed)
 
