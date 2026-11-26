@@ -131,7 +131,6 @@ type MarriageViewProps = {
   categoryConfig?: {
     categoryId: RhythmCategoryId;
     label: string;
-    description: string;
     foundations: readonly FoundationPreview[];
     foundationTerm?: FoundationTerminology;
     tabLabel?: string;
@@ -244,7 +243,6 @@ export function MarriageView({
   const wasArchiveDialogOpen = useRef(false);
   const categoryId = categoryConfig?.categoryId ?? 'marriage';
   const categoryLabel = categoryConfig?.label ?? 'Marriage';
-  const categoryDescription = categoryConfig?.description ?? 'Structure beats good intentions.';
   const categoryToken = categoryId;
   const foundationTerm = categoryConfig?.foundationTerm ?? foundationTerminologyForCategory(categoryId);
   const foundationDetailOpen = activeTab === 'foundations' && selectedFoundationId !== null;
@@ -510,7 +508,6 @@ export function MarriageView({
             titleId={`${categoryToken}-title`}
             icon={<AreaIcon id={categoryId} />}
             onHome={onHome}
-            subtitle={categoryDescription}
           />
           {categoryConfig?.categoryAction && (
             <div className="category-page-header-action">{categoryConfig.categoryAction}</div>

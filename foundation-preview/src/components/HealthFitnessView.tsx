@@ -575,7 +575,6 @@ export function HealthFitnessView({
             titleId="health-fitness-title"
             icon={<AreaIcon id="health" />}
             onHome={onHome}
-            subtitle="Structure beats good intentions"
           />
 
           <CategoryHealthSummary

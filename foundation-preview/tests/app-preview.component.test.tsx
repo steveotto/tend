@@ -1935,7 +1935,7 @@ describe('Tend Today preview', () => {
       .getByRole('button', { name: 'Parenting' }));
 
     expect(screen.getByRole('heading', { name: 'Parenting' })).toBeTruthy();
-    expect(screen.getByText("If your presence isn't felt, your absence won't be noticed.")).toBeTruthy();
+    expect(screen.getByText('Structure beats good intentions')).toBeTruthy();
     const parentingTabs = screen.getByRole('tablist', { name: 'Parenting content' });
     expect(Array.from(parentingTabs.querySelectorAll('[role="tab"]'), tab => tab.textContent))
       .toEqual(['Foundations', 'Today', 'Rhythms']);
@@ -7675,7 +7675,7 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' })).getByRole('button', { name: 'Faith' }));
     expect(screen.getByRole('heading', { name: 'Faith' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Faith' }).closest('.category-header')).toBeTruthy();
-    expect(screen.getByText('Faith practices that help you make room for God in everyday life.').closest('.category-header')).toBeTruthy();
+    expect(screen.getByText('Structure beats good intentions').closest('.category-header')).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Practices' })).toBeTruthy();
     expect(screen.queryByText('This destination is not implemented in this preview.')).toBeNull();
     await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
@@ -11430,6 +11430,7 @@ describe('Tend Today preview', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
       .getByRole('button', { name: 'Dating' }));
     expect(screen.getByRole('heading', { name: 'Dating' })).toBeTruthy();
+    expect(screen.getByText('Structure beats good intentions').closest('.category-header')).toBeTruthy();
     expect(screen.getAllByText('No active Rhythms.').length).toBeGreaterThan(0);
     expect(screen.getByText('0 of 0 Rhythms tended')).toBeTruthy();
     await user.click(screen.getByRole('tab', { name: 'Rhythms' }));

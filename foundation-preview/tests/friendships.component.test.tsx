@@ -92,6 +92,13 @@ function FriendshipsHarness({
 }
 
 describe('Friendships view', () => {
+  it('uses the shared Category header tagline', () => {
+    render(<FriendshipsHarness />);
+
+    const header = screen.getByRole('heading', { name: 'Friendships' }).closest('.category-header');
+    expect(header?.querySelector('p')?.textContent).toBe('Structure beats good intentions');
+  });
+
   it('uses one card-wide keyboard target and keeps quick actions outside profile navigation', async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

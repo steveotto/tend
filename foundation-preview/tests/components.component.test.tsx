@@ -88,12 +88,13 @@ describe('shared preview components', () => {
         titleId="faith-title"
         icon={<AreaIcon id="faith" />}
         onHome={onHome}
-        subtitle="Faith practices that help you make room for God in everyday life."
       />
     );
     const stack = container.querySelector<HTMLElement>('.category-header-stack')!;
     const home = within(stack).getByRole('button', { name: 'Home' });
     const hero = stack.querySelector('.category-header--hero');
+    expect(hero?.querySelector('.category-header__copy p')?.textContent)
+      .toBe('Structure beats good intentions');
     expect(home.className).toContain('tend-back-button--plain');
     expect(stack.firstElementChild).toBe(home);
     expect(home.nextElementSibling).toBe(hero);

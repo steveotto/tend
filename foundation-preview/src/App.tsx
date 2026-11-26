@@ -4905,7 +4905,6 @@ function PreviewWorkspace({
                 categoryConfig={{
                   categoryId: 'dating',
                   label: 'Dating',
-                  description: 'Build connection and shared direction at a pace that feels mutual.',
                   foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'dating'),
                   scoreExplanationIntro: 'Dating Health reflects follow-through on chosen Rhythms; it does not rate relationship quality.',
                   scoreInterpretationNote: 'These scores describe selected Rhythm follow-through, not the quality or future of a relationship.',
@@ -4973,7 +4972,6 @@ function PreviewWorkspace({
                 categoryConfig={{
                   categoryId: 'parenting',
                   label: 'Parenting',
-                  description: "If your presence isn't felt, your absence won't be noticed.",
                   foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'parenting'),
                   scoreInterpretationNote: 'These scores reflect follow-through on chosen Rhythms. They do not measure a child’s wellbeing or the quality of someone’s parenting.',
                   suggestionCatalogue: parentingSuggestionCatalogue
@@ -5026,7 +5024,6 @@ function PreviewWorkspace({
                 categoryConfig={{
                   categoryId: 'faith',
                   label: 'Faith',
-                  description: 'Faith practices that help you make room for God in everyday life.',
                   foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'faith'),
                   foundationTerm: { singular: 'Practice', plural: 'Practices' },
                   tabLabel: 'Practices',
@@ -5083,7 +5080,6 @@ function PreviewWorkspace({
                 categoryConfig={{
                   categoryId: 'friendships',
                   label: 'Friendships',
-                  description: 'Keep close through time, encouragement, and shared memories.',
                   foundations: foundationCatalogue.filter(foundation => foundation.categoryId === 'friendships'),
                   scoreExplanationIntro: 'Friendships Health reflects eligible Rhythms linked through these Foundations. Connection logs and cadence do not affect scoring.',
                   categoryAction: (
