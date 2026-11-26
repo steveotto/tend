@@ -65,7 +65,7 @@ function filters(patch: Partial<AllItemsFilters>): AllItemsFilters {
 }
 
 describe('All items selector', () => {
-  it('combines type, person, frequency, and time filters with AND semantics', () => {
+  it('combines type, person, frequency, and time selections with AND semantics', () => {
     const dailyRhythm = rhythm('daily', 'Daily practice', {
       personIds: [personA],
       schedule: { frequency: 'daily' },
@@ -87,9 +87,9 @@ describe('All items selector', () => {
       sparks: [spark('spark', 'Unscheduled Spark')],
       prayerRequests: [weeklyPrayer]
     }, filters({
-      person: personA,
-      frequency: 'weekly',
-      timeOfDay: 'afternoon'
+      person: [personA],
+      frequency: ['weekly'],
+      timeOfDay: ['afternoon']
     }));
 
     expect(result.rhythms).toEqual([]);
@@ -113,7 +113,7 @@ describe('All items selector', () => {
       rhythms: [sharedRhythm],
       sparks: [sharedSpark],
       prayerRequests: [sharedPrayer]
-    }, filters({ person: personB }));
+    }, filters({ person: [personB] }));
 
     expect(result.rhythms).toEqual([sharedRhythm]);
     expect(result.sparks).toEqual([sharedSpark]);
@@ -135,14 +135,14 @@ describe('All items selector', () => {
       rhythms: [],
       sparks: [],
       prayerRequests: [accountPrayer, sharedAccountPrayer]
-    }, filters({ person: 'none' }));
+    }, filters({ person: ['none'] }));
     expect(noPerson.prayerRequests).toEqual([accountPrayer]);
 
     const sharedPerson = selectAllItems({
       rhythms: [],
       sparks: [],
       prayerRequests: [accountPrayer, sharedAccountPrayer]
-    }, filters({ person: personB }));
+    }, filters({ person: [personB] }));
     expect(sharedPerson.prayerRequests).toEqual([sharedAccountPrayer]);
   });
 
@@ -162,9 +162,9 @@ describe('All items selector', () => {
       sparks: [unscheduledSpark],
       prayerRequests: []
     }, filters({
-      person: 'none',
-      frequency: 'not-scheduled',
-      timeOfDay: 'not-applicable'
+      person: ['none'],
+      frequency: ['not-scheduled'],
+      timeOfDay: ['not-applicable']
     }));
     expect(noPerson.rhythms).toEqual([noPersonUnscheduled]);
     expect(noPerson.sparks).toEqual([]);
@@ -173,7 +173,7 @@ describe('All items selector', () => {
       rhythms: [noPersonUnscheduled, anytimeRhythm],
       sparks: [unscheduledSpark],
       prayerRequests: []
-    }, filters({ timeOfDay: 'anytime' }));
+    }, filters({ timeOfDay: ['anytime'] }));
     expect(anytime.rhythms).toEqual([anytimeRhythm]);
     expect(anytime.sparks).toEqual([]);
   });
@@ -204,7 +204,7 @@ describe('All items selector', () => {
       rhythms: [customRhythm],
       sparks: [],
       prayerRequests: []
-    }, filters({ frequency: 'custom' }));
+    }, filters({ frequency: ['custom'] }));
 
     expect(result.rhythms).toEqual([customRhythm]);
   });
@@ -220,13 +220,50 @@ describe('All items selector', () => {
       prayerRequests: []
     };
 
-    expect(selectAllItems(collections, filters({ frequency: 'monthly' })).rhythms)
+    expect(selectAllItems(collections, filters({ frequency: ['monthly'] })).rhythms)
       .toEqual([monthlyRhythm]);
-    expect(selectAllItems(collections, filters({ frequency: 'custom' })).rhythms)
+    expect(selectAllItems(collections, filters({ frequency: ['custom'] })).rhythms)
       .toEqual([biweeklyRhythm]);
-    expect(selectAllItems(collections, filters({ frequency: 'not-scheduled' })).rhythms)
+    expect(selectAllItems(collections, filters({ frequency: ['not-scheduled'] })).rhythms)
       .toEqual([unscheduledRhythm]);
     expect(selectAllItems(collections, defaultAllItemsFilters).rhythms)
       .toEqual([biweeklyRhythm, monthlyRhythm, unknownCadence, unscheduledRhythm]);
+  });
+
+  it('matches any value in a multi-select and ANDs the separate filter groups', () => {
+    const dailyRhythm = rhythm('multi-daily', 'Daily practice', {
+      personIds: [personA],
+      schedule: { frequency: 'daily' },
+      timeOfDay: 'morning'
+    });
+    const weeklyPrayer = prayer('multi-weekly', 'Weekly request', {
+      personId: personB,
+      schedule: { frequency: 'weekly', weekdays: [1] },
+      timeOfDay: 'afternoon'
+    });
+    const collections = {
+      rhythms: [dailyRhythm],
+      sparks: [],
+      prayerRequests: [weeklyPrayer]
+    };
+    const multiple = selectAllItems(collections, filters({
+      type: ['rhythms', 'prayer-requests'],
+      person: [personA, personB],
+      frequency: ['daily', 'weekly'],
+      timeOfDay: ['morning', 'afternoon']
+    }));
+
+    expect(multiple.rhythms).toEqual([dailyRhythm]);
+    expect(multiple.prayerRequests).toEqual([weeklyPrayer]);
+    expect(multiple.count).toBe(2);
+
+    const separateFiltersAnd = selectAllItems(collections, filters({
+      type: ['rhythms', 'prayer-requests'],
+      person: [personA, personB],
+      frequency: ['daily', 'weekly'],
+      timeOfDay: ['morning']
+    }));
+    expect(separateFiltersAnd.rhythms).toEqual([dailyRhythm]);
+    expect(separateFiltersAnd.prayerRequests).toEqual([]);
   });
 });

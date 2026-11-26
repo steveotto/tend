@@ -12,6 +12,23 @@ afterEach(cleanup);
 
 const people = createSamplePeople();
 const owner: PersonId = people[0]!.id;
+
+async function selectFilterOptions(
+  user: ReturnType<typeof userEvent.setup>,
+  filterName: string,
+  optionNames: readonly string[]
+) {
+  const groupName = `${filterName} options`;
+  if (!screen.queryByRole('group', { name: groupName })) {
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${filterName}:`) }));
+  }
+  const group = screen.getByRole('group', { name: groupName });
+  for (const optionName of optionNames) {
+    const option = within(group).getByRole('checkbox', { name: optionName });
+    if (!(option as HTMLInputElement).checked) await user.click(option);
+  }
+}
+
 const rhythm: RhythmPreview = {
   id: 'all-items-rhythm',
   title: 'All items rhythm',
@@ -111,17 +128,17 @@ describe('All items page', () => {
     const originalProps = pageProps({ onEditRhythm });
     const view = render(<AllItemsPage {...originalProps} />);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'rhythms');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Person' }), owner);
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Frequency' }), 'daily');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Time of day' }), 'morning');
+    await selectFilterOptions(user, 'Type', ['Rhythms']);
+    await selectFilterOptions(user, 'Person', [people[0]!.displayName]);
+    await selectFilterOptions(user, 'Frequency', ['Daily']);
+    await selectFilterOptions(user, 'Time of day', ['Morning']);
     await user.click(screen.getByRole('button', { name: 'Edit All items rhythm' }));
 
     expect(onEditRhythm).toHaveBeenCalledOnce();
-    expect((screen.getByRole('combobox', { name: 'Type' }) as HTMLSelectElement).value).toBe('rhythms');
-    expect((screen.getByRole('combobox', { name: 'Person' }) as HTMLSelectElement).value).toBe(owner);
-    expect((screen.getByRole('combobox', { name: 'Frequency' }) as HTMLSelectElement).value).toBe('daily');
-    expect((screen.getByRole('combobox', { name: 'Time of day' }) as HTMLSelectElement).value).toBe('morning');
+    expect(screen.getByRole('button', { name: 'Type: Rhythms' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: `Person: ${people[0]!.displayName}` })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Frequency: Daily' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Time of day: Morning' })).toBeTruthy();
 
     const renamedRhythm = { ...rhythm, title: 'Updated rhythm title' };
     view.rerender(<AllItemsPage {...pageProps({
@@ -131,7 +148,7 @@ describe('All items page', () => {
 
     expect(screen.getByRole('heading', { name: 'Updated rhythm title' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('1 item');
-    expect((screen.getByRole('combobox', { name: 'Person' }) as HTMLSelectElement).value).toBe(owner);
+    expect(screen.getByRole('button', { name: `Person: ${people[0]!.displayName}` })).toBeTruthy();
   });
 
   it('keeps filters and refreshed results after the existing Spark editor is opened', async () => {
@@ -152,10 +169,10 @@ describe('All items page', () => {
       onUpdateSpark
     })} />);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'sparks');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Person' }), owner);
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Frequency' }), 'not-scheduled');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Time of day' }), 'not-applicable');
+    await selectFilterOptions(user, 'Type', ['Sparks']);
+    await selectFilterOptions(user, 'Person', [people[0]!.displayName]);
+    await selectFilterOptions(user, 'Frequency', ['Not scheduled / Not applicable']);
+    await selectFilterOptions(user, 'Time of day', ['No applicable time setting']);
     const card = screen.getByRole('article', { name: 'All items Spark' });
     await user.click(within(card).getByRole('button', { name: 'Expand Spark All items Spark' }));
     await user.click(within(card).getByRole('button', { name: 'Edit Spark' }));
@@ -165,12 +182,10 @@ describe('All items page', () => {
     await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
 
     expect(onUpdateSpark).toHaveBeenCalledOnce();
-    expect((screen.getByRole('combobox', { name: 'Type' }) as HTMLSelectElement).value).toBe('sparks');
-    expect((screen.getByRole('combobox', { name: 'Person' }) as HTMLSelectElement).value).toBe(owner);
-    expect((screen.getByRole('combobox', { name: 'Frequency' }) as HTMLSelectElement).value)
-      .toBe('not-scheduled');
-    expect((screen.getByRole('combobox', { name: 'Time of day' }) as HTMLSelectElement).value)
-      .toBe('not-applicable');
+    expect(screen.getByRole('button', { name: 'Type: Sparks' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: `Person: ${people[0]!.displayName}` })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Frequency: Not scheduled / Not applicable' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Time of day: No applicable time setting' })).toBeTruthy();
 
     view.rerender(<AllItemsPage {...pageProps({
       rhythms: [],
@@ -201,8 +216,8 @@ describe('All items page', () => {
     });
     const view = render(<AllItemsPage {...props} />);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'prayer-requests');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Person' }), 'none');
+    await selectFilterOptions(user, 'Type', ['Prayer requests']);
+    await selectFilterOptions(user, 'Person', ['No person']);
     expect(within(screen.getByRole('group', { name: 'Person association' })).getByText('No person')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('1 item');
 
@@ -219,10 +234,8 @@ describe('All items page', () => {
       null,
       expect.objectContaining({ title: 'Updated account request', sharedWith: [] })
     );
-    expect((screen.getByRole('combobox', { name: 'Type' }) as HTMLSelectElement).value)
-      .toBe('prayer-requests');
-    expect((screen.getByRole('combobox', { name: 'Person' }) as HTMLSelectElement).value)
-      .toBe('none');
+    expect(screen.getByRole('button', { name: 'Type: Prayer requests' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Person: No person' })).toBeTruthy();
 
     view.rerender(<AllItemsPage {...pageProps({
       rhythms: [],
@@ -273,12 +286,12 @@ describe('All items page', () => {
   it('combines filters and displays the no-match guidance with a clear action', async () => {
     const user = userEvent.setup();
     render(<AllItemsPage {...pageProps()} />);
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'sparks');
+    await selectFilterOptions(user, 'Type', ['Sparks']);
 
     expect(screen.getByRole('status').textContent).toContain('0 items');
     expect(screen.getByText('No items match these filters. Clear filters to see everything.')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
-    expect((screen.getByRole('combobox', { name: 'Type' }) as HTMLSelectElement).value).toBe('all');
+    expect(screen.getByRole('button', { name: 'Type: All types' })).toBeTruthy();
   });
 
   it('distinguishes Anytime from an unset Prayer time in the filter and shared card', async () => {
@@ -305,16 +318,53 @@ describe('All items page', () => {
       prayerRequests: [noTimeRequest, anytimeRequest]
     })} />);
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'prayer-requests');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Time of day' }), 'not-applicable');
+    await selectFilterOptions(user, 'Type', ['Prayer requests']);
+    await selectFilterOptions(user, 'Time of day', ['No applicable time setting']);
     expect(screen.getByRole('status').textContent).toContain('1 item');
     expect(screen.getByRole('article', { name: 'Prayer with no time' })).toBeTruthy();
     expect(screen.getByText('Time of day not set')).toBeTruthy();
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Time of day' }), 'anytime');
+    const timeOptions = screen.getByRole('group', { name: 'Time of day options' });
+    await user.click(within(timeOptions).getByRole('checkbox', { name: 'No applicable time setting' }));
+    await selectFilterOptions(user, 'Time of day', ['Anytime']);
     expect(screen.getByRole('status').textContent).toContain('1 item');
     const anytimeCard = screen.getByRole('article', { name: 'Anytime prayer' });
     expect(screen.queryByRole('article', { name: 'Prayer with no time' })).toBeNull();
     expect(within(anytimeCard).getByText('Anytime')).toBeTruthy();
+  });
+
+  it('matches any selected option within each filter while combining filters with AND', async () => {
+    const user = userEvent.setup();
+    const rhythmA = { ...rhythm, id: 'multi-a', title: 'Morning rhythm', personIds: [owner] };
+    const personB = people[1]!;
+    const prayerB: PersonPrayerRequest = {
+      id: 'multi-b',
+      personId: personB.id,
+      sharedWith: [],
+      title: 'Afternoon Prayer',
+      status: 'active',
+      schedule: { frequency: 'weekly', weekdays: [1] },
+      timeOfDay: 'afternoon',
+      createdAt: '2026-10-01T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      prayerLogs: []
+    };
+    render(<AllItemsPage {...pageProps({
+      rhythms: [rhythmA],
+      prayerRequests: [prayerB]
+    })} />);
+
+    await selectFilterOptions(user, 'Type', ['Rhythms', 'Prayer requests']);
+    await selectFilterOptions(user, 'Person', [people[0]!.displayName, personB.displayName]);
+    await selectFilterOptions(user, 'Frequency', ['Daily', 'Weekly']);
+    await selectFilterOptions(user, 'Time of day', ['Morning', 'Afternoon']);
+
+    expect(screen.getByRole('button', { name: 'Type: 2 selected' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Person: 2 selected' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Frequency: 2 selected' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Time of day: 2 selected' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('2 items');
+    expect(screen.getByRole('article', { name: 'Morning rhythm' })).toBeTruthy();
+    expect(screen.getByRole('article', { name: 'Afternoon Prayer' })).toBeTruthy();
   });
 });

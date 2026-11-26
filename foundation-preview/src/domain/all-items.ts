@@ -17,11 +17,17 @@ export type AllItemsFrequencyFilter =
 export type AllItemsTimeFilter = 'all' | 'not-applicable' | RhythmTimeValue;
 export type AllItemsPersonFilter = 'all' | 'none' | PersonId;
 
+export type AllItemsTypeSelection = 'all' | readonly Exclude<AllItemsTypeFilter, 'all'>[];
+export type AllItemsFrequencySelection = 'all' | readonly Exclude<AllItemsFrequencyFilter, 'all'>[];
+export type AllItemsTimeSelection = 'all' | readonly Exclude<AllItemsTimeFilter, 'all'>[];
+export type AllItemsPersonSelection = 'all' | readonly AllItemsPersonFilterValue[];
+export type AllItemsPersonFilterValue = Exclude<AllItemsPersonFilter, 'all'>;
+
 export type AllItemsFilters = {
-  type: AllItemsTypeFilter;
-  person: AllItemsPersonFilter;
-  frequency: AllItemsFrequencyFilter;
-  timeOfDay: AllItemsTimeFilter;
+  type: AllItemsTypeSelection;
+  person: AllItemsPersonSelection;
+  frequency: AllItemsFrequencySelection;
+  timeOfDay: AllItemsTimeSelection;
 };
 
 export const defaultAllItemsFilters: AllItemsFilters = {
@@ -48,7 +54,7 @@ export function selectAllItems(
   collections: AllItemsCollections,
   filters: AllItemsFilters
 ): AllItemsSelection {
-  const rhythms = filters.type === 'sparks' || filters.type === 'prayer-requests'
+  const rhythms = !matchesSelection(filters.type, 'rhythms')
     ? []
     : sortByTitle(collections.rhythms.filter(rhythm => {
         const timeLabel = legacyTimeLabel(rhythm);
@@ -60,14 +66,14 @@ export function selectAllItems(
           ?? null
       }, filters);
       }));
-  const sparks = filters.type === 'rhythms' || filters.type === 'prayer-requests'
+  const sparks = !matchesSelection(filters.type, 'sparks')
     ? []
     : sortByTitle(collections.sparks.filter(spark => matchesFilters({
         people: [spark.ownerId, ...spark.sharedWith],
         frequency: 'not-scheduled',
         timeOfDay: null
       }, filters)));
-  const prayerRequests = filters.type === 'rhythms' || filters.type === 'sparks'
+  const prayerRequests = !matchesSelection(filters.type, 'prayer-requests')
     ? []
     : sortByTitle(collections.prayerRequests.filter(request => matchesFilters({
         people: [...(request.personId === null ? [] : [request.personId]), ...(request.sharedWith ?? [])],
@@ -122,13 +128,36 @@ function matchesFilters(
   },
   filters: AllItemsFilters
 ): boolean {
-  if (filters.person === 'none' && item.people.length !== 0) return false;
-  if (filters.person !== 'all' && filters.person !== 'none' && !item.people.includes(filters.person)) return false;
-  if (filters.frequency !== 'all' && filters.frequency !== item.frequency) return false;
-  if (filters.timeOfDay === 'not-applicable' && item.timeOfDay != null) return false;
-  if (filters.timeOfDay !== 'all' && filters.timeOfDay !== 'not-applicable'
-    && item.timeOfDay !== filters.timeOfDay) return false;
-  return true;
+  return matchesPersonSelection(filters.person, item.people)
+    && matchesSelection(filters.frequency, item.frequency)
+    && matchesTimeSelection(filters.timeOfDay, item.timeOfDay);
+}
+
+function matchesPersonSelection(
+  selection: AllItemsFilters['person'],
+  people: readonly PersonId[]
+): boolean {
+  return selection === 'all' || selection.some(person =>
+    person === 'none' ? people.length === 0 : people.includes(person)
+  );
+}
+
+function matchesSelection<Value extends string>(
+  selection: 'all' | readonly Value[],
+  value: Value | null | undefined
+): boolean {
+  return selection === 'all' || (value !== null && value !== undefined && selection.includes(value));
+}
+
+function matchesTimeSelection(
+  selection: AllItemsFilters['timeOfDay'],
+  timeOfDay: RhythmTimeValue | null | undefined
+): boolean {
+  return selection === 'all' || selection.some(time =>
+    time === 'not-applicable'
+      ? timeOfDay === null || timeOfDay === undefined
+      : time === timeOfDay
+  );
 }
 
 function sortByTitle<T extends { id: string; title: string }>(items: readonly T[]): T[] {

@@ -5511,8 +5511,8 @@ async function main() {
               viewportWidth: document.documentElement.clientWidth,
               documentWidth: document.documentElement.scrollWidth,
               filters: { left: rect.left, right: rect.right },
-              selects: [...filters.querySelectorAll('select')].map(select => {
-                const bounds = select.getBoundingClientRect();
+              triggers: [...filters.querySelectorAll('.all-items-filter__trigger')].map(trigger => {
+                const bounds = trigger.getBoundingClientRect();
                 return { left: bounds.left, right: bounds.right };
               })
             };
@@ -5520,13 +5520,29 @@ async function main() {
           assert.equal(layout.viewportWidth, width);
           assert.equal(layout.documentWidth, width, `All items must not overflow horizontally at ${width}px.`);
           assert.ok(layout.filters.left >= 0 && layout.filters.right <= width);
-          assert.equal(layout.selects.length, 4);
-          assert.ok(layout.selects.every(bounds => bounds.left >= 0 && bounds.right <= width));
+          assert.equal(layout.triggers.length, 4);
+          assert.ok(layout.triggers.every(bounds => bounds.left >= 0 && bounds.right <= width));
+          const timeTrigger = page.getByRole('button', { name: 'Time of day: All times' });
+          await timeTrigger.click();
+          const menuBounds = await page.locator(
+            '.all-items-filter__dropdown--open .all-items-filter__menu'
+          ).evaluate(menu => {
+            const rect = menu.getBoundingClientRect();
+            return { left: rect.left, right: rect.right };
+          });
+          assert.ok(menuBounds.left >= 0 && menuBounds.right <= width,
+            `Open filter dropdown must fit within ${width}px.`);
+          await timeTrigger.click();
         }
-        await page.getByRole('combobox', { name: 'Type' }).selectOption('prayer-requests');
-        await page.getByRole('combobox', { name: 'Person' }).selectOption('none');
+        await page.getByRole('button', { name: 'Type: All types' }).click();
+        await page.getByRole('group', { name: 'Type options' })
+          .getByRole('checkbox', { name: 'Prayer requests' }).click();
+        await page.getByRole('button', { name: 'Person: All people' }).click();
+        await page.getByRole('group', { name: 'Person options' })
+          .getByRole('checkbox', { name: 'No person' }).click();
         await page.getByRole('group', { name: 'Person association' }).getByText('No person').waitFor();
         assert.match((await page.getByRole('status').textContent()) ?? '', /1 item/);
+        await page.getByRole('button', { name: 'Person: No person' }).click();
         await page.getByRole('button', { name: 'View prayer history for Account-level no-person Prayer' }).click();
         const prayerHistory = page.getByRole('dialog', { name: 'Prayer history' });
         await prayerHistory.getByRole('button', { name: 'Edit prayer request Account-level no-person Prayer' }).click();
@@ -5535,9 +5551,8 @@ async function main() {
         await prayerEditor.getByRole('button', { name: 'Cancel' }).click();
         await prayerHistory.waitFor({ state: 'visible' });
         await prayerHistory.getByRole('button', { name: 'Close prayer history' }).click();
-        await page.getByRole('combobox', { name: 'Type' }).waitFor({ state: 'visible' });
-        assert.equal(await page.getByRole('combobox', { name: 'Type' }).inputValue(), 'prayer-requests');
-        assert.equal(await page.getByRole('combobox', { name: 'Person' }).inputValue(), 'none');
+        await page.getByRole('button', { name: 'Type: Prayer requests' }).waitFor({ state: 'visible' });
+        await page.getByRole('button', { name: 'Person: No person' }).waitFor({ state: 'visible' });
         await page.getByRole('button', { name: 'Today', exact: true }).click();
         await page.locator('.home-dashboard').waitFor();
 

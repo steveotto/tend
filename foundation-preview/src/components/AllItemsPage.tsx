@@ -6,16 +6,29 @@ import type { PersonSpark, PersonSparkDraft } from '../domain/person-sparks.ts';
 import { rhythmLastTendedLabel } from '../domain/preview-data.ts';
 import type { FoundationPreview, PersonId, PersonPickerGroup, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import type { FriendshipData } from '../domain/friendships.ts';
-import { selectAllItems } from '../domain/all-items.ts';
-import type { AllItemsFrequencyFilter, AllItemsFilters } from '../domain/all-items.ts';
+import { defaultAllItemsFilters, selectAllItems } from '../domain/all-items.ts';
+import type {
+  AllItemsFilters,
+  AllItemsFrequencyFilter,
+  AllItemsPersonFilterValue,
+  AllItemsTimeFilter,
+  AllItemsTypeFilter
+} from '../domain/all-items.ts';
 import { PersonSparkPanel } from './PersonSparkPanel.tsx';
 import { PersonPrayerPanel } from './PersonPrayerPanel.tsx';
 import { RhythmCard } from './Cards.tsx';
 import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
+import { MultiSelectDropdown } from './MultiSelectDropdown.tsx';
+import type { MultiSelectOption } from './MultiSelectDropdown.tsx';
 
-const frequencyOptions: { value: AllItemsFrequencyFilter; label: string }[] = [
-  { value: 'all', label: 'All frequencies' },
+const typeOptions: MultiSelectOption<Exclude<AllItemsTypeFilter, 'all'>>[] = [
+  { value: 'rhythms', label: 'Rhythms' },
+  { value: 'sparks', label: 'Sparks' },
+  { value: 'prayer-requests', label: 'Prayer requests' }
+];
+
+const frequencyOptions: MultiSelectOption<Exclude<AllItemsFrequencyFilter, 'all'>>[] = [
   { value: 'not-scheduled', label: 'Not scheduled / Not applicable' },
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
@@ -83,10 +96,7 @@ type AllItemsPageProps = {
 
 export function AllItemsPage(props: AllItemsPageProps) {
   const [filters, setFilters] = useState<AllItemsFilters>({
-    type: 'all',
-    person: 'all',
-    frequency: 'all',
-    timeOfDay: 'all'
+    ...defaultAllItemsFilters
   });
   const timeOptions = useRhythmTimeOptions();
   const selection = selectAllItems({
@@ -99,41 +109,16 @@ export function AllItemsPage(props: AllItemsPageProps) {
     || filters.person !== 'all'
     || filters.frequency !== 'all'
     || filters.timeOfDay !== 'all';
-  const timeValues = timeOptions.map(option => option.value);
-
-  function updateType(value: string) {
-    if (value === 'all' || value === 'rhythms' || value === 'sparks' || value === 'prayer-requests') {
-      setFilters(current => ({ ...current, type: value }));
-    }
-  }
-
-  function updatePerson(value: string) {
-    if (value === 'all' || value === 'none') {
-      setFilters(current => ({ ...current, person: value }));
-    } else {
-      const person = props.people.find(item => item.id === value);
-      if (person) setFilters(current => ({ ...current, person: person.id }));
-    }
-  }
-
-  function updateFrequency(value: string) {
-    const option = frequencyOptions.find(item => item.value === value);
-    if (option) {
-      setFilters(current => ({
-        ...current,
-        frequency: option.value
-      }));
-    }
-  }
-
-  function updateTime(value: string) {
-    if (value === 'all' || value === 'not-applicable') {
-      setFilters(current => ({ ...current, timeOfDay: value }));
-    } else {
-      const selectedTime = timeValues.find(time => time === value);
-      if (selectedTime) setFilters(current => ({ ...current, timeOfDay: selectedTime }));
-    }
-  }
+  const personOptions: MultiSelectOption<AllItemsPersonFilterValue>[] = [
+    { value: 'none', label: 'No person' },
+    ...[...props.people]
+      .sort((left, right) => left.displayName.localeCompare(right.displayName) || left.id.localeCompare(right.id))
+      .map(person => ({ value: person.id, label: person.displayName }))
+  ];
+  const timeFilterOptions: MultiSelectOption<Exclude<AllItemsTimeFilter, 'all'>>[] = [
+    { value: 'not-applicable', label: 'No applicable time setting' },
+    ...timeOptions
+  ];
 
   function lastTendedLabel(rhythm: RhythmPreview, completed: boolean) {
     return rhythmLastTendedLabel(rhythm, completed, props.today);
@@ -153,49 +138,34 @@ export function AllItemsPage(props: AllItemsPageProps) {
     <section className="all-items-page" aria-labelledby="all-items-heading">
       <h3 id="all-items-heading">All items</h3>
       <div className="all-items-page__filters" aria-label="Filter all items">
-        <label>
-          <span>Type</span>
-          <select aria-label="Type" value={filters.type} onChange={event => updateType(event.currentTarget.value)}>
-            <option value="all">All types</option>
-            <option value="rhythms">Rhythms</option>
-            <option value="sparks">Sparks</option>
-            <option value="prayer-requests">Prayer requests</option>
-          </select>
-        </label>
-        <label>
-          <span>Person</span>
-          <select aria-label="Person" value={filters.person} onChange={event => updatePerson(event.currentTarget.value)}>
-            <option value="all">All people</option>
-            <option value="none">No person</option>
-            {[...props.people]
-              .sort((left, right) => left.displayName.localeCompare(right.displayName) || left.id.localeCompare(right.id))
-              .map(person => <option key={person.id} value={person.id}>{person.displayName}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Frequency</span>
-          <select
-            aria-label="Frequency"
-            value={filters.frequency}
-            onChange={event => updateFrequency(event.currentTarget.value)}
-          >
-            {frequencyOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Time of day</span>
-          <select
-            aria-label="Time of day"
-            value={filters.timeOfDay}
-            onChange={event => updateTime(event.currentTarget.value)}
-          >
-            <option value="all">All times</option>
-            <option value="not-applicable">No applicable time setting</option>
-            {timeValues.map(value => (
-              <option key={value} value={value}>{rhythmTimeLabel(value, timeOptions)}</option>
-            ))}
-          </select>
-        </label>
+        <MultiSelectDropdown
+          label="Type"
+          allLabel="All types"
+          options={typeOptions}
+          value={filters.type}
+          onChange={type => setFilters(current => ({ ...current, type }))}
+        />
+        <MultiSelectDropdown
+          label="Person"
+          allLabel="All people"
+          options={personOptions}
+          value={filters.person}
+          onChange={person => setFilters(current => ({ ...current, person }))}
+        />
+        <MultiSelectDropdown
+          label="Frequency"
+          allLabel="All frequencies"
+          options={frequencyOptions}
+          value={filters.frequency}
+          onChange={frequency => setFilters(current => ({ ...current, frequency }))}
+        />
+        <MultiSelectDropdown
+          label="Time of day"
+          allLabel="All times"
+          options={timeFilterOptions}
+          value={filters.timeOfDay}
+          onChange={timeOfDay => setFilters(current => ({ ...current, timeOfDay }))}
+        />
       </div>
       <div className="all-items-page__results">
         <p role="status" aria-live="polite">
@@ -205,12 +175,7 @@ export function AllItemsPage(props: AllItemsPageProps) {
           type="button"
           className="btn mini ghost"
           disabled={!hasActiveFilters}
-          onClick={() => setFilters({
-            type: 'all',
-            person: 'all',
-            frequency: 'all',
-            timeOfDay: 'all'
-          })}
+          onClick={() => setFilters({ ...defaultAllItemsFilters })}
         >
           Clear filters
         </button>
