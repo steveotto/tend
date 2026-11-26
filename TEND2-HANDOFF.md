@@ -12,7 +12,7 @@
 
 **Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, based on current `origin/main` at `499e1ac749705baa0391a2385d2f4cbbbe83c8ec`. `supabase/.temp/` and unrelated work were left untouched.
 
-**Production release:** PR, merge, and Cloudflare Pages deployment are pending. Record the merged revision, successful required checks/deployment, and live HTTP/bundle evidence here after release. Archived Rhythms and sorting remain paused.
+**Production release:** PR [#151](https://github.com/steveotto/tend/pull/151) merged on 2026-11-26 as application revision `0a5527c3c32aca813c27a2aa3e9266006a46453c`. Required PR validation passed in [run 45890509153](https://github.com/steveotto/tend/actions/runs/45890509153); the Cloudflare Pages check passed for deployment `d9ddca5a-3ad7-45ec-aef6-150d1eff838e`. After merge, the production root returned HTTP 200 and referenced `assets/main-QuKJ8_l6.js`; the served bundle includes the shared association UI labels. The post-merge Foundation validation rerun passed all checks in [run 45891798798](https://github.com/steveotto/tend/actions/runs/45891798798); its first attempt had a non-repeatable browser CSS border-color assertion failure. Synthetic authenticated regression coverage confirms empty associations render no Person badge and an explicit link displays only Alex. No live account was accessed; archived Rhythms and sorting remain paused.
 
 ## Category header tagline (deployed)
 
