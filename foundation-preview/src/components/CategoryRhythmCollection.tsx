@@ -6,7 +6,7 @@ import type { Destination } from './AppNavigation.tsx';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { categoryRhythmGroup } from '../domain/category-rhythms.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
-import { peopleForRhythm, rhythmLastActivityLabel } from '../domain/preview-data.ts';
+import { rhythmLastActivityLabel } from '../domain/preview-data.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { ArchivedRhythmsControl } from './ArchivedRhythmsControl.tsx';
@@ -134,7 +134,7 @@ export function CategoryRhythmCollection({
                       inline
                       statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
                       completed={completedRhythms.has(rhythm.id)}
-                      people={peopleForRhythm(rhythm, people)}
+                      people={people}
                       foundations={foundations}
                       relatedRhythms={rhythms}
                       onPersonSelect={onPersonSelect}

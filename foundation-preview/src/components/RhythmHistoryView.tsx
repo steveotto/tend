@@ -1,10 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useCurrentInstant } from './useCurrentInstant.ts';
 import type { MouseEvent } from 'react';
-import { createPortal } from 'react-dom';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import { orderedCompletions, rhythmLastActivityLabel } from '../domain/preview-data.ts';
-import { useScrollLock } from '../hooks/useScrollLock.ts';
 import type { RhythmCompletion } from '../domain/preview-data.ts';
 import type { DatedRhythmCompletion, RhythmCompletionRecord } from '../domain/rhythm-completion.ts';
 import type {
@@ -64,6 +62,7 @@ import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions, useTimeBlockSettings } from './TimeBlocksContext.tsx';
 import { isValidDate } from '../domain/money-goals.ts';
 import type { StrengthMode } from '../domain/strength.ts';
+import { MoneyGoalDialog } from './MoneyGoalDialog.tsx';
 
 export function RhythmHistoryView({
   rhythm,
@@ -109,7 +108,10 @@ export function RhythmHistoryView({
   closeButtonRef?: { current: HTMLButtonElement | null };
   datedCompletions?: readonly DatedRhythmCompletion[];
   completionHistoryAvailable?: boolean;
-  onSaveCompletion?: (record: RhythmCompletionRecord) => string | null;
+  onSaveCompletion?: (
+    record: RhythmCompletionRecord,
+    connectionParticipantIds?: PersonId[]
+  ) => string | null;
   onUpdateCompletion?: (record: RhythmCompletionRecord) => string | null;
   onDeleteCompletion?: (completionId: string) => string | null;
   onChooseSchedule?: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -207,7 +209,6 @@ export function RhythmHistoryView({
     : undefined;
   const historyViewRef = useRef<HTMLElement>(null);
   const historyBodyRef = useRef<HTMLDivElement>(null);
-  const logMomentDialogRef = useRef<HTMLDialogElement>(null);
   const loggedMomentsSummaryRef = useRef<HTMLElement>(null);
   const logMomentButtonRef = useRef<HTMLButtonElement>(null);
   const editButtonsRef = useRef(new Map<string, HTMLButtonElement>());
@@ -287,7 +288,6 @@ export function RhythmHistoryView({
       : undefined;
   const [editingRecord, setEditingRecord] = useState<RhythmCompletionRecord | null>(null);
   const [loggingMoment, setLoggingMoment] = useState(false);
-  useScrollLock(loggingMoment);
   const [loggedMomentsExpanded, setLoggedMomentsExpanded] = useState(false);
   const [logAnnouncement, setLogAnnouncement] = useState('');
   const [scoreDetailsExpanded, setScoreDetailsExpanded] = useState(false);
@@ -403,17 +403,6 @@ export function RhythmHistoryView({
       logMomentButtonRef.current?.focus({ preventScroll: true });
     }
     previousLoggingMomentRef.current = loggingMoment;
-  }, [loggingMoment]);
-
-  useEffect(() => {
-    if (!loggingMoment) return;
-    const dialog = logMomentDialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) {
-      if (typeof dialog.showModal === 'function') dialog.showModal();
-      else dialog.setAttribute('open', '');
-    }
-    dialog.querySelector<HTMLElement>('.rhythm-completion-form__heading')?.focus({ preventScroll: true });
   }, [loggingMoment]);
 
   useEffect(() => {
@@ -602,6 +591,7 @@ export function RhythmHistoryView({
           embedded
           headingId="rhythm-history-completion-title"
           initialRecord={editingRecord}
+          people={people ?? []}
           onSave={record => onUpdateCompletion
             ? onUpdateCompletion(record)
             : 'This logged moment can no longer be edited.'}
@@ -974,69 +964,35 @@ export function RhythmHistoryView({
           onClose={closeSeasonDeleteDialog}
         />
       )}
-      {loggingMoment && onSaveCompletion && createPortal(
-        <dialog
-          ref={logMomentDialogRef}
-          className="rhythm-history-view__log-dialog"
-          aria-labelledby="rhythm-history-completion-title"
-          aria-modal="true"
-          onClick={event => {
-            if (event.target === event.currentTarget) dismissLoggingMoment();
-          }}
-          onCancel={event => {
-            event.preventDefault();
-            dismissLoggingMoment();
-          }}
-          onKeyDown={event => {
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              event.stopPropagation();
-              dismissLoggingMoment();
-              return;
-            }
-            if (event.key !== 'Tab') return;
-            const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
-              'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-            ));
-            if (!focusable.length) {
-              event.preventDefault();
-              event.currentTarget.focus();
-              return;
-            }
-            const first = focusable[0]!;
-            const last = focusable[focusable.length - 1]!;
-            if (event.shiftKey && (document.activeElement === first || !event.currentTarget.contains(document.activeElement))) {
-              event.preventDefault();
-              last.focus();
-            } else if (!event.shiftKey && (document.activeElement === last || !event.currentTarget.contains(document.activeElement))) {
-              event.preventDefault();
-              first.focus();
-            }
-          }}
+      {loggingMoment && onSaveCompletion && (
+        <MoneyGoalDialog
+          title="Log a moment"
+          titleId="rhythm-history-completion-title"
+          labelledBy="rhythm-history-completion-title"
+          initialFocusId="rhythm-history-completion-title"
+          closeLabel="Close Log a moment"
+          dialogClassName="rhythm-history-view__log-dialog"
+          phoneFullScreen
+          scrollableBody
+          portalToBody
+          closeOnEscape
+          dismissOnBackdrop
+          onClose={dismissLoggingMoment}
         >
-          <header className="rhythm-history-view__log-dialog-header">
-            <button
-              type="button"
-              className="today-rhythm-details__close"
-              aria-label="Cancel logging moment"
-              onClick={dismissLoggingMoment}
-            >
-              ×
-            </button>
-          </header>
           <RhythmCompletionForm
             rhythm={rhythm}
             embedded
-            headingId="rhythm-history-completion-title"
-            onSave={onSaveCompletion}
+            dialogLayout
+            headingId="rhythm-history-completion-form-title"
+            people={people ?? []}
+            onSave={(record, participantIds) => onSaveCompletion(record, participantIds)}
             onCancel={dismissLoggingMoment}
             onSaved={() => {
               dismissLoggingMoment();
               setLogAnnouncement('Moment logged.');
             }}
           />
-        </dialog>,
-        document.body
+        </MoneyGoalDialog>
       )}
 
           </>

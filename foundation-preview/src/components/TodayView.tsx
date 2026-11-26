@@ -2,7 +2,6 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 're
 import type { KeyboardEvent, MouseEvent } from 'react';
 import type { ReactNode } from 'react';
 import {
-  peopleForRhythm,
   type FoundationPreview,
   type PersonId,
   type PersonPickerGroup,
@@ -438,7 +437,7 @@ export function TodayView({
                         rhythm={rhythm}
                         inline
                         headingId={`today-rhythm-${rhythm.id}-title`}
-                        people={peopleForRhythm(rhythm, people)}
+                        people={people}
                         foundations={foundations}
                         relatedRhythms={rhythms}
                         onPersonSelect={onPersonSelect}

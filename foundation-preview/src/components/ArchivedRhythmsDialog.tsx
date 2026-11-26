@@ -148,7 +148,7 @@ export function ArchivedRhythmsDialog({
               rhythm={selectedRhythm}
               {...(foundations ? { foundations } : {})}
               relatedRhythms={rhythms}
-              people={peopleForRhythm(selectedRhythm, people)}
+              people={people}
               completed={completedRhythms.has(selectedRhythm.id)}
               archived
               embedded

@@ -247,6 +247,7 @@ export function MoneyGoalDialog({
         phoneFullScreen ? 'dialog--phone-fullscreen' : '',
         scrollableBody ? 'money-goal-dialog--scrollable-body' : ''
       ].filter(Boolean).join(' ')}
+      aria-modal="true"
       aria-labelledby={labelledBy ?? 'money-goal-dialog-title'}
       onCancel={event => {
         event.preventDefault();

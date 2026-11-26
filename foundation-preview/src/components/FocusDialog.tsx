@@ -133,7 +133,7 @@ export function FocusDialog({
                 rhythm={rhythm}
                 inline
                 headingId={`focus-${group.localDate}-${group.id}-${rhythm.id}`}
-                people={people.filter(person => rhythm.personIds?.includes(person.id))}
+                people={people}
                 foundations={foundations}
                 relatedRhythms={rhythms}
                 rhythmScores={rhythmScores}

@@ -10,7 +10,6 @@ import type {
   CompletionDraftErrors,
   RhythmCompletionRecord
 } from '../domain/rhythm-completion.ts';
-import { syntheticPeople } from '../domain/preview-data.ts';
 import type { PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
 import type { PersonId } from '../domain/preview-data.ts';
 import { PeopleParticipantPicker } from './PeopleParticipantPicker.tsx';
@@ -37,7 +36,7 @@ export function RhythmCompletionForm({
   onSave,
   onCancel,
   onSaved,
-  people = syntheticPeople
+  people = []
 }: {
   rhythm: RhythmPreview;
   embedded?: boolean;
@@ -95,6 +94,10 @@ export function RhythmCompletionForm({
     }
     if (logConnection && connectionParticipantIds.length === 0) {
       setConnectionError('Choose at least one person, or skip the connection.');
+      return;
+    }
+    if (logConnection && connectionParticipantIds.some(id => !people.some(person => person.id === id))) {
+      setConnectionError('Some associated People are unavailable. Refresh People or skip this Connection.');
       return;
     }
     if (!hasTime) {
@@ -222,16 +225,23 @@ export function RhythmCompletionForm({
             <span>Also log a connection</span>
           </label>
           {logConnection && (
-            <PeopleParticipantPicker
-              people={people}
-              selectedIds={connectionParticipantIds}
-              onChange={(personId, selected) => {
-                setConnectionParticipantIds(current => selected
-                  ? [...new Set([...current, personId])]
-                  : current.filter(id => id !== personId));
-                setConnectionError('');
-              }}
-            />
+            <>
+              <PeopleParticipantPicker
+                people={people}
+                selectedIds={connectionParticipantIds}
+                onChange={(personId, selected) => {
+                  setConnectionParticipantIds(current => selected
+                    ? [...new Set([...current, personId])]
+                    : current.filter(id => id !== personId));
+                  setConnectionError('');
+                }}
+              />
+              {connectionParticipantIds.some(id => !people.some(person => person.id === id)) && (
+                <p className="rhythm-completion-form__error" role="status">
+                  Some associated People are unavailable. Refresh People or skip this Connection.
+                </p>
+              )}
+            </>
           )}
           {connectionError && <p className="rhythm-completion-form__error" role="alert">{connectionError}</p>}
         </fieldset>

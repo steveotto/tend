@@ -231,6 +231,86 @@ async function verifyRhythmConnectionCheckboxPalette(browser: Browser): Promise<
   }
 }
 
+async function verifyRhythmLogDialogResponsiveLayout(browser: Browser): Promise<void> {
+  const [tokens, styles] = await Promise.all([
+    readFile(path.resolve(previewDirectory, 'public/brand/tend-tokens.css'), 'utf8'),
+    readFile(path.resolve(previewDirectory, 'src/styles.css'), 'utf8')
+  ]);
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  try {
+    await page.setContent(`
+      <button id="log-opener" type="button">+ Log a moment</button>
+      <dialog class="money-goal-dialog money-goal-dialog--scrollable-body dialog--phone-fullscreen rhythm-history-view__log-dialog"
+        aria-labelledby="log-title" aria-modal="true" open>
+        <div class="money-goal-dialog__surface">
+          <header class="money-goal-dialog__persistent-header">
+            <div class="money-goal-dialog__heading"><h2 id="log-title">Log a moment</h2></div>
+            <button type="button" class="money-goal-dialog__close" aria-label="Close Log a moment">×</button>
+          </header>
+          <div class="money-goal-dialog__scroll-region" role="region">
+            <form class="rhythm-completion-form rhythm-completion-form--embedded rhythm-completion-form--dialog-layout">
+              <h3>When did you tend it?</h3>
+              <div style="height: 900px">Scrollable completion fields</div>
+              <div class="money-goal-dialog__actions rhythm-completion-form__actions">
+                <button type="submit">Save</button>
+                <button type="button">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </dialog>
+    `);
+    await page.addStyleTag({ content: tokens });
+    await page.addStyleTag({ content: styles });
+
+    await page.setViewportSize({ width: 390, height: 430 });
+    const phone = await page.locator('.rhythm-history-view__log-dialog').evaluate(dialog => {
+      const bounds = dialog.getBoundingClientRect();
+      const header = dialog.querySelector('.money-goal-dialog__persistent-header')!;
+      const region = dialog.querySelector<HTMLElement>('.money-goal-dialog__scroll-region')!;
+      const actions = dialog.querySelector('.money-goal-dialog__actions')!;
+      const surface = dialog.querySelector<HTMLElement>('.money-goal-dialog__surface')!;
+      region.scrollTop = region.scrollHeight;
+      const headerBounds = header.getBoundingClientRect();
+      const regionBounds = region.getBoundingClientRect();
+      const actionsBounds = actions.getBoundingClientRect();
+      return {
+        width: bounds.width,
+        height: bounds.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        surfacePaddingBottom: Number.parseFloat(getComputedStyle(surface).paddingBottom),
+        regionScrolls: region.scrollHeight > region.clientHeight,
+        headerRemainsVisible: headerBounds.top >= bounds.top && headerBounds.bottom <= regionBounds.top,
+        actionsReachable: actionsBounds.top >= regionBounds.top && actionsBounds.bottom <= regionBounds.bottom
+      };
+    });
+    assert.equal(phone.width, 390);
+    assert.equal(phone.height, 430);
+    assert.equal(phone.viewportWidth, 390);
+    assert.equal(phone.viewportHeight, 430);
+    assert.ok(phone.surfacePaddingBottom >= 12);
+    assert.equal(phone.regionScrolls, true);
+    assert.equal(phone.headerRemainsVisible, true);
+    assert.equal(phone.actionsReachable, true);
+
+    await page.setViewportSize({ width: 1024, height: 768 });
+    const desktop = await page.locator('.rhythm-history-view__log-dialog').evaluate(dialog => {
+      const bounds = dialog.getBoundingClientRect();
+      return {
+        width: bounds.width,
+        height: bounds.height,
+        borderRadius: getComputedStyle(dialog).borderRadius
+      };
+    });
+    assert.equal(desktop.width, 440);
+    assert.ok(desktop.height <= 760);
+    assert.equal(desktop.borderRadius, '20px');
+  } finally {
+    await page.close();
+  }
+}
+
 type PreviewTextSize = 'small' | 'medium' | 'large';
 
 async function measureHeroHeader(page: Page, selector: string) {
@@ -13911,6 +13991,7 @@ async function main() {
     await verifyRhythmConnectionIndicatorLayout(browser);
     await verifyConnectionHistoryRowResponsiveLayout(browser);
     await verifyRhythmConnectionCheckboxPalette(browser);
+    await verifyRhythmLogDialogResponsiveLayout(browser);
     await verifyCalendarSettingsResponsiveLayout(browser);
     console.log('Browser CSS contract passed: sign-in and dashboard layouts render without tend.css.');
   } finally {

@@ -15,17 +15,19 @@ export function PeopleParticipantPicker({
   return (
     <fieldset className="friendships-participants">
       <legend>{legend}</legend>
-      {people.map(person => (
-        <label key={person.id}>
-          <input
-            type="checkbox"
-            aria-label={person.displayName}
-            checked={selectedIds.includes(person.id)}
-            onChange={event => onChange(person.id, event.currentTarget.checked)}
-          />
-          <PersonBadgeVisual person={person} />
-        </label>
-      ))}
+      {people.length === 0
+        ? <p className="friendships-participants__empty" role="status">No People are available for this Rhythm.</p>
+        : people.map(person => (
+          <label key={person.id}>
+            <input
+              type="checkbox"
+              aria-label={person.displayName}
+              checked={selectedIds.includes(person.id)}
+              onChange={event => onChange(person.id, event.currentTarget.checked)}
+            />
+            <PersonBadgeVisual person={person} />
+          </label>
+        ))}
     </fieldset>
   );
 }

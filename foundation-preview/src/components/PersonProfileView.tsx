@@ -21,7 +21,6 @@ import type {
   RhythmPreview
 } from '../domain/preview-data.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
-import { peopleForRhythm } from '../domain/preview-data.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { ArchivedRhythmsDialog } from './ArchivedRhythmsDialog.tsx';
@@ -570,7 +569,7 @@ export function PersonProfileView({
         rhythm={rhythm}
         inline
         headingId={`person-profile-rhythm-${personId}-${rhythm.id}`}
-        people={peopleForRhythm(rhythm, people)}
+        people={people}
         foundations={foundations}
         relatedRhythms={rhythms}
         onPersonSelect={onPersonSelect}

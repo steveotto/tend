@@ -7955,6 +7955,13 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   font-size: calc(0.8125rem * var(--app-text-scale, 1));
 }
 
+.friendships-participants__empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ink-soft, #66736b);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+}
+
 .friendships-participants label {
   box-sizing: border-box;
   display: flex;
@@ -29252,16 +29259,18 @@ button.person-health-component-score:focus-visible {
   text-align: center;
 }
 
-.rhythm-history-view__log-dialog {
+.money-goal-dialog.rhythm-history-view__log-dialog {
   position: fixed;
   inset: 0;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   width: min(440px, calc(100vw - 32px));
   max-width: calc(100vw - 32px);
   max-height: min(85vh, 760px);
   margin: auto;
   padding: 0;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid var(--tend-line, var(--line));
   border-radius: 20px;
   background: var(--tend-surface, var(--card));
@@ -29269,29 +29278,54 @@ button.person-health-component-score:focus-visible {
   box-shadow: 0 22px 70px #10251d45;
 }
 
-.rhythm-history-view__log-dialog::backdrop {
+.money-goal-dialog.rhythm-history-view__log-dialog::backdrop {
   background: #10251d9c;
 }
 
-.rhythm-history-view__log-dialog-header {
-  position: sticky;
-  z-index: 1;
-  top: 0;
+.money-goal-dialog.rhythm-history-view__log-dialog > .money-goal-dialog__surface {
   display: flex;
-  justify-content: flex-end;
-  min-height: 44px;
-  padding: 8px 8px 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 18px 20px;
+}
+
+.money-goal-dialog.rhythm-history-view__log-dialog .money-goal-dialog__persistent-header {
   background: var(--tend-surface, var(--card));
 }
 
-.rhythm-history-view__log-dialog .rhythm-completion-form--embedded {
-  padding: 4px 20px 20px;
+.money-goal-dialog.rhythm-history-view__log-dialog .money-goal-dialog__scroll-region {
+  padding: 16px 0;
 }
 
-@media (max-width: 380px) {
-  .rhythm-history-view__log-dialog .rhythm-completion-form--embedded {
-    padding-right: 14px;
-    padding-left: 14px;
+.money-goal-dialog.rhythm-history-view__log-dialog .rhythm-completion-form--embedded {
+  padding: 0 0 max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-fullscreen) {
+  inset: 0;
+  max-width: calc(100vw - 32px);
+  max-height: min(85vh, 760px);
+}
+
+@media (max-width: 700px) {
+  .money-goal-dialog.rhythm-history-view__log-dialog.dialog--phone-fullscreen {
+    inset: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .money-goal-dialog.rhythm-history-view__log-dialog.dialog--phone-fullscreen > .money-goal-dialog__surface {
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 18px)
+      max(16px, env(safe-area-inset-right, 0px))
+      calc(env(safe-area-inset-bottom, 0px) + 12px)
+      max(16px, env(safe-area-inset-left, 0px));
   }
 }
 
