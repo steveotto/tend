@@ -20,6 +20,7 @@ import {
   parsePreviewBackup,
   PREVIEW_SCHEMA_VERSION
 } from '../src/domain/preview-state.ts';
+import { todayRhythms } from '../src/domain/preview-data.ts';
 import { migratePreviewToProposedV4 } from '../src/domain/preview-v4-migration.ts';
 import {
   PREVIEW_ACCOUNT_STORAGE_PREFIX,
@@ -377,6 +378,102 @@ describe('PreviewIdentityHost', () => {
     expect(storage.getItem('tend:supabase-auth')).toBe('classic-session-sentinel');
   });
 
+  it('keeps Today and Focus Rhythms isolated while switching between authenticated accounts', async () => {
+    const storage = installMemoryStorage();
+    const accountA = accountId;
+    const accountB = 'b0000000-0000-4000-8000-000000000002';
+    const rhythmA: SavedRhythm = {
+      id: 'user-rhythm-a1000000-0000-4000-8000-000000000001',
+      title: 'Account A saved Rhythm',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      timeOfDay: 'morning',
+      schedule: { frequency: 'daily' },
+      personIds: [],
+      categoryIds: ['faith']
+    };
+    const accountAData = createEmptyPreviewData();
+    accountAData.todayView = 'all-today';
+    accountAData.timeBlocks.blocks = [{ id: 'morning', name: 'Morning', start: '00:00' }];
+    accountAData.timeBlocks.sleepStart = '23:59';
+    accountAData.savedRhythms = [rhythmA];
+    storage.setItem(
+      `${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountA}`,
+      JSON.stringify(createPreviewEnvelope(accountAData))
+    );
+
+    const oldBrowserData = createEmptyPreviewData();
+    oldBrowserData.savedRhythms = [{
+      ...rhythmA,
+      id: 'user-rhythm-c1000000-0000-4000-8000-000000000001',
+      title: 'Old browser-only Rhythm'
+    }];
+    const oldBrowserRaw = JSON.stringify(createPreviewEnvelope(oldBrowserData));
+    storage.setItem(PREVIEW_STORAGE_KEY, oldBrowserRaw);
+
+    const user = userEvent.setup();
+    const auth = fakeAuth(session);
+    render(
+      <PreviewIdentityHost
+        accessReady
+        supabaseUrl="https://project.supabase.co"
+        supabasePublishableKey="synthetic-public-key"
+        clientFactory={auth.clientFactory}
+      />
+    );
+
+    await screen.findByRole('region', { name: "Today's plan" });
+    await screen.findByText('Account A saved Rhythm');
+    await user.click(screen.getByRole('button', { name: 'Focus' }));
+    const accountAFocus = await screen.findByRole('dialog', { name: 'Focus' });
+    expect(within(accountAFocus).getByText('Account A saved Rhythm')).toBeTruthy();
+
+    act(() => auth.emitEvent('SIGNED_IN', {
+      user: { id: accountB, email: 'account-b@example.test' }
+    }));
+    await screen.findByRole('region', { name: "Today's plan" });
+    await waitFor(() => {
+      expect(storage.getItem(`${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountB}`)).not.toBeNull();
+    });
+    const accountBData = JSON.parse(storage.getItem(`${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountB}`)!);
+    expect(accountBData.data.savedRhythms).toEqual([]);
+    expect(screen.queryByText('Account A saved Rhythm')).toBeNull();
+    expect(screen.queryByText('Old browser-only Rhythm')).toBeNull();
+
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
+    for (const fixture of todayRhythms) expect(screen.queryByText(fixture.title)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Focus' }));
+    const accountBFocus = await screen.findByRole('dialog', { name: 'Focus' });
+    for (const fixture of todayRhythms) expect(within(accountBFocus).queryByText(fixture.title)).toBeNull();
+    await user.click(within(accountBFocus).getByRole('button', { name: 'Close Focus' }));
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Faith' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    await user.click(screen.getByRole('button', { name: 'Suggestions' }));
+    const suggestions = await screen.findByRole('dialog', { name: 'Faith practice suggestions' });
+    await user.click(within(suggestions).getAllByRole('button', { name: 'Add' })[0]!);
+    const editor = await screen.findByRole('dialog', { name: 'Add Rhythm' });
+    const suggestedTitle = (within(editor).getByLabelText('Title') as HTMLInputElement).value;
+    expect(JSON.parse(storage.getItem(`${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountB}`)!)
+      .data.savedRhythms).toEqual([]);
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      const saved = JSON.parse(storage.getItem(`${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountB}`)!);
+      expect(saved.data.savedRhythms).toHaveLength(1);
+      expect(saved.data.savedRhythms[0].title).toBe(suggestedTitle);
+    });
+
+    act(() => auth.emitEvent('SIGNED_IN', session));
+    await screen.findByRole('region', { name: "Today's plan" });
+    await screen.findByText('Account A saved Rhythm');
+    expect(screen.queryByText(suggestedTitle)).toBeNull();
+    const restoredAData = JSON.parse(storage.getItem(`${PREVIEW_ACCOUNT_STORAGE_PREFIX}:${accountA}`)!);
+    expect(restoredAData.data.savedRhythms).toMatchObject([{ title: 'Account A saved Rhythm' }]);
+    expect(storage.getItem(PREVIEW_STORAGE_KEY)).toBe(oldBrowserRaw);
+  });
+
   it('keeps new-account data empty and isolated through first save, sign-out, sign-in, and reload', async () => {
     const storage = installMemoryStorage();
     vi.stubEnv('VITE_TEND_PREVIEW_AUTO_SYNC_ENABLED', 'true');
@@ -413,6 +510,13 @@ describe('PreviewIdentityHost', () => {
 
     act(() => auth.emitEvent('SIGNED_IN', session));
     await screen.findByRole('region', { name: "Today's plan" });
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    expandAllTodayGroups();
+    for (const fixture of todayRhythms) expect(screen.queryByText(fixture.title)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Focus' }));
+    const focus = await screen.findByRole('dialog', { name: 'Focus' });
+    for (const fixture of todayRhythms) expect(within(focus).queryByText(fixture.title)).toBeNull();
+    await user.click(within(focus).getByRole('button', { name: 'Close Focus' }));
     const initializedAccountRaw = storage.getItem(accountStorageKey);
     expect(initializedAccountRaw).not.toBeNull();
     const initializedAccount = JSON.parse(initializedAccountRaw!);

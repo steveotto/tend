@@ -210,6 +210,7 @@ import {
   archivedTodayRhythms,
   isEditableRhythmId,
   resolveTodayRhythms,
+  resolveSavedTodayRhythms,
   restoreRhythmId,
   rhythmDraftFrom,
   rhythmsForCategory,
@@ -482,6 +483,15 @@ function isFitnessLinkedCompletion(data: PreviewData, completionId: string | und
 const defaultPreviewIdentity = import.meta.env.DEV
   ? DEVELOPMENT_PREVIEW_IDENTITY
   : PREVIEW_AUTH_PENDING;
+
+function resolveRhythmsForIdentity(
+  identity: Extract<PreviewIdentityState, { kind: 'development' | 'authenticated' }>,
+  savedRhythms: readonly SavedRhythm[]
+) {
+  return identity.kind === 'development' && import.meta.env.DEV
+    ? resolveTodayRhythms(savedRhythms)
+    : resolveSavedTodayRhythms(savedRhythms);
+}
 
 export function App({
   identity = defaultPreviewIdentity,
@@ -979,16 +989,16 @@ function PreviewWorkspace({
     ).completed).map(rhythm => rhythm.id));
   }
   function satisfiedRhythmIdsForData(data: PreviewData): ReadonlySet<string> {
-    const rhythms = resolveTodayRhythms(data.savedRhythms)
+    const rhythms = resolveRhythmsForIdentity(identity, data.savedRhythms)
       .map(rhythm => rhythmWithSavedCompletions(rhythm, data));
     return selectSatisfiedRhythmIds(rhythms, completedIdsForData(data, rhythms), date => dateForRhythm(date));
   }
   function completedRhythmIdsForData(data: PreviewData): ReadonlySet<string> {
-    const rhythms = resolveTodayRhythms(data.savedRhythms)
+    const rhythms = resolveRhythmsForIdentity(identity, data.savedRhythms)
       .map(rhythm => rhythmWithSavedCompletions(rhythm, data));
     return completedIdsForData(data, rhythms);
   }
-  const allTodayRhythms = resolveTodayRhythms(previewData.savedRhythms)
+  const allTodayRhythms = resolveRhythmsForIdentity(identity, previewData.savedRhythms)
     .map(rhythm => rhythmWithSavedCompletions(rhythm));
   const editableTodayRhythms = activeTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
   const archivedRhythms = archivedTodayRhythms(allTodayRhythms, previewData.archivedRhythmIds);
@@ -2679,7 +2689,8 @@ function PreviewWorkspace({
     );
     const savedRhythms = result.savedRhythms;
     if (!savedRhythms) return result.errors;
-    const savedRhythm = resolveTodayRhythms(savedRhythms).find(item => item.id === rhythmEditor.id);
+    const savedRhythm = resolveRhythmsForIdentity(identity, savedRhythms)
+      .find(item => item.id === rhythmEditor.id);
     if (!savedRhythm) return { form: 'The saved Rhythm could not be resolved. No changes were saved.' };
     const priorWorkoutSetting = previewData.strength.rhythmModes.find(item =>
       item.rhythmId === rhythmEditor.id
@@ -3537,7 +3548,8 @@ function PreviewWorkspace({
     }
     const isTendAction = source === 'tend';
     if (!isEditableRhythmId(record.rhythmId)
-      || !resolveTodayRhythms(previewData.savedRhythms).some(rhythm => rhythm.id === record.rhythmId)
+      || !resolveRhythmsForIdentity(identity, previewData.savedRhythms)
+        .some(rhythm => rhythm.id === record.rhythmId)
       || previewData.archivedRhythmIds.includes(record.rhythmId)
       || (isTendAction && completedRhythms.has(record.rhythmId))) {
       return 'This Rhythm cannot be completed right now. No completion was saved.';
@@ -3575,7 +3587,7 @@ function PreviewWorkspace({
         : {})
     };
     if (connectionParticipantIds !== undefined) {
-      const rhythm = resolveTodayRhythms(previewData.savedRhythms)
+      const rhythm = resolveRhythmsForIdentity(identity, previewData.savedRhythms)
         .find(item => item.id === record.rhythmId);
       if (rhythm?.alsoLogConnection === true) {
         let connectionId: string;
@@ -3639,7 +3651,8 @@ function PreviewWorkspace({
     const existing = previewData.datedRhythmCompletions.find(item => item.id === record.id);
     if (!isEditableRhythmId(record.rhythmId)
       || previewData.archivedRhythmIds.includes(record.rhythmId)
-      || !resolveTodayRhythms(previewData.savedRhythms).some(rhythm => rhythm.id === record.rhythmId)) {
+      || !resolveRhythmsForIdentity(identity, previewData.savedRhythms)
+        .some(rhythm => rhythm.id === record.rhythmId)) {
       return 'This logged moment can no longer be edited. No changes were saved.';
     }
     if (existing) {
@@ -3721,7 +3734,8 @@ function PreviewWorkspace({
     const rhythmId = record?.rhythmId ?? seedRhythmId;
     if (!rhythmId || !isEditableRhythmId(rhythmId)
       || previewData.archivedRhythmIds.includes(rhythmId)
-      || !resolveTodayRhythms(previewData.savedRhythms).some(rhythm => rhythm.id === rhythmId)) {
+      || !resolveRhythmsForIdentity(identity, previewData.savedRhythms)
+        .some(rhythm => rhythm.id === rhythmId)) {
       return 'This logged moment can no longer be deleted. No changes were made.';
     }
     if (!record) {
@@ -3783,7 +3797,7 @@ function PreviewWorkspace({
     const activeCompletionId = previewData.activeRhythmCompletions
       .find(item => item.rhythmId === id)?.completionId;
     if (previewData.completedRhythmIds.includes(id)
-      && resolveTodayRhythms(previewData.savedRhythms).some(rhythm => rhythm.id === id)
+      && resolveRhythmsForIdentity(identity, previewData.savedRhythms).some(rhythm => rhythm.id === id)
       && !isFitnessLinkedCompletion(previewData, activeCompletionId)) {
       const ownedConnections = previewData.friendships.connections.filter(connection =>
         connection.type === 'rhythm'
@@ -3802,7 +3816,7 @@ function PreviewWorkspace({
     setPreviewData(previous => {
       const completionIndex = previous.completedRhythmIds.indexOf(id);
       if (completionIndex === -1
-        || !resolveTodayRhythms(previous.savedRhythms).some(rhythm => rhythm.id === id)) return previous;
+        || !resolveRhythmsForIdentity(identity, previous.savedRhythms).some(rhythm => rhythm.id === id)) return previous;
       const activeCompletionId = previous.activeRhythmCompletions
         .find(item => item.rhythmId === id)?.completionId;
       if (isFitnessLinkedCompletion(previous, activeCompletionId)) return previous;

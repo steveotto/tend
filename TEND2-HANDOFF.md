@@ -1,5 +1,17 @@
 # Tend 2 Foundation handoff
 
+## Authenticated Rhythm account isolation
+
+**Confirmed cause and repair:** `resolveTodayRhythms([])` includes the static Today fixture list, and authenticated App consumers were using it directly. The shared App resolver now keeps those fixtures only for the development preview and filters authenticated results to Rhythm IDs explicitly saved in that account. Suggestions remain available and are only persisted by the explicit save action; the synthetic development preview remains unchanged.
+
+**Consumer review:** Every App call site now uses the identity-aware result, covering Today, Focus, category/health views, profile Rhythm candidates, search, scoring, and Rhythm completion/history state. The only other direct resolver uses are its saved-only wrapper and the domain archive/restore guards; those guards are reached from UI actions for Rhythms already present in the filtered view, so they cannot surface unsaved fixtures. No other authenticated/account-facing view renders the sample fallback.
+
+**Account-isolation evidence:** Synthetic integration tests cover a clean new account, reused browser storage with an Account A → fresh Account B → Account A switch, preservation of A's saved Rhythm, absence of legacy browser-only and static fixture Rhythms in B's Today and Focus, and suggestion persistence only after explicit Save. Focused Rhythm and identity tests passed **46/46**. Full component/domain tests passed **1,954 across 119 files**; reader tests **7/7**; legacy tests **177/177**; browser CSS and recovery browser contracts passed; semantic typecheck, Pages/scoring production builds, and Pages artifact tests **10/10** passed. No live account, Amy's data, production signup, database, or `supabase/.temp/` was accessed or changed.
+
+**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, based on `origin/main` at `5ab59d0a33d03cfccb0ee1b361f7c06d38091a97`. Continue from this checkout/branch rather than the older shared checkout.
+
+**Production release:** Pending verified merge and Cloudflare Pages deployment. Record the merged application revision and production deployment record here after release. Grouping/tagline requests remain queued; Archived Rhythms and sorting remain deferred.
+
 ## Incomplete cross-device restoration follow-up (deployed, user verification pending)
 
 **Cause established from the adapter:** `mergePrayerRequestsIntoClassicState` already embeds the full validated React Preview envelope in `tend2AuthenticatedEnvelope`; it does not serialize only People and Prayers. The previous `convertClassicStateToPreviewEnvelope` reader instead started with empty Preview data and rebuilt a narrow projection from canonical People/Prayer rows. It therefore omitted the embedded `personDetails` (including JPEG data-URL photos), People notes/Sparks, saved Rhythms and their completion/history records, scoring inputs, and category/Foundation preferences. Category scores are derived from those inputs and recalculated; they are not stored score values. The photos are portable account data in `personDetails`, not just device-local object URLs. No live account was read, so this code-path finding does not prove which fields were present in the reported 12:10 PM account save.
