@@ -3,6 +3,7 @@ import type { RhythmSchedule, RhythmWeekday } from '../../foundation-preview/src
 export const CONSISTENCY_WEIGHT = 0.75;
 export const ON_TRACK_WEIGHT = 0.25;
 export const POINTS_PER_CONSECUTIVE_MISS = 10;
+export const CUSTOM_WEEKS_CONSISTENCY_WINDOW_DAYS = 84;
 
 export type ScoreMetric =
   | { kind: 'scored'; score: number }
@@ -246,7 +247,7 @@ function windowLength(schedule: RhythmSchedule): WindowLength {
   if (schedule.frequency === 'quarterly') return { months: 12 };
   if (schedule.frequency === 'yearly') return { months: 24 };
   if (schedule.unit === 'days') return { days: 30 };
-  if (schedule.unit === 'weeks') return { days: 84 };
+  if (schedule.unit === 'weeks') return { days: CUSTOM_WEEKS_CONSISTENCY_WINDOW_DAYS };
   if (schedule.unit === 'months') return { months: 6 };
   return { months: 24 };
 }
@@ -366,6 +367,47 @@ export function consistencyWindowForSchedule(
     endDate: window.endDate,
     dueDates: window.dueOccurrences.map(occurrence => occurrence.dueDate)
   };
+}
+
+export function customWeeksConsistencyWindowForHistory(input: {
+  asOfDate: string;
+  dueThroughDate: string;
+  trackingStartDate: string;
+  historyStartDate: string;
+  scheduleForDate: (date: string) => RhythmSchedule | undefined;
+}): ConsistencyWindow {
+  assertDate(input.asOfDate);
+  assertDate(input.dueThroughDate);
+  assertDate(input.trackingStartDate);
+  assertDate(input.historyStartDate);
+  if (input.dueThroughDate > input.asOfDate) {
+    throw new RangeError('The consistency window cannot include a future date.');
+  }
+
+  const boundary = input.trackingStartDate > input.historyStartDate
+    ? input.trackingStartDate
+    : input.historyStartDate;
+  const rollingStart = subtractWindow(input.asOfDate, { days: CUSTOM_WEEKS_CONSISTENCY_WINDOW_DAYS });
+  let startDate = boundary > rollingStart ? boundary : rollingStart;
+  const dueDates: string[] = [];
+  const appendDueDates = (firstDate: string, lastDate: string) => {
+    for (let date = firstDate; date <= lastDate; date = addDays(date, 1)) {
+      const schedule = input.scheduleForDate(date);
+      if (schedule && isScheduledDate(schedule, date)) dueDates.push(date);
+    }
+  };
+  appendDueDates(startDate, input.dueThroughDate);
+
+  let extendedDays = 0;
+  while (dueDates.length < 2 && startDate > boundary
+    && extendedDays < MAX_SCHEDULE_SEARCH_DAYS) {
+    startDate = addDays(startDate, -1);
+    const schedule = input.scheduleForDate(startDate);
+    if (schedule && isScheduledDate(schedule, startDate)) dueDates.unshift(startDate);
+    extendedDays += 1;
+  }
+
+  return { startDate, endDate: input.asOfDate, dueDates };
 }
 
 function occurrenceCompleted(

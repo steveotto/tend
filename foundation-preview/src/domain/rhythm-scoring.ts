@@ -1,6 +1,8 @@
 import { isValidDate } from './money-goals.ts';
 import type { RhythmCompletionRecord } from './rhythm-completion.ts';
 import {
+  CUSTOM_WEEKS_CONSISTENCY_WINDOW_DAYS,
+  customWeeksConsistencyWindowForHistory,
   consistencyWindowForSchedule,
   rhythmOpportunityGraceExpired,
   scoreClockStartDateForSchedule,
@@ -277,11 +279,18 @@ function addCalendarMonths(value: string, amount: number): string {
 
 function consistencyScheduleSupported(
   schedule: RhythmSchedule
-): schedule is Exclude<RhythmSchedule, { frequency: 'custom' }> {
-  return schedule.frequency !== 'custom';
+): boolean {
+  return schedule.frequency !== 'custom' || schedule.unit === 'weeks';
 }
 
-function maximumWindowStart(schedule: Exclude<RhythmSchedule, { frequency: 'custom' }>, asOfDate: string): string {
+function isCustomWeeksSchedule(schedule: RhythmSchedule): boolean {
+  return schedule.frequency === 'custom' && schedule.unit === 'weeks';
+}
+
+function maximumWindowStart(schedule: RhythmSchedule, asOfDate: string): string {
+  if (isCustomWeeksSchedule(schedule)) {
+    return addCalendarDays(asOfDate, -(CUSTOM_WEEKS_CONSISTENCY_WINDOW_DAYS - 1));
+  }
   if (schedule.frequency === 'daily') return addCalendarDays(asOfDate, -29);
   if (schedule.frequency === 'weekly'
     && (schedule.weeklyMode === 'select-days' || schedule.weekdays.length > 1)) {
@@ -567,7 +576,6 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
       && scheduleForDate(record.effectiveDate) !== undefined
       && isScheduledDate(scheduleForDate(record.effectiveDate)!, record.effectiveDate) === true);
     const maxWindowStartDate = maximumWindowStart(schedule, input.asOfDate);
-    const windowStartDate = trackingStartDate > maxWindowStartDate ? trackingStartDate : maxWindowStartDate;
     const currentSchedule = scheduleForDate(input.asOfDate);
     const currentPeriod = currentSchedule
       ? rhythmOccurrencePeriod(currentSchedule, input.asOfDate)
@@ -586,11 +594,24 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           && (recordSegment?.id ?? null) === (currentSegment?.id ?? null)
           && rhythmOccurrencePeriod(recordSchedule, record.effectiveDate).startDate === currentPeriod.startDate;
       });
-    const todayIncluded = schedule.frequency === 'daily' && completedToday
+    const todayIncluded = (schedule.frequency === 'daily' || isCustomWeeksSchedule(schedule))
+      && completedToday
       || firstDueIsScorableToday;
     const windowEndDate = todayIncluded || currentWeeklyPeriodIncluded || firstDueIsScorableToday
       ? input.asOfDate
       : yesterday;
+    const historyStartDate = segments[0]?.startDate ?? trackingStartDate;
+    const customWeeksWindow = isCustomWeeksSchedule(schedule)
+      ? customWeeksConsistencyWindowForHistory({
+          asOfDate: input.asOfDate,
+          dueThroughDate: windowEndDate,
+          trackingStartDate,
+          historyStartDate,
+          scheduleForDate
+        })
+      : null;
+    const windowStartDate = customWeeksWindow?.startDate
+      ?? (trackingStartDate > maxWindowStartDate ? trackingStartDate : maxWindowStartDate);
     if (windowStartDate > windowEndDate) {
       consistency = unscored(
         'no-eligible-occurrences',
@@ -621,6 +642,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
           if (occurrence.date !== input.asOfDate || !occurrence.recordIds.length) return true;
           const occurrenceSchedule = scheduleForDate(occurrence.date);
           return occurrenceSchedule?.frequency === 'daily'
+            || occurrenceSchedule !== undefined && isCustomWeeksSchedule(occurrenceSchedule)
             || occurrenceSchedule !== undefined && isPeriodBasedRhythmSchedule(occurrenceSchedule);
         });
         const completedCount = occurrences.filter(item => item.status === 'completed').length;
@@ -639,7 +661,7 @@ export function selectRhythmScore(input: SelectRhythmScoreInput): RhythmScoreRes
               eligibleDueCount: occurrences.length,
               completedCount,
               notCompletedCount: occurrences.length - completedCount,
-              limitedHistoryDays: trackingStartDate > maxWindowStartDate
+              limitedHistoryDays: windowStartDate > maxWindowStartDate
                 ? schedule.frequency === 'daily'
                   ? occurrences.length
                   : calendarDaysInclusive(windowStartDate, windowEndDate)
@@ -1016,6 +1038,7 @@ export function selectSharedEngineRhythmScore(input: SelectRhythmScoreInput): Rh
           'Choose a schedule to calculate On Track. Descriptive cadence alone does not define due dates.'
         ));
   }
+  if (isCustomWeeksSchedule(schedule)) return selectRhythmScore(input);
   if (schedule.endDate !== undefined && schedule.endDate < input.asOfDate) {
     return baseUnscored(input, unscored('inactive', 'This Rhythm has ended, so its score is not accruing.'));
   }
