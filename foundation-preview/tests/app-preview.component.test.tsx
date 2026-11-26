@@ -11740,4 +11740,152 @@ describe('Tend Today preview', () => {
     expect(within(areasNav).queryByRole('button', { name: 'Dating' })).toBeNull();
     expectDataPreserved();
   });
+
+  it('keeps an intentionally unassociated Faith Rhythm separate from a person-linked Rhythm through edits, completions, and reload', async () => {
+    const user = userEvent.setup();
+    const identity = createAuthenticatedPreviewIdentity('c0000000-0000-4000-8000-000000000153', 1);
+    const storage = browserPreviewStorage(identity);
+    const data = createEmptyPreviewData();
+    const alex = {
+      id: '10000000-0000-4000-8000-000000000153',
+      displayName: 'Alex Example'
+    };
+    const quietReflection: SavedRhythm = {
+      id: 'user-rhythm-88888888-0000-4000-8000-000000000101',
+      title: 'BETA TEST — Quiet reflection',
+      description: 'A quiet moment.',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      personIds: [],
+      categoryIds: ['faith'],
+      schedule: { frequency: 'daily' },
+      primaryFoundationId: 'faith-solitude',
+      secondaryFoundationIds: []
+    };
+    const alexCheckIn: SavedRhythm = {
+      id: 'user-rhythm-88888888-0000-4000-8000-000000000102',
+      title: 'BETA TEST — Daily check-in',
+      cadence: 'Daily',
+      timeLabel: 'Anytime',
+      personIds: [alex.id],
+      categoryIds: ['faith'],
+      schedule: { frequency: 'daily' },
+      primaryFoundationId: 'faith-solitude',
+      secondaryFoundationIds: [],
+      alsoLogConnection: true
+    };
+    data.people = [alex];
+    data.peopleGroups = setPersonGroupMembership(data.peopleGroups, 'friends', alex.id, true);
+    data.savedRhythms = [quietReflection, alexCheckIn];
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+
+    const { unmount } = testingRender(<App identity={identity} />);
+    await screen.findByRole('button', { name: 'More, settings' });
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Faith' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+
+    let quietCard = screen.getByRole('article', { name: quietReflection.title });
+    let alexCard = screen.getByRole('article', { name: alexCheckIn.title });
+    expect(within(quietCard).queryByRole('group', {
+      name: `People associated with ${quietReflection.title}`
+    })).toBeNull();
+    expect(within(within(alexCard).getByRole('group', {
+      name: `People associated with ${alexCheckIn.title}`
+    })).getByRole('button', { name: `Open synthetic profile for ${alex.displayName}` })).toBeTruthy();
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Tools and navigation' }))
+      .getByRole('button', { name: 'Today' }));
+    await user.click(screen.getByRole('tab', { name: 'All today' }));
+    await user.click(screen.getByRole('button', { name: /Anytime, On your schedule/ }));
+    const todayQuietCard = screen.getByRole('article', { name: quietReflection.title });
+    const todayAlexCard = screen.getByRole('article', { name: alexCheckIn.title });
+    expect(within(todayQuietCard).queryByRole('group', {
+      name: `People associated with ${quietReflection.title}`
+    })).toBeNull();
+    expect(within(within(todayAlexCard).getByRole('group', {
+      name: `People associated with ${alexCheckIn.title}`
+    })).getByRole('button', { name: `Open synthetic profile for ${alex.displayName}` })).toBeTruthy();
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Faith' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    quietCard = screen.getByRole('article', { name: quietReflection.title });
+    alexCard = screen.getByRole('article', { name: alexCheckIn.title });
+
+    await user.click(within(quietCard).getByRole('button', { name: `Tend ${quietReflection.title}` }));
+    let completionDialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
+    expect(within(completionDialog).queryByLabelText('Also log a connection')).toBeNull();
+    await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'When did you tend it?' })).toBeNull());
+
+    quietCard = screen.getByRole('article', { name: quietReflection.title });
+    await user.click(within(quietCard).getByRole('button', {
+      name: historyButtonName(`View scores and history for ${quietReflection.title}`)
+    }));
+    const quietDetails = await screen.findByRole('dialog', { name: quietReflection.title });
+    await user.click(within(quietDetails).getByRole('button', { name: `Edit ${quietReflection.title}` }));
+    let editor = screen.getByRole('dialog', { name: 'Edit Rhythm' });
+    expect(within(editor).getByRole('button', { name: 'Choose people' })).toBeTruthy();
+    await user.clear(within(editor).getByLabelText('Description (optional)'));
+    await user.type(within(editor).getByLabelText('Description (optional)'), 'Still intentionally unassociated.');
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Rhythm' })).toBeNull());
+    await user.click(within(quietDetails).getByRole('button', { name: 'Close details' }));
+
+    const afterEdit = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(afterEdit.valid).toBe(true);
+    if (!afterEdit.valid) return;
+    expect(afterEdit.envelope.data.savedRhythms.find(item => item.id === quietReflection.id)).toMatchObject({
+      description: 'Still intentionally unassociated.',
+      personIds: []
+    });
+    expect(afterEdit.envelope.data.friendships.connections).toEqual([]);
+
+    alexCard = screen.getByRole('article', { name: alexCheckIn.title });
+    await user.click(within(alexCard).getByRole('button', { name: `Tend ${alexCheckIn.title}` }));
+    completionDialog = await screen.findByRole('dialog', { name: 'When did you tend it?' });
+    expect((within(completionDialog).getByLabelText('Also log a connection') as HTMLInputElement).checked)
+      .toBe(true);
+    expect((within(completionDialog).getByLabelText(alex.displayName) as HTMLInputElement).checked)
+      .toBe(true);
+    await user.click(within(completionDialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'When did you tend it?' })).toBeNull());
+
+    const afterCompletions = parsePreviewBackup(
+      storage.getItem(PREVIEW_STORAGE_KEY)!,
+      localDateString(new Date())
+    );
+    expect(afterCompletions.valid).toBe(true);
+    if (!afterCompletions.valid) return;
+    expect(afterCompletions.envelope.data.friendships.connections).toHaveLength(1);
+    expect(afterCompletions.envelope.data.friendships.connections[0]?.participantIds).toEqual([alex.id]);
+
+    const historyButton = within(screen.getByRole('article', { name: quietReflection.title }))
+      .getByRole('button', { name: historyButtonName(`View scores and history for ${quietReflection.title}`) });
+    await user.click(historyButton);
+    const historyDialog = await screen.findByRole('dialog', { name: quietReflection.title });
+    expect(within(historyDialog).queryByText(alex.displayName)).toBeNull();
+    unmount();
+
+    testingRender(<App identity={identity} />);
+    await screen.findByRole('button', { name: 'More, settings' });
+    await user.click(within(screen.getByRole('navigation', { name: 'Areas' }))
+      .getByRole('button', { name: 'Faith' }));
+    await user.click(screen.getByRole('tab', { name: 'Rhythms' }));
+    quietCard = screen.getByRole('article', { name: quietReflection.title });
+    alexCard = screen.getByRole('article', { name: alexCheckIn.title });
+    expect(within(quietCard).queryByRole('group', {
+      name: `People associated with ${quietReflection.title}`
+    })).toBeNull();
+    expect(within(within(alexCard).getByRole('group', {
+      name: `People associated with ${alexCheckIn.title}`
+    })).getByRole('button', { name: `Open synthetic profile for ${alex.displayName}` })).toBeTruthy();
+    const afterReload = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(afterReload.valid).toBe(true);
+    if (!afterReload.valid) return;
+    expect(afterReload.envelope.data.savedRhythms.find(item => item.id === quietReflection.id)?.personIds)
+      .toEqual([]);
+    expect(afterReload.envelope.data.friendships.connections[0]?.participantIds).toEqual([alex.id]);
+  });
 });

@@ -1063,7 +1063,12 @@ describe('shared preview components', () => {
           onClose={() => undefined}
         />
         <RhythmDetailsDialog
-          rhythm={{ ...rhythm, id: 'inline-associated-example', description: '' }}
+          rhythm={{
+            ...rhythm,
+            id: 'inline-associated-example',
+            description: '',
+            personIds: [syntheticPeople[0]!.id]
+          }}
           inline
           people={syntheticPeople.slice(0, 1)}
           onPersonSelect={() => undefined}
