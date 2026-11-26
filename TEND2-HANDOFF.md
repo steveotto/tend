@@ -10,7 +10,7 @@
 
 **Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, based on `origin/main` at `5ab59d0a33d03cfccb0ee1b361f7c06d38091a97`. Continue from this checkout/branch rather than the older shared checkout.
 
-**Production release:** Pending verified merge and Cloudflare Pages deployment. Record the merged application revision and production deployment record here after release. Grouping/tagline requests remain queued; Archived Rhythms and sorting remain deferred.
+**Production release:** PR [#146](https://github.com/steveotto/tend/pull/146) merged on 2026-11-26 as application revision `8db1950f804cf6130a986f313ca3ca04e4248e93`. Post-merge required validation passed in [run 45840173866](https://github.com/steveotto/tend/actions/runs/45840173866); the Cloudflare Pages production check passed for deployment `e32a3ae2-363e-4ff1-b8fd-09c24f5bf4ed`. After deployment, `https://tendwhatmatters.com/` returned HTTP 200 and referenced `assets/main-COnXn8es.js`. The separate GitHub Pages workflow also ran automatically on merge, but Cloudflare Pages is the verified production route for this custom domain. Grouping/tagline requests remain queued; Archived Rhythms and sorting remain deferred.
 
 ## Incomplete cross-device restoration follow-up (deployed, user verification pending)
 
