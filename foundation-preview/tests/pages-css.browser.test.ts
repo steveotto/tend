@@ -5511,6 +5511,11 @@ async function main() {
               viewportWidth: document.documentElement.clientWidth,
               documentWidth: document.documentElement.scrollWidth,
               filters: { left: rect.left, right: rect.right },
+              search: (() => {
+                const bounds = document.querySelector('.all-items-page__search')
+                  ?.getBoundingClientRect();
+                return bounds ? { left: bounds.left, right: bounds.right } : null;
+              })(),
               triggers: [...filters.querySelectorAll('.all-items-filter__trigger')].map(trigger => {
                 const bounds = trigger.getBoundingClientRect();
                 return { left: bounds.left, right: bounds.right };
@@ -5520,6 +5525,8 @@ async function main() {
           assert.equal(layout.viewportWidth, width);
           assert.equal(layout.documentWidth, width, `All items must not overflow horizontally at ${width}px.`);
           assert.ok(layout.filters.left >= 0 && layout.filters.right <= width);
+          assert.ok(layout.search && layout.search.left >= 0 && layout.search.right <= width,
+            `All items search must fit within ${width}px.`);
           assert.equal(layout.triggers.length, 4);
           assert.ok(layout.triggers.every(bounds => bounds.left >= 0 && bounds.right <= width));
           const timeTrigger = page.getByRole('button', { name: 'Time of day: All times' });

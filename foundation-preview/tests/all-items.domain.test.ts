@@ -266,4 +266,58 @@ describe('All items selector', () => {
     expect(separateFiltersAnd.rhythms).toEqual([dailyRhythm]);
     expect(separateFiltersAnd.prayerRequests).toEqual([]);
   });
+
+  it('matches title and existing details text while ignoring case and surrounding spaces', () => {
+    const detailedRhythm = rhythm('rhythm-detail', 'Morning walk', {
+      description: 'Call Avery after breakfast'
+    });
+    const detailedSpark = spark('spark-detail', 'Read quietly', {
+      description: 'Choose the evening devotional'
+    });
+    const detailedPrayer = prayer('prayer-detail', 'Family request', {
+      details: 'Pray for wisdom about work'
+    });
+    const collections = {
+      rhythms: [detailedRhythm],
+      sparks: [detailedSpark],
+      prayerRequests: [detailedPrayer]
+    };
+
+    expect(selectAllItems(collections, filters({ search: '  MORNING  ' })).rhythms)
+      .toEqual([detailedRhythm]);
+    expect(selectAllItems(collections, filters({ search: 'evening devotional' })).sparks)
+      .toEqual([detailedSpark]);
+    expect(selectAllItems(collections, filters({ search: 'wisdom about' })).prayerRequests)
+      .toEqual([detailedPrayer]);
+  });
+
+  it('combines text search with the existing filters and excludes private notes and history', () => {
+    const matchingPrayer = prayer('matching-prayer', 'Hospital visit', {
+      details: 'Bring encouragement',
+      personId: personB,
+      prayerLogs: [{ id: 'private-log', notes: 'private-only log text' }]
+    });
+    const otherPrayer = prayer('other-prayer', 'Hospital planning', {
+      details: 'Coordinate meals',
+      personId: personA
+    });
+    const result = selectAllItems({
+      rhythms: [],
+      sparks: [],
+      prayerRequests: [matchingPrayer, otherPrayer]
+    }, filters({
+      type: ['prayer-requests'],
+      person: [personB],
+      search: 'encouragement'
+    }));
+
+    expect(result.prayerRequests).toEqual([matchingPrayer]);
+
+    const privateLogOnly = selectAllItems({
+      rhythms: [],
+      sparks: [],
+      prayerRequests: [matchingPrayer]
+    }, filters({ search: 'private-only' }));
+    expect(privateLogOnly.prayerRequests).toEqual([]);
+  });
 });

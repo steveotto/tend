@@ -28,13 +28,15 @@ export type AllItemsFilters = {
   person: AllItemsPersonSelection;
   frequency: AllItemsFrequencySelection;
   timeOfDay: AllItemsTimeSelection;
+  search: string;
 };
 
 export const defaultAllItemsFilters: AllItemsFilters = {
   type: 'all',
   person: 'all',
   frequency: 'all',
-  timeOfDay: 'all'
+  timeOfDay: 'all',
+  search: ''
 };
 
 export type AllItemsCollections = {
@@ -63,7 +65,9 @@ export function selectAllItems(
         frequency: rhythmFrequency(rhythm),
         timeOfDay: rhythm.timeOfDay
           ?? (timeLabel ? rhythmTimeValueFromLegacyLabel(timeLabel) : undefined)
-          ?? null
+          ?? null,
+        title: rhythm.title,
+        details: rhythm.description ?? ''
       }, filters);
       }));
   const sparks = !matchesSelection(filters.type, 'sparks')
@@ -71,14 +75,18 @@ export function selectAllItems(
     : sortByTitle(collections.sparks.filter(spark => matchesFilters({
         people: [spark.ownerId, ...spark.sharedWith],
         frequency: 'not-scheduled',
-        timeOfDay: null
+        timeOfDay: null,
+        title: spark.title,
+        details: spark.description ?? ''
       }, filters)));
   const prayerRequests = !matchesSelection(filters.type, 'prayer-requests')
     ? []
     : sortByTitle(collections.prayerRequests.filter(request => matchesFilters({
         people: [...(request.personId === null ? [] : [request.personId]), ...(request.sharedWith ?? [])],
         frequency: request.schedule?.frequency ?? 'not-scheduled',
-        timeOfDay: request.timeOfDay ?? null
+        timeOfDay: request.timeOfDay ?? null,
+        title: request.title,
+        details: request.details ?? ''
       }, filters)));
 
   return {
@@ -125,12 +133,22 @@ function matchesFilters(
     people: readonly PersonId[];
     frequency: AllItemsFrequencyFilter | null;
     timeOfDay: RhythmTimeValue | null | undefined;
+    title: string;
+    details?: string;
   },
   filters: AllItemsFilters
 ): boolean {
   return matchesPersonSelection(filters.person, item.people)
     && matchesSelection(filters.frequency, item.frequency)
-    && matchesTimeSelection(filters.timeOfDay, item.timeOfDay);
+    && matchesTimeSelection(filters.timeOfDay, item.timeOfDay)
+    && matchesSearch(filters.search, item.title, item.details);
+}
+
+function matchesSearch(search: string, title: string, details?: string): boolean {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) return true;
+  return title.toLowerCase().includes(normalizedSearch)
+    || (details?.toLowerCase().includes(normalizedSearch) ?? false);
 }
 
 function matchesPersonSelection(

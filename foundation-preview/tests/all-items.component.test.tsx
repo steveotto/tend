@@ -367,4 +367,71 @@ describe('All items page', () => {
     expect(screen.getByRole('article', { name: 'Morning rhythm' })).toBeTruthy();
     expect(screen.getByRole('article', { name: 'Afternoon Prayer' })).toBeTruthy();
   });
+
+  it('searches titles and details locally and combines search with filters and clear actions', async () => {
+    const user = userEvent.setup();
+    const detailedRhythm = {
+      ...rhythm,
+      id: 'search-detail',
+      title: 'Morning walk',
+      description: 'Call Avery after breakfast'
+    };
+    const otherRhythm = {
+      ...rhythm,
+      id: 'search-other',
+      title: 'Evening rest',
+      description: 'Quiet reflection'
+    };
+    render(<AllItemsPage {...pageProps({
+      rhythms: [detailedRhythm, otherRhythm]
+    })} />);
+
+    const search = screen.getByRole('searchbox', { name: 'Search titles and details' }) as HTMLInputElement;
+    expect(search.getAttribute('placeholder')).toBe('Search titles and details…');
+    await user.type(search, '  BREAKFAST  ');
+    await selectFilterOptions(user, 'Type', ['Rhythms']);
+    expect(screen.getByRole('status').textContent).toContain('1 item');
+    expect(screen.getByRole('article', { name: 'Morning walk' })).toBeTruthy();
+    expect(screen.queryByRole('article', { name: 'Evening rest' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(search.value).toBe('');
+    expect(screen.getByRole('status').textContent).toContain('2 items');
+
+    await user.type(search, 'quiet');
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(search.value).toBe('');
+    expect(screen.getByRole('button', { name: 'Type: All types' })).toBeTruthy();
+  });
+
+  it('preserves search text and filters after opening an existing item editor', async () => {
+    const user = userEvent.setup();
+    const onEditRhythm = vi.fn();
+    const detailedRhythm = {
+      ...rhythm,
+      description: 'A shared detail to find'
+    };
+    const view = render(<AllItemsPage {...pageProps({
+      rhythms: [detailedRhythm],
+      onEditRhythm
+    })} />);
+
+    const search = screen.getByRole('searchbox', { name: 'Search titles and details' }) as HTMLInputElement;
+    await user.type(search, 'shared detail');
+    await selectFilterOptions(user, 'Type', ['Rhythms']);
+    await user.click(screen.getByRole('button', { name: 'Edit All items rhythm' }));
+
+    expect(onEditRhythm).toHaveBeenCalledOnce();
+    expect(search.value).toBe('shared detail');
+    expect(screen.getByRole('button', { name: 'Type: Rhythms' })).toBeTruthy();
+
+    view.rerender(<AllItemsPage {...pageProps({
+      rhythms: [{ ...detailedRhythm, title: 'Updated rhythm title' }],
+      onEditRhythm
+    })} />);
+
+    expect(search.value).toBe('shared detail');
+    expect(screen.getByRole('button', { name: 'Type: Rhythms' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('1 item');
+  });
 });

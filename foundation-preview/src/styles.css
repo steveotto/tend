@@ -29626,6 +29626,15 @@ button.person-health-component-score:focus-visible {
   margin: 0;
 }
 
+.all-items-page__search {
+  min-width: 0;
+}
+
+.all-items-page__search .utility-search-field {
+  width: 100%;
+  max-width: 100%;
+}
+
 .all-items-page__filters {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
