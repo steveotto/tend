@@ -50,9 +50,11 @@ export function PersonPrayerPanel({
   onSaveLog,
   onDeleteLog,
   onUndoDeleteLog,
-  onRemove
+  onRemove,
+  allItems = false,
+  allPrayerRequests
 }: {
-  personId: PersonId;
+  personId: PersonId | null;
   enabled?: boolean;
   today: string;
   prayerHealthInstant?: Date;
@@ -66,30 +68,32 @@ export function PersonPrayerPanel({
   onUpdate: (
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     draft: PersonPrayerRequestDraft
   ) => string | null;
   onTransition: (
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     transition: PrayerRequestTransition
   ) => string | null;
-  onPray: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
+  onPray: (requestId: string, expectedUpdatedAt: string, actorId: PersonId | null) => string | null;
   onSaveLog?: (
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     log: PersonPrayerLog
   ) => string | null;
   onDeleteLog?: (
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     logId: string
   ) => PersonPrayerLogUndo | string;
-  onUndoDeleteLog?: (undo: PersonPrayerLogUndo, actorId: PersonId) => string | null;
-  onRemove: (requestId: string, expectedUpdatedAt: string, actorId: PersonId) => string | null;
+  onUndoDeleteLog?: (undo: PersonPrayerLogUndo, actorId: PersonId | null) => string | null;
+  onRemove: (requestId: string, expectedUpdatedAt: string, actorId: PersonId | null) => string | null;
+  allItems?: boolean;
+  allPrayerRequests?: readonly PersonPrayerRequest[];
 }) {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -101,21 +105,30 @@ export function PersonPrayerPanel({
   const pickerOpener = useRef<HTMLButtonElement | null>(null);
   const dialogWasOpen = useRef(false);
   const pickerWasOpen = useRef(false);
-  const personRequests = personPrayerRequestsForPerson(requests, personId);
-  const activeCount = activePrayerRequestCount(requests, personId);
-  const person = personById(people, personId);
+  const personRequests = allItems
+    ? requests
+    : personId ? personPrayerRequestsForPerson(requests, personId) : [];
+  const activeCount = personId ? activePrayerRequestCount(requests, personId) : 0;
+  const person = personId ? personById(people, personId) : undefined;
+  const panelIdentity = personId ?? 'all-items';
   const timeOptions = useRhythmTimeOptions();
+  const editorTimeOptions = editor?.request && editor.draft.timeOfDay === undefined
+    ? [{ value: 'not-set', label: 'Not set' } as const, ...timeOptions]
+    : timeOptions;
   const timeBlockSettings = useTimeBlockSettings();
   const timeZone = requestedTimeZone
     ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
-  const personPrayerHealth: PersonPrayerHealthSelection = selectPersonPrayerHealth(
-    requests,
-    personId,
-    today,
-    timeZone,
-    prayerHealthInstant,
-    timeBlockSettings
-  );
+  const actionsEnabled = enabled || allItems;
+  const personPrayerHealth: PersonPrayerHealthSelection | undefined = personId
+    ? selectPersonPrayerHealth(
+        allPrayerRequests ?? requests,
+        personId,
+        today,
+        timeZone,
+        prayerHealthInstant,
+        timeBlockSettings
+      )
+    : undefined;
   const groups = [
     { status: 'active' as const, label: 'Active' },
     { status: 'answered' as const, label: 'Answered' },
@@ -175,10 +188,19 @@ export function PersonPrayerPanel({
 
   function saveEditor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!enabled || !editor) return;
-    const result = editor.request
-      ? onUpdate(editor.request.id, editor.request.updatedAt, personId, editor.draft)
-      : onCreate(personId, editor.draft);
+    if (!actionsEnabled || !editor) return;
+    let result: string | null;
+    if (editor.request) {
+      result = onUpdate(
+          editor.request.id,
+          editor.request.updatedAt,
+          allItems ? editor.request.personId : personId,
+          editor.draft
+        );
+    } else {
+      if (personId === null) return;
+      result = onCreate(personId, editor.draft);
+    }
     if (result) {
       setEditor(current => current ? { ...current, error: result } : current);
       return;
@@ -203,22 +225,27 @@ export function PersonPrayerPanel({
   }
 
   function changeStatus(request: PersonPrayerRequest, transition: PrayerRequestTransition) {
-    if (!enabled) return;
-    setActionError(onTransition(request.id, request.updatedAt, personId, transition) ?? '');
+    if (!actionsEnabled) return;
+    setActionError(onTransition(
+      request.id,
+      request.updatedAt,
+      allItems ? request.personId : personId,
+      transition
+    ) ?? '');
   }
 
   function pray(request: PersonPrayerRequest) {
-    if (!enabled) return;
-    setActionError(onPray(request.id, request.updatedAt, personId) ?? '');
+    if (!actionsEnabled) return;
+    setActionError(onPray(request.id, request.updatedAt, allItems ? request.personId : personId) ?? '');
   }
 
   function deleteLog(
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     logId: string
   ): PersonPrayerLogUndo | string {
-    if (!enabled) return 'Prayer logging is unavailable.';
+    if (!actionsEnabled) return 'Prayer logging is unavailable.';
     if (!onDeleteLog) return 'Prayer log deletion is unavailable.';
     const result = onDeleteLog(requestId, expectedUpdatedAt, actorId, logId);
     if (typeof result === 'string') return result;
@@ -226,8 +253,8 @@ export function PersonPrayerPanel({
     return result;
   }
 
-  function undoDeleteLog(undo: PersonPrayerLogUndo, actorId: PersonId): string | null {
-    if (!enabled) return 'Prayer logging is unavailable.';
+  function undoDeleteLog(undo: PersonPrayerLogUndo, actorId: PersonId | null): string | null {
+    if (!actionsEnabled) return 'Prayer logging is unavailable.';
     if (!onUndoDeleteLog) return 'Prayer log Undo is unavailable.';
     const error = onUndoDeleteLog(undo, actorId);
     if (!error) setDeletedLogUndo(null);
@@ -235,8 +262,12 @@ export function PersonPrayerPanel({
   }
 
   function removeRequest() {
-    if (!enabled || !confirmRequest) return;
-    const error = onRemove(confirmRequest.id, confirmRequest.updatedAt, personId);
+    if (!actionsEnabled || !confirmRequest) return;
+    const error = onRemove(
+      confirmRequest.id,
+      confirmRequest.updatedAt,
+      allItems ? confirmRequest.personId : personId
+    );
     if (error) {
       setActionError(error);
       return;
@@ -246,76 +277,112 @@ export function PersonPrayerPanel({
     setActionError('');
   }
 
-  const editorTitleId = `person-prayer-editor-title-${personId}`;
-  const confirmTitleId = `person-prayer-delete-title-${personId}`;
+  const editorTitleId = `person-prayer-editor-title-${panelIdentity}`;
+  const confirmTitleId = `person-prayer-delete-title-${panelIdentity}`;
+  const statusLabels = {
+    active: 'Active',
+    answered: 'Answered',
+    archived: 'Archived'
+  } as const;
+
+  function renderRequestCard(request: PersonPrayerRequest) {
+    const owner = request.personId === null ? undefined : personById(people, request.personId);
+    const displayPerson = allItems ? owner : person;
+    const sharedPeople = (request.sharedWith ?? []).map(id => personById(people, id));
+    const requestHealth = allItems && owner
+      ? selectPersonPrayerHealth(
+          allPrayerRequests ?? requests,
+          owner.id,
+          today,
+          timeZone,
+          prayerHealthInstant,
+          timeBlockSettings
+        )
+      : allItems ? undefined : personPrayerHealth;
+    return (
+      <li
+        id={`person-prayer-request-${request.id}`}
+        className="person-prayer-list__item"
+        key={request.id}
+        tabIndex={targetRequestId === request.id ? -1 : undefined}
+        aria-current={targetRequestId === request.id ? 'true' : undefined}
+      >
+        <PersonPrayerCard
+          request={request}
+          {...(displayPerson ? { person: displayPerson } : {})}
+          {...(owner ? { owner } : {})}
+          sharedPeople={sharedPeople}
+          today={today}
+          timeZone={timeZone}
+          {...(requestHealth ? { personPrayerHealth: requestHealth } : {})}
+          {...(allItems ? {
+            statusLabel: statusLabels[request.status],
+            showOwner: true
+          } : {})}
+          onPray={pray}
+          onTransition={changeStatus}
+          onEdit={(selectedRequest, opener, onReturn) =>
+            openEditor(opener, selectedRequest, onReturn)}
+          {...(onSaveLog ? { onSaveLog } : {})}
+          {...(onDeleteLog ? { onDeleteLog: deleteLog } : {})}
+          {...(onUndoDeleteLog ? { onUndoDeleteLog: undoDeleteLog } : {})}
+          undoLog={deletedLogUndo?.requestId === request.id ? deletedLogUndo : null}
+        />
+      </li>
+    );
+  }
 
   return (
-    <section className="person-prayer-panel prayer-theme" aria-labelledby={`person-prayer-heading-${personId}`} hidden={!enabled}>
-      <PersonProfileTabHeader
-        headingId={`person-prayer-heading-${personId}`}
-        title="Prayer"
-        subtitle={`${activeCount} active ${activeCount === 1 ? 'request' : 'requests'}`}
-        actionLabel="Add request"
-        actionRef={addButtonRef}
-        theme="prayer"
-        onAction={event => openEditor(event.currentTarget)}
-      />
+    <section
+      className={`person-prayer-panel prayer-theme${allItems ? ' person-prayer-panel--all-items' : ''}`}
+      {...(allItems
+        ? { 'aria-label': 'Prayer requests' }
+        : { 'aria-labelledby': `person-prayer-heading-${panelIdentity}` })}
+      hidden={!enabled && !allItems}
+    >
+      {!allItems && (
+        <PersonProfileTabHeader
+          headingId={`person-prayer-heading-${panelIdentity}`}
+          title="Prayer"
+          subtitle={`${activeCount} active ${activeCount === 1 ? 'request' : 'requests'}`}
+          actionLabel="Add request"
+          actionRef={addButtonRef}
+          theme="prayer"
+          onAction={event => openEditor(event.currentTarget)}
+        />
+      )}
       {actionError && <p className="person-prayer-panel__error" role="alert">{actionError}</p>}
       {personRequests.length === 0 ? (
-        <p className="friendships-empty">No prayer requests for {personById(people, personId).displayName} yet.</p>
+        <p className="friendships-empty">
+          {allItems ? 'No prayer requests match these filters.' : `No prayer requests for ${person?.displayName ?? 'this person'} yet.`}
+        </p>
       ) : (
         <>
-        {activeCount === 0 && <p className="friendships-empty">No active prayer requests.</p>}
-        {groups.map(group => {
-        const groupRequests = personRequests.filter(request => request.status === group.status);
-        if (groupRequests.length === 0) return null;
-        return (
-          <section
-            key={group.status}
-            className="person-prayer-panel__group"
-            aria-labelledby={`person-prayer-${group.status}-${personId}`}
-          >
-            <h4 id={`person-prayer-${group.status}-${personId}`}>{group.label} ({groupRequests.length})</h4>
-            <ul className="person-prayer-list">
-              {groupRequests.map(request => {
-                const owner = personById(people, request.personId);
-                const sharedPeople = (request.sharedWith ?? []).map(id => personById(people, id));
-                return (
-                  <li
-                    id={`person-prayer-request-${request.id}`}
-                    className="person-prayer-list__item"
-                    key={request.id}
-                    tabIndex={targetRequestId === request.id ? -1 : undefined}
-                    aria-current={targetRequestId === request.id ? 'true' : undefined}
-                  >
-                    <PersonPrayerCard
-                      request={request}
-                      person={person}
-                      owner={owner}
-                      sharedPeople={sharedPeople}
-                      today={today}
-                      timeZone={timeZone}
-                      personPrayerHealth={personPrayerHealth}
-                      onPray={pray}
-                      onTransition={changeStatus}
-                      onEdit={(selectedRequest, opener, onReturn) =>
-                        openEditor(opener, selectedRequest, onReturn)}
-                      {...(onSaveLog ? { onSaveLog } : {})}
-                      {...(onDeleteLog ? { onDeleteLog: deleteLog } : {})}
-                      {...(onUndoDeleteLog ? { onUndoDeleteLog: undoDeleteLog } : {})}
-                      undoLog={deletedLogUndo?.requestId === request.id ? deletedLogUndo : null}
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        );
-        })}
+        {allItems ? (
+          <ul className="person-prayer-list">{personRequests.map(renderRequestCard)}</ul>
+        ) : (
+          <>
+            {activeCount === 0 && <p className="friendships-empty">No active prayer requests.</p>}
+            {groups.map(group => {
+              const groupRequests = personRequests.filter(request => request.status === group.status);
+              if (groupRequests.length === 0) return null;
+              return (
+                <section
+                  key={group.status}
+                  className="person-prayer-panel__group"
+                  aria-labelledby={`person-prayer-${group.status}-${personId}`}
+                >
+                  <h4 id={`person-prayer-${group.status}-${personId}`}>{group.label} ({groupRequests.length})</h4>
+                  <ul className="person-prayer-list">{groupRequests.map(renderRequestCard)}</ul>
+                </section>
+              );
+            })}
+          </>
+        )}
         </>
       )}
 
-      {enabled && editor && pickerOpen ? (
+      {actionsEnabled && editor && pickerOpen ? (
         <MoneyGoalDialog
           title="Choose people to share this request with"
           titleId={editorTitleId}
@@ -333,14 +400,19 @@ export function PersonPrayerPanel({
             groups={peopleGroups}
             theme="prayer"
             selectedIds={editor.draft.sharedWith}
-            excludedIds={[editor.request?.personId ?? personId]}
+            excludedIds={editor.request
+              ? editor.request.personId === null ? [] : [editor.request.personId]
+              : personId === null ? [] : [personId]}
             onToggle={id => updateDraft({
               sharedWith: editor.draft.sharedWith.includes(id)
                 ? editor.draft.sharedWith.filter(item => item !== id)
                 : [...editor.draft.sharedWith, id]
             })}
             onToggleGroup={ids => {
-              const eligibleIds = ids.filter(id => id !== (editor.request?.personId ?? personId));
+              const excludedIds = editor.request
+                ? editor.request.personId === null ? [] : [editor.request.personId]
+                : personId === null ? [] : [personId];
+              const eligibleIds = ids.filter(id => !excludedIds.includes(id));
               const allSelected = eligibleIds.length > 0
                 && eligibleIds.every(id => editor.draft.sharedWith.includes(id));
               updateDraft({
@@ -353,7 +425,7 @@ export function PersonPrayerPanel({
             onCancel={() => setPickerOpen(false)}
           />
         </MoneyGoalDialog>
-      ) : enabled && editor ? (
+      ) : actionsEnabled && editor ? (
         <MoneyGoalDialog
           title={editor.request ? 'Prayer request details' : 'Add prayer request'}
           titleId={editorTitleId}
@@ -371,7 +443,7 @@ export function PersonPrayerPanel({
             <label>
               Title
               <input
-                id={`person-prayer-title-${personId}`}
+                id={`person-prayer-title-${panelIdentity}`}
                 value={editor.draft.title}
                 maxLength={160}
                 required
@@ -398,9 +470,11 @@ export function PersonPrayerPanel({
                 <label>Time of day</label>
                 <StyledSelect
                   label="Time of day"
-                  options={timeOptions}
-                  value={editor.draft.timeOfDay ?? 'anytime'}
-                  onChange={timeOfDay => updateDraft({ timeOfDay })}
+                  options={editorTimeOptions}
+                  value={editor.draft.timeOfDay ?? (editor.request ? 'not-set' : 'anytime')}
+                  onChange={timeOfDay => updateDraft({
+                    timeOfDay: timeOfDay === 'not-set' ? undefined : timeOfDay
+                  })}
                 />
               </div>
             </RhythmScheduleFields>
@@ -436,7 +510,7 @@ export function PersonPrayerPanel({
                 <button
                   type="button"
                   className="person-prayer-form__delete-button"
-                  aria-label={editor.request.personId === personId
+                  aria-label={allItems || editor.request.personId === personId
                     ? `Delete ${editor.request.title}`
                     : `Remove ${editor.request.title} from this profile`}
                   onClick={() => {
@@ -445,7 +519,7 @@ export function PersonPrayerPanel({
                   }}
                 >
                   <RhythmMetadataIcon kind="delete" />
-                  {editor.request.personId === personId ? 'Delete request' : 'Remove from this profile'}
+                  {allItems || editor.request.personId === personId ? 'Delete request' : 'Remove from this profile'}
                 </button>
               </div>
             )}
@@ -454,13 +528,13 @@ export function PersonPrayerPanel({
       ) : null}
       {enabled && confirmRequest && (
         <MoneyGoalDialog
-          title={confirmRequest.personId === personId
+          title={allItems || confirmRequest.personId === personId
             ? 'Delete this request?'
             : 'Remove this request from this profile?'}
           titleId={confirmTitleId}
           labelledBy={confirmTitleId}
           dialogClassName="person-prayer-dialog prayer-theme"
-          initialFocusId={`person-prayer-cancel-delete-${personId}`}
+          initialFocusId={`person-prayer-cancel-delete-${panelIdentity}`}
           closeLabel="Close delete confirmation"
           phoneFullScreen
           scrollableBody
@@ -470,14 +544,14 @@ export function PersonPrayerPanel({
         >
           <div className="person-prayer-confirm">
             <p>
-              {confirmRequest.personId === personId
+              {allItems || confirmRequest.personId === personId
                 ? 'This permanently deletes the request and its prayer history from every linked profile.'
                 : 'The primary owner and other linked profiles will keep the request and its prayer history.'}
             </p>
             {actionError && <p className="person-prayer-panel__error" role="alert">{actionError}</p>}
             <div className="person-prayer-form__actions">
               <button
-                id={`person-prayer-cancel-delete-${personId}`}
+                id={`person-prayer-cancel-delete-${panelIdentity}`}
                 type="button"
                 className="btn mini ghost"
                 onClick={() => {
@@ -488,7 +562,7 @@ export function PersonPrayerPanel({
                 Cancel
               </button>
               <button type="button" className="btn mini" onClick={removeRequest}>
-                {confirmRequest.personId === personId ? 'Delete request' : 'Remove from profile'}
+                {allItems || confirmRequest.personId === personId ? 'Delete request' : 'Remove from profile'}
               </button>
             </div>
           </div>

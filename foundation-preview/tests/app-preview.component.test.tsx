@@ -1812,7 +1812,8 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: '‹ More' }));
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     const dataSection = screen.getByRole('region', { name: 'Your data' });
-    expect(within(dataSection).getAllByRole('button')).toHaveLength(1);
+    expect(within(dataSection).getAllByRole('button')).toHaveLength(2);
+    expect(within(dataSection).getByRole('button', { name: /All items/ })).toBeTruthy();
     expect(within(dataSection).getByRole('button', { name: /Backup & recovery/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Save & sync/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: '‹ More' }));

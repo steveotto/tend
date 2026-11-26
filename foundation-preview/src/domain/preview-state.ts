@@ -114,7 +114,7 @@ import {
 import type { CategoryPreferences, FoundationPreferences } from './category-availability.ts';
 
 export const PREVIEW_BACKUP_FORMAT = 'tend.synthetic-preview';
-export const PREVIEW_SCHEMA_VERSION = 59;
+export const PREVIEW_SCHEMA_VERSION = 60;
 export type PreviewTextSize = 'small' | 'medium' | 'large';
 
 export type PreviewData = {
@@ -157,7 +157,7 @@ export type PreviewEnvelope = {
 };
 
 export type PreviewEnvelopeV4 = PreviewEnvelope;
-export type PreviewSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57 | 58 | 59;
+export type PreviewSchemaVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57 | 58 | 59 | 60;
 
 type PreviewEnvelopeV1 = {
   format: typeof PREVIEW_BACKUP_FORMAT;
@@ -908,6 +908,7 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
       && value.schemaVersion !== 56
       && value.schemaVersion !== 57
       && value.schemaVersion !== 58
+      && value.schemaVersion !== 59
       && value.schemaVersion !== PREVIEW_SCHEMA_VERSION)) {
     return { valid: false, kind: 'unsupported', message: 'This preview backup format or schema version is not supported.' };
   }
@@ -942,7 +943,8 @@ function validatePreviewEnvelopeInternal(value: unknown, currentDate: string): P
   const isV29 = value.schemaVersion === 29;
   const isV30 = value.schemaVersion === 30;
   const isV31 = value.schemaVersion === 31;
-  const isV59 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV60 = value.schemaVersion === PREVIEW_SCHEMA_VERSION;
+  const isV59 = value.schemaVersion === 59 || isV60;
   const isV58 = value.schemaVersion === 58 || isV59;
   const isV57 = value.schemaVersion === 57 || isV58;
   const isV56 = value.schemaVersion === 56 || isV57;

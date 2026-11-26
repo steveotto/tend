@@ -29,7 +29,7 @@ export type PersonPrayerLog = {
 
 export type PersonPrayerRequest = {
   id: string;
-  personId: PersonId;
+  personId: PersonId | null;
   sharedWith?: PersonId[];
   title: string;
   details?: string;
@@ -131,12 +131,12 @@ export function validatePersonPrayerRequestsCollection(
       : validateRhythmSchedule(candidate.schedule);
     if (!isValidId(candidate.id)
       || requestIds.has(candidate.id)
-      || !isValidPersonId(candidate.personId)
-      || knownPeople !== null && !knownPeople.has(candidate.personId)
+      || candidate.personId !== null && !isValidPersonId(candidate.personId)
+      || candidate.personId !== null && knownPeople !== null && !knownPeople.has(candidate.personId)
       || !Array.isArray(sharedWith)
       || !sharedWith.every(isValidPersonId)
       || knownPeople !== null && sharedWith.some(id => !knownPeople.has(id))
-      || sharedWith.includes(candidate.personId)
+      || candidate.personId !== null && sharedWith.includes(candidate.personId)
       || new Set(sharedWith).size !== sharedWith.length
       || typeof candidate.title !== 'string'
       || candidate.title.trim().length === 0
@@ -234,7 +234,7 @@ export function personPrayerRequestDraft(request?: PersonPrayerRequest): PersonP
     ...(request
       ? {
           ...(request.schedule ? { schedule: request.schedule } : {}),
-          timeOfDay: request.timeOfDay ?? 'anytime'
+          ...(request.timeOfDay ? { timeOfDay: request.timeOfDay } : {})
         }
       : { schedule: { frequency: 'daily' }, timeOfDay: 'anytime' })
   };
@@ -249,7 +249,7 @@ export function createPersonPrayerRequest(
   if (!isValidId(input.id) || requests.some(request => request.id === input.id)) {
     return { valid: false, error: 'A unique prayer request ID is required.' };
   }
-  if (!personIds.includes(input.personId)) {
+  if (input.personId === null || !personIds.includes(input.personId)) {
     return { valid: false, error: 'Choose an existing primary person.' };
   }
   if (input.status !== 'active' || input.answeredAt !== undefined || input.archivedAt !== undefined) {
@@ -305,7 +305,7 @@ export function updatePersonPrayerRequest(
   requests: readonly PersonPrayerRequest[],
   requestId: string,
   expectedUpdatedAt: string,
-  actorId: PersonId,
+  actorId: PersonId | null,
   draft: PersonPrayerRequestDraft,
   updatedAt: string,
   personIds: readonly PersonId[],
@@ -386,7 +386,7 @@ export function transitionPersonPrayerRequest(
   requests: readonly PersonPrayerRequest[],
   requestId: string,
   expectedUpdatedAt: string,
-  actorId: PersonId,
+  actorId: PersonId | null,
   transition: PrayerRequestTransition,
   updatedAt: string
 ): PersonPrayerCommandResult {
@@ -419,7 +419,7 @@ export function recordPersonPrayer(
   requests: readonly PersonPrayerRequest[],
   requestId: string,
   expectedUpdatedAt: string,
-  actorId: PersonId,
+  actorId: PersonId | null,
   log: PersonPrayerLog,
   personIds: readonly PersonId[]
 ): PersonPrayerCommandResult {
@@ -454,7 +454,7 @@ export function savePersonPrayerLog(
   requests: readonly PersonPrayerRequest[],
   requestId: string,
   expectedUpdatedAt: string,
-  actorId: PersonId,
+  actorId: PersonId | null,
   log: PersonPrayerLog,
   updatedAt: string,
   personIds: readonly PersonId[]
@@ -522,7 +522,7 @@ export function deletePersonPrayerLog(
   requests: readonly PersonPrayerRequest[],
   requestId: string,
   expectedUpdatedAt: string,
-  actorId: PersonId,
+  actorId: PersonId | null,
   logId: string,
   updatedAt: string,
   personIds: readonly PersonId[]
@@ -570,7 +570,7 @@ export function deletePersonPrayerLog(
 export function undoDeletePersonPrayerLog(
   requests: readonly PersonPrayerRequest[],
   undo: PersonPrayerLogUndo,
-  actorId: PersonId,
+  actorId: PersonId | null,
   updatedAt: string,
   personIds: readonly PersonId[]
 ): PersonPrayerLogCommandResult {
@@ -610,7 +610,7 @@ export function deletePersonPrayerRequest(
   requests: readonly PersonPrayerRequest[],
   requestId: string,
   expectedUpdatedAt: string,
-  actorId: PersonId
+  actorId: PersonId | null
 ): PersonPrayerCommandResult {
   const existing = requests.find(request => request.id === requestId);
   if (!existing || existing.personId !== actorId) {
@@ -651,8 +651,9 @@ export function unlinkPersonPrayerRequest(
   };
 }
 
-function canAccessRequest(request: PersonPrayerRequest, actorId: PersonId): boolean {
-  return request.personId === actorId || request.sharedWith?.includes(actorId) === true;
+function canAccessRequest(request: PersonPrayerRequest, actorId: PersonId | null): boolean {
+  return request.personId === actorId
+    || actorId !== null && request.sharedWith?.includes(actorId) === true;
 }
 
 function isValidPrayerScoring(
@@ -790,7 +791,7 @@ function validateDraft(
   title: string,
   details: string,
   sharedWith: readonly PersonId[],
-  primaryPersonId: PersonId,
+  primaryPersonId: PersonId | null,
   personIds: readonly PersonId[]
 ): string | null {
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > requestMaxLength) {
@@ -802,7 +803,7 @@ function validateDraft(
   if (!Array.isArray(sharedWith)
     || !sharedWith.every(id => isValidPersonId(id) && personIds.includes(id))
     || new Set(sharedWith).size !== sharedWith.length
-    || sharedWith.includes(primaryPersonId)) {
+    || primaryPersonId !== null && sharedWith.includes(primaryPersonId)) {
     return 'Choose valid, unique people to share this request with.';
   }
   return null;
@@ -821,11 +822,14 @@ function validateSchedule(
   return null;
 }
 
-function normalizeSharedWith(sharedWith: readonly PersonId[], primaryPersonId: PersonId): PersonId[] | null {
+function normalizeSharedWith(
+  sharedWith: readonly PersonId[],
+  primaryPersonId: PersonId | null
+): PersonId[] | null {
   if (!Array.isArray(sharedWith)
     || !sharedWith.every(isValidPersonId)
     || new Set(sharedWith).size !== sharedWith.length
-    || sharedWith.includes(primaryPersonId)) return null;
+    || primaryPersonId !== null && sharedWith.includes(primaryPersonId)) return null;
   return [...sharedWith];
 }
 

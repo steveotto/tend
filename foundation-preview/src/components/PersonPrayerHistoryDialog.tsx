@@ -45,8 +45,8 @@ export function PersonPrayerHistoryDialog({
   onClose
 }: {
   request: PersonPrayerRequest;
-  person: PersonPreview;
-  owner: PersonPreview;
+  person?: PersonPreview;
+  owner?: PersonPreview;
   sharedPeople: readonly PersonPreview[];
   history: PersonPrayerHistory;
   personPrayerHealth?: PersonPrayerHealthSelection;
@@ -165,10 +165,12 @@ export function PersonPrayerHistoryDialog({
               </button>
             </div>
             <div className="person-prayer-card__associations">
-              <div className="person-prayer-card__association" role="group" aria-label="Prayer profile">
-                <PersonBadge person={person} presentation="static" displayNameMode="full" />
+              <div className="person-prayer-card__association" role="group" aria-label="Person association">
+                {person
+                  ? <PersonBadge person={person} presentation="static" displayNameMode="full" />
+                  : <span>No person</span>}
               </div>
-              {owner.id !== person.id && (
+              {owner && person && owner.id !== person.id && (
                 <div className="person-prayer-card__association" role="group" aria-label="Request owner">
                   <span>Owned by</span>
                   <PersonBadge person={owner} presentation="static" displayNameMode="full" />

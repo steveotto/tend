@@ -886,19 +886,28 @@ export function PersonProfileView({
                 : 'Prayer requests are unavailable.'}
               {...(onRetryLocalSave ? { onRetryLocalSave } : {})}
               onUpdate={(requestId, expectedUpdatedAt, actorId, draft) => onUpdatePrayerRequest
-                ? onUpdatePrayerRequest(requestId, expectedUpdatedAt, actorId, draft)
+                ? onUpdatePrayerRequest(requestId, expectedUpdatedAt, actorId ?? personId, draft)
                 : 'Prayer requests are unavailable.'}
               onTransition={(requestId, expectedUpdatedAt, actorId, transition) => onPrayerRequestTransition
-                ? onPrayerRequestTransition(requestId, expectedUpdatedAt, actorId, transition)
+                ? onPrayerRequestTransition(requestId, expectedUpdatedAt, actorId ?? personId, transition)
                 : 'Prayer requests are unavailable.'}
               onPray={(requestId, expectedUpdatedAt, actorId) => onPrayForRequest
-                ? onPrayForRequest(requestId, expectedUpdatedAt, actorId)
+                ? onPrayForRequest(requestId, expectedUpdatedAt, actorId ?? personId)
                 : 'Prayer logging is unavailable.'}
-              {...(onSavePrayerLog ? { onSaveLog: onSavePrayerLog } : {})}
-              {...(onDeletePrayerLog ? { onDeleteLog: onDeletePrayerLog } : {})}
-              {...(onUndoDeletePrayerLog ? { onUndoDeleteLog: onUndoDeletePrayerLog } : {})}
+              {...(onSavePrayerLog ? {
+                onSaveLog: (requestId, expectedUpdatedAt, actorId, log) =>
+                  onSavePrayerLog(requestId, expectedUpdatedAt, actorId ?? personId, log)
+              } : {})}
+              {...(onDeletePrayerLog ? {
+                onDeleteLog: (requestId, expectedUpdatedAt, actorId, logId) =>
+                  onDeletePrayerLog(requestId, expectedUpdatedAt, actorId ?? personId, logId)
+              } : {})}
+              {...(onUndoDeletePrayerLog ? {
+                onUndoDeleteLog: (undo, actorId) =>
+                  onUndoDeletePrayerLog(undo, actorId ?? personId)
+              } : {})}
               onRemove={(requestId, expectedUpdatedAt, actorId) => onRemovePrayerRequest
-                ? onRemovePrayerRequest(requestId, expectedUpdatedAt, actorId)
+                ? onRemovePrayerRequest(requestId, expectedUpdatedAt, actorId ?? personId)
                 : 'Prayer requests are unavailable.'}
             />
           </section>

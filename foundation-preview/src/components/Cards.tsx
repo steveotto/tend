@@ -539,6 +539,8 @@ type RhythmCardProps = RhythmCardBaseProps & (
   | {
       variant: 'details-summary';
       archived?: boolean;
+      completed?: boolean;
+      statusLabel?: string;
       cadence?: string;
       schedule?: RhythmSchedule;
       timeLabel?: string;
@@ -551,6 +553,10 @@ type RhythmCardProps = RhythmCardBaseProps & (
       foundations?: readonly FoundationPreview[];
       onOpenFoundation?: (foundationId: string, openerId: string) => void;
       onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
+      completionActionLabel?: string;
+      completedActionLabel?: string;
+      onTend?: (event: MouseEvent<HTMLButtonElement>) => void;
+      onUndo?: () => void;
     }
   | { variant: 'suggestion'; icon?: ReactNode | undefined; onDetails: (event: MouseEvent<HTMLButtonElement>) => void }
 );
@@ -642,12 +648,18 @@ export function RhythmCard(props: RhythmCardProps) {
         onOpenCategory={onOpenCategory}
         onOpenFoundation={props.onOpenFoundation}
         archived={props.archived === true}
+        completed={props.completed === true}
+        statusLabel={props.statusLabel}
         cadence={props.cadence}
         schedule={props.schedule}
         timeLabel={props.timeLabel}
         lastTended={props.lastTended}
         activityContext={props.activityContext}
         onEdit={props.onEdit}
+        completionActionLabel={props.completionActionLabel}
+        completedActionLabel={props.completedActionLabel}
+        onTend={props.onTend}
+        onUndo={props.onUndo}
       />
     );
   }
@@ -770,12 +782,18 @@ function RhythmDetailsSummaryCard({
   onOpenCategory,
   onOpenFoundation,
   archived,
+  completed,
+  statusLabel,
   cadence,
   schedule,
   timeLabel,
   lastTended,
   activityContext,
-  onEdit
+  onEdit,
+  completionActionLabel,
+  completedActionLabel,
+  onTend,
+  onUndo
 }: {
   rhythm: RhythmPreview;
   headingId: string;
@@ -786,6 +804,8 @@ function RhythmDetailsSummaryCard({
   onOpenCategory?: ((categoryId: Destination, openerId: string) => void) | undefined;
   onOpenFoundation?: ((foundationId: string, openerId: string) => void) | undefined;
   archived: boolean;
+  completed: boolean;
+  statusLabel?: string | undefined;
   cadence?: string | undefined;
   schedule?: RhythmSchedule | undefined;
   timeLabel?: string | undefined;
@@ -796,7 +816,12 @@ function RhythmDetailsSummaryCard({
     detail?: string;
   } | undefined;
   onEdit?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  completionActionLabel?: string | undefined;
+  completedActionLabel?: string | undefined;
+  onTend?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  onUndo?: (() => void) | undefined;
 }) {
+  const tendButtonRef = useRef<HTMLButtonElement>(null);
   return (
     <article
       className="rhythm-card rhythm-card--details-summary"
@@ -811,6 +836,7 @@ function RhythmDetailsSummaryCard({
             titleClassName="rhythm-card__details-summary-title"
             descriptionClassName="rhythm-card__details-summary-description"
             archived={archived}
+            statusLabel={statusLabel}
           />
         </div>
         {onEdit && (
@@ -848,15 +874,30 @@ function RhythmDetailsSummaryCard({
           {...(onOpenFoundation ? { onOpenFoundation } : {})}
         />
       </div>
-      <RhythmMetadata
-        variant="footer"
-        className="rhythm-card__details-summary-footer"
-        {...(!schedule && cadence ? { cadence } : {})}
-        {...(schedule ? { schedule } : {})}
-        {...(timeLabel ? { timeLabel } : {})}
-        lastTended={lastTended}
-        rhythmTitle={rhythm.title}
-      />
+      <div className="rhythm-card__details-summary-actions">
+        <RhythmMetadata
+          variant="footer"
+          className="rhythm-card__details-summary-footer"
+          {...(!schedule && cadence ? { cadence } : {})}
+          {...(schedule ? { schedule } : {})}
+          {...(timeLabel ? { timeLabel } : {})}
+          lastTended={lastTended}
+          rhythmTitle={rhythm.title}
+          completed={completed}
+          {...(onUndo ? { onUndo } : {})}
+        />
+        {onTend && (
+          <RhythmCompletionActions
+            rhythmId={rhythm.id}
+            rhythmTitle={rhythm.title}
+            completed={completed}
+            actionLabel={completionActionLabel}
+            completedLabel={completedActionLabel}
+            onTend={onTend}
+            tendButtonRef={tendButtonRef}
+          />
+        )}
+      </div>
     </article>
   );
 }
@@ -915,6 +956,7 @@ function RhythmCardSummary({
   titleClassName,
   descriptionClassName,
   archived = false,
+  statusLabel,
   showDescription = true
 }: {
   rhythm: RhythmPreview;
@@ -923,6 +965,7 @@ function RhythmCardSummary({
   titleClassName?: string;
   descriptionClassName?: string;
   archived?: boolean;
+  statusLabel?: string | undefined;
   showDescription?: boolean;
 }) {
   return (
@@ -930,6 +973,7 @@ function RhythmCardSummary({
       <div className="rhythm-title-row">
         <h3 id={headingId} className={titleClassName}>{rhythm.title}</h3>
         {archived && <RhythmArchivedBadge />}
+        {statusLabel && <span className="rhythm-card__details-summary-badge">{statusLabel}</span>}
         {rhythm.personal && <RhythmPersonalBadge />}
         {externallyAutomated && <span className="automation-badge">Automated at bank</span>}
       </div>

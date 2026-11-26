@@ -4885,7 +4885,7 @@ async function verifyCanonicalPrayerFreshDeviceRoundTrip(browser: Browser): Prom
   type BrowserPrayerLog = { id: string; prayedAt?: string; prayedOn?: string };
   type BrowserPrayerRequest = {
     id: string;
-    personId: string;
+    personId: string | null;
     title: string;
     updatedAt: string;
     sharedWith?: string[];
@@ -5069,8 +5069,18 @@ async function verifyCanonicalPrayerFreshDeviceRoundTrip(browser: Browser): Prom
     assert.equal(laptopSave.savedRevision, 2);
     const freshDeviceSave = await runAdapter(laptopSave.state, laptopSave.savedRevision, 'device-save');
     assert.equal(freshDeviceSave.revision, 2, 'The clean device must load the laptop revision.');
-    assert.equal(freshDeviceSave.document.data.prayerRequests[0]?.personId, 'avery');
-    assert.deepEqual(freshDeviceSave.document.data.prayerRequests[0]?.sharedWith, ['morgan']);
+    const accountPrayer = freshDeviceSave.document.data.prayerRequests.find(
+      prayer => prayer.id === 'global-prayer'
+    );
+    assert.ok(accountPrayer);
+    assert.equal(accountPrayer.personId, null, 'The clean device must not invent a Person owner.');
+    assert.deepEqual(accountPrayer.sharedWith, ['morgan']);
+    const personPrayer = freshDeviceSave.document.data.prayerRequests.find(
+      prayer => prayer.id === 'person-prayer'
+    );
+    assert.ok(personPrayer);
+    assert.equal(personPrayer.personId, 'avery');
+    assert.deepEqual(personPrayer.sharedWith, ['morgan']);
     assert.equal(freshDeviceSave.savedRevision, 3);
 
     const laptopReload = await runAdapter(freshDeviceSave.state, freshDeviceSave.savedRevision, 'reload');
@@ -5192,6 +5202,16 @@ async function main() {
     const dashboardPrayerFixture = createSamplePreviewData();
     const dashboardPrayerNow = new Date().toISOString();
     dashboardPrayerFixture.prayerRequests = [{
+      id: 'browser-no-person-prayer-request',
+      personId: null,
+      sharedWith: [],
+      title: 'Account-level no-person Prayer',
+      details: 'Synthetic account-level request for All items browser coverage.',
+      status: 'active',
+      createdAt: new Date(Date.parse(dashboardPrayerNow) - 86_400_000).toISOString(),
+      updatedAt: dashboardPrayerNow,
+      prayerLogs: []
+    }, {
       id: 'browser-active-prayer-request',
       personId: 'sample-person-avery',
       sharedWith: ['sample-person-morgan'],
@@ -5478,6 +5498,63 @@ async function main() {
         await forecastResponse;
         await page.getByRole('button', { name: 'Today', exact: true }).click();
         await page.locator('.today-plan__title-weather').waitFor();
+
+        await page.getByRole('button', { name: 'More, settings' }).click();
+        await page.getByRole('button', { name: /Settings/ }).click();
+        await page.getByRole('button', { name: 'All items' }).click();
+        await page.locator('.all-items-page').waitFor();
+        for (const width of [320, 375, 390, 430]) {
+          await page.setViewportSize({ width, height: 812 });
+          const layout = await page.locator('.all-items-page__filters').evaluate(filters => {
+            const rect = filters.getBoundingClientRect();
+            return {
+              viewportWidth: document.documentElement.clientWidth,
+              documentWidth: document.documentElement.scrollWidth,
+              filters: { left: rect.left, right: rect.right },
+              triggers: [...filters.querySelectorAll('.all-items-filter__trigger')].map(trigger => {
+                const bounds = trigger.getBoundingClientRect();
+                return { left: bounds.left, right: bounds.right };
+              })
+            };
+          });
+          assert.equal(layout.viewportWidth, width);
+          assert.equal(layout.documentWidth, width, `All items must not overflow horizontally at ${width}px.`);
+          assert.ok(layout.filters.left >= 0 && layout.filters.right <= width);
+          assert.equal(layout.triggers.length, 4);
+          assert.ok(layout.triggers.every(bounds => bounds.left >= 0 && bounds.right <= width));
+          const timeTrigger = page.getByRole('button', { name: 'Time of day: All times' });
+          await timeTrigger.click();
+          const menuBounds = await page.locator(
+            '.all-items-filter__dropdown--open .all-items-filter__menu'
+          ).evaluate(menu => {
+            const rect = menu.getBoundingClientRect();
+            return { left: rect.left, right: rect.right };
+          });
+          assert.ok(menuBounds.left >= 0 && menuBounds.right <= width,
+            `Open filter dropdown must fit within ${width}px.`);
+          await timeTrigger.click();
+        }
+        await page.getByRole('button', { name: 'Type: All types' }).click();
+        await page.getByRole('group', { name: 'Type options' })
+          .getByRole('checkbox', { name: 'Prayer requests' }).click();
+        await page.getByRole('button', { name: 'Person: All people' }).click();
+        await page.getByRole('group', { name: 'Person options' })
+          .getByRole('checkbox', { name: 'No person' }).click();
+        await page.getByRole('group', { name: 'Person association' }).getByText('No person').waitFor();
+        assert.match((await page.getByRole('status').textContent()) ?? '', /1 item/);
+        await page.getByRole('button', { name: 'Person: No person' }).click();
+        await page.getByRole('button', { name: 'View prayer history for Account-level no-person Prayer' }).click();
+        const prayerHistory = page.getByRole('dialog', { name: 'Prayer history' });
+        await prayerHistory.getByRole('button', { name: 'Edit prayer request Account-level no-person Prayer' }).click();
+        const prayerEditor = page.getByRole('dialog', { name: 'Prayer request details' });
+        await prayerEditor.getByLabel('Title').waitFor();
+        await prayerEditor.getByRole('button', { name: 'Cancel' }).click();
+        await prayerHistory.waitFor({ state: 'visible' });
+        await prayerHistory.getByRole('button', { name: 'Close prayer history' }).click();
+        await page.getByRole('button', { name: 'Type: Prayer requests' }).waitFor({ state: 'visible' });
+        await page.getByRole('button', { name: 'Person: No person' }).waitFor({ state: 'visible' });
+        await page.getByRole('button', { name: 'Today', exact: true }).click();
+        await page.locator('.home-dashboard').waitFor();
 
         const mobileSizeToggle = page.locator('.mobile-display-toggle');
         const expectedSizes = [
