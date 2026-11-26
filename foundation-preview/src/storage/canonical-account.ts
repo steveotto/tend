@@ -374,18 +374,8 @@ export function convertClassicStateToPreviewEnvelope(
     }
     classicPrayerSharedWith(prayer);
   }
-  // Explicit null is the Classic representation of a Prayer with no Person association.
-  // Keep it in canonical state without projecting it into Person-scoped Prayer views.
-  const explicitlyUnassociatedPrayerIds = new Set(classicPrayers.flatMap(prayer =>
-    isRecord(prayer) && typeof prayer.id === 'string' && prayer.personId === null
-      ? [prayer.id]
-      : []
-  ));
-  const personAssociatedPrayers = classicPrayers.filter(
-    prayer => !isRecord(prayer) || prayer.personId !== null
-  );
   const previousRequestsById = new Map(previousRequests.map(request => [request.id, request]));
-  const canonicalRequests = personAssociatedPrayers.map((prayer): PersonPrayerRequest => {
+  const canonicalRequests = classicPrayers.map((prayer): PersonPrayerRequest => {
     if (!isRecord(prayer) || typeof prayer.id !== 'string') {
       throw new Error('A canonical Prayer record has an invalid structure. No data was changed.');
     }
@@ -402,15 +392,18 @@ export function convertClassicStateToPreviewEnvelope(
       } = previousRequest;
       previousRequestFields = fields;
     }
-    const personId = typeof prayer.personId === 'string'
-      ? prayer.personId
-      : typeof classicSharedWith[0] === 'string'
-        ? classicSharedWith[0]
-        : previousRequest?.personId ?? null;
-    if (personId === null) {
+    const explicitlyUnassociated = prayer.personId === null;
+    const personId = explicitlyUnassociated
+      ? null
+      : typeof prayer.personId === 'string'
+        ? prayer.personId
+        : typeof classicSharedWith[0] === 'string'
+          ? classicSharedWith[0]
+          : previousRequest?.personId ?? null;
+    if (personId === null && !explicitlyUnassociated) {
       throw new Error('A canonical Prayer record has no resolvable owner. No data was changed.');
     }
-    if (!data.people.some(person => person.id === personId)) {
+    if (personId !== null && !data.people.some(person => person.id === personId)) {
       throw new Error(
         'A canonical Prayer request references a Person missing from the account and its saved Prayer metadata. No data was changed.'
       );
@@ -485,11 +478,13 @@ export function convertClassicStateToPreviewEnvelope(
     const sharedWithSource = Array.isArray(prayer.sharedWith)
       ? classicSharedWith
       : previousRequest?.sharedWith ?? [];
-    const sharedWith = sharedWithSource.filter(id => id !== personId);
+    const sharedWith = personId === null
+      ? [...sharedWithSource]
+      : sharedWithSource.filter(id => id !== personId);
     return {
       ...previousRequestFields,
       id: prayerId,
-      personId: personId as PersonPrayerRequest['personId'],
+      personId,
       ...(sharedWith.length > 0 ? { sharedWith } : {}),
       title: typeof prayer.text === 'string' ? prayer.text : previousRequest?.title ?? 'Prayer',
       ...(typeof prayer.details === 'string'
@@ -516,9 +511,7 @@ export function convertClassicStateToPreviewEnvelope(
   });
   const canonicalRequestsById = new Map(canonicalRequests.map(request => [request.id, request]));
   data.prayerRequests = [
-    ...previousRequests
-      .filter(request => !explicitlyUnassociatedPrayerIds.has(request.id))
-      .map(request => canonicalRequestsById.get(request.id) ?? request),
+    ...previousRequests.map(request => canonicalRequestsById.get(request.id) ?? request),
     ...canonicalRequests.filter(request => !previousRequestsById.has(request.id))
   ];
 
@@ -572,6 +565,23 @@ export function mergePrayerRequestsIntoClassicState(
     }
   }
   const previousEnvelope = validatedStoredPreviewEnvelope(state, currentDate);
+  const currentProjection = convertClassicStateToPreviewEnvelope(state, currentDate);
+  const currentRequestsById = new Map(
+    currentProjection.data.prayerRequests.map(request => [request.id, request])
+  );
+  const currentRequestIds = new Set(currentProjection.data.prayerRequests.map(request => request.id));
+  const submittedRequestsById = new Map(
+    envelope.data.prayerRequests.map(request => [request.id, request])
+  );
+  const unchangedUnassociatedPrayerIds = new Set(existing.flatMap(prayer => {
+    if (!isRecord(prayer) || typeof prayer.id !== 'string' || prayer.personId !== null) return [];
+    const currentRequest = currentRequestsById.get(prayer.id);
+    const submittedRequest = submittedRequestsById.get(prayer.id);
+    return currentRequest && submittedRequest
+      && JSON.stringify(currentRequest) === JSON.stringify(submittedRequest)
+      ? [prayer.id]
+      : [];
+  }));
   let previousIds = new Set<string>();
   if (previousEnvelope) {
     previousIds = new Set(
@@ -581,13 +591,15 @@ export function mergePrayerRequestsIntoClassicState(
   const preserved = existing.filter(prayer => {
     if (!isRecord(prayer) || typeof prayer.id !== 'string') return true;
     if (unsupportedIds.has(prayer.id)) return true;
-    if (prayer.personId === null && !nextIds.has(prayer.id)) return true;
+    if (unchangedUnassociatedPrayerIds.has(prayer.id)) return true;
     if (nextIds.has(prayer.id)) return false;
+    if (currentRequestIds.has(prayer.id)) return false;
     if (previousIds.has(prayer.id)) return false;
     return true;
   });
   const converted = envelope.data.prayerRequests
-    .filter(request => !unsupportedIds.has(request.id))
+    .filter(request => !unsupportedIds.has(request.id)
+      && !unchangedUnassociatedPrayerIds.has(request.id))
     .map((request) => {
     const original = existing.find(prayer => isRecord(prayer) && prayer.id === request.id);
     const schedule = previewSchedule(request.schedule);
@@ -608,7 +620,8 @@ export function mergePrayerRequestsIntoClassicState(
       ? original.sharedWith as string[]
       : null;
     const requestSharedWith = request.sharedWith ?? [];
-    const preserveLegacyOwnerMembership = originalSharedWith?.includes(request.personId) === true
+    const preserveLegacyOwnerMembership = request.personId !== null
+      && originalSharedWith?.includes(request.personId) === true
       && sameStrings(
         originalSharedWith.filter(personId => personId !== request.personId),
         requestSharedWith
@@ -622,6 +635,7 @@ export function mergePrayerRequestsIntoClassicState(
       sharedWith: preserveLegacyOwnerMembership ? originalSharedWith : requestSharedWith,
       updatedAt: request.updatedAt
     };
+    if (request.details === undefined) delete output.details;
     delete output.answered;
     delete output.archived;
     delete output.answeredDate;

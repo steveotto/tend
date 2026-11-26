@@ -27,6 +27,8 @@ export function PersonPrayerCard({
   today,
   timeZone,
   personPrayerHealth,
+  statusLabel,
+  showOwner = false,
   onPray,
   onTransition,
   onEdit,
@@ -36,12 +38,14 @@ export function PersonPrayerCard({
   undoLog
 }: {
   request: PersonPrayerRequest;
-  person: PersonPreview;
-  owner: PersonPreview;
+  person?: PersonPreview;
+  owner?: PersonPreview;
   sharedPeople: readonly PersonPreview[];
   today: string;
   timeZone: string;
   personPrayerHealth?: PersonPrayerHealthSelection;
+  statusLabel?: string;
+  showOwner?: boolean;
   onPray: (request: PersonPrayerRequest) => void;
   onTransition: (request: PersonPrayerRequest, transition: PrayerRequestTransition) => void;
   onEdit: (
@@ -52,16 +56,16 @@ export function PersonPrayerCard({
   onSaveLog?: (
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonPreview['id'],
+    actorId: PersonPreview['id'] | null,
     log: PersonPrayerLog
   ) => string | null;
   onDeleteLog?: (
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonPreview['id'],
+    actorId: PersonPreview['id'] | null,
     logId: string
   ) => PersonPrayerLogUndo | string;
-  onUndoDeleteLog?: (undo: PersonPrayerLogUndo, actorId: PersonPreview['id']) => string | null;
+  onUndoDeleteLog?: (undo: PersonPrayerLogUndo, actorId: PersonPreview['id'] | null) => string | null;
   undoLog?: PersonPrayerLogUndo | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -91,6 +95,11 @@ export function PersonPrayerCard({
           <div className="person-prayer-card__heading">
             <div className="person-prayer-card__heading-main">
               <h3 id={headingId} className="person-prayer-card__title">{request.title}</h3>
+              {statusLabel && (
+                <span className={`person-prayer-card__status person-prayer-card__status--${request.status}`}>
+                  {statusLabel}
+                </span>
+              )}
               {request.details && <p className="person-prayer-card__details">{request.details}</p>}
             </div>
             <button
@@ -107,10 +116,16 @@ export function PersonPrayerCard({
             </button>
           </div>
           <div className="person-prayer-card__associations">
-            {request.personId !== person.id && (
-              <div className="person-prayer-card__association" role="group" aria-label="Request owner">
-                <span>Owned by</span>
-                <PersonBadge person={owner} presentation="static" displayNameMode="full" />
+            {(showOwner || request.personId !== person?.id) && (
+              <div
+                className="person-prayer-card__association"
+                role="group"
+                aria-label={request.personId === null ? 'Person association' : 'Request owner'}
+              >
+                <span>{request.personId === null ? 'Person association' : 'Owned by'}</span>
+                {owner
+                  ? <PersonBadge person={owner} presentation="static" displayNameMode="full" />
+                  : <span>No person</span>}
               </div>
             )}
             {sharedPeople.length > 0 && (
@@ -161,7 +176,9 @@ export function PersonPrayerCard({
             {request.schedule && (
               <RhythmScheduleSummary
                 schedule={request.schedule}
-                timeLabel={rhythmTimeLabel(request.timeOfDay ?? 'anytime', timeOptions)}
+                timeLabel={request.timeOfDay
+                  ? rhythmTimeLabel(request.timeOfDay, timeOptions)
+                  : 'Time of day not set'}
                 presentation="card-footer"
               />
             )}
@@ -206,8 +223,8 @@ export function PersonPrayerCard({
       {historyOpen && (
         <PersonPrayerHistoryDialog
           request={request}
-          person={person}
-          owner={owner}
+          {...(person ? { person } : {})}
+          {...(owner ? { owner } : {})}
           sharedPeople={sharedPeople}
           history={history}
           today={today}
@@ -221,13 +238,15 @@ export function PersonPrayerCard({
             }
           }}
           {...(onSaveLog ? {
-            onSaveLog: (log, expectedUpdatedAt) => onSaveLog(request.id, expectedUpdatedAt, person.id, log)
+            onSaveLog: (log, expectedUpdatedAt) =>
+              onSaveLog(request.id, expectedUpdatedAt, person?.id ?? request.personId, log)
           } : {})}
           {...(onDeleteLog ? {
-            onDeleteLog: (logId, expectedUpdatedAt) => onDeleteLog(request.id, expectedUpdatedAt, person.id, logId)
+            onDeleteLog: (logId, expectedUpdatedAt) =>
+              onDeleteLog(request.id, expectedUpdatedAt, person?.id ?? request.personId, logId)
           } : {})}
           {...(onUndoDeleteLog ? {
-            onUndoDeleteLog: undo => onUndoDeleteLog(undo, person.id)
+            onUndoDeleteLog: undo => onUndoDeleteLog(undo, person?.id ?? request.personId)
           } : {})}
           onClose={() => setHistoryOpen(false)}
         />

@@ -30,7 +30,8 @@ export function PersonSparkPanel({
   onDelete,
   onUndo,
   onComplete,
-  onPersonSelect
+  onPersonSelect,
+  allItems = false
 }: {
   personId: PersonId;
   people: readonly PersonPreview[];
@@ -45,6 +46,7 @@ export function PersonSparkPanel({
   onUndo: (sparkId: string) => string | null;
   onComplete: (spark: PersonSpark, opener: HTMLButtonElement) => void;
   onPersonSelect: (id: PersonId) => void;
+  allItems?: boolean;
 }) {
   const [editor, setEditor] = useState<EditorRequest | null>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -53,7 +55,7 @@ export function PersonSparkPanel({
   const editorOpener = useRef<HTMLElement | null>(null);
   const editorWasOpen = useRef(false);
   const nextEditorKey = useRef(0);
-  const personSparks = personSparksForPerson(sparks, personId);
+  const personSparks = allItems ? sparks : personSparksForPerson(sparks, personId);
   const activeSparks = selectOpenPersonSparks(personSparks);
   const archivedSparks = selectPersonSparksByStatus(personSparks, 'archived');
 
@@ -88,7 +90,7 @@ export function PersonSparkPanel({
     const associatedPeople = [spark.ownerId, ...spark.sharedWith]
       .map(id => people.find(person => person.id === id))
       .filter((person): person is PersonPreview => person !== undefined);
-    if (associatedPeople.length === 0) return null;
+    if (associatedPeople.length === 0 && !allItems) return null;
     const completion = activePersonSparkCompletion(spark);
     const linkedConnection = completion?.connectionId
       ? friendships.connections.find(connection => connection.id === completion.connectionId)
@@ -109,29 +111,38 @@ export function PersonSparkPanel({
   }
 
   return (
-    <section className="person-spark-panel" aria-labelledby={`person-sparks-heading-${personId}`}>
-      <header className="person-spark-panel__heading">
-        <div>
-          <h3 id={`person-sparks-heading-${personId}`}>Sparks</h3>
-          <p>One-off ideas for connecting someday.</p>
-        </div>
-        <button
-          ref={addButtonRef}
-          type="button"
-          className="person-spark-panel__add"
-          onClick={openCreate}
-        >
-          + Add Spark
-        </button>
-      </header>
-      {activeSparks.length > 0 ? (
+    <section
+      className={`person-spark-panel${allItems ? ' person-spark-panel--all-items' : ''}`}
+      {...(allItems
+        ? { 'aria-label': 'Sparks' }
+        : { 'aria-labelledby': `person-sparks-heading-${personId}` })}
+    >
+      {!allItems && (
+        <header className="person-spark-panel__heading">
+          <div>
+            <h3 id={`person-sparks-heading-${personId}`}>Sparks</h3>
+            <p>One-off ideas for connecting someday.</p>
+          </div>
+          <button
+            ref={addButtonRef}
+            type="button"
+            className="person-spark-panel__add"
+            onClick={openCreate}
+          >
+            + Add Spark
+          </button>
+        </header>
+      )}
+      {allItems ? (
+        <ul className="person-spark-list">{personSparks.map(renderSpark)}</ul>
+      ) : activeSparks.length > 0 ? (
         <ul className="person-spark-list">{activeSparks.map(renderSpark)}</ul>
       ) : (
         <p className="person-spark-panel__empty">
           {personSparks.length > 0 ? 'No open Sparks yet.' : 'No Sparks yet.'}
         </p>
       )}
-      {archivedSparks.length > 0 && (
+      {!allItems && archivedSparks.length > 0 && (
         <details className="person-spark-panel__archived">
           <summary ref={archivedSummaryRef}>Archived Sparks ({archivedSparks.length})</summary>
           <ul className="person-spark-list">{archivedSparks.map(renderSpark)}</ul>
@@ -141,8 +152,8 @@ export function PersonSparkPanel({
         <PersonSparkEditorDialog
           key={editor.key}
           spark={editor.spark}
-          initialOwnerId={personId}
-          viewerId={personId}
+          initialOwnerId={editor.spark?.ownerId ?? personId}
+          viewerId={allItems ? editor.spark?.ownerId ?? personId : personId}
           people={people}
           peopleGroups={peopleGroups}
           friendships={friendships}

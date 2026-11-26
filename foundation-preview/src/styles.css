@@ -29615,6 +29615,159 @@ button.person-health-component-score:focus-visible {
   }
 }
 
+.all-items-page {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.all-items-page > h3 {
+  margin: 0;
+}
+
+.all-items-page__filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.all-items-page__filters > label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ink-soft, #5c6a61);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 650;
+}
+
+.all-items-page__filters select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 1px solid var(--line, #d8ded9);
+  border-radius: 9px;
+  background: var(--card, #fff);
+  color: var(--ink, #25332b);
+  font: 500 calc(0.8125rem * var(--app-text-scale, 1))/1.3 var(--sans);
+  text-overflow: ellipsis;
+}
+
+.all-items-page__filters select:focus-visible {
+  outline: 2px solid var(--forest, #2f704e);
+  outline-offset: 2px;
+}
+
+.all-items-page__results {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.all-items-page__results p {
+  margin: 0;
+  color: var(--ink-soft, #5c6a61);
+  font-size: calc(0.8125rem * var(--app-text-scale, 1));
+  font-weight: 650;
+}
+
+.all-items-page__groups {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.all-items-page__group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.all-items-page__group > h4 {
+  margin: 0;
+  color: var(--ink, #25332b);
+  font-size: calc(0.9375rem * var(--app-text-scale, 1));
+}
+
+.all-items-page__list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.all-items-page__list > li {
+  min-width: 0;
+}
+
+.all-items-page__empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--line, #d8ded9);
+  border-radius: 12px;
+  color: var(--ink-soft, #5c6a61);
+  line-height: 1.5;
+}
+
+.person-spark-panel--all-items {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.person-prayer-panel--all-items {
+  gap: 8px;
+}
+
+.person-prayer-card__status {
+  display: inline-flex;
+  justify-self: start;
+  width: max-content;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--tend-prayer-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tend-prayer-surface) 60%, var(--tend-canvas));
+  color: var(--tend-prayer-text);
+  font-size: calc(0.6875rem * var(--app-text-scale, 1));
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rhythm-card__details-summary-actions {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rhythm-card__details-summary-actions > .rhythm-card__tend {
+  justify-self: end;
+}
+
+@media (max-width: 700px) {
+  .all-items-page__filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 380px) {
+  .all-items-page__filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .tend-app-preview .rhythm-history-view__body--dialog {
   display: grid;
   align-content: start;

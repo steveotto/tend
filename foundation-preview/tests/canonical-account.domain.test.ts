@@ -94,7 +94,11 @@ describe('canonical authenticated account adapter', () => {
     expect(record?.document).toMatchObject({
       data: {
         people: [{ id: 'private-person-one' }, { id: 'private-person-two' }],
-        prayerRequests: [{ id: 'private-prayer-one' }, { id: 'private-prayer-three' }]
+        prayerRequests: [
+          { id: 'private-prayer-one' },
+          { id: 'private-prayer-two', personId: null, sharedWith: ['private-person-two'] },
+          { id: 'private-prayer-three' }
+        ]
       }
     });
     expect(JSON.stringify(record?.canonicalStructure)).not.toMatch(/private|name|text/i);
@@ -266,7 +270,7 @@ describe('canonical authenticated account adapter', () => {
     expect(converted.data.prayerRequests[0]?.sharedWith).toBeUndefined();
   });
 
-  it('preserves explicit no-person Classic Prayers outside the Person projection', () => {
+  it('projects explicit no-person Classic Prayers without inventing a Person owner', () => {
     const globalPrayer = {
       id: 'global-prayer',
       personId: null,
@@ -285,12 +289,20 @@ describe('canonical authenticated account adapter', () => {
       added: '2026-11-20',
       prayerLogs: [Date.parse('2026-11-23T12:00:00.000Z')]
     };
+    const unassociatedPrayer = {
+      id: 'unassociated-prayer',
+      personId: null,
+      sharedWith: [],
+      text: 'Synthetic prayer with no Person associations',
+      added: '2026-11-21',
+      prayerLogs: []
+    };
     const classic = {
       people: [
         { id: 'avery', name: 'Avery' },
         { id: 'morgan', name: 'Morgan' }
       ],
-      prayers: [globalPrayer, associatedPrayer],
+      prayers: [globalPrayer, associatedPrayer, unassociatedPrayer],
       unrelatedAccountField: { preserve: true },
       [CANONICAL_PREVIEW_ENVELOPE_KEY]: createPreviewEnvelope({
         ...createEmptyPreviewData(),
@@ -314,21 +326,85 @@ describe('canonical authenticated account adapter', () => {
     };
 
     const preview = convertClassicStateToPreviewEnvelope(classic);
-    expect(preview.data.prayerRequests.map(request => request.id)).toEqual(['person-prayer']);
+    expect(preview.data.prayerRequests.map(request => request.id)).toEqual([
+      'global-prayer',
+      'person-prayer',
+      'unassociated-prayer'
+    ]);
     expect(preview.data.prayerRequests[0]).toMatchObject({
+      personId: null,
+      sharedWith: ['morgan']
+    });
+    expect(preview.data.prayerRequests[1]).toMatchObject({
       personId: 'avery',
       sharedWith: ['morgan']
     });
+    expect(validatePreviewEnvelope(preview, '2026-11-25')).toMatchObject({ valid: true });
+    const untouchedMerge = mergePrayerRequestsIntoClassicState(classic, preview);
+    if (!Array.isArray(untouchedMerge.prayers)) {
+      throw new Error('Unchanged Prayer records must remain an array.');
+    }
+    expect(untouchedMerge.prayers[0]).toEqual(globalPrayer);
 
-    const merged = mergePrayerRequestsIntoClassicState(classic, preview);
+    const deletedGlobalPrayer = mergePrayerRequestsIntoClassicState(classic, {
+      ...preview,
+      data: {
+        ...preview.data,
+        prayerRequests: preview.data.prayerRequests.filter(request => request.id !== 'global-prayer')
+      }
+    });
+    if (!Array.isArray(deletedGlobalPrayer.prayers)) {
+      throw new Error('Deleted Prayer records must remain an array.');
+    }
+    expect(deletedGlobalPrayer.prayers.some(prayer =>
+      typeof prayer === 'object' && prayer !== null && 'id' in prayer && prayer.id === 'global-prayer'
+    )).toBe(false);
+    expect(deletedGlobalPrayer.prayers).toContain(unassociatedPrayer);
+
+    const editedPreview: PreviewEnvelope = {
+      ...preview,
+      data: {
+        ...preview.data,
+        prayerRequests: preview.data.prayerRequests.map(request => request.id === 'global-prayer'
+          ? {
+              ...request,
+              title: 'Edited account-level Prayer',
+              updatedAt: '2026-11-25T12:00:00.000Z'
+            }
+          : request)
+      }
+    };
+    const merged = mergePrayerRequestsIntoClassicState(classic, editedPreview);
     if (!Array.isArray(merged.prayers)) throw new Error('Merged Prayer records must remain an array.');
-    expect(merged.prayers).toHaveLength(2);
-    expect(merged.prayers[0]).toEqual(globalPrayer);
-    expect(merged.prayers[1]).toMatchObject({
+    expect(merged.prayers).toHaveLength(3);
+    const mergedGlobalPrayer = merged.prayers.find(prayer =>
+      typeof prayer === 'object' && prayer !== null && 'id' in prayer && prayer.id === 'global-prayer'
+    );
+    const mergedPersonPrayer = merged.prayers.find(prayer =>
+      typeof prayer === 'object' && prayer !== null && 'id' in prayer && prayer.id === 'person-prayer'
+    );
+    const mergedUnassociatedPrayer = merged.prayers.find(prayer =>
+      typeof prayer === 'object' && prayer !== null && 'id' in prayer && prayer.id === 'unassociated-prayer'
+    );
+    expect(mergedGlobalPrayer).toMatchObject({
+      id: 'global-prayer',
+      personId: null,
+      sharedWith: ['morgan'],
+      text: 'Edited account-level Prayer',
+      faithOwner: 'me',
+      unknownPrayerField: { preserve: ['exactly'] },
+      prayerLogs: [Date.parse('2026-11-22T12:00:00.000Z')]
+    });
+    expect(mergedPersonPrayer).toMatchObject({
       id: 'person-prayer',
       personId: 'avery',
       sharedWith: ['avery', 'morgan'],
       prayerLogs: [Date.parse('2026-11-23T12:00:00.000Z')]
+    });
+    expect(mergedUnassociatedPrayer).toMatchObject({
+      id: 'unassociated-prayer',
+      personId: null,
+      sharedWith: []
     });
     expect(merged.unrelatedAccountField).toEqual(classic.unrelatedAccountField);
   });

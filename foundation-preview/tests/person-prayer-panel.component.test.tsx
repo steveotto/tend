@@ -559,6 +559,82 @@ describe('shared Person Prayer panel', () => {
     expect(summaryFooter?.contains(summaryCount)).toBe(false);
   });
 
+  it('preserves the viewing Person for shared Prayer logs and does not infer a missing time', async () => {
+    const user = userEvent.setup();
+    const request: PersonPrayerRequest = {
+      id: 'shared-prayer-log-actor',
+      personId: owner,
+      sharedWith: [shared],
+      title: 'Shared request',
+      status: 'active',
+      schedule: { frequency: 'daily' },
+      createdAt,
+      updatedAt: createdAt,
+      prayerLogs: []
+    };
+    const actorIds: (PersonId | null)[] = [];
+    render(
+      <PersonPrayerCard
+        request={request}
+        person={people.find(person => person.id === shared)!}
+        owner={people.find(person => person.id === owner)!}
+        sharedPeople={[people.find(person => person.id === shared)!]}
+        today="2026-10-31"
+        timeZone="UTC"
+        onPray={() => {}}
+        onTransition={() => {}}
+        onEdit={() => {}}
+        onSaveLog={(_requestId, _expectedUpdatedAt, actorId) => {
+          actorIds.push(actorId);
+          return null;
+        }}
+      />
+    );
+
+    const card = screen.getByRole('article', { name: request.title });
+    expect(within(card).getByText('Time of day not set')).toBeTruthy();
+    await user.click(within(card).getByRole('button', {
+      name: `View prayer history for ${request.title}`
+    }));
+    const history = screen.getByRole('dialog', { name: 'Prayer history' });
+    expect(within(history).getByText('Time of day not set')).toBeTruthy();
+    await user.click(within(history).getByRole('button', { name: '+ Log a prayer' }));
+    const form = within(history).getByRole('heading', { name: 'Log a prayer' }).closest('form')!;
+    await user.click(within(form).getByRole('button', { name: 'Save prayer' }));
+    expect(actorIds).toEqual([shared]);
+  });
+
+  it('keeps an unset Prayer time unset when editing an existing request', async () => {
+    const user = userEvent.setup();
+    render(<PrayerHarness initialRequests={[{
+      id: 'unset-time-request',
+      personId: owner,
+      title: 'Request without a time',
+      status: 'active',
+      schedule: { frequency: 'daily' },
+      createdAt,
+      updatedAt: createdAt,
+      prayerLogs: []
+    }]} />);
+
+    const card = screen.getByRole('article', { name: 'Request without a time' });
+    await user.click(within(card).getByRole('button', {
+      name: 'View prayer history for Request without a time'
+    }));
+    const history = screen.getByRole('dialog', { name: 'Prayer history' });
+    await user.click(within(history).getByRole('button', {
+      name: 'Edit prayer request Request without a time'
+    }));
+    const editor = screen.getByRole('dialog', { name: 'Prayer request details' });
+    expect(within(editor).getByRole('combobox', { name: 'Time of day: Not set' })).toBeTruthy();
+    await user.type(within(editor).getByRole('textbox', { name: 'Title' }), ' edited');
+    await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
+
+    const saved = JSON.parse(screen.getByTestId('requests').textContent ?? '[]') as PersonPrayerRequest[];
+    expect(saved[0]?.title).toBe('Request without a time edited');
+    expect(saved[0]).not.toHaveProperty('timeOfDay');
+  });
+
   it('supports editing, canceling, deletion confirmation, and focus fallback after removal', async () => {
     const user = userEvent.setup();
     render(<PrayerHarness />);

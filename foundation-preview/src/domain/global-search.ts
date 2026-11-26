@@ -186,6 +186,7 @@ export function selectGlobalSearchResults(
   }
 
   for (const request of data.prayerEnabled === false ? [] : data.prayerRequests) {
+    if (request.personId === null) continue;
     const ownerName = personName(peopleById, request.personId);
     if (!matches(query, request.title, request.details, ownerName)) continue;
     groupResults.prayers.push({

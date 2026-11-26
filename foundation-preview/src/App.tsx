@@ -35,6 +35,7 @@ import type { PreviewPersistenceStatus } from './components/PreviewDataControls.
 import { PreviewAccountSync } from './components/PreviewAccountSync.tsx';
 import { ReadOnlyAccountDataCheck } from './components/ReadOnlyAccountDataCheck.tsx';
 import { PreviewBackupImportControl } from './components/PreviewBackupImportControl.tsx';
+import { AllItemsPage } from './components/AllItemsPage.tsx';
 import { TextSizeSettings } from './components/TextSizeSettings.tsx';
 import type { PreviewAccountBackupApi } from './storage/preview-account-backup.ts';
 import { PersonProfileView } from './components/PersonProfileView.tsx';
@@ -547,6 +548,7 @@ function PreviewAccessState({ title, message }: { title: string; message: string
 }
 
 type SettingsDetail =
+  | 'all-items'
   | 'categories'
   | 'prayer'
   | 'appearance'
@@ -556,7 +558,7 @@ type SettingsDetail =
   | 'save-sync'
   | 'backup-recovery';
 
-type SettingsIconName = 'categories' | 'prayer' | 'appearance' | 'time-blocks' | 'calendar' | 'weather' | 'backup-recovery' | 'settings';
+type SettingsIconName = 'categories' | 'prayer' | 'appearance' | 'time-blocks' | 'calendar' | 'weather' | 'backup-recovery' | 'settings' | 'items';
 
 function SettingsDirectoryIcon({ name }: { name: SettingsIconName }) {
   return (
@@ -594,6 +596,11 @@ function SettingsDirectoryIcon({ name }: { name: SettingsIconName }) {
           <circle cx="9" cy="6" r="1.5" />
           <circle cx="15" cy="12" r="1.5" />
           <circle cx="8" cy="18" r="1.5" />
+        </>}
+        {name === 'items' && <>
+          <rect x="4" y="4" width="16" height="5" rx="1" />
+          <rect x="4" y="11" width="16" height="5" rx="1" />
+          <path d="M4 20h16" />
         </>}
       </svg>
     </span>
@@ -642,7 +649,9 @@ function PreviewWorkspace({
   const [healthFitnessVisited, setHealthFitnessVisited] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData>(initialPreviewData);
   const prayerRequests = useMemo<PrayerRequestPreview[]>(() =>
-    previewData.prayerRequests.map(request => {
+    previewData.prayerRequests.filter(
+      (request): request is typeof request & { personId: PersonId } => request.personId !== null
+    ).map(request => {
       const history = prayerRequestHistorySummary(request);
       return {
         id: request.id,
@@ -1155,6 +1164,10 @@ function PreviewWorkspace({
   const archivedProfileRhythmCandidates = [...new Map(
     [...archivedRhythms, ...archivedUserRhythms].map(rhythm => [rhythm.id, rhythm])
   ).values()];
+  const allItemRhythms = [...new Map(
+    [...profileRhythmCandidates, ...archivedProfileRhythmCandidates].map(rhythm => [rhythm.id, rhythm])
+  ).values()];
+  const allItemCompletedRhythmIds = completedIdsForData(previewData, allItemRhythms);
   const personHealthAsOfDate = localDateInTimeZone(scoringInstant, localTimeZone || 'UTC');
   const personOverallHealthScores = new Map(peopleWithPhotos.map(person => {
     const active = profileRhythmCandidates.filter(rhythm =>
@@ -2134,7 +2147,7 @@ function PreviewWorkspace({
   function editPrayerRequest(
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     draft: PersonPrayerRequestDraft
   ): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
@@ -2160,7 +2173,7 @@ function PreviewWorkspace({
   function transitionPrayerRequest(
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     transition: PrayerRequestTransition
   ): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
@@ -2177,7 +2190,7 @@ function PreviewWorkspace({
     return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request', instant);
   }
 
-  function prayForRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
+  function prayForRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId | null): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
     const instant = new Date();
     const now = instant.toISOString();
@@ -2196,7 +2209,7 @@ function PreviewWorkspace({
   function savePrayerLog(
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     log: PersonPrayerLog
   ): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
@@ -2217,7 +2230,7 @@ function PreviewWorkspace({
   function deletePrayerLog(
     requestId: string,
     expectedUpdatedAt: string,
-    actorId: PersonId,
+    actorId: PersonId | null,
     logId: string
   ): PersonPrayerLogUndo | string {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
@@ -2236,7 +2249,7 @@ function PreviewWorkspace({
     return error ?? result.undo ?? 'The prayer entry could not be made undoable.';
   }
 
-  function undoPrayerLogDeletion(undo: PersonPrayerLogUndo, actorId: PersonId): string | null {
+  function undoPrayerLogDeletion(undo: PersonPrayerLogUndo, actorId: PersonId | null): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
     const instant = new Date();
     const result = undoDeletePersonPrayerLog(
@@ -2250,20 +2263,20 @@ function PreviewWorkspace({
     return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer log', instant);
   }
 
-  function removePrayerRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId): string | null {
+  function removePrayerRequest(requestId: string, expectedUpdatedAt: string, actorId: PersonId | null): string | null {
     if (!previewData.prayerEnabled) return prayerUnavailableMessage;
     const instant = new Date();
     const request = previewData.prayerRequests.find(item => item.id === requestId);
     if (!request) return 'This prayer request is no longer available.';
     const result = request.personId === actorId
       ? deletePersonPrayerRequest(previewData.prayerRequests, requestId, expectedUpdatedAt, actorId)
-      : unlinkPersonPrayerRequest(
+      : actorId !== null ? unlinkPersonPrayerRequest(
           previewData.prayerRequests,
           requestId,
           expectedUpdatedAt,
           actorId,
           instant.toISOString()
-        );
+        ) : { valid: false as const, error: 'This prayer request is no longer available from this profile.' };
     if (!result.valid) return result.error;
     return persistSeasonHistory({ ...previewData, prayerRequests: result.requests }, 'prayer request', instant);
   }
@@ -4195,6 +4208,7 @@ function PreviewWorkspace({
       { detail: 'weather', label: 'Weather', summary: 'Choose a location and forecast units.', icon: 'weather' }
     ] },
     { title: 'Your data', items: [
+      { detail: 'all-items', label: 'All items', summary: 'Review your Rhythms, Sparks, and Prayer requests.', icon: 'items' },
       { detail: 'backup-recovery', label: 'Backup & recovery', summary: 'Export, import, and restore your data.', icon: 'backup-recovery' }
     ] }
   ];
@@ -4673,6 +4687,48 @@ function PreviewWorkspace({
                         <h3 id="weather-settings-title">Weather</h3>
                         <TodayWeatherSettings controller={todayWeather} timeZone={weatherTimeZone} />
                       </section>
+                      <div className="settings-page__detail-slot" hidden={settingsDetail !== 'all-items'}>
+                        <AllItemsPage
+                          rhythms={allItemRhythms}
+                          completedRhythmIds={allItemCompletedRhythmIds}
+                          archivedRhythmIds={previewData.archivedRhythmIds}
+                          sparks={previewData.personSparks}
+                          prayerRequests={previewData.prayerRequests}
+                          people={peopleWithPhotos}
+                          peopleGroups={resolvedPeopleGroups}
+                          foundations={foundationCatalogue}
+                          friendships={previewData.friendships}
+                          today={currentDate}
+                          timeZone={localTimeZone || 'UTC'}
+                          prayerEnabled={previewData.prayerEnabled}
+                          onEditRhythm={(rhythm, event) => openRhythmEditor(event, rhythm)}
+                          onTendRhythm={openCompletion}
+                          onUndoRhythm={undoTend}
+                          onPersonSelect={openPersonProfile}
+                          onOpenCategory={categoryId => navigate(categoryId)}
+                          onOpenFoundation={foundationId => navigateToFoundation(foundationId, 'today')}
+                          onCreateSpark={createPersonSparkForProfile}
+                          onUpdateSpark={editPersonSpark}
+                          onArchiveSpark={archivePersonSpark}
+                          onDeleteSpark={removePersonSpark}
+                          onUndoSpark={undoSparkCompletion}
+                          onCompleteSpark={(spark, opener) => openPersonProfileAt(
+                            spark.ownerId,
+                            'connections',
+                            undefined,
+                            { sparkCompletionId: spark.id, returnFocus: opener }
+                          )}
+                          onCreatePrayerRequest={createPrayerRequest}
+                          onRetryLocalSave={retrySave}
+                          onUpdatePrayerRequest={editPrayerRequest}
+                          onPrayerRequestTransition={transitionPrayerRequest}
+                          onPrayForRequest={prayForRequest}
+                          onSavePrayerLog={savePrayerLog}
+                          onDeletePrayerLog={deletePrayerLog}
+                          onUndoDeletePrayerLog={undoPrayerLogDeletion}
+                          onRemovePrayerRequest={removePrayerRequest}
+                        />
+                      </div>
                       <div className="settings-page__detail-slot" hidden={settingsDetail !== 'save-sync'}>
                         {identity.kind === 'development' && <h3 className="settings-page__detail-heading">Save &amp; sync</h3>}
                       </div>

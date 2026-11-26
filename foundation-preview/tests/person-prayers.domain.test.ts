@@ -76,6 +76,52 @@ describe('person-linked Prayer requests', () => {
     })], people)).toBe(true);
   });
 
+  it('updates and logs an account-level Prayer without assigning a Person', () => {
+    const accountPrayer = request({
+      personId: null,
+      sharedWith: [],
+      prayerLogs: [{ id: 'existing-log', prayedOn: '2026-10-30' }]
+    });
+    expect(validatePersonPrayerRequestsCollection([accountPrayer], people)).toBe(true);
+
+    const edited = updatePersonPrayerRequest(
+      [accountPrayer],
+      accountPrayer.id,
+      accountPrayer.updatedAt,
+      null,
+      { title: 'Updated account Prayer', details: accountPrayer.details ?? '', sharedWith: [] },
+      '2026-10-31T13:00:00.000Z',
+      people
+    );
+    expect(edited.valid).toBe(true);
+    if (!edited.valid) return;
+    expect(edited.requests[0]).toMatchObject({
+      personId: null,
+      sharedWith: [],
+      title: 'Updated account Prayer',
+      prayerLogs: [{ id: 'existing-log', prayedOn: '2026-10-30' }]
+    });
+
+    const logged = recordPersonPrayer(
+      edited.requests,
+      accountPrayer.id,
+      '2026-10-31T13:00:00.000Z',
+      null,
+      { id: 'new-log', prayedAt: '2026-10-31T14:00:00.000Z' },
+      people
+    );
+    expect(logged.valid).toBe(true);
+    if (!logged.valid) return;
+    expect(logged.requests[0]).toMatchObject({
+      personId: null,
+      sharedWith: [],
+      prayerLogs: [
+        { id: 'existing-log', prayedOn: '2026-10-30' },
+        { id: 'new-log', prayedAt: '2026-10-31T14:00:00.000Z' }
+      ]
+    });
+  });
+
   it('creates, edits, and changes lifecycle without adding prayer logs', () => {
     const created = createPersonPrayerRequest([], request({ sharedWith: [] }), people);
     expect(created.valid).toBe(true);
