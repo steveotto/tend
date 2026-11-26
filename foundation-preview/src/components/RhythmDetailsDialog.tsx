@@ -74,6 +74,7 @@ type RhythmDetailsDialogProps = {
   onUndoSeasonRange?: () => string | null;
   onUndo?: () => void;
   onEdit?: (event: MouseEvent<HTMLButtonElement>) => void;
+  showInlineEdit?: boolean;
   archived?: boolean;
   embedded?: boolean;
   onClose: () => void;
@@ -107,6 +108,7 @@ export function RhythmDetailsDialog({
   onUndoSeasonRange,
   onUndo,
   onEdit,
+  showInlineEdit = false,
   archived = false,
   embedded = false,
   inline = false,
@@ -275,7 +277,7 @@ export function RhythmDetailsDialog({
                   </div>
                 )
                 : <h2 ref={titleRef} id={titleId} tabIndex={embedded ? -1 : undefined}>{rhythm.title}</h2>}
-              {!inline && editButton}
+              {(!inline || showInlineEdit) && editButton}
               {archived && <RhythmArchivedBadge />}
               {rhythm.personal && <RhythmPersonalBadge />}
               {!inline && rhythm.healthLogCapability === 'cardio' && rhythm.healthRunTarget && (

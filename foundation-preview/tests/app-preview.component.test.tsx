@@ -723,6 +723,8 @@ describe('Tend Today preview', () => {
     expect(within(screen.getByRole('region', { name: 'Your data' }))
       .getByRole('button', { name: /Backup & recovery/ })).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Your data' }))
+      .getByRole('button', { name: /Archived Rhythms/ })).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Your data' }))
       .queryByRole('button', { name: /Save & sync/ })).toBeNull();
     expect(screen.getAllByRole('button', { name: /Backup & recovery/ })).toHaveLength(1);
 
@@ -1812,8 +1814,9 @@ describe('Tend Today preview', () => {
     await user.click(screen.getByRole('button', { name: '‹ More' }));
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     const dataSection = screen.getByRole('region', { name: 'Your data' });
-    expect(within(dataSection).getAllByRole('button')).toHaveLength(2);
+    expect(within(dataSection).getAllByRole('button')).toHaveLength(3);
     expect(within(dataSection).getByRole('button', { name: /All items/ })).toBeTruthy();
+    expect(within(dataSection).getByRole('button', { name: /Archived Rhythms/ })).toBeTruthy();
     expect(within(dataSection).getByRole('button', { name: /Backup & recovery/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Save & sync/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: '‹ More' }));
@@ -11739,6 +11742,70 @@ describe('Tend Today preview', () => {
     expect(within(areasNav).queryByRole('button', { name: 'Marriage' })).toBeNull();
     expect(within(areasNav).queryByRole('button', { name: 'Dating' })).toBeNull();
     expectDataPreserved();
+  });
+
+  it('provides a read-only archived Rhythm Settings page with filters, edit return state, and restore', async () => {
+    const user = userEvent.setup();
+    const identity = createAuthenticatedPreviewIdentity('c0000000-0000-4000-8000-000000000154', 1);
+    const storage = browserPreviewStorage(identity);
+    const data = createEmptyPreviewData();
+    const alex = {
+      id: '10000000-0000-4000-8000-000000000154',
+      displayName: 'Alex Example'
+    };
+    const archivedRhythm: SavedRhythm = {
+      id: 'user-rhythm-88888888-0000-4000-8000-000000000154',
+      title: 'BETA TEST — Archived quiet reflection',
+      description: 'Preserve this description.',
+      cadence: 'Daily',
+      timeLabel: 'Morning',
+      timeOfDay: 'morning',
+      personIds: [alex.id],
+      categoryIds: ['faith'],
+      schedule: { frequency: 'daily' },
+      primaryFoundationId: 'faith-solitude',
+      secondaryFoundationIds: []
+    };
+    data.people = [alex];
+    data.peopleGroups = setPersonGroupMembership(data.peopleGroups, 'friends', alex.id, true);
+    data.savedRhythms = [archivedRhythm];
+    data.archivedRhythmIds = [archivedRhythm.id];
+    storage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(createPreviewEnvelope(data)));
+
+    testingRender(<App identity={identity} />);
+    await screen.findByRole('button', { name: 'More, settings' });
+    await user.click(screen.getByRole('button', { name: 'More, settings' }));
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(screen.getByRole('button', { name: /Archived Rhythms/ }));
+
+    expect(screen.getByRole('heading', { name: 'Archived Rhythms' })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Type: Rhythms' }) as HTMLButtonElement).disabled).toBe(true);
+    const card = screen.getByRole('article', { name: archivedRhythm.title });
+    expect(within(card).queryByRole('button', { name: /^Tend/ })).toBeNull();
+    expect(within(card).getByRole('button', {
+      name: `Open synthetic profile for ${alex.displayName}`
+    })).toBeTruthy();
+
+    const search = screen.getByRole('searchbox', { name: 'Search titles and details' });
+    await user.type(search, 'quiet');
+    expect(screen.getByRole('article', { name: archivedRhythm.title })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: `Edit ${archivedRhythm.title}` }));
+    const editor = await screen.findByRole('dialog', { name: 'Edit Rhythm' });
+    await user.click(within(editor).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Rhythm' })).toBeNull());
+    expect((screen.getByRole('searchbox', { name: 'Search titles and details' }) as HTMLInputElement).value)
+      .toBe('quiet');
+
+    await user.click(screen.getByRole('button', { name: `Restore rhythm ${archivedRhythm.title}` }));
+    await waitFor(() => expect(screen.queryByRole('article', { name: archivedRhythm.title })).toBeNull());
+    const saved = parsePreviewBackup(storage.getItem(PREVIEW_STORAGE_KEY)!, localDateString(new Date()));
+    expect(saved.valid).toBe(true);
+    if (!saved.valid) return;
+    expect(saved.envelope.data.archivedRhythmIds).toEqual([]);
+    expect(saved.envelope.data.savedRhythms.find(item => item.id === archivedRhythm.id)).toMatchObject({
+      description: 'Preserve this description.',
+      personIds: [alex.id]
+    });
   });
 
   it('keeps an intentionally unassociated Faith Rhythm separate from a person-linked Rhythm through edits, completions, and reload', async () => {
