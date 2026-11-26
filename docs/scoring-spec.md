@@ -26,7 +26,12 @@ Every rhythm gets two scores, computed from its logged occurrences:
 | Quarterly | 12 months |
 | Yearly | 24 months |
 
-For custom intervals, use the base unit's window: days use 30 days, weeks use 12 weeks, months use 6 months, and years use 24 months. If that window contains fewer than 2 due occurrences, extend it to the smallest length that contains at least 2 due occurrences, so Consistency always measures at least 2 chances.
+For custom every-N-week intervals, use a rolling 84-calendar-day window. If it contains fewer than 2 scheduled opportunities, extend backward only as far as needed to include the latest two opportunities, without crossing the known tracking or schedule-history boundary. Evaluate each history segment with its saved recurrence anchor and selected weekdays; each scheduled date counts once. Unknown history within the resulting window keeps Consistency unavailable.
+
+**Explicit policy follow-ups (unchanged by the biweekly policy):**
+
+- Custom intervals in days, months, and years still lack an approved, consistent app-wide Consistency policy. The shared engine has base windows for these units, while some app selectors continue to report them as unsupported; this change does not reconcile those paths.
+- Standard weekly schedules with multiple selected weekdays still use a 30-day window in the history-aware selector and an 84-day window in the shared engine. This discrepancy remains unresolved and is not changed here.
 
 **On Track** = starts at 100, loses 10 per consecutive missed occurrence, floors at 0, resets to 100 on a qualifying completion. Misses are counted only from the rhythm's score-clock start (see below).
 

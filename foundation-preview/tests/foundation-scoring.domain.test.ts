@@ -9,10 +9,17 @@ import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 import { addCalendarDays, selectRhythmScore } from '../src/domain/rhythm-scoring.ts';
 import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 import {
+  aggregateCategoryHealthScores,
+  selectCategoryHealthScore
+} from '../src/domain/category-scoring.ts';
+import {
   selectFoundationRhythmScores,
   selectFoundationScore
 } from '../src/domain/foundation-scoring.ts';
-import { selectPersonRhythmHealth } from '../src/domain/person-health.ts';
+import {
+  selectPersonOverallHealth,
+  selectPersonRhythmHealth
+} from '../src/domain/person-health.ts';
 import type {
   RhythmScoreResult,
   RhythmScoreSelection,
@@ -746,5 +753,111 @@ describe('selecting equal-weight Foundation scores', () => {
     expect(before.health).toBe(85);
     expect(afterAssociation.health).toBeNull();
     expect(afterScoreUpdate.health).toBe(90);
+  });
+
+  it('uses the same custom-week score in details, Foundation, Category, Person, and aggregate paths', () => {
+    const rhythmId = 'biweekly-scoring-paths';
+    const schedule: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 2,
+      weekdays: [1, 3],
+      startDate: '2026-08-03'
+    };
+    const customWeeksRhythm: RhythmPreview = {
+      ...rhythm(rhythmId, 'connection'),
+      schedule,
+      cadence: 'Custom',
+      personIds: ['sample-person-avery'],
+      createdLocalDate: '2026-07-01',
+      createdTimeZone: 'UTC',
+      scoring: {
+        trackingStartDate: '2026-07-01',
+        timeZone: 'UTC',
+        scheduleHistory: [
+          createRhythmSeason(rhythmId, '2026-07-01', schedule, undefined, 'biweekly-season')
+        ]
+      },
+      completionHistory: [
+        { id: 'monday-a', effectiveDate: '2026-08-03' },
+        { id: 'monday-b', effectiveDate: '2026-08-03' },
+        { id: 'wednesday', effectiveDate: '2026-08-05' },
+        { id: 'latest', effectiveDate: '2026-10-14' }
+      ]
+    };
+    const evaluationInstant = new Date('2026-10-23T12:00:00.000Z');
+    const direct = selectRhythmScore({
+      rhythmId,
+      schedule,
+      ...(customWeeksRhythm.scoring ? { scoring: customWeeksRhythm.scoring } : {}),
+      createdLocalDate: '2026-07-01',
+      createdTimeZone: 'UTC',
+      records: customWeeksRhythm.completionHistory!.map(record => ({
+        ...record,
+        rhythmId
+      })),
+      recordsAvailable: true,
+      asOfDate: '2026-10-23',
+      timeZone: 'UTC'
+    });
+    const scores = selectFoundationRhythmScores(
+      [customWeeksRhythm],
+      [],
+      new Set(),
+      evaluationInstant,
+      'UTC'
+    );
+    const foundation = selectFoundationScore('connection', [customWeeksRhythm], scores, []);
+    const category = selectCategoryHealthScore(
+      [{ id: 'connection' }],
+      [customWeeksRhythm],
+      scores,
+      []
+    );
+    const person = selectPersonRhythmHealth(
+      'sample-person-avery',
+      [customWeeksRhythm],
+      scores,
+      new Set()
+    );
+    const personOverall = selectPersonOverallHealth(
+      person,
+      { score: null },
+      { score: null },
+      false
+    );
+    const aggregate = aggregateCategoryHealthScores([category.health]);
+
+    expect(scores.get(rhythmId)).toEqual(direct);
+    expect(direct).toMatchObject({
+      kind: 'rhythm-score',
+      consistency: { kind: 'scored', score: 25, evidence: { eligibleDueCount: 12, completedCount: 3 } },
+      onTrack: { kind: 'scored', score: 100 },
+      healthScore: 43.75
+    });
+    expect(foundation).toMatchObject({
+      eligibleRhythmIds: [rhythmId],
+      consistency: 25,
+      onTrack: 100,
+      health: 43.75
+    });
+    expect(category).toMatchObject({
+      eligibleFoundationIds: ['connection'],
+      consistency: 25,
+      onTrack: 100,
+      health: 43.75
+    });
+    expect(person).toMatchObject({
+      eligibleRhythmIds: [rhythmId],
+      consistency: 25,
+      onTrack: 100,
+      health: 43.75
+    });
+    expect(personOverall.health).toBe(43.75);
+    expect(aggregate).toMatchObject({
+      health: 43.75,
+      scoredCategoryCount: 1,
+      categoryCount: 1
+    });
   });
 });

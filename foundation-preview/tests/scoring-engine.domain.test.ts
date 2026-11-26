@@ -3,6 +3,7 @@ import type { RhythmSchedule } from '../src/domain/rhythm-schedule.ts';
 import {
   averageScores,
   blendScores,
+  customWeeksConsistencyWindowForHistory,
   consistencyWindowForSchedule,
   scoreRhythm
 } from '../../src/scoring/engine.ts';
@@ -141,6 +142,81 @@ describe('shared scoring engine cadence windows', () => {
 
     expect(window.startDate).toBe('2026-10-01');
     expect(window.dueDates).toHaveLength(2);
+  });
+
+  it('uses the 84-day window, saved weekday anchor, and the latest two historical opportunities', () => {
+    const selectedWeekdays: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 2,
+      weekdays: [1, 3],
+      startDate: '2026-08-03'
+    };
+    const rolling = customWeeksConsistencyWindowForHistory({
+      asOfDate: '2026-10-23',
+      dueThroughDate: '2026-10-22',
+      trackingStartDate: '2026-07-01',
+      historyStartDate: '2026-07-01',
+      scheduleForDate: () => selectedWeekdays
+    });
+    expect(rolling.startDate).toBe('2026-08-01');
+    expect(rolling.dueDates).toEqual([
+      '2026-08-03', '2026-08-05', '2026-08-17', '2026-08-19',
+      '2026-08-31', '2026-09-02', '2026-09-14', '2026-09-16',
+      '2026-09-28', '2026-09-30', '2026-10-12', '2026-10-14'
+    ]);
+
+    const everyFiftyWeeks: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 50,
+      weekdays: [1],
+      startDate: '2024-01-01'
+    };
+    const extended = customWeeksConsistencyWindowForHistory({
+      asOfDate: '2026-10-23',
+      dueThroughDate: '2026-10-22',
+      trackingStartDate: '2024-01-01',
+      historyStartDate: '2024-01-01',
+      scheduleForDate: () => everyFiftyWeeks
+    });
+    expect(extended.startDate).toBe('2024-12-16');
+    expect(extended.dueDates).toEqual(['2024-12-16', '2025-12-01']);
+  });
+
+  it('uses the schedule effective on each date and never extends before known history', () => {
+    const previous: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 50,
+      weekdays: [1],
+      startDate: '2024-01-01'
+    };
+    const current: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 52,
+      weekdays: [1],
+      startDate: '2026-01-05'
+    };
+    const changed = customWeeksConsistencyWindowForHistory({
+      asOfDate: '2026-10-23',
+      dueThroughDate: '2026-10-22',
+      trackingStartDate: '2024-01-01',
+      historyStartDate: '2024-01-01',
+      scheduleForDate: date => date < '2026-01-01' ? previous : current
+    });
+    expect(changed.dueDates).toEqual(['2025-12-01', '2026-01-05']);
+
+    const limited = customWeeksConsistencyWindowForHistory({
+      asOfDate: '2026-10-23',
+      dueThroughDate: '2026-10-22',
+      trackingStartDate: '2025-01-01',
+      historyStartDate: '2025-01-01',
+      scheduleForDate: () => previous
+    });
+    expect(limited.startDate).toBe('2025-01-01');
+    expect(limited.dueDates).toEqual(['2025-12-01']);
   });
 });
 

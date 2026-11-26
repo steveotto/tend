@@ -334,6 +334,83 @@ describe('Season-scoped Health scoring', () => {
     expect(reloadedV2Score).toEqual(v2Score);
   });
 
+  it('scores current and prior known custom-week Seasons while keeping unknown history unavailable', () => {
+    const previousSchedule: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 50,
+      weekdays: [1],
+      startDate: '2024-01-01'
+    };
+    const currentSchedule: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 2,
+      weekdays: [1, 3],
+      startDate: '2026-10-05'
+    };
+    const previous = createRhythmSeason(
+      rhythmId,
+      '2024-01-01',
+      previousSchedule,
+      undefined,
+      'season-biweekly-previous'
+    );
+    const unknown = createUnknownRhythmSeason(rhythmId, '2026-01-01');
+    const current = createRhythmSeason(
+      rhythmId,
+      '2026-10-01',
+      currentSchedule,
+      undefined,
+      'season-biweekly-current'
+    );
+    const input = scoreInput(
+      [previous, unknown, current],
+      '2026-10-23',
+      [
+        completion('previous-season', '2025-12-01'),
+        completion('current-one', '2026-10-05'),
+        completion('current-two', '2026-10-19')
+      ]
+    );
+
+    expect(selectRhythmSeasonScore(input, previous, '2025-12-31')).toMatchObject({
+      kind: 'rhythm-score',
+      asOfDate: '2025-12-31',
+      consistency: {
+        kind: 'scored',
+        score: 50,
+        evidence: {
+          windowStartDate: '2024-12-16',
+          eligibleDueCount: 2,
+          completedCount: 1
+        }
+      }
+    });
+    expect(selectRhythmSeasonScore(input, current)).toMatchObject({
+      kind: 'rhythm-score',
+      consistency: {
+        kind: 'scored',
+        score: 50,
+        evidence: {
+          windowStartDate: '2026-10-01',
+          eligibleDueCount: 4,
+          completedCount: 2
+        }
+      }
+    });
+    expect(selectRhythmSeasonScore(input, unknown)).toMatchObject({
+      kind: 'unscored',
+      consistency: { kind: 'unscored', reasonCode: 'unsupported-history' },
+      healthScore: null
+    });
+    expect(selectRhythmScore(input)).toMatchObject({
+      kind: 'rhythm-score',
+      consistency: { kind: 'unscored', reasonCode: 'unsupported-history' },
+      healthScore: null
+    });
+  });
+
   it('keeps zero distinct from unknown, empty evidence, and unsupported Custom Consistency', () => {
     const daily = createRhythmSeason(rhythmId, '2026-09-01', { frequency: 'daily' }, undefined, 'season-zero');
     const zero = selectRhythmSeasonScore(scoreInput([daily], '2026-10-10'), daily);

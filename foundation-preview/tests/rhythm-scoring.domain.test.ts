@@ -4,11 +4,12 @@ import {
   addCalendarDays,
   localDateInTimeZone,
   localTimeInTimeZone,
-  selectDailyRhythmScore
+  selectDailyRhythmScore,
+  selectSharedEngineRhythmScore
 } from '../src/domain/rhythm-scoring.ts';
 import type { SelectDailyRhythmScoreInput } from '../src/domain/rhythm-scoring.ts';
 import type { RhythmSchedule, RhythmScoringMetadata } from '../src/domain/rhythm-schedule.ts';
-import { createRhythmSeason } from '../src/domain/rhythm-seasons.ts';
+import { createRhythmSeason, createUnknownRhythmSeason } from '../src/domain/rhythm-seasons.ts';
 
 const rhythmId = 'daily-test-rhythm';
 const asOfDate = '2026-10-23';
@@ -2333,5 +2334,205 @@ describe('daily occurrence scoring', () => {
       onTrack: { kind: 'unscored', reasonCode: 'ready-for-first-tend' },
       healthScore: null
     });
+  });
+
+  it('scores custom biweekly selected weekdays once each and preserves same-day eligibility', () => {
+    const schedule: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 2,
+      weekdays: [1, 3],
+      startDate: '2026-08-03'
+    };
+    const scoreInput = input({
+      schedule,
+      scoring: scoring('2026-07-01', [{ startDate: '2026-07-01', schedule }]),
+      createdLocalDate: '2026-07-01',
+      createdTimeZone: 'UTC',
+      records: [
+        record('monday-a', '2026-08-03'),
+        record('monday-duplicate', '2026-08-03'),
+        record('wednesday', '2026-08-05'),
+        record('latest', '2026-10-14')
+      ]
+    });
+    const detailsScore = scored(scoreInput);
+    const sharedScore = selectSharedEngineRhythmScore(scoreInput);
+
+    expect(detailsScore).toMatchObject({
+      consistency: {
+        kind: 'scored',
+        score: 25,
+        evidence: {
+          windowStartDate: '2026-08-01',
+          windowEndDate: '2026-10-22',
+          eligibleDueCount: 12,
+          completedCount: 3
+        }
+      },
+      onTrack: { kind: 'scored', score: 100 },
+      healthScore: 43.75
+    });
+    expect(sharedScore).toEqual(detailsScore);
+    expect(detailsScore.consistency.kind === 'scored'
+      && detailsScore.consistency.evidence.occurrences.find(item => item.date === '2026-08-03'))
+      .toMatchObject({ status: 'completed', recordIds: ['monday-a', 'monday-duplicate'] });
+
+    const dueToday: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 2,
+      weekdays: [5],
+      startDate: '2026-10-09'
+    };
+    const incompleteToday = scored(input({
+      schedule: dueToday,
+      scoring: scoring('2026-10-09', [{ startDate: '2026-10-09', schedule: dueToday }]),
+      createdLocalDate: '2026-10-09',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-23',
+      records: []
+    }));
+    expect(incompleteToday.consistency).toMatchObject({
+      kind: 'scored',
+      evidence: { eligibleDueCount: 1, windowEndDate: '2026-10-22' }
+    });
+    const completedToday = scored(input({
+      schedule: dueToday,
+      scoring: scoring('2026-10-09', [{ startDate: '2026-10-09', schedule: dueToday }]),
+      createdLocalDate: '2026-10-09',
+      createdTimeZone: 'UTC',
+      asOfDate: '2026-10-23',
+      records: [record('prior', '2026-10-09'), record('today', '2026-10-23')]
+    }));
+    expect(completedToday.consistency).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: {
+        eligibleDueCount: 2,
+        completedCount: 2,
+        windowEndDate: '2026-10-23',
+        todayIncluded: true
+      }
+    });
+  });
+
+  it('extends custom-week windows across saved schedule changes but respects limited and unknown history', () => {
+    const previous: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 50,
+      weekdays: [1],
+      startDate: '2024-01-01'
+    };
+    const current: RhythmSchedule = {
+      frequency: 'custom',
+      unit: 'weeks',
+      interval: 52,
+      weekdays: [1],
+      startDate: '2026-01-05'
+    };
+    const changedHistory = [
+      createRhythmSeason(rhythmId, '2024-01-01', previous, undefined, 'previous'),
+      createRhythmSeason(rhythmId, '2026-01-01', current, undefined, 'current')
+    ];
+    const changed = scored(input({
+      schedule: current,
+      scoring: scoring('2024-01-01', changedHistory),
+      createdLocalDate: '2024-01-01',
+      createdTimeZone: 'UTC',
+      records: [record('previous-anchor', '2025-12-01')]
+    }));
+    expect(changed.consistency).toMatchObject({
+      kind: 'scored',
+      score: 50,
+      evidence: {
+        windowStartDate: '2025-12-01',
+        eligibleDueCount: 2,
+        completedCount: 1,
+        occurrences: [
+          { date: '2025-12-01', status: 'completed' },
+          { date: '2026-01-05', status: 'not-completed' }
+        ]
+      }
+    });
+
+    const limited = scored(input({
+      schedule: previous,
+      scoring: scoring('2025-01-01', [{ startDate: '2025-01-01', schedule: previous }]),
+      records: [record('limited-history', '2025-12-01')],
+      asOfDate: '2026-10-23'
+    }));
+    expect(limited.consistency).toMatchObject({
+      kind: 'scored',
+      score: 100,
+      evidence: {
+        windowStartDate: '2025-01-01',
+        eligibleDueCount: 1,
+        completedCount: 1
+      }
+    });
+
+    const unknownHistory = [
+      createRhythmSeason(rhythmId, '2024-01-01', previous, undefined, 'known'),
+      createUnknownRhythmSeason(rhythmId, '2025-06-01'),
+      createRhythmSeason(rhythmId, '2026-01-01', current, undefined, 'current')
+    ];
+    const unknownScoring: RhythmScoringMetadata = {
+      trackingStartDate: '2024-01-01',
+      timeZone: 'UTC',
+      scheduleHistory: unknownHistory
+    };
+    const unknown = scored(input({
+      schedule: current,
+      scoring: unknownScoring,
+      createdLocalDate: '2024-01-01',
+      createdTimeZone: 'UTC',
+      records: [],
+      asOfDate: '2026-10-23'
+    }));
+    expect(unknown).toMatchObject({
+      kind: 'rhythm-score',
+      consistency: { kind: 'unscored', reasonCode: 'unsupported-history' },
+      healthScore: null
+    });
+  });
+
+  it('leaves custom day, month, and year Consistency policies unchanged', () => {
+    const schedules: readonly RhythmSchedule[] = [
+      { frequency: 'custom', unit: 'days', interval: 2, startDate: '2026-10-01' },
+      {
+        frequency: 'custom',
+        unit: 'months',
+        interval: 2,
+        pattern: { kind: 'dayOfMonth', day: 1 },
+        startDate: '2026-01-01'
+      },
+      {
+        frequency: 'custom',
+        unit: 'years',
+        interval: 2,
+        month: 10,
+        pattern: { kind: 'dayOfMonth', day: 1 },
+        startDate: '2024-10-01'
+      }
+    ];
+
+    for (const schedule of schedules) {
+      if (schedule.frequency !== 'custom') throw new Error('Expected a custom schedule.');
+      const startDate = schedule.startDate;
+      const result = scored(input({
+        schedule,
+        scoring: scoring(startDate, [{ startDate, schedule }]),
+        createdLocalDate: startDate,
+        createdTimeZone: 'UTC',
+        records: [],
+        asOfDate: '2026-10-23'
+      }));
+      expect(result.consistency).toMatchObject({
+        kind: 'unscored',
+        reasonCode: 'unsupported-schedule'
+      });
+    }
   });
 });
