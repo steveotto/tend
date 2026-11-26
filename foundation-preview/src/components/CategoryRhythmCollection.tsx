@@ -1,15 +1,14 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { syntheticPeople } from '../domain/preview-data.ts';
 import type { FoundationPreview, PersonId, PersonPreview, RhythmPreview } from '../domain/preview-data.ts';
-import type { CategoryRhythmGroupId } from '../domain/category-rhythms.ts';
 import type { Destination } from './AppNavigation.tsx';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
-import { categoryRhythmGroup } from '../domain/category-rhythms.ts';
 import { isEditableRhythmId } from '../domain/rhythm-editor.ts';
 import { rhythmLastActivityLabel } from '../domain/preview-data.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
 import { ArchivedRhythmsControl } from './ArchivedRhythmsControl.tsx';
+import { RhythmScheduleGroups } from './RhythmScheduleGroups.tsx';
 
 type Props = {
   people?: readonly PersonPreview[];
@@ -42,12 +41,6 @@ type Props = {
   renderAdditionalActions?: (rhythm: RhythmPreview) => ReactNode;
 };
 
-const groups = [
-  { id: 'daily', title: 'Daily' },
-  { id: 'weekly', title: 'Weekly' },
-  { id: 'seasonal', title: 'Seasonal & Annual' }
-] as const;
-
 export function CategoryRhythmCollection({
   people = syntheticPeople,
   categoryLabel,
@@ -78,18 +71,6 @@ export function CategoryRhythmCollection({
   completedActionLabelFor,
   renderAdditionalActions
 }: Props) {
-  const groupedRhythms: Array<{ id: CategoryRhythmGroupId; title: string; rhythms: RhythmPreview[] }> = groups.map(group => ({
-    ...group,
-    rhythms: rhythms.filter(rhythm => categoryRhythmGroup(rhythm) === group.id)
-  }));
-  if (rhythms.some(rhythm => categoryRhythmGroup(rhythm) === 'custom')) {
-    groupedRhythms.push({
-      id: 'custom',
-      title: 'Custom schedule',
-      rhythms: rhythms.filter(rhythm => categoryRhythmGroup(rhythm) === 'custom')
-    });
-  }
-
   return (
     <section className="marriage-rhythm-section" aria-labelledby={`${categoryToken}-rhythm-section-title`}>
       <div className="marriage-section-heading">
@@ -120,58 +101,57 @@ export function CategoryRhythmCollection({
           </span>
         )}
       </div>
-      {rhythms.length === 0 && <h4 className="marriage-empty-state">Start with a rhythm.</h4>}
-      {groupedRhythms.map(group => (
-        <section key={group.id} className="marriage-recommendation-group" aria-labelledby={`${categoryToken}-group-${group.id}`}>
-          <header><h4 id={`${categoryToken}-group-${group.id}`}>{group.title}</h4><span>{group.rhythms.length}</span></header>
-          {group.rhythms.length
-            ? (
-              <div className="marriage-rhythm-list">
-                {group.rhythms.map(rhythm => (
-                  <div className="marriage-rhythm-entry" key={rhythm.id}>
-                    <RhythmDetailsDialog
-                      rhythm={rhythm}
-                      inline
-                      statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
-                      completed={completedRhythms.has(rhythm.id)}
-                      people={people}
-                      foundations={foundations}
-                      relatedRhythms={rhythms}
-                      onPersonSelect={onPersonSelect}
-                      onOpenFoundation={onOpenFoundation}
-                      onOpenCategory={onOpenCategory}
-                      headingId={`${categoryToken}-active-rhythm-${rhythm.id}`}
-                      archived={false}
-                      healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
-                      {...(completionActionLabelFor
-                        ? { completionActionLabel: completionActionLabelFor(rhythm) }
-                        : {})}
-                      {...(completionActionAccessibleLabelFor
-                        ? { completionActionAccessibleLabel: completionActionAccessibleLabelFor(rhythm) }
-                        : {})}
-                      {...(completedActionLabelFor
-                        ? { completedActionLabel: completedActionLabelFor(rhythm) }
-                        : {})}
-                      onHistory={event => onRhythmHistory(rhythm.id, event)}
-                      {...(isEditableRhythmId(rhythm.id)
-                        ? {
-                            onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
-                            onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
-                            ...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
-                              ? { onUndo: () => onUndo(rhythm.id) }
-                              : {})
-                          }
-                        : {})}
-                      onClose={() => undefined}
-                    />
-                    {renderAdditionalActions?.(rhythm)}
-                  </div>
-                ))}
+      <RhythmScheduleGroups
+        rhythms={rhythms}
+        categoryToken={categoryToken}
+        emptyCollectionMessage={rhythms.length === 0
+          ? <h4 className="marriage-empty-state">Start with a rhythm.</h4>
+          : undefined}
+        renderGroup={groupRhythms => (
+          <div className="marriage-rhythm-list">
+            {groupRhythms.map(rhythm => (
+              <div className="marriage-rhythm-entry" key={rhythm.id}>
+                <RhythmDetailsDialog
+                  rhythm={rhythm}
+                  inline
+                  statusLabel={rhythmLastActivityLabel(rhythm, todayDate)}
+                  completed={completedRhythms.has(rhythm.id)}
+                  people={people}
+                  foundations={foundations}
+                  relatedRhythms={rhythms}
+                  onPersonSelect={onPersonSelect}
+                  onOpenFoundation={onOpenFoundation}
+                  onOpenCategory={onOpenCategory}
+                  headingId={`${categoryToken}-active-rhythm-${rhythm.id}`}
+                  archived={false}
+                  healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                  {...(completionActionLabelFor
+                    ? { completionActionLabel: completionActionLabelFor(rhythm) }
+                    : {})}
+                  {...(completionActionAccessibleLabelFor
+                    ? { completionActionAccessibleLabel: completionActionAccessibleLabelFor(rhythm) }
+                    : {})}
+                  {...(completedActionLabelFor
+                    ? { completedActionLabel: completedActionLabelFor(rhythm) }
+                    : {})}
+                  onHistory={event => onRhythmHistory(rhythm.id, event)}
+                  {...(isEditableRhythmId(rhythm.id)
+                    ? {
+                        onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event),
+                        onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event),
+                        ...(undoableRhythms.has(rhythm.id) && !rhythm.healthLogCapability
+                          ? { onUndo: () => onUndo(rhythm.id) }
+                          : {})
+                      }
+                    : {})}
+                  onClose={() => undefined}
+                />
+                {renderAdditionalActions?.(rhythm)}
               </div>
-            )
-            : <p className="marriage-empty-state">No active Rhythms.</p>}
-        </section>
-      ))}
+            ))}
+          </div>
+        )}
+      />
       <ArchivedRhythmsControl
         count={archivedRhythms.length}
         openerRef={archivedRhythmsOpenerRef}

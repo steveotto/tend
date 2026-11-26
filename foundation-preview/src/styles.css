@@ -11461,18 +11461,6 @@ html[data-mobile-text-size="large"] .health-info-contribution-card {
   transform: rotate(180deg);
 }
 
-.person-profile__other-rhythms {
-  display: grid;
-  gap: 10px;
-}
-
-.person-profile__other-rhythms h4 {
-  margin: 0;
-  color: var(--ink-soft, #66736b);
-  font-size: calc(0.8125rem * var(--app-text-scale, 1));
-  font-weight: 600;
-}
-
 .person-profile__cadence {
   display: flex;
   align-items: center;

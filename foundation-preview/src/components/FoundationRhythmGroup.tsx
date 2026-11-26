@@ -5,6 +5,7 @@ import { type FoundationPreview, type PersonId, type PersonPreview, type RhythmP
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import { RhythmDetailsDialog } from './RhythmDetailsDialog.tsx';
+import { RhythmScheduleGroups } from './RhythmScheduleGroups.tsx';
 
 type Props = {
   people: readonly PersonPreview[];
@@ -51,54 +52,60 @@ export function FoundationRhythmGroup({
 }: Props) {
   return (
     <section className="marriage-foundation-support-group" aria-labelledby={headingId}>
-      <div className="marriage-rhythm-list current-plan-item-group">
-        {rhythms.map(rhythm => {
-          const archived = archivedRhythmIds.includes(rhythm.id);
-          return (
-            <RhythmDetailsDialog
-              key={rhythm.id}
-              rhythm={rhythm}
-              inline
-              completed={completedRhythms.has(rhythm.id)}
-              people={people}
-              foundations={foundations}
-              relatedRhythms={rhythms}
-              {...(onPersonSelect ? { onPersonSelect } : {})}
-              {...(onOpenFoundation ? { onOpenFoundation } : {})}
-              {...(onOpenCategory ? { onOpenCategory } : {})}
-              archived={archived}
-              headingId={`${categoryToken}-detail-rhythm-${rhythm.id}`}
-              healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
-              {...(completionActionLabelFor
-                ? { completionActionLabel: completionActionLabelFor(rhythm) }
-                : {})}
-              {...(completionActionAccessibleLabelFor
-                ? { completionActionAccessibleLabel: completionActionAccessibleLabelFor(rhythm) }
-                : {})}
-              {...(completedActionLabelFor
-                ? { completedActionLabel: completedActionLabelFor(rhythm) }
-                : {})}
-              {...(onRhythmHistory
-                ? { onHistory: (event: MouseEvent<HTMLButtonElement>) => onRhythmHistory(rhythm.id, event) }
-                : {})}
-              {...(!archived && isEditableRhythmId(rhythm.id)
-                ? {
-                    ...(onTend
-                      ? { onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event) }
-                      : {}),
-                    ...(onEditRhythm
-                      ? { onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event) }
-                      : {}),
-                    ...(undoableRhythms.has(rhythm.id) && onUndo
-                      ? { onUndo: () => onUndo(rhythm.id) }
-                      : {})
-                  }
-                : {})}
-              onClose={() => undefined}
-            />
-          );
-        })}
-      </div>
+      <RhythmScheduleGroups
+        rhythms={rhythms}
+        categoryToken={`${categoryToken}-${headingId}`}
+        renderGroup={groupRhythms => (
+          <div className="marriage-rhythm-list current-plan-item-group">
+            {groupRhythms.map(rhythm => {
+              const archived = archivedRhythmIds.includes(rhythm.id);
+              return (
+                <RhythmDetailsDialog
+                  key={rhythm.id}
+                  rhythm={rhythm}
+                  inline
+                  completed={completedRhythms.has(rhythm.id)}
+                  people={people}
+                  foundations={foundations}
+                  relatedRhythms={rhythms}
+                  {...(onPersonSelect ? { onPersonSelect } : {})}
+                  {...(onOpenFoundation ? { onOpenFoundation } : {})}
+                  {...(onOpenCategory ? { onOpenCategory } : {})}
+                  archived={archived}
+                  headingId={`${categoryToken}-detail-rhythm-${rhythm.id}`}
+                  healthScore={rhythmHealthScore(rhythmScores.get(rhythm.id))}
+                  {...(completionActionLabelFor
+                    ? { completionActionLabel: completionActionLabelFor(rhythm) }
+                    : {})}
+                  {...(completionActionAccessibleLabelFor
+                    ? { completionActionAccessibleLabel: completionActionAccessibleLabelFor(rhythm) }
+                    : {})}
+                  {...(completedActionLabelFor
+                    ? { completedActionLabel: completedActionLabelFor(rhythm) }
+                    : {})}
+                  {...(onRhythmHistory
+                    ? { onHistory: (event: MouseEvent<HTMLButtonElement>) => onRhythmHistory(rhythm.id, event) }
+                    : {})}
+                  {...(!archived && isEditableRhythmId(rhythm.id)
+                    ? {
+                        ...(onTend
+                          ? { onTend: (event: MouseEvent<HTMLButtonElement>) => onTend(rhythm.id, event) }
+                          : {}),
+                        ...(onEditRhythm
+                          ? { onEdit: (event: MouseEvent<HTMLButtonElement>) => onEditRhythm(rhythm, event) }
+                          : {}),
+                        ...(undoableRhythms.has(rhythm.id) && onUndo
+                          ? { onUndo: () => onUndo(rhythm.id) }
+                          : {})
+                      }
+                    : {})}
+                  onClose={() => undefined}
+                />
+              );
+            })}
+          </div>
+        )}
+      />
     </section>
   );
 }

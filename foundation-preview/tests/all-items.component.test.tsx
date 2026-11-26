@@ -160,6 +160,80 @@ describe('All items page', () => {
     expect(onRhythmHistory.mock.calls[0]?.[0]).toBe(rhythm.id);
   });
 
+  it('groups active Rhythms by the shared schedule sections without disturbing other item sections', () => {
+    const groupedRhythms: RhythmPreview[] = [{
+      ...rhythm,
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      title: 'Daily all-items Rhythm',
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' }
+    }, {
+      ...rhythm,
+      id: 'user-rhythm-22222222-2222-4222-8222-222222222222',
+      title: 'Weekly all-items Rhythm',
+      cadence: 'Weekly',
+      schedule: { frequency: 'weekly', weekdays: [1] }
+    }, {
+      ...rhythm,
+      id: 'user-rhythm-33333333-3333-4333-8333-333333333333',
+      title: 'Seasonal all-items Rhythm',
+      cadence: 'Quarterly',
+      schedule: {
+        frequency: 'quarterly',
+        monthInQuarter: 1,
+        pattern: { kind: 'dayOfMonth', day: 1 }
+      }
+    }, {
+      ...rhythm,
+      id: 'user-rhythm-44444444-4444-4444-8444-444444444444',
+      title: 'Every other week all-items Rhythm',
+      cadence: 'Every 2 weeks',
+      schedule: {
+        frequency: 'custom',
+        unit: 'weeks',
+        interval: 2,
+        weekdays: [1],
+        startDate: '2026-10-26'
+      }
+    }, {
+      ...rhythm,
+      id: 'user-rhythm-55555555-5555-4555-8555-555555555555',
+      title: 'Archived all-items Rhythm',
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' }
+    }];
+    const prayerRequest: PersonPrayerRequest = {
+      id: 'all-items-active-prayer',
+      personId: owner,
+      title: 'All items Prayer',
+      status: 'active',
+      createdAt: '2026-10-01T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      prayerLogs: []
+    };
+    render(<AllItemsPage {...pageProps({
+      rhythms: groupedRhythms,
+      archivedRhythmIds: [groupedRhythms[4]!.id],
+      sparks: [completedSpark],
+      prayerRequests: [prayerRequest]
+    })} />);
+
+    expect(screen.getByRole('status').textContent).toContain('6 items');
+    expect(screen.getByRole('heading', { name: 'Sparks (1)' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Prayer requests (1)' })).toBeTruthy();
+    for (const [groupTitle, rhythm] of [
+      ['Daily', groupedRhythms[0]!],
+      ['Weekly', groupedRhythms[1]!],
+      ['Seasonal & Annual', groupedRhythms[2]!],
+      ['Custom schedule', groupedRhythms[3]!]
+    ] as const) {
+      const group = screen.getByRole('region', { name: groupTitle });
+      expect(within(group).getByRole('article', { name: rhythm.title })).toBeTruthy();
+      expect(screen.getAllByRole('article', { name: rhythm.title })).toHaveLength(1);
+    }
+    expect(screen.queryByRole('article', { name: 'Archived all-items Rhythm' })).toBeNull();
+  });
+
   it('keeps filters and refreshed results when the standard Rhythm history/edit flow returns', async () => {
     const user = userEvent.setup();
     const onRhythmHistory = vi.fn();

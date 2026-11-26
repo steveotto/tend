@@ -1,5 +1,17 @@
 # Tend 2 Foundation handoff
 
+## Rhythm schedule grouping (release in progress)
+
+Rhythms are now organized into the Faith Category → Rhythms Daily, Weekly, and Seasonal & Annual groups on Person profiles, All Items, and shared Foundation/Principle views. The extracted `RhythmScheduleGroups` component is also used by Faith itself, preserving its headings, counts, empty states, spacing, and shared Rhythm cards. It delegates all classification to `categoryRhythmGroup`, including every-two-weeks under Custom schedule. Rhythms with unsupported/legacy schedules remain visible under Unclassified schedule rather than disappearing from All Items counts. Person scopes, due/tended controls, associations, scores, and actions remain in their original renderers; All Items keeps Spark/Prayer sections, search/filter/edit-return behavior, counts, and archived exclusion.
+
+**Component reuse map:** `RhythmScheduleGroups` → Faith/other category Rhythm collections, Person profiles, All Items, and `FoundationRhythmGroup`; the latter is used by Marriage, Finance, Strength, Cardio, Weight, and Flexibility views. No card/editor/dialog implementation was duplicated. The previous Person-only “Other Rhythms” markup and styles were removed. Runtime component tests verify classification, empty sections, unique rendering, actions, and archived exclusion; source-level architecture checks do not prove every future consumer uses the shared component.
+
+**Validation:** semantic typecheck passed; focused grouping/All Items/Person tests passed **53/53**; full component tests **1,960/1,960 across 120 files**; reader tests **7/7**; legacy tests **177/177**; browser CSS and recovery contracts passed; Pages + scoring production builds, isolated preview production build, and Pages artifact tests **10/10** passed. `git diff --check` passed. No state, schedule, scoring, persistence, or sync behavior was changed.
+
+**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, based on `origin/main` at `9cdca0d1530a370495ec08aed217aa132375b430`. No other checkout was used and `supabase/.temp/` was left untouched.
+
+**Release status:** authorized PR, merge, and Cloudflare Pages production deployment are pending. Record the merged revision, deployment ID, and custom-domain verification here after release. Tagline, Archived Rhythms, and sorting remain out of scope.
+
 ## Authenticated Rhythm account isolation
 
 **Confirmed cause and repair:** `resolveTodayRhythms([])` includes the static Today fixture list, and authenticated App consumers were using it directly. The shared App resolver now keeps those fixtures only for the development preview and filters authenticated results to Rhythm IDs explicitly saved in that account. Suggestions remain available and are only persisted by the explicit save action; the synthetic development preview remains unchanged.

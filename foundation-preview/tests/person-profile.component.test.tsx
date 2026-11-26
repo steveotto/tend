@@ -333,6 +333,70 @@ describe('shared person profile', () => {
     expect(rhythmHistory).toHaveBeenCalledOnce();
   });
 
+  it('groups the complete Person Rhythm scope by the shared schedule sections', () => {
+    const personRhythms: RhythmPreview[] = [{
+      ...linkedRhythm,
+      id: 'user-rhythm-11111111-1111-4111-8111-111111111111',
+      title: 'Daily profile Rhythm',
+      cadence: 'Daily',
+      schedule: { frequency: 'daily' },
+      personIds: ['sample-person-avery']
+    }, {
+      ...linkedRhythm,
+      id: 'user-rhythm-22222222-2222-4222-8222-222222222222',
+      title: 'Weekly profile Rhythm',
+      cadence: 'Weekly',
+      schedule: { frequency: 'weekly', weekdays: [1] },
+      personIds: ['sample-person-avery']
+    }, {
+      ...linkedRhythm,
+      id: 'user-rhythm-33333333-3333-4333-8333-333333333333',
+      title: 'Seasonal profile Rhythm',
+      cadence: 'Quarterly',
+      schedule: {
+        frequency: 'quarterly',
+        monthInQuarter: 1,
+        pattern: { kind: 'dayOfMonth', day: 1 }
+      },
+      personIds: ['sample-person-avery']
+    }, {
+      ...linkedRhythm,
+      id: 'user-rhythm-44444444-4444-4444-8444-444444444444',
+      title: 'Every other week profile Rhythm',
+      cadence: 'Every 2 weeks',
+      schedule: {
+        frequency: 'custom',
+        unit: 'weeks',
+        interval: 2,
+        weekdays: [1],
+        startDate: '2026-10-26'
+      },
+      personIds: ['sample-person-avery']
+    }];
+    const archivedRhythm = {
+      ...linkedRhythm,
+      id: 'user-rhythm-55555555-5555-4555-8555-555555555555',
+      title: 'Archived profile Rhythm',
+      personIds: ['sample-person-avery']
+    };
+    render(<ProfileHarness rhythms={personRhythms} archivedRhythms={[archivedRhythm]} />);
+
+    const profile = screen.getByRole('main', { name: 'Avery Brooks' });
+    for (const [groupTitle, rhythm] of [
+      ['Daily', personRhythms[0]!],
+      ['Weekly', personRhythms[1]!],
+      ['Seasonal & Annual', personRhythms[2]!],
+      ['Custom schedule', personRhythms[3]!]
+    ] as const) {
+      const group = within(profile).getByRole('region', { name: groupTitle });
+      expect(within(group).getByRole('article', { name: rhythm.title })).toBeTruthy();
+      expect(within(group).getByRole('button', { name: `Tend ${rhythm.title}` })).toBeTruthy();
+      expect(within(group).getAllByRole('article', { name: rhythm.title })).toHaveLength(1);
+    }
+    expect(within(profile).queryByRole('article', { name: 'Archived profile Rhythm' })).toBeNull();
+    expect(within(profile).queryByRole('heading', { name: 'Other Rhythms' })).toBeNull();
+  });
+
   it('opens Person settings directly without an intermediate menu and preserves profile tabs', async () => {
     const user = userEvent.setup();
     const onEditPerson = vi.fn();
