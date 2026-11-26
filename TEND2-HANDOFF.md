@@ -1,5 +1,19 @@
 # Tend 2 Foundation handoff
 
+## Person association display consistency (release in progress)
+
+**Confirmed cause:** shared Rhythm association rendering treated every account-supplied person as linked, instead of intersecting that list with the Rhythm's saved `personIds`. The details dialog also inferred an association from a non-empty people list. This establishes a display-path defect; no live account records were read, so persisted corruption is not established.
+
+**Focused fix and regression:** shared association rows and the details dialog now use the existing `peopleForRhythm` selector. Authenticated synthetic App coverage verifies an intentionally empty `personIds` remains empty after edit/save/reload, shows no Person badge in Category and Today, and creates no Connection when tended. A separate Alex-linked Rhythm displays Alex only and logs exactly Alex as its Connection participant. History is also checked; global search already uses the saved IDs, and archived views reuse the shared card/selector. No data repair or scoring, sorting, archiving, schedule, or persistence changes were made.
+
+**Component reuse map:** `RhythmAssociationRows` is used by shared `RhythmCard` and `RhythmDetailsDialog`; these serve Category, Foundation/Principle, Person, Today, Focus, All Items, history, and archived Rhythm views. No parallel card/editor was added. Runtime checks cover the authenticated save, completion, history, and reload paths; they use synthetic data and do not establish the state of any live account.
+
+**Validation:** `npm test` passed (1,962 component tests plus reader, legacy, browser-CSS, and recovery-browser suites); semantic typecheck passed; Pages and scoring production builds passed; Pages artifact tests passed **10/10**; `git diff --check` passed. The build emitted its existing large-client-chunk advisory.
+
+**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, based on current `origin/main` at `499e1ac749705baa0391a2385d2f4cbbbe83c8ec`. `supabase/.temp/` and unrelated work were left untouched.
+
+**Production release:** PR, merge, and Cloudflare Pages deployment are pending. Record the merged revision, successful required checks/deployment, and live HTTP/bundle evidence here after release. Archived Rhythms and sorting remain paused.
+
 ## Category header tagline (deployed)
 
 Every Category header now uses the exact shared phrase **“Structure beats good intentions”**, replacing the prior category-specific copy while preserving each title, icon, colors, scores, and other content. The shared `CategoryHeader` remains the only implementation; Foundation and Principle detail headers are unchanged. Existing Marriage hero styling and responsive rules are reused without new styles.

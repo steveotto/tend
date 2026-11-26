@@ -1,5 +1,6 @@
 import {
   foundationTerminologyForCategory,
+  peopleForRhythm,
   type FoundationPreview,
   type PersonId,
   type PersonPreview,
@@ -42,6 +43,7 @@ export function RhythmAssociationRows({
   const availableCategories = useAvailableCategories();
   const availableCategoryIds = selectAvailableCategoryIds(availability.categoryPreferences);
   const availableFoundationIds = selectAvailableFoundationIds(availability, foundations ?? []);
+  const associatedPeople = people ? peopleForRhythm(rhythm, people) : [];
   const categories = availableCategories.filter(area => rhythm.categoryIds?.includes(area.id) === true);
   const resolvedLinks = foundations
     ? resolveRhythmFoundationLinks(rhythm, foundations)
@@ -66,7 +68,7 @@ export function RhythmAssociationRows({
 
   return (
     <>
-      {((people?.length && onPersonSelect) || categoryGroups.length > 0
+      {((associatedPeople.length && onPersonSelect) || categoryGroups.length > 0
         || (showFoundationLinks && (unmatchedFoundations.length > 0 || (resolvedLinks?.unresolvedIds.length ?? 0) > 0))) ? (
         <div
           className="today-rhythm-details__association-metadata-row"
@@ -75,14 +77,14 @@ export function RhythmAssociationRows({
             ? `People, categories, and Foundations associated with ${rhythm.title}`
             : `People and categories associated with ${rhythm.title}`}
         >
-          {people && people.length > 0 && onPersonSelect && (
+          {associatedPeople.length > 0 && onPersonSelect && (
             <div
               className="today-rhythm-details__association-people"
               role="group"
               aria-label={`People associated with ${rhythm.title}`}
             >
               <PersonBadgeList
-                people={people}
+                people={associatedPeople}
                 rhythmTitle={rhythm.title}
                 onSelect={onPersonSelect}
                 collapsedLimit={2}

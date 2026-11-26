@@ -13,6 +13,7 @@ afterEach(cleanup);
 function peopleForCount(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     ...syntheticPeople[index % syntheticPeople.length]!,
+    id: `sample-person-overflow-${index + 1}`,
     displayName: `${syntheticPeople[index % syntheticPeople.length]!.displayName} ${index + 1}`
   }));
 }
@@ -176,11 +177,12 @@ describe('shared people badge overflow', () => {
   it('keeps category badges after expanded people and the Show less control', async () => {
     const user = userEvent.setup();
     const onPersonSelect = vi.fn();
+    const people = peopleForCount(5);
     const rhythm = {
       ...todayRhythms[0]!,
-      categoryIds: ['faith', 'marriage'] as const
+      categoryIds: ['faith', 'marriage'] as const,
+      personIds: people.map(person => person.id)
     };
-    const people = peopleForCount(5);
     render(
       <RhythmDetailsDialog
         rhythm={rhythm}

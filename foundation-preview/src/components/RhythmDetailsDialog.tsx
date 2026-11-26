@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import {
   areas,
+  peopleForRhythm,
   rhythmLastActivityLabel,
   type FoundationPreview,
   type PersonId,
@@ -182,7 +183,7 @@ export function RhythmDetailsDialog({
     if (event.target === event.currentTarget) onClose();
   }
 
-  const hasPeople = Boolean(people?.length && onPersonSelect);
+  const hasPeople = Boolean(people && peopleForRhythm(rhythm, people).length > 0 && onPersonSelect);
   const hasCategories = Boolean(rhythm.categoryIds?.some(id => areas.some(area => area.id === id)));
   const hasFoundationLinks = Boolean(!inline && foundations && foundationRhythmIds(rhythm).length);
   const scoringTimeZone = rhythm.scoring?.timeZone
