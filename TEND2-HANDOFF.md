@@ -10,7 +10,7 @@ Rhythms are now organized into the Faith Category → Rhythms Daily, Weekly, and
 
 **Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, based on `origin/main` at `9cdca0d1530a370495ec08aed217aa132375b430`. No other checkout was used and `supabase/.temp/` was left untouched.
 
-**Release status:** authorized PR, merge, and Cloudflare Pages production deployment are pending. Record the merged revision, deployment ID, and custom-domain verification here after release. Tagline, Archived Rhythms, and sorting remain out of scope.
+**Production release:** PR [#148](https://github.com/steveotto/tend/pull/148) merged on 2026-11-26 as revision `78f8eb8a7ada25dfcd0bd1cba72d248208fec763`. Post-merge validation passed in [run 45848779498](https://github.com/steveotto/tend/actions/runs/45848779498); the Cloudflare Pages check passed for deployment `5081e3d2-1716-4d2e-93bf-8c4ee2058762`. `https://tendwhatmatters.com/` returned HTTP 200 and served `assets/main-CnAfD5XB.js`; the live bundle contains the new Unclassified schedule safeguard. Tagline, Archived Rhythms, and sorting remain out of scope.
 
 ## Authenticated Rhythm account isolation
 
