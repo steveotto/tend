@@ -516,6 +516,16 @@ The Prayer Add/Edit end-date control reuses `RhythmScheduleFields`. The width/la
 
 This fix shipped in PR #120. The production deployment contains the merged commit; no live account, browser storage, or database was changed.
 
+## All Items shared Rhythm presentation (release candidate)
+
+**Change:** All Items now composes the same `RhythmDetailsDialog` inline card used by Home and People instead of the alternate `RhythmCard` details-summary variant. It uses the shared Health score/history action, Person badges, category icon, Tend action, and separated schedule footer. The history action enters the existing Rhythm details/history route, where the normal edit flow remains available. Archived Rhythms are excluded from the selector, search results, and visible total; Spark and Prayer status handling is unchanged.
+
+**Reuse map and duplication review:** `RhythmDetailsDialog` → Home (`TodayView`), People (`PersonProfileView`), and All Items (`AllItemsPage`). `PersonSparkPanel` and `PersonPrayerPanel` remain the existing shared Spark and Prayer views in All Items; no card, list-item, or editor components were added. The alternate All Items Rhythm markup and top-right edit affordance were removed. The shared inline presentation intentionally omits separate Foundation-link badges in all three views; its category/area icon remains visible and consistent. `RhythmHistoryView` retains its distinct history-summary presentation because it is a separate history surface, not an All Items card.
+
+**Regression coverage and limits:** Runtime/component tests cover the inline shared card/actions, archived-Rhythm exclusion from results/counts/search, and filter/search retention while the history/edit route returns. The browser contract compares the same synthetic Rhythm’s key card/action/footer geometry and styling across All Items, Home, and a Person profile at 375px, and checks responsive bounds. These contracts verify shared runtime composition and measured presentation properties; they are not pixel-perfect screenshot comparisons across every viewport and do not establish physical-device or screen-reader behavior.
+
+**Validation:** Full `npm test` passed: **1,940 component/domain tests across 118 files**, reader **7/7**, legacy **177/177**, browser CSS, and recovery browser contracts. Semantic typecheck, production Pages/scoring builds, Pages artifact tests **10/10**, and `git diff --check` passed. Production release status is pending the authorized merge and deployment.
+
 ## Cardio calorie estimates and run comparisons (shipped, PR #120)
 
 Run history now shows distance, duration, average pace, estimated calories, and comparisons. Calories use `round(weightKg × distanceKm)`. The selector uses the latest valid weigh-in on or before the run date; when no dated measurement exists, the run form accepts a weight in the configured unit or leaves calories unavailable. Each estimate records its source and weight snapshot, so later weigh-in edits do not rewrite completed runs. Legacy Cardio runs with usable dated weight receive additive snapshots during the synthetic preview migration to schema 52; their original schema 51 document is preserved under `tend2:synthetic-preview:v51-recovery`. No live state, database schema, scoring policy, Health, On Track, or Rhythm behavior changes.
