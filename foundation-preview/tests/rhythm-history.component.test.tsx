@@ -2463,6 +2463,7 @@ describe('shared Rhythm history', () => {
     expect(entries.map(entry => entry.querySelector('span:nth-child(2)')?.textContent)).toEqual([
       `${shortTestDate(addCalendarDays(asOfDate, -2))} · Created`,
       `${shortTestDate(addCalendarDays(asOfDate, -2))} · Missed`,
+      `1 more misses · ${shortTestDate(addCalendarDays(asOfDate, -1))}–${shortTestDate(addCalendarDays(asOfDate, -1))}`,
       `Today · ${shortTestDate(asOfDate)}`
     ]);
     expect(entries[1]?.getAttribute('aria-label')).toMatch(/Missed scheduled occurrence on/);
