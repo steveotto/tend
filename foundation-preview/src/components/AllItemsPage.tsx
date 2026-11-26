@@ -108,7 +108,8 @@ export function AllItemsPage(props: AllItemsPageProps) {
   const hasActiveFilters = filters.type !== 'all'
     || filters.person !== 'all'
     || filters.frequency !== 'all'
-    || filters.timeOfDay !== 'all';
+    || filters.timeOfDay !== 'all'
+    || filters.search.trim().length > 0;
   const personOptions: MultiSelectOption<AllItemsPersonFilterValue>[] = [
     { value: 'none', label: 'No person' },
     ...[...props.people]
@@ -137,6 +138,34 @@ export function AllItemsPage(props: AllItemsPageProps) {
   return (
     <section className="all-items-page" aria-labelledby="all-items-heading">
       <h3 id="all-items-heading">All items</h3>
+      <div className="all-items-page__search">
+        <div className="utility-search-field">
+          <span className="utility-search-icon" aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            placeholder="Search titles and details…"
+            aria-label="Search titles and details"
+            value={filters.search}
+            onChange={event => {
+              const search = event.currentTarget.value;
+              setFilters(current => ({
+                ...current,
+                search
+              }));
+            }}
+          />
+          {filters.search && (
+            <button
+              type="button"
+              className="utility-search-clear"
+              aria-label="Clear search"
+              onClick={() => setFilters(current => ({ ...current, search: '' }))}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      </div>
       <div className="all-items-page__filters" aria-label="Filter all items">
         <MultiSelectDropdown
           label="Type"
