@@ -1,6 +1,6 @@
 # Tend 2 Foundation handoff
 
-## All Items sorting (verified; release in progress)
+## All Items sorting (released)
 
 **Implementation:** All Items now has transient Sort by and Direction controls for grouped presentation (default), Title, Type, Person name, Time of day, and Frequency. Explicit sorting flattens the mixed Rhythm/Spark/Prayer results; Type follows the current section order (Rhythms, Sparks, Prayer requests), Person uses the alphabetically first saved association, Time uses the configured chronological options, and Frequency follows daily, weekly, monthly, quarterly, yearly, then custom. Missing/not-applicable values stay last in either direction, with title and stable ID tie-breakers. Search, filters, counts, archived-Rhythm exclusion, cards/actions/editors, and return state are retained. Clear filters does not reset sorting, and sort state is never persisted.
 
@@ -12,9 +12,9 @@
 
 **Validation:** Semantic typecheck passed; the full component suite passed **1,975/1,975 across 121 files** (after rerunning without concurrent builds); All Items sorting regressions passed **32/32**; reader tests **7/7**, legacy tests **177/177**, browser CSS and recovery browser contracts passed; Pages + scoring production builds and isolated preview build passed; Pages artifact tests **10/10** passed; `git diff --check` passed. Two unrelated five-second component-test timeouts occurred only while builds/browser checks were competing for CPU; both passed individually, and the complete component suite then passed on its own.
 
-**Release status:** The verified changes are being prepared for the authorized PR/merge/deployment. Production remains at the previously deployed revision `f9a4788cf4df972028334f8d7b5905663bba3d94`; no production manual check has been run for this feature.
+**Production release:** PR [#155](https://github.com/steveotto/tend/pull/155) merged on 2026-11-27. The application commit `316f0ccaeb50e143be8cadc102a9f6a8888d6d4b` is included in main merge revision `544b0a72e6436748729fef27b1d794636084e654`. PR validation passed in [run 46025640784](https://github.com/steveotto/tend/actions/runs/46025640784); the Cloudflare Pages preview check passed at deployment `983fb51a-9e27-41e3-beaa-ff0cd09ed413`. The production deployment is Cloudflare Pages ID `f2e76b7d-7491-433e-9007-43fb9e2a75b9`, Environment **Production**, Branch `main`, Source `544b0a7`. The post-merge application deployment and build checks passed in [run 46027072984](https://github.com/steveotto/tend/actions/runs/46027072984), and main validation passed in [run 46027074112](https://github.com/steveotto/tend/actions/runs/46027074112). `https://tendwhatmatters.com/app-preview` returned HTTP 200 and references JavaScript `assets/main-CH7CgyC0.js` and CSS `assets/main-BYGcm2LF.css`; the JavaScript asset returned HTTP 200. Production now serves the merged revision. No live account was accessed or changed.
 
-**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`, based on `origin/main` at `f9a4788cf4df972028334f8d7b5905663bba3d94`. The sorting changes and this handoff note remain uncommitted for continuation. `supabase/.temp/` was not touched.
+**Working checkout:** `/Users/ice/dev/copilot-worktrees/gh11-tend2-foundation/gh56-echoblocks-laughing-invention`, branch `gh56-echoblocks-rhythm-account-isolation-fix`. Sorting is merged in `origin/main` at `544b0a72e6436748729fef27b1d794636084e654`. This checkout contains the release-evidence handoff update. `supabase/.temp/` and unrelated work were left untouched.
 
 ## Archived Rhythms Settings page (deployed)
 
