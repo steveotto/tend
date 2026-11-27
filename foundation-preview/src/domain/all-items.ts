@@ -1,8 +1,8 @@
 import { effectiveRhythmSchedule, rhythmTimeValueFromLegacyLabel } from './rhythm-schedule.ts';
-import type { RhythmTimeValue } from './rhythm-schedule.ts';
+import type { RhythmTimeOption, RhythmTimeValue } from './rhythm-schedule.ts';
 import type { PersonPrayerRequest } from './person-prayers.ts';
 import type { PersonSpark } from './person-sparks.ts';
-import type { PersonId, RhythmPreview } from './preview-data.ts';
+import type { PersonId, PersonPreview, RhythmPreview } from './preview-data.ts';
 
 export type AllItemsTypeFilter = 'all' | 'rhythms' | 'sparks' | 'prayer-requests';
 export type AllItemsFrequencyFilter =
@@ -53,6 +53,23 @@ export type AllItemsSelection = {
   count: number;
 };
 
+export type AllItemsSortField =
+  | 'grouped'
+  | 'title'
+  | 'type'
+  | 'person'
+  | 'time-of-day'
+  | 'frequency';
+export type AllItemsSortDirection = 'ascending' | 'descending';
+export type AllItemsSort = {
+  field: AllItemsSortField;
+  direction: AllItemsSortDirection;
+};
+export type AllItemsResultItem =
+  | { kind: 'rhythm'; item: RhythmPreview }
+  | { kind: 'spark'; item: PersonSpark }
+  | { kind: 'prayer-request'; item: PersonPrayerRequest };
+
 export function selectAllItems(
   collections: AllItemsCollections,
   filters: AllItemsFilters
@@ -99,6 +116,36 @@ export function selectAllItems(
   };
 }
 
+export function orderAllItems(
+  selection: AllItemsSelection,
+  sort: AllItemsSort,
+  people: readonly PersonPreview[],
+  timeOptions: readonly RhythmTimeOption[]
+): AllItemsResultItem[] {
+  const items: AllItemsResultItem[] = [
+    ...selection.rhythms.map(item => ({ kind: 'rhythm' as const, item })),
+    ...selection.sparks.map(item => ({ kind: 'spark' as const, item })),
+    ...selection.prayerRequests.map(item => ({ kind: 'prayer-request' as const, item }))
+  ];
+  if (sort.field === 'grouped') return items;
+
+  const peopleById = new Map(people.map(person => [person.id, person]));
+  const timeOrder = new Map(timeOptions.map((option, index) => [option.value, index]));
+  const direction = sort.direction === 'ascending' ? 1 : -1;
+  const field = sort.field;
+
+  return items.sort((left, right) => {
+    const leftValue = sortValue(left, field, peopleById, timeOrder);
+    const rightValue = sortValue(right, field, peopleById, timeOrder);
+    const primary = compareSortValues(leftValue, rightValue, direction);
+    if (primary !== 0) return primary;
+
+    return left.item.title.localeCompare(right.item.title)
+      || left.item.id.localeCompare(right.item.id)
+      || left.kind.localeCompare(right.kind);
+  });
+}
+
 export function selectArchivedRhythms(
   rhythms: readonly RhythmPreview[],
   archivedRhythmIds: ReadonlySet<string>,
@@ -127,7 +174,9 @@ function legacyTimeLabel(rhythm: RhythmPreview): string | undefined {
   return typeof rhythm.timeLabel === 'string' ? rhythm.timeLabel : undefined;
 }
 
-function rhythmFrequency(rhythm: RhythmPreview): AllItemsFrequencyFilter | null {
+function rhythmFrequency(
+  rhythm: RhythmPreview
+): Exclude<AllItemsFrequencyFilter, 'all'> | null {
   const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
   if (schedule) return schedule.frequency;
   switch (rhythm.cadence) {
@@ -151,6 +200,76 @@ function rhythmFrequency(rhythm: RhythmPreview): AllItemsFrequencyFilter | null 
     default:
       return rhythm.cadence ? null : 'not-scheduled';
   }
+}
+
+type SortValue = string | number | null;
+
+function sortValue(
+  item: AllItemsResultItem,
+  field: Exclude<AllItemsSortField, 'grouped'>,
+  peopleById: ReadonlyMap<PersonId, PersonPreview>,
+  timeOrder: ReadonlyMap<string, number>
+): SortValue {
+  switch (field) {
+    case 'title':
+      return item.item.title;
+    case 'type':
+      return item.kind === 'rhythm' ? 0 : item.kind === 'spark' ? 1 : 2;
+    case 'person':
+      return associatedPeople(item)
+        .map(id => peopleById.get(id))
+        .filter((person): person is PersonPreview => person !== undefined)
+        .sort((left, right) =>
+          left.displayName.localeCompare(right.displayName) || left.id.localeCompare(right.id)
+        )[0]?.displayName ?? null;
+    case 'time-of-day': {
+      const legacyLabel = item.kind === 'rhythm' ? legacyTimeLabel(item.item) : undefined;
+      const timeOfDay = item.kind === 'rhythm'
+        ? item.item.timeOfDay
+          ?? (legacyLabel ? rhythmTimeValueFromLegacyLabel(legacyLabel) : undefined)
+        : item.kind === 'prayer-request'
+          ? item.item.timeOfDay
+          : undefined;
+      return timeOfDay === undefined ? null : timeOrder.get(timeOfDay) ?? null;
+    }
+    case 'frequency': {
+      const frequency = item.kind === 'rhythm'
+        ? rhythmFrequency(item.item)
+        : item.kind === 'prayer-request'
+          ? item.item.schedule?.frequency ?? null
+          : null;
+      return frequency === null || frequency === 'not-scheduled'
+        ? null
+        : frequencyOrder[frequency];
+    }
+  }
+}
+
+function associatedPeople(item: AllItemsResultItem): readonly PersonId[] {
+  if (item.kind === 'rhythm') return item.item.personIds ?? [];
+  if (item.kind === 'spark') return [item.item.ownerId, ...item.item.sharedWith];
+  return [
+    ...(item.item.personId === null ? [] : [item.item.personId]),
+    ...(item.item.sharedWith ?? [])
+  ];
+}
+
+const frequencyOrder: Record<Exclude<AllItemsFrequencyFilter, 'all' | 'not-scheduled'>, number> = {
+  daily: 0,
+  weekly: 1,
+  monthly: 2,
+  quarterly: 3,
+  yearly: 4,
+  custom: 5
+};
+
+function compareSortValues(left: SortValue, right: SortValue, direction: 1 | -1): number {
+  if (left === null) return right === null ? 0 : 1;
+  if (right === null) return -1;
+  const compared = typeof left === 'number' && typeof right === 'number'
+    ? left - right
+    : String(left).localeCompare(String(right));
+  return compared * direction;
 }
 
 function matchesFilters(

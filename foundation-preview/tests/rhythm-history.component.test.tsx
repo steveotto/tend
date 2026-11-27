@@ -2453,8 +2453,11 @@ describe('shared Rhythm history', () => {
   });
 
   it('labels a pending current date as current state rather than as a missed occurrence', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const scoringInstant = new Date('2026-11-27T19:00:00.000Z');
+    vi.setSystemTime(scoringInstant);
     const user = userEvent.setup();
-    const asOfDate = localDateInTimeZone(new Date(), 'UTC');
+    const asOfDate = localDateInTimeZone(scoringInstant, 'UTC');
     const rhythm = rhythmForSchedule({ frequency: 'daily' }, addCalendarDays(asOfDate, -2));
     render(<RhythmHistoryView rhythm={rhythm} completionHistoryAvailable />);
     await openRhythmScoringDetails(user);

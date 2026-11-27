@@ -52,6 +52,7 @@ export function PersonPrayerPanel({
   onUndoDeleteLog,
   onRemove,
   allItems = false,
+  allItemsEntry = false,
   allPrayerRequests
 }: {
   personId: PersonId | null;
@@ -93,6 +94,7 @@ export function PersonPrayerPanel({
   onUndoDeleteLog?: (undo: PersonPrayerLogUndo, actorId: PersonId | null) => string | null;
   onRemove: (requestId: string, expectedUpdatedAt: string, actorId: PersonId | null) => string | null;
   allItems?: boolean;
+  allItemsEntry?: boolean;
   allPrayerRequests?: readonly PersonPrayerRequest[];
 }) {
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -334,9 +336,9 @@ export function PersonPrayerPanel({
 
   return (
     <section
-      className={`person-prayer-panel prayer-theme${allItems ? ' person-prayer-panel--all-items' : ''}`}
+      className={`person-prayer-panel prayer-theme${allItems ? ' person-prayer-panel--all-items' : ''}${allItemsEntry ? ' person-prayer-panel--all-items-entry' : ''}`}
       {...(allItems
-        ? { 'aria-label': 'Prayer requests' }
+        ? allItemsEntry ? {} : { 'aria-label': 'Prayer requests' }
         : { 'aria-labelledby': `person-prayer-heading-${panelIdentity}` })}
       hidden={!enabled && !allItems}
     >

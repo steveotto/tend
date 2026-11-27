@@ -1,14 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { defaultAllItemsFilters, selectAllItems, selectArchivedRhythms } from '../src/domain/all-items.ts';
-import type { AllItemsFilters } from '../src/domain/all-items.ts';
+import {
+  defaultAllItemsFilters,
+  orderAllItems,
+  selectAllItems,
+  selectArchivedRhythms
+} from '../src/domain/all-items.ts';
+import type { AllItemsFilters, AllItemsSort, AllItemsSortField } from '../src/domain/all-items.ts';
 import type { PersonPrayerRequest } from '../src/domain/person-prayers.ts';
 import type { PersonSpark } from '../src/domain/person-sparks.ts';
 import { todayRhythms } from '../src/domain/preview-data.ts';
-import type { PersonId, RhythmPreview } from '../src/domain/preview-data.ts';
+import type { PersonId, PersonPreview, RhythmPreview } from '../src/domain/preview-data.ts';
+import { rhythmTimeOptions } from '../src/domain/rhythm-schedule.ts';
 
 const personA: PersonId = 'sample-person-avery';
 const personB: PersonId = 'sample-person-morgan';
 const timestamp = '2026-10-31T12:00:00.000Z';
+const people: PersonPreview[] = [
+  { id: personA, displayName: 'Avery Example' },
+  { id: personB, displayName: 'Morgan Example' }
+];
 
 function rhythm(
   id: string,
@@ -62,6 +72,22 @@ function prayer(
 
 function filters(patch: Partial<AllItemsFilters>): AllItemsFilters {
   return { ...defaultAllItemsFilters, ...patch };
+}
+
+function orderedIds(
+  collections: {
+    rhythms: readonly RhythmPreview[];
+    sparks: readonly PersonSpark[];
+    prayerRequests: readonly PersonPrayerRequest[];
+    archivedRhythmIds?: ReadonlySet<string>;
+  },
+  field: AllItemsSortField,
+  direction: AllItemsSort['direction'] = 'ascending',
+  filterPatch: Partial<AllItemsFilters> = {}
+): string[] {
+  const selection = selectAllItems(collections, filters(filterPatch));
+  return orderAllItems(selection, { field, direction }, people, rhythmTimeOptions)
+    .map(entry => `${entry.kind}:${entry.item.id}`);
 }
 
 describe('All items selector', () => {
@@ -361,5 +387,206 @@ describe('All items selector', () => {
       prayerRequests: [matchingPrayer]
     }, filters({ search: 'private-only' }));
     expect(privateLogOnly.prayerRequests).toEqual([]);
+  });
+
+  it('sorts mixed item types by title in both directions and uses stable ID ties', () => {
+    const collections = {
+      rhythms: [
+        rhythm('rhythm-z', 'Shared title'),
+        rhythm('rhythm-a', 'Shared title')
+      ],
+      sparks: [spark('spark', 'Bravo Spark')],
+      prayerRequests: [prayer('prayer', 'Alpha request')]
+    };
+
+    expect(orderedIds(collections, 'title')).toEqual([
+      'prayer-request:prayer',
+      'spark:spark',
+      'rhythm:rhythm-a',
+      'rhythm:rhythm-z'
+    ]);
+    expect(orderedIds(collections, 'title', 'descending')).toEqual([
+      'rhythm:rhythm-a',
+      'rhythm:rhythm-z',
+      'spark:spark',
+      'prayer-request:prayer'
+    ]);
+  });
+
+  it('groups by the existing item-type order, then title, in both directions', () => {
+    const collections = {
+      rhythms: [rhythm('z-rhythm', 'Zulu rhythm'), rhythm('a-rhythm', 'Able rhythm')],
+      sparks: [spark('z-spark', 'Zulu Spark'), spark('a-spark', 'Able Spark')],
+      prayerRequests: [prayer('z-prayer', 'Zulu request'), prayer('a-prayer', 'Able request')]
+    };
+
+    expect(orderedIds(collections, 'type')).toEqual([
+      'rhythm:a-rhythm', 'rhythm:z-rhythm',
+      'spark:a-spark', 'spark:z-spark',
+      'prayer-request:a-prayer', 'prayer-request:z-prayer'
+    ]);
+    expect(orderedIds(collections, 'type', 'descending')).toEqual([
+      'prayer-request:a-prayer', 'prayer-request:z-prayer',
+      'spark:a-spark', 'spark:z-spark',
+      'rhythm:a-rhythm', 'rhythm:z-rhythm'
+    ]);
+  });
+
+  it('sorts by the alphabetically first associated Person and keeps missing values last', () => {
+    const collections = {
+      rhythms: [
+        rhythm('morgan', 'Morgan-linked', { personIds: [personB] }),
+        rhythm('multi', 'Avery-first', { personIds: [personB, personA] }),
+        rhythm('none', 'No Person', { personIds: [] })
+      ],
+      sparks: [],
+      prayerRequests: []
+    };
+
+    expect(orderedIds(collections, 'person')).toEqual([
+      'rhythm:multi',
+      'rhythm:morgan',
+      'rhythm:none'
+    ]);
+    expect(orderedIds(collections, 'person', 'descending')).toEqual([
+      'rhythm:morgan',
+      'rhythm:multi',
+      'rhythm:none'
+    ]);
+  });
+
+  it('uses the saved associations for Person sorting across Rhythms, Sparks, and Prayer requests', () => {
+    const collections = {
+      rhythms: [rhythm('rhythm-morgan', 'Morgan Rhythm', { personIds: [personB] })],
+      sparks: [spark('spark-avery', 'Avery Spark', {
+        ownerId: personB,
+        sharedWith: [personA]
+      })],
+      prayerRequests: [
+        prayer('prayer-morgan', 'Morgan Prayer', { personId: personB }),
+        prayer('prayer-none', 'No Person', { personId: null, sharedWith: [] })
+      ]
+    };
+
+    expect(orderedIds(collections, 'person')).toEqual([
+      'spark:spark-avery',
+      'prayer-request:prayer-morgan',
+      'rhythm:rhythm-morgan',
+      'prayer-request:prayer-none'
+    ]);
+    expect(orderedIds(collections, 'person', 'descending')).toEqual([
+      'prayer-request:prayer-morgan',
+      'rhythm:rhythm-morgan',
+      'spark:spark-avery',
+      'prayer-request:prayer-none'
+    ]);
+  });
+
+  it('uses the configured chronological time order and keeps not-applicable last both ways', () => {
+    const collections = {
+      rhythms: [
+        rhythm('evening', 'Evening', { timeOfDay: 'evening' }),
+        rhythm('early', 'Early morning', { timeOfDay: 'early-morning' }),
+        rhythm('anytime', 'Anytime', { timeOfDay: 'anytime' })
+      ],
+      sparks: [spark('spark', 'No time')],
+      prayerRequests: [prayer('morning', 'Morning', { timeOfDay: 'morning' })]
+    };
+
+    expect(orderedIds(collections, 'time-of-day')).toEqual([
+      'rhythm:anytime',
+      'rhythm:early',
+      'prayer-request:morning',
+      'rhythm:evening',
+      'spark:spark'
+    ]);
+    expect(orderedIds(collections, 'time-of-day', 'descending')).toEqual([
+      'rhythm:evening',
+      'prayer-request:morning',
+      'rhythm:early',
+      'rhythm:anytime',
+      'spark:spark'
+    ]);
+  });
+
+  it('uses schedule frequency order rather than labels and keeps unscheduled values last', () => {
+    const collections = {
+      rhythms: [
+        rhythm('yearly', 'Yearly', { schedule: { frequency: 'yearly', month: 1, pattern: { kind: 'dayOfMonth', day: 1 } } }),
+        rhythm('daily', 'Daily', { schedule: { frequency: 'daily' } }),
+        rhythm('monthly', 'Monthly', { schedule: { frequency: 'monthly', pattern: { kind: 'dayOfMonth', day: 1 } } }),
+        rhythm('biweekly', 'Every two weeks', {
+          cadence: 'Every 2 weeks',
+          schedule: { frequency: 'custom', unit: 'weeks', interval: 2, weekdays: [1], startDate: '2026-10-01' }
+        }),
+        rhythm('weekly', 'Weekly', { schedule: { frequency: 'weekly', weekdays: [1] } }),
+        rhythm('unscheduled', 'Unscheduled')
+      ],
+      sparks: [spark('spark', 'No frequency')],
+      prayerRequests: [
+        prayer('quarterly', 'Quarterly', {
+          schedule: { frequency: 'quarterly', monthInQuarter: 1, pattern: { kind: 'dayOfMonth', day: 1 } }
+        })
+      ]
+    };
+
+    expect(orderedIds(collections, 'frequency')).toEqual([
+      'rhythm:daily',
+      'rhythm:weekly',
+      'rhythm:monthly',
+      'prayer-request:quarterly',
+      'rhythm:yearly',
+      'rhythm:biweekly',
+      'spark:spark',
+      'rhythm:unscheduled'
+    ]);
+    expect(orderedIds(collections, 'frequency', 'descending')).toEqual([
+      'rhythm:biweekly',
+      'rhythm:yearly',
+      'prayer-request:quarterly',
+      'rhythm:monthly',
+      'rhythm:weekly',
+      'rhythm:daily',
+      'spark:spark',
+      'rhythm:unscheduled'
+    ]);
+  });
+
+  it('applies search and filters before sorting, excludes archived Rhythms, and leaves inputs unchanged', () => {
+    const rhythms = Object.freeze([
+      rhythm('z-active', 'Zulu active', { description: 'shared query', schedule: { frequency: 'daily' } }),
+      rhythm('a-active', 'Able active', { description: 'shared query', schedule: { frequency: 'weekly', weekdays: [1] } }),
+      rhythm('archived', 'Archived shared query', { description: 'shared query' })
+    ]);
+    const collections = {
+      rhythms,
+      sparks: [spark('spark', 'Spark shared query')],
+      prayerRequests: [prayer('prayer', 'Prayer shared query')],
+      archivedRhythmIds: new Set(['archived'])
+    };
+
+    expect(orderedIds(collections, 'title', 'descending', {
+      search: 'shared query',
+      type: ['rhythms', 'sparks'],
+      frequency: ['daily', 'weekly']
+    })).toEqual([
+      'rhythm:z-active',
+      'rhythm:a-active'
+    ]);
+    expect(rhythms.map(item => item.id)).toEqual(['z-active', 'a-active', 'archived']);
+  });
+
+  it('retains the current grouped order unless a different sort is explicitly selected', () => {
+    const collections = {
+      rhythms: [rhythm('rhythm', 'A rhythm')],
+      sparks: [spark('spark', 'A Spark')],
+      prayerRequests: [prayer('prayer', 'A request')]
+    };
+
+    expect(orderedIds(collections, 'grouped')).toEqual([
+      'rhythm:rhythm',
+      'spark:spark',
+      'prayer-request:prayer'
+    ]);
   });
 });

@@ -11,13 +11,15 @@ import {
   type RhythmPreview
 } from '../domain/preview-data.ts';
 import type { FriendshipData } from '../domain/friendships.ts';
-import { defaultAllItemsFilters, selectAllItems } from '../domain/all-items.ts';
+import { defaultAllItemsFilters, orderAllItems, selectAllItems } from '../domain/all-items.ts';
 import { rhythmHealthScore } from '../domain/rhythm-scoring.ts';
 import type { RhythmScoreResult } from '../domain/rhythm-scoring.ts';
 import type {
   AllItemsFilters,
   AllItemsFrequencyFilter,
   AllItemsPersonFilterValue,
+  AllItemsSortDirection,
+  AllItemsSortField,
   AllItemsTimeFilter,
   AllItemsTypeFilter
 } from '../domain/all-items.ts';
@@ -29,6 +31,8 @@ import type { Destination } from './AppNavigation.tsx';
 import { useRhythmTimeOptions } from './TimeBlocksContext.tsx';
 import { MultiSelectDropdown } from './MultiSelectDropdown.tsx';
 import type { MultiSelectOption } from './MultiSelectDropdown.tsx';
+import { StyledSelect } from './StyledSelect.tsx';
+import type { StyledSelectOption } from './StyledSelect.tsx';
 
 const typeOptions: MultiSelectOption<Exclude<AllItemsTypeFilter, 'all'>>[] = [
   { value: 'rhythms', label: 'Rhythms' },
@@ -44,6 +48,20 @@ const frequencyOptions: MultiSelectOption<Exclude<AllItemsFrequencyFilter, 'all'
   { value: 'quarterly', label: 'Quarterly' },
   { value: 'yearly', label: 'Yearly' },
   { value: 'custom', label: 'Custom interval' }
+];
+
+const sortFieldOptions: readonly StyledSelectOption<AllItemsSortField>[] = [
+  { value: 'grouped', label: 'Grouped presentation' },
+  { value: 'title', label: 'Title' },
+  { value: 'type', label: 'Type' },
+  { value: 'person', label: 'Person name' },
+  { value: 'time-of-day', label: 'Time of day' },
+  { value: 'frequency', label: 'Frequency' }
+];
+
+const sortDirectionOptions: readonly StyledSelectOption<AllItemsSortDirection>[] = [
+  { value: 'ascending', label: 'Ascending' },
+  { value: 'descending', label: 'Descending' }
 ];
 
 type AllItemsPageProps = {
@@ -107,6 +125,8 @@ export function AllItemsPage(props: AllItemsPageProps) {
   const [filters, setFilters] = useState<AllItemsFilters>({
     ...defaultAllItemsFilters
   });
+  const [sortField, setSortField] = useState<AllItemsSortField>('grouped');
+  const [sortDirection, setSortDirection] = useState<AllItemsSortDirection>('ascending');
   const timeOptions = useRhythmTimeOptions();
   const archivedRhythmIds = new Set(props.archivedRhythmIds);
   const activeRhythms = props.rhythms.filter(rhythm => !archivedRhythmIds.has(rhythm.id));
@@ -116,6 +136,12 @@ export function AllItemsPage(props: AllItemsPageProps) {
     sparks: props.sparks,
     prayerRequests: props.prayerRequests
   }, filters);
+  const orderedItems = orderAllItems(
+    selection,
+    { field: sortField, direction: sortDirection },
+    props.people,
+    timeOptions
+  );
   const totalItems = activeRhythms.length
     + props.sparks.length
     + props.prayerRequests.length;
@@ -134,6 +160,87 @@ export function AllItemsPage(props: AllItemsPageProps) {
     { value: 'not-applicable', label: 'No applicable time setting' },
     ...timeOptions
   ];
+
+  function renderRhythm(rhythm: RhythmPreview) {
+    const completed = props.completedRhythmIds.has(rhythm.id);
+    const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
+    const isInactive = Boolean(schedule?.endDate && schedule.endDate < props.today);
+    return (
+      <RhythmDetailsDialog
+        rhythm={rhythm}
+        inline
+        completed={completed}
+        healthScore={rhythmHealthScore(props.rhythmScores.get(rhythm.id))}
+        people={props.people}
+        foundations={props.foundations}
+        relatedRhythms={activeRhythms}
+        onPersonSelect={props.onPersonSelect}
+        onOpenCategory={props.onOpenCategory}
+        onOpenFoundation={props.onOpenFoundation}
+        onHistory={event => props.onRhythmHistory(rhythm.id, event)}
+        {...(isInactive ? { statusLabel: 'Inactive' } : {})}
+        {...(!isInactive ? {
+          onTend: (event: MouseEvent<HTMLButtonElement>) => props.onTendRhythm(rhythm.id, event)
+        } : {})}
+        {...(!isInactive && completed
+          ? { onUndo: () => props.onUndoRhythm(rhythm.id) }
+          : {})}
+        onClose={() => undefined}
+      />
+    );
+  }
+
+  function renderSparkPanel(sparks: readonly PersonSpark[], entry = false) {
+    const firstSpark = sparks[0];
+    if (!firstSpark) return null;
+    return (
+      <PersonSparkPanel
+        personId={firstSpark.ownerId}
+        people={props.people}
+        peopleGroups={props.peopleGroups}
+        sparks={sparks}
+        friendships={props.friendships}
+        today={props.today}
+        onCreate={draft => props.onCreateSpark(firstSpark.ownerId, draft)}
+        onUpdate={props.onUpdateSpark}
+        onArchive={props.onArchiveSpark}
+        onDelete={props.onDeleteSpark}
+        onUndo={props.onUndoSpark}
+        onComplete={props.onCompleteSpark}
+        onPersonSelect={props.onPersonSelect}
+        allItems
+        {...(entry ? { allItemsEntry: true } : {})}
+      />
+    );
+  }
+
+  function renderPrayerPanel(requests: readonly PersonPrayerRequest[], entry = false) {
+    const firstRequest = requests[0];
+    if (!firstRequest) return null;
+    return (
+      <PersonPrayerPanel
+        personId={firstRequest.personId}
+        enabled={props.prayerEnabled}
+        today={props.today}
+        timeZone={props.timeZone}
+        people={props.people}
+        peopleGroups={props.peopleGroups}
+        requests={requests}
+        allPrayerRequests={props.prayerRequests}
+        onCreate={props.onCreatePrayerRequest}
+        {...(props.onRetryLocalSave ? { onRetryLocalSave: props.onRetryLocalSave } : {})}
+        onUpdate={props.onUpdatePrayerRequest}
+        onTransition={props.onPrayerRequestTransition}
+        onPray={props.onPrayForRequest}
+        {...(props.onSavePrayerLog ? { onSaveLog: props.onSavePrayerLog } : {})}
+        {...(props.onDeletePrayerLog ? { onDeleteLog: props.onDeletePrayerLog } : {})}
+        {...(props.onUndoDeletePrayerLog ? { onUndoDeleteLog: props.onUndoDeletePrayerLog } : {})}
+        onRemove={props.onRemovePrayerRequest}
+        allItems
+        {...(entry ? { allItemsEntry: true } : {})}
+      />
+    );
+  }
 
   return (
     <section className="all-items-page" aria-labelledby="all-items-heading">
@@ -196,6 +303,27 @@ export function AllItemsPage(props: AllItemsPageProps) {
           onChange={timeOfDay => setFilters(current => ({ ...current, timeOfDay }))}
         />
       </div>
+      <div className="all-items-page__sorting" aria-label="Sort all items">
+        <div className="all-items-page__sort-control">
+          <span>Sort by</span>
+          <StyledSelect
+            label="Sort by"
+            options={sortFieldOptions}
+            value={sortField}
+            onChange={setSortField}
+          />
+        </div>
+        <div className="all-items-page__sort-control">
+          <span>Direction</span>
+          <StyledSelect
+            label="Sort direction"
+            options={sortDirectionOptions}
+            value={sortDirection}
+            disabled={sortField === 'grouped'}
+            onChange={setSortDirection}
+          />
+        </div>
+      </div>
       <div className="all-items-page__results">
         <p role="status" aria-live="polite">
           {selection.count} {selection.count === 1 ? 'item' : 'items'}
@@ -216,7 +344,7 @@ export function AllItemsPage(props: AllItemsPageProps) {
             : 'No items match these filters. Clear filters to see everything.'}
         </p>
       ) : (
-        <div className="all-items-page__groups">
+        sortField === 'grouped' ? <div className="all-items-page__groups">
           {selection.rhythms.length > 0 && (
             <section className="all-items-page__group" aria-labelledby="all-items-rhythms-heading">
               <h4 id="all-items-rhythms-heading">Rhythms ({selection.rhythms.length})</h4>
@@ -225,36 +353,9 @@ export function AllItemsPage(props: AllItemsPageProps) {
                 categoryToken="all-items-rhythms"
                 renderGroup={groupRhythms => (
                   <ul className="all-items-page__list">
-                    {groupRhythms.map(rhythm => {
-                      const completed = props.completedRhythmIds.has(rhythm.id);
-                      const schedule = effectiveRhythmSchedule(rhythm.schedule, rhythm.cadence);
-                      const isInactive = Boolean(schedule?.endDate && schedule.endDate < props.today);
-                      return (
-                        <li key={rhythm.id}>
-                          <RhythmDetailsDialog
-                            rhythm={rhythm}
-                            inline
-                            completed={completed}
-                            healthScore={rhythmHealthScore(props.rhythmScores.get(rhythm.id))}
-                            people={props.people}
-                            foundations={props.foundations}
-                            relatedRhythms={activeRhythms}
-                            onPersonSelect={props.onPersonSelect}
-                            onOpenCategory={props.onOpenCategory}
-                            onOpenFoundation={props.onOpenFoundation}
-                            onHistory={event => props.onRhythmHistory(rhythm.id, event)}
-                            {...(isInactive ? { statusLabel: 'Inactive' } : {})}
-                            {...(!isInactive ? {
-                              onTend: (event: MouseEvent<HTMLButtonElement>) => props.onTendRhythm(rhythm.id, event)
-                            } : {})}
-                            {...(!isInactive && completed
-                              ? { onUndo: () => props.onUndoRhythm(rhythm.id) }
-                              : {})}
-                            onClose={() => undefined}
-                          />
-                        </li>
-                      );
-                    })}
+                    {groupRhythms.map(rhythm => (
+                      <li key={rhythm.id}>{renderRhythm(rhythm)}</li>
+                    ))}
                   </ul>
                 )}
               />
@@ -263,50 +364,28 @@ export function AllItemsPage(props: AllItemsPageProps) {
           {selection.sparks.length > 0 && (
             <section className="all-items-page__group" aria-labelledby="all-items-sparks-heading">
               <h4 id="all-items-sparks-heading">Sparks ({selection.sparks.length})</h4>
-              <PersonSparkPanel
-                personId={selection.sparks[0]!.ownerId}
-                people={props.people}
-                peopleGroups={props.peopleGroups}
-                sparks={selection.sparks}
-                friendships={props.friendships}
-                today={props.today}
-                onCreate={draft => props.onCreateSpark(selection.sparks[0]!.ownerId, draft)}
-                onUpdate={props.onUpdateSpark}
-                onArchive={props.onArchiveSpark}
-                onDelete={props.onDeleteSpark}
-                onUndo={props.onUndoSpark}
-                onComplete={props.onCompleteSpark}
-                onPersonSelect={props.onPersonSelect}
-                allItems
-              />
+              {renderSparkPanel(selection.sparks)}
             </section>
           )}
           {selection.prayerRequests.length > 0 && (
             <section className="all-items-page__group" aria-labelledby="all-items-prayer-heading">
               <h4 id="all-items-prayer-heading">Prayer requests ({selection.prayerRequests.length})</h4>
-              <PersonPrayerPanel
-                personId={selection.prayerRequests[0]!.personId}
-                enabled={props.prayerEnabled}
-                today={props.today}
-                timeZone={props.timeZone}
-                people={props.people}
-                peopleGroups={props.peopleGroups}
-                requests={selection.prayerRequests}
-                allPrayerRequests={props.prayerRequests}
-                onCreate={props.onCreatePrayerRequest}
-                {...(props.onRetryLocalSave ? { onRetryLocalSave: props.onRetryLocalSave } : {})}
-                onUpdate={props.onUpdatePrayerRequest}
-                onTransition={props.onPrayerRequestTransition}
-                onPray={props.onPrayForRequest}
-                {...(props.onSavePrayerLog ? { onSaveLog: props.onSavePrayerLog } : {})}
-                {...(props.onDeletePrayerLog ? { onDeleteLog: props.onDeletePrayerLog } : {})}
-                {...(props.onUndoDeletePrayerLog ? { onUndoDeleteLog: props.onUndoDeletePrayerLog } : {})}
-                onRemove={props.onRemovePrayerRequest}
-                allItems
-              />
+              {renderPrayerPanel(selection.prayerRequests)}
             </section>
           )}
-        </div>
+        </div> : (
+          <section className="all-items-page__sorted-items" aria-label="Sorted all items">
+            {orderedItems.map(entry => (
+              <div className="all-items-page__sorted-entry" key={`${entry.kind}:${entry.item.id}`}>
+                {entry.kind === 'rhythm'
+                  ? renderRhythm(entry.item)
+                  : entry.kind === 'spark'
+                    ? renderSparkPanel([entry.item], true)
+                    : renderPrayerPanel([entry.item], true)}
+              </div>
+            ))}
+          </section>
+        )
       )}
     </section>
   );
