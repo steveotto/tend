@@ -31,7 +31,8 @@ export function PersonSparkPanel({
   onUndo,
   onComplete,
   onPersonSelect,
-  allItems = false
+  allItems = false,
+  allItemsEntry = false
 }: {
   personId: PersonId;
   people: readonly PersonPreview[];
@@ -47,6 +48,7 @@ export function PersonSparkPanel({
   onComplete: (spark: PersonSpark, opener: HTMLButtonElement) => void;
   onPersonSelect: (id: PersonId) => void;
   allItems?: boolean;
+  allItemsEntry?: boolean;
 }) {
   const [editor, setEditor] = useState<EditorRequest | null>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -112,9 +114,9 @@ export function PersonSparkPanel({
 
   return (
     <section
-      className={`person-spark-panel${allItems ? ' person-spark-panel--all-items' : ''}`}
+      className={`person-spark-panel${allItems ? ' person-spark-panel--all-items' : ''}${allItemsEntry ? ' person-spark-panel--all-items-entry' : ''}`}
       {...(allItems
-        ? { 'aria-label': 'Sparks' }
+        ? allItemsEntry ? {} : { 'aria-label': 'Sparks' }
         : { 'aria-labelledby': `person-sparks-heading-${personId}` })}
     >
       {!allItems && (

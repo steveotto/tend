@@ -34,6 +34,22 @@ async function selectFilterOptions(
   }
 }
 
+async function selectSortOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  option: string
+) {
+  await user.click(screen.getByRole('combobox', { name: new RegExp(`^${label}:`) }));
+  await user.click(screen.getByRole('option', { name: option }));
+}
+
+function sortedCardTitles(): string[] {
+  const sortedItems = screen.getByRole('region', { name: 'Sorted all items' });
+  return [...sortedItems.querySelectorAll('article')].map(card =>
+    card.querySelector('[role="heading"], h3')?.textContent ?? ''
+  );
+}
+
 const rhythm: RhythmPreview = {
   id: 'all-items-rhythm',
   title: 'All items rhythm',
@@ -548,5 +564,66 @@ describe('All items page', () => {
     expect(search.value).toBe('shared detail');
     expect(screen.getByRole('button', { name: 'Type: Rhythms' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('1 item');
+  });
+
+  it('flattens mixed results for explicit sorting and preserves the sort across clear filters and edit return', async () => {
+    const user = userEvent.setup();
+    const spark: PersonSpark = {
+      id: 'sorted-spark',
+      ownerId: owner,
+      title: 'Beta Spark',
+      sharedWith: [],
+      archived: false,
+      completed: false,
+      completionHistory: []
+    };
+    const prayerRequest: PersonPrayerRequest = {
+      id: 'sorted-prayer',
+      personId: owner,
+      title: 'Alpha request',
+      status: 'active',
+      createdAt: '2026-10-01T12:00:00.000Z',
+      updatedAt: '2026-10-31T12:00:00.000Z',
+      prayerLogs: []
+    };
+    const onUpdateSpark = vi.fn(() => null);
+    const view = render(<AllItemsPage {...pageProps({
+      rhythms: [{ ...rhythm, title: 'Zulu Rhythm' }],
+      sparks: [spark],
+      prayerRequests: [prayerRequest],
+      onUpdateSpark
+    })} />);
+
+    await selectSortOption(user, 'Sort by', 'Title');
+    expect(screen.queryByRole('heading', { name: 'Rhythms (1)' })).toBeNull();
+    expect(sortedCardTitles()).toEqual(['Alpha request', 'Beta Spark', 'Zulu Rhythm']);
+
+    await selectSortOption(user, 'Sort direction', 'Descending');
+    expect(sortedCardTitles()).toEqual(['Zulu Rhythm', 'Beta Spark', 'Alpha request']);
+    await selectFilterOptions(user, 'Type', ['Sparks']);
+    expect(screen.getByRole('status').textContent).toContain('1 item');
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(screen.getByRole('combobox', { name: 'Sort by: Title' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Sort direction: Descending' })).toBeTruthy();
+    expect(sortedCardTitles()).toEqual(['Zulu Rhythm', 'Beta Spark', 'Alpha request']);
+
+    const sparkCard = screen.getByRole('article', { name: 'Beta Spark' });
+    await user.click(within(sparkCard).getByRole('button', { name: 'Expand Spark Beta Spark' }));
+    await user.click(within(sparkCard).getByRole('button', { name: 'Edit Spark' }));
+    const editor = screen.getByRole('dialog', { name: 'Edit Spark' });
+    await user.clear(within(editor).getByLabelText('Title'));
+    await user.type(within(editor).getByLabelText('Title'), 'Yotta Spark');
+    await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
+    expect(onUpdateSpark).toHaveBeenCalledOnce();
+
+    view.rerender(<AllItemsPage {...pageProps({
+      rhythms: [{ ...rhythm, title: 'Zulu Rhythm' }],
+      sparks: [{ ...spark, title: 'Yotta Spark' }],
+      prayerRequests: [prayerRequest],
+      onUpdateSpark
+    })} />);
+    expect(screen.getByRole('combobox', { name: 'Sort by: Title' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Sort direction: Descending' })).toBeTruthy();
+    expect(sortedCardTitles()).toEqual(['Zulu Rhythm', 'Yotta Spark', 'Alpha request']);
   });
 });

@@ -29741,6 +29741,40 @@ dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-full
   min-width: 0;
 }
 
+.all-items-page__sorting {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.all-items-page__sorting .rhythm-select {
+  min-width: 0;
+}
+
+.all-items-page__sort-control {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ink-soft, #5c6a61);
+  font-size: calc(0.75rem * var(--app-text-scale, 1));
+  font-weight: 650;
+}
+
+.all-items-page__sort-control .rhythm-select__trigger {
+  min-height: 40px;
+}
+
+.all-items-page__sorted-items {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.all-items-page__sorted-entry {
+  min-width: 0;
+}
+
 .all-items-filter {
   display: grid;
   gap: 4px;
@@ -29958,6 +29992,11 @@ dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-full
   box-shadow: none;
 }
 
+.person-spark-panel--all-items-entry,
+.person-prayer-panel--all-items-entry {
+  display: contents;
+}
+
 .person-prayer-panel--all-items {
   gap: 8px;
 }
@@ -29992,6 +30031,9 @@ dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-full
   .all-items-page__filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .all-items-page__sorting {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .archived-rhythms-page__filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -29999,6 +30041,9 @@ dialog.money-goal-dialog.rhythm-history-view__log-dialog:not(.dialog--phone-full
 
 @media (max-width: 380px) {
   .all-items-page__filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .all-items-page__sorting {
     grid-template-columns: minmax(0, 1fr);
   }
   .archived-rhythms-page__filters {
